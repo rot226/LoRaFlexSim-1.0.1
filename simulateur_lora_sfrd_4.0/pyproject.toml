@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simulateur-lora-sfrd"
+version = "0.1.0"
+description = "LoRa network simulator"
+readme = "VERSION_3/README.md"
+requires-python = ">=3.10"
+authors = [{name = "Unknown"}]
+
+# Dependencies from VERSION_3/requirements.txt
+dependencies = [
+    "numpy>=1.21",
+    "pandas>=1.3",
+    "scipy>=1.7",
+    "matplotlib>=3.5",
+    "plotly>=5.4",
+    "panel>=0.13",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["launcher", "launcher.*", "VERSION_3", "VERSION_3.*"]
