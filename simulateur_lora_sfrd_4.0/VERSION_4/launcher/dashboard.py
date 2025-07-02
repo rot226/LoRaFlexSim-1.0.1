@@ -129,12 +129,14 @@ def update_map():
         textfont=dict(color="white", size=14),
     )
     area = area_input.value
+    # Add a small extra space on the Y axis so edge nodes remain fully visible
+    display_area_y = area * 1.125
     fig.update_layout(
         title="Position des nœuds et passerelles",
         xaxis_title="X (m)",
         yaxis_title="Y (m)",
         xaxis_range=[0, area],
-        yaxis_range=[0, area],
+        yaxis_range=[0, display_area_y],
         yaxis=dict(scaleanchor="x", scaleratio=1),
         margin=dict(l=20, r=20, t=40, b=20),
     )
