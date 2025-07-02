@@ -180,7 +180,7 @@ def test_sim_run_and_step_equivalence():
 
 
 def test_get_events_dataframe_has_all_columns():
-    pd = pytest.importorskip("pandas")
+    pytest.importorskip("pandas")
     sim = _make_sim(num_nodes=1, same_start=False)
     sim.run()
     df = sim.get_events_dataframe()

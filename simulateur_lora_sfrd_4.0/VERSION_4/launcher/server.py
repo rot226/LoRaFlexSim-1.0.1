@@ -93,7 +93,7 @@ class NetworkServer:
 
         # Appliquer ADR complet au niveau serveur
         if self.adr_enabled and rssi is not None:
-            from .lorawan import SF_TO_DR, DBM_TO_TX_POWER_INDEX, TX_POWER_INDEX_TO_DBM
+            from .lorawan import DBM_TO_TX_POWER_INDEX, TX_POWER_INDEX_TO_DBM
 
             node = next((n for n in self.nodes if n.id == node_id), None)
             if node:
