@@ -183,6 +183,7 @@ class Simulator:
         self.total_energy_J = 0.0
         self.total_delay = 0.0
         self.delivered_count = 0
+        self.retransmissions = 0
         
         # Journal des événements (pour export CSV)
         self.events_log: list[dict] = []
@@ -436,6 +437,7 @@ class Simulator:
 
             # Planifier retransmissions restantes ou prochaine émission
             if node._nb_trans_left > 0:
+                self.retransmissions += 1
                 self.schedule_event(node, self.current_time + 1.0)
             else:
                 if self.packets_to_send == 0 or self.packets_sent < self.packets_to_send:
@@ -585,7 +587,7 @@ class Simulator:
             'recent_pdr_by_node': recent_pdr_by_node,
             'pdr_by_sf': pdr_by_sf,
             'pdr_by_gateway': pdr_by_gateway,
-            'retransmissions': self.packets_lost_collision,
+            'retransmissions': self.retransmissions,
         }
     
     def get_events_dataframe(self) -> 'pd.DataFrame | None':

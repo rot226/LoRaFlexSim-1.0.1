@@ -12,7 +12,8 @@ This repository contains a lightweight LoRa network simulator implemented in Pyt
 - Full LoRaWAN ADR layer following the official specification (LinkADRReq/Ans,
   ADRACKReq, channel mask, NbTrans, ADR_ACK_DELAY fallback) and derived from the
   FLoRa model
-- Optional battery model to track remaining energy per node (FLoRa energy profile)
+- Optional battery model to track remaining energy per node
+  (FLoRa energy profile)
 
 ## Quick start
 
