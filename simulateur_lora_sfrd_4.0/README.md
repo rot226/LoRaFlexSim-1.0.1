@@ -1,6 +1,6 @@
-# LoRa Network Simulator 3.0
+# LoRa Network Simulator 4.0
 
-This repository contains a lightweight LoRa network simulator implemented in Python. The latest code resides in the `VERSION_3` directory and is based on a simplified version of the FLoRa model so it can run without OMNeT++.
+This repository contains a lightweight LoRa network simulator implemented in Python. The latest code resides in the `VERSION_4` directory and is based on a simplified version of the FLoRa model so it can run without OMNeT++.
 
 ## Features
 - Duty cycle enforcement to mimic real LoRa constraints
@@ -18,7 +18,7 @@ This repository contains a lightweight LoRa network simulator implemented in Pyt
 
 ```bash
 # Install dependencies
-cd VERSION_3
+cd VERSION_4
 python3 -m venv env
 source env/bin/activate  # On Windows use env\Scripts\activate
 pip install -r requirements.txt
@@ -33,10 +33,10 @@ python run.py --nodes 20 --steps 100
 You can also execute the simulator directly from the repository root:
 
 ```bash
-python VERSION_3/run.py --nodes 20 --steps 100
+python VERSION_4/run.py --nodes 20 --steps 100
 ```
 
-For a detailed description of all options, see `VERSION_3/README.md`.
+For a detailed description of all options, see `VERSION_4/README.md`.
 
 ## Advanced usage
 
@@ -44,11 +44,11 @@ Here are some commands to explore more simulator features:
 
 ```bash
 # Multi-channel simulation with node mobility
-python VERSION_3/run.py --nodes 50 --gateways 2 --area 2000 --channels 3 \
+python VERSION_4/run.py --nodes 50 --gateways 2 --area 2000 --channels 3 \
   --mobility --steps 500 --output advanced.csv
 
 # LoRaWAN demo with downlinks
-python VERSION_3/run.py --lorawan-demo --steps 100 --output lorawan.csv
+python VERSION_4/run.py --lorawan-demo --steps 100 --output lorawan.csv
 ```
 
 You can analyse the resulting CSV file with:
