@@ -112,7 +112,7 @@ def update_map():
         name="Nœuds",
         text=node_ids,
         textposition="middle center",
-        marker=dict(symbol="circle", color="blue", size=24),
+        marker=dict(symbol="circle", color="blue", size=32),
         textfont=dict(color="white", size=14),
     )
     x_gw = [gw.x for gw in sim.gateways]
