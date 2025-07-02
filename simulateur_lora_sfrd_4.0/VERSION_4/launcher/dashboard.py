@@ -39,6 +39,9 @@ mode_select = pn.widgets.RadioButtonGroup(
 )
 interval_input = pn.widgets.FloatInput(name="Intervalle moyen (s)", value=30.0, step=1.0, start=0.1)
 packets_input = pn.widgets.IntInput(name="Nombre de paquets (0=infin)", value=0, step=1, start=0)
+seed_input = pn.widgets.IntInput(
+    name="Graine (0 = aléatoire)", value=0, step=1, start=0
+)
 adr_node_checkbox = pn.widgets.Checkbox(name="ADR nœud", value=False)
 adr_server_checkbox = pn.widgets.Checkbox(name="ADR serveur", value=False)
 
@@ -215,6 +218,7 @@ def on_start(event):
         channel_distribution="random" if channel_dist_select.value == "Aléatoire" else "round-robin",
         fixed_sf=int(sf_value_input.value) if fixed_sf_checkbox.value else None,
         fixed_tx_power=float(tx_power_input.value) if fixed_power_checkbox.value else None,
+        seed=int(seed_input.value) if int(seed_input.value) != 0 else None,
     )
 
     # La mobilité est désormais gérée directement par le simulateur
@@ -256,6 +260,7 @@ def on_start(event):
     mobility_checkbox.disabled = True
     mobility_speed_min_input.disabled = True
     mobility_speed_max_input.disabled = True
+    seed_input.disabled = True
     real_time_duration_input.disabled = True
     start_button.disabled = True
     stop_button.disabled = False
@@ -298,6 +303,7 @@ def on_stop(event):
     mobility_checkbox.disabled = False
     mobility_speed_min_input.disabled = False
     mobility_speed_max_input.disabled = False
+    seed_input.disabled = False
     real_time_duration_input.disabled = False
     start_button.disabled = False
     stop_button.disabled = True
@@ -433,6 +439,7 @@ controls = pn.WidgetBox(
     mode_select,
     interval_input,
     packets_input,
+    seed_input,
     adr_node_checkbox,
     adr_server_checkbox,
     fixed_sf_checkbox,
