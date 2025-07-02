@@ -8,7 +8,7 @@ except ImportError as exc:  # pragma: no cover - optional dependencies
     missing = "pandas" if "pandas" in str(exc) else "matplotlib"
     print(
         f"Le module '{missing}' est requis pour exécuter ce script. "
-        "Installez les dépendances via 'pip install -r VERSION_3/requirements.txt'."
+        "Installez les dépendances via 'pip install -r VERSION_4/requirements.txt'."
     )
     raise SystemExit(1)
 
