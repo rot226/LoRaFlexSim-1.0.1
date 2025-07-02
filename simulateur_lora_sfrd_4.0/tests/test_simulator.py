@@ -214,3 +214,28 @@ def test_get_events_dataframe_has_all_columns():
     ]
     for col in expected_columns:
         assert col in df.columns
+
+
+def test_simulator_seed_reproducibility():
+    ch = Channel(shadowing_std=0)
+    kwargs = dict(
+        num_nodes=3,
+        num_gateways=2,
+        area_size=50.0,
+        transmission_mode="Random",
+        packet_interval=10.0,
+        packets_to_send=0,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    sim1 = Simulator(**kwargs, seed=42)
+    sim2 = Simulator(**kwargs, seed=42)
+    pos1 = [(n.x, n.y) for n in sim1.nodes]
+    pos2 = [(n.x, n.y) for n in sim2.nodes]
+    gw1 = [(g.x, g.y) for g in sim1.gateways]
+    gw2 = [(g.x, g.y) for g in sim2.gateways]
+    assert pos1 == pos2
+    assert gw1 == gw2

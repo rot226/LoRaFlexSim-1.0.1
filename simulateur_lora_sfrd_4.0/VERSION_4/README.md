@@ -21,6 +21,8 @@ Bienvenue ! Ce projet est un **simulateur complet de réseau LoRa**, inspiré du
    python run.py --nodes 20 --mode Random --interval 15
    python run.py --nodes 5 --mode Periodic --interval 10
    ```
+   Ajoutez l'option `--seed` pour reproduire exactement le placement des nœuds
+   et passerelles.
 
 ## Exemples d'utilisation avancés
 
