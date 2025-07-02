@@ -124,6 +124,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Exécute un exemple LoRaWAN",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        help="Graine aléatoire pour reproduire les résultats",
+    )
     args = parser.parse_args()
 
     logging.info(
@@ -131,6 +136,8 @@ if __name__ == "__main__":
         f"aire={args.area}m, {args.channels} canaux, mode={args.mode}, "
         f"intervalle={args.interval}, steps={args.steps}"
     )
+    if args.seed is not None:
+        random.seed(args.seed)
     if args.lorawan_demo:
         from launcher.node import Node
         from launcher.gateway import Gateway

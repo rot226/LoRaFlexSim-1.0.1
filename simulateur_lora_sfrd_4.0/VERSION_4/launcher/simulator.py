@@ -53,7 +53,8 @@ class Simulator:
                  fixed_sf: int | None = None,
                  fixed_tx_power: float | None = None,
                  battery_capacity_j: float | None = None,
-                 payload_size_bytes: int = 20):
+                 payload_size_bytes: int = 20,
+                 seed: int | None = None):
         """
         Initialise la simulation LoRa avec les entités et paramètres donnés.
         :param num_nodes: Nombre de nœuds à simuler.
@@ -78,6 +79,9 @@ class Simulator:
         :param fixed_tx_power: Si défini, puissance d'émission initiale commune (dBm).
         :param battery_capacity_j: Capacité de la batterie attribuée à chaque nœud (J). ``None`` pour illimité.
         :param payload_size_bytes: Taille du payload utilisé pour calculer l'airtime (octets).
+        :param seed: Graine aléatoire pour reproduire le placement des nœuds et
+            passerelles. ``None`` pour un tirage aléatoire différent à chaque
+            exécution.
         """
         # Paramètres de simulation
         self.num_nodes = num_nodes
@@ -112,6 +116,11 @@ class Simulator:
         # Compatibilité : premier canal par défaut
         self.channel = self.multichannel.channels[0]
         self.network_server = NetworkServer()
+
+        # Graine aléatoire facultative pour reproduire les résultats
+        self.seed = seed
+        if self.seed is not None:
+            random.seed(self.seed)
         
         # Générer les passerelles
         self.gateways = []
