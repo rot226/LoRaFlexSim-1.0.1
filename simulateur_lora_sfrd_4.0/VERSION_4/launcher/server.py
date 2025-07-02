@@ -4,7 +4,7 @@ logger = logging.getLogger(__name__)
 
 # Paramètres ADR (valeurs issues de la spécification LoRaWAN)
 REQUIRED_SNR = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
-MARGIN_DB = 10.0
+MARGIN_DB = 30.0
 
 class NetworkServer:
     """Représente le serveur de réseau LoRa (collecte des paquets reçus)."""
