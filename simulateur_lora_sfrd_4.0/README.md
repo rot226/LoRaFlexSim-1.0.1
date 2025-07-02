@@ -26,6 +26,9 @@ pip install -r requirements.txt
 # Launch the dashboard
 panel serve launcher/dashboard.py --show
 
+# From the repository root use
+panel serve VERSION_4/launcher/dashboard.py --show
+
 The dashboard now exposes a **Graine** input. Set the same value on
 subsequent runs to keep the node placement identical.
 
