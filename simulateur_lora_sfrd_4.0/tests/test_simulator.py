@@ -92,6 +92,16 @@ def test_simulator_step_collision():
         assert node.packets_collision == 1
 
 
+def test_metrics_retransmissions():
+    sim = _make_sim(num_nodes=1, same_start=False)
+    sim.nodes[0].nb_trans = 2
+    while sim.step():
+        pass
+    metrics = sim.get_metrics()
+    assert metrics["retransmissions"] == 1
+    assert sim.packets_sent == 2
+
+
 def test_lorawan_frame_handling():
     node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
     up = node.prepare_uplink(b"ping", confirmed=True)
