@@ -393,18 +393,20 @@ class Simulator:
                     entry['gateway_id'] = self.network_server.event_gateway.get(event_id, None) if delivered else None
                     break
             
+            # Mettre à jour l'historique du nœud pour calculer les statistiques
+            # récentes et éventuellement déclencher l'ADR.
+            snr_value = None
+            rssi_value = None
+            if delivered and node.last_snr is not None:
+                snr_value = node.last_snr
+            if delivered and node.last_rssi is not None:
+                rssi_value = node.last_rssi
+            node.history.append({'snr': snr_value, 'rssi': rssi_value, 'delivered': delivered})
+            if len(node.history) > 20:
+                node.history.pop(0)
+
             # Gestion Adaptive Data Rate (ADR)
             if self.adr_node:
-                # Mettre à jour l'historique du nœud (20 dernières transmissions)
-                snr_value = None
-                rssi_value = None
-                if delivered and node.last_snr is not None:
-                    snr_value = node.last_snr
-                if delivered and node.last_rssi is not None:
-                    rssi_value = node.last_rssi
-                node.history.append({'snr': snr_value, 'rssi': rssi_value, 'delivered': delivered})
-                if len(node.history) > 20:
-                    node.history.pop(0)
                 # Calculer le PER récent et la marge ADR
                 total_count = len(node.history)
                 success_count = sum(1 for e in node.history if e['delivered'])
