@@ -2,6 +2,7 @@ import argparse
 import csv
 import random
 import logging
+import sys
 
 # Configuration du logger pour afficher les informations
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -154,7 +155,7 @@ if __name__ == "__main__":
         logging.info(
             f"Exemple LoRaWAN : trame uplink FCnt={frame.fcnt}, RX1={rx1}s"
         )
-        exit()
+        sys.exit()
 
     delivered, collisions, pdr, energy, avg_delay = simulate(
         args.nodes,
