@@ -112,8 +112,8 @@ def update_map():
         name="Nœuds",
         text=node_ids,
         textposition="middle center",
-        marker=dict(symbol="circle", color="blue", size=16),
-        textfont=dict(color="white"),
+        marker=dict(symbol="circle", color="blue", size=20),
+        textfont=dict(color="white", size=14),
     )
     x_gw = [gw.x for gw in sim.gateways]
     y_gw = [gw.y for gw in sim.gateways]
@@ -125,8 +125,8 @@ def update_map():
         name="Passerelles",
         text=gw_ids,
         textposition="middle center",
-        marker=dict(symbol="star", color="red", size=24, line=dict(width=1, color="black")),
-        textfont=dict(color="white"),
+        marker=dict(symbol="star", color="red", size=28, line=dict(width=1, color="black")),
+        textfont=dict(color="white", size=14),
     )
     area = area_input.value
     fig.update_layout(
