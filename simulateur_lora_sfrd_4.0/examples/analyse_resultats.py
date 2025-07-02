@@ -36,4 +36,3 @@ plt.title('Taux de livraison par nombre de nœuds')
 plt.tight_layout()
 plt.savefig('pdr_par_nodes.png')
 print("Graphique enregistré dans pdr_par_nodes.png")
-
