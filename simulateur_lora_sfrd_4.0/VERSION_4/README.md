@@ -12,9 +12,11 @@ Bienvenue ! Ce projet est un **simulateur complet de réseau LoRa**, inspiré du
    pip install -r requirements.txt
    ```
 3. **Lancez le tableau de bord :**
-   ```bash
-   panel serve launcher/dashboard.py --show
-   ```
+```bash
+panel serve launcher/dashboard.py --show
+```
+Définissez la valeur du champ **Graine** pour réutiliser le même placement de
+nœuds d'une simulation à l'autre.
 4. **Exécutez des simulations en ligne de commande :**
    ```bash
    python run.py --nodes 30 --gateways 1 --area 1000 --mode Random --interval 10 --steps 100 --output resultats.csv
