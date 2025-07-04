@@ -4,6 +4,8 @@ import random
 import logging
 import sys
 
+PAYLOAD_SIZE = 20  # octets simulés par paquet
+
 # Configuration du logger pour afficher les informations
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -76,8 +78,16 @@ def simulate(nodes, gateways, area, mode, interval, steps, channels=1):
         else 0
     )
     avg_delay = (sum(delays) / len(delays)) if delays else 0
+    throughput_bps = delivered * PAYLOAD_SIZE * 8 / steps if steps > 0 else 0.0
 
-    return delivered, collisions, pdr, energy_consumed, avg_delay
+    return (
+        delivered,
+        collisions,
+        pdr,
+        energy_consumed,
+        avg_delay,
+        throughput_bps,
+    )
 
 
 if __name__ == "__main__":
@@ -157,7 +167,7 @@ if __name__ == "__main__":
         )
         sys.exit()
 
-    delivered, collisions, pdr, energy, avg_delay = simulate(
+    delivered, collisions, pdr, energy, avg_delay, throughput = simulate(
         args.nodes,
         args.gateways,
         args.area,
@@ -168,7 +178,8 @@ if __name__ == "__main__":
     )
     logging.info(
         f"Résultats : PDR={pdr:.2f}% , Paquets livrés={delivered}, Collisions={collisions}, "
-        f"Énergie consommée={energy:.1f} unités, Délai moyen={avg_delay:.2f} unités de temps"
+        f"Énergie consommée={energy:.1f} unités, Délai moyen={avg_delay:.2f} unités de temps, "
+        f"Débit moyen={throughput:.2f} bps"
     )
 
     # Sauvegarde des résultats dans un CSV si demandé
@@ -190,6 +201,7 @@ if __name__ == "__main__":
                     "PDR(%)",
                     "energy",
                     "avg_delay",
+                    "throughput_bps",
                 ]
             )
             # Données
@@ -207,6 +219,7 @@ if __name__ == "__main__":
                     f"{pdr:.2f}",
                     f"{energy:.1f}",
                     f"{avg_delay:.2f}",
+                    f"{throughput:.2f}",
                 ]
             )
         logging.info(f"Résultats enregistrés dans {args.output}")
