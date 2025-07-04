@@ -10,7 +10,7 @@ PAYLOAD_SIZE = 20  # octets simulés par paquet
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
-def simulate(nodes, gateways, area, mode, interval, steps, channels=1):
+def simulate(nodes, gateways, mode, interval, steps, channels=1):
     """Exécute une simulation LoRa simplifiée et retourne les métriques.
 
     Les transmissions peuvent se faire sur plusieurs canaux et plusieurs
@@ -99,12 +99,6 @@ if __name__ == "__main__":
         "--gateways", type=int, default=1, help="Nombre de gateways"
     )
     parser.add_argument(
-        "--area",
-        type=int,
-        default=1000,
-        help="Taille de l'aire de simulation (côté du carré)",
-    )
-    parser.add_argument(
         "--channels", type=int, default=1, help="Nombre de canaux radio"
     )
     parser.add_argument(
@@ -144,7 +138,7 @@ if __name__ == "__main__":
 
     logging.info(
         f"Simulation d'un réseau LoRa : {args.nodes} nœuds, {args.gateways} gateways, "
-        f"aire={args.area}m, {args.channels} canaux, mode={args.mode}, "
+        f"{args.channels} canaux, mode={args.mode}, "
         f"intervalle={args.interval}, steps={args.steps}"
     )
     if args.seed is not None:
@@ -170,7 +164,6 @@ if __name__ == "__main__":
     delivered, collisions, pdr, energy, avg_delay, throughput = simulate(
         args.nodes,
         args.gateways,
-        args.area,
         args.mode,
         args.interval,
         args.steps,
@@ -191,7 +184,6 @@ if __name__ == "__main__":
                 [
                     "nodes",
                     "gateways",
-                    "area",
                     "channels",
                     "mode",
                     "interval",
@@ -209,7 +201,6 @@ if __name__ == "__main__":
                 [
                     args.nodes,
                     args.gateways,
-                    args.area,
                     args.channels,
                     args.mode,
                     args.interval,
