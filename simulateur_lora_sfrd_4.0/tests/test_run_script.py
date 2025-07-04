@@ -12,7 +12,6 @@ def test_simulate_throughput_bps():
     delivered, collisions, pdr, energy, avg_delay, throughput = run.simulate(
         nodes=1,
         gateways=1,
-        area=10,
         mode="Periodic",
         interval=1,
         steps=10,

@@ -19,7 +19,7 @@ Définissez la valeur du champ **Graine** pour réutiliser le même placement de
 nœuds d'une simulation à l'autre.
 4. **Exécutez des simulations en ligne de commande :**
    ```bash
-   python run.py --nodes 30 --gateways 1 --area 1000 --mode Random --interval 10 --steps 100 --output resultats.csv
+   python run.py --nodes 30 --gateways 1 --mode Random --interval 10 --steps 100 --output resultats.csv
    python run.py --nodes 20 --mode Random --interval 15
    python run.py --nodes 5 --mode Periodic --interval 10
    ```
@@ -32,7 +32,7 @@ Quelques commandes pour tester des scénarios plus complexes :
 
 ```bash
 # Simulation multi-canaux avec mobilité
-python run.py --nodes 50 --gateways 2 --area 2000 --channels 3 \
+python run.py --nodes 50 --gateways 2 --channels 3 \
   --mobility --steps 500 --output advanced.csv
 
 # Démonstration LoRaWAN avec downlinks

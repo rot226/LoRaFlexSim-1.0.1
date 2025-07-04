@@ -53,7 +53,7 @@ Here are some commands to explore more simulator features:
 
 ```bash
 # Multi-channel simulation with node mobility
-python VERSION_4/run.py --nodes 50 --gateways 2 --area 2000 --channels 3 \
+python VERSION_4/run.py --nodes 50 --gateways 2 --channels 3 \
   --mobility --steps 500 --output advanced.csv
 
 # LoRaWAN demo with downlinks
