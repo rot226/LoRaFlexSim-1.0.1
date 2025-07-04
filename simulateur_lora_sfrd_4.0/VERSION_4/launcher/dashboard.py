@@ -16,6 +16,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from launcher.simulator import Simulator  # noqa: E402
+from launcher import adr_standard_1, adr_2, adr_3  # noqa: E402
 
 # --- Initialisation Panel ---
 pn.extension("plotly")
@@ -29,6 +30,7 @@ chrono_callback = None
 start_time = None
 elapsed_time = 0
 max_real_time = None
+selected_adr_module = adr_standard_1
 
 # --- Widgets de configuration ---
 num_nodes_input = pn.widgets.IntInput(name="Nombre de nœuds", value=20, step=1, start=1)
@@ -44,6 +46,12 @@ seed_input = pn.widgets.IntInput(
 )
 adr_node_checkbox = pn.widgets.Checkbox(name="ADR nœud", value=False)
 adr_server_checkbox = pn.widgets.Checkbox(name="ADR serveur", value=False)
+
+# --- Boutons de sélection du profil ADR ---
+adr1_button = pn.widgets.Button(name="adr_1", button_type="primary")
+adr2_button = pn.widgets.Button(name="adr_2")
+adr3_button = pn.widgets.Button(name="adr_3")
+adr_active_badge = pn.pane.HTML("", width=80)
 
 # --- Choix SF et puissance initiaux identiques ---
 fixed_sf_checkbox = pn.widgets.Checkbox(name="Choisir SF unique", value=False)
@@ -155,6 +163,33 @@ def on_mode_change(event):
 mode_select.param.watch(on_mode_change, "value")
 
 
+# --- Sélection du profil ADR ---
+def _update_adr_badge(name: str) -> None:
+    adr_active_badge.object = (
+        f"<span style='background-color: #28a745; color:white; padding:2px 6px; border-radius:4px'>{name}</span>"
+    )
+
+
+def select_adr(module, name: str) -> None:
+    global selected_adr_module
+    selected_adr_module = module
+    adr_node_checkbox.value = True
+    adr_server_checkbox.value = True
+    _update_adr_badge(name)
+    for btn in (adr1_button, adr2_button, adr3_button):
+        btn.button_type = "default"
+    if name == "ADR 1":
+        adr1_button.button_type = "primary"
+    elif name == "ADR 2":
+        adr2_button.button_type = "primary"
+    else:
+        adr3_button.button_type = "primary"
+    if sim is not None:
+        module.apply(sim)
+
+
+_update_adr_badge("ADR 1")
+
 # --- Callback chrono ---
 def periodic_chrono_update():
     global chrono_indicator, start_time, elapsed_time, max_real_time
@@ -223,6 +258,10 @@ def on_start(event):
         fixed_tx_power=float(tx_power_input.value) if fixed_power_checkbox.value else None,
         seed=int(seed_input.value) if int(seed_input.value) != 0 else None,
     )
+
+    # Appliquer le profil ADR sélectionné
+    if selected_adr_module:
+        selected_adr_module.apply(sim)
 
     # La mobilité est désormais gérée directement par le simulateur
     start_time = time.time()
@@ -430,6 +469,11 @@ def on_fixed_power_toggle(event):
 fixed_sf_checkbox.param.watch(on_fixed_sf_toggle, "value")
 fixed_power_checkbox.param.watch(on_fixed_power_toggle, "value")
 
+# --- Boutons ADR ---
+adr1_button.on_click(lambda event: select_adr(adr_standard_1, "ADR 1"))
+adr2_button.on_click(lambda event: select_adr(adr_2, "ADR 2"))
+adr3_button.on_click(lambda event: select_adr(adr_3, "ADR 3"))
+
 # --- Associer les callbacks aux boutons ---
 start_button.on_click(on_start)
 stop_button.on_click(on_stop)
@@ -445,6 +489,7 @@ controls = pn.WidgetBox(
     seed_input,
     adr_node_checkbox,
     adr_server_checkbox,
+    pn.Row(adr1_button, adr2_button, adr3_button, adr_active_badge),
     fixed_sf_checkbox,
     sf_value_input,
     fixed_power_checkbox,
