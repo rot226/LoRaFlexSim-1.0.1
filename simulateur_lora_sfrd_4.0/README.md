@@ -60,7 +60,7 @@ python VERSION_4/run.py --nodes 50 --gateways 2 --channels 3 \
 python VERSION_4/run.py --lorawan-demo --steps 100 --output lorawan.csv
 ```
 
-You can analyse the resulting CSV file with:
+You can analyze the resulting CSV file with:
 
 ```bash
 python examples/analyse_resultats.py advanced.csv

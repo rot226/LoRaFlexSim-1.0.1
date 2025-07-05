@@ -135,12 +135,11 @@ L'option `--output` de `run.py` permet d'enregistrer les métriques de la
 simulation dans un fichier CSV. Ce dernier contient l'en‑tête suivant :
 
 ```
-nodes,gateways,area,channels,mode,interval,steps,delivered,collisions,PDR(%),energy,avg_delay,throughput_bps
+nodes,gateways,channels,mode,interval,steps,delivered,collisions,PDR(%),energy,avg_delay,throughput_bps
 ```
 
 * **nodes** : nombre de nœuds simulés.
 * **gateways** : nombre de passerelles.
-* **area** : côté du carré de simulation en mètres.
 * **channels** : nombre de canaux radio simulés.
 * **mode** : `Random` ou `Periodic`.
 * **interval** : intervalle moyen/fixe entre deux transmissions.

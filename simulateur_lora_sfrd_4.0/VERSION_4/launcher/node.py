@@ -129,6 +129,8 @@ class Node:
         """Return the remaining battery level as a ratio between 0 and 1."""
         if self.battery_capacity_j == float('inf'):
             return 1.0
+        if self.battery_capacity_j == 0:
+            return 0.0
         return max(0.0, self.battery_remaining_j / self.battery_capacity_j)
 
     def distance_to(self, other) -> float:
