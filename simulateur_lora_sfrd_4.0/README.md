@@ -32,6 +32,8 @@ panel serve VERSION_4/launcher/dashboard.py --show
 
 The dashboard now exposes a **Seed** input. Set the same value on
 subsequent runs to keep the node placement identical.
+Enable **Manual positions** to override node or gateway coordinates. Each line
+should follow `node,id=3,x=120,y=40` or `gw,id=1,x=10,y=80`.
 
 # Run a simulation
 python run.py --nodes 20 --steps 100
