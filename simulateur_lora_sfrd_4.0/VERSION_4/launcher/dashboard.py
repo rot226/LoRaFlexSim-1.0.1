@@ -77,6 +77,10 @@ mobility_speed_max_input = pn.widgets.FloatInput(name="Vitesse max (m/s)", value
 real_time_duration_input = pn.widgets.FloatInput(name="Durée réelle max (s)", value=0.0, step=1.0, start=0.0)
 fast_forward_button = pn.widgets.Button(name="Accélérer jusqu'à la fin", button_type="primary", disabled=True)
 
+# --- Positions manuelles ---
+manual_pos_toggle = pn.widgets.Checkbox(name="Positions manuelles")
+position_textarea = pn.widgets.TextAreaInput(name="Coordonnées", height=100, visible=False)
+
 # --- Boutons de contrôle ---
 start_button = pn.widgets.Button(name="Lancer la simulation", button_type="success")
 stop_button = pn.widgets.Button(name="Arrêter la simulation", button_type="warning", disabled=True)
@@ -258,6 +262,36 @@ def on_start(event):
         fixed_tx_power=float(tx_power_input.value) if fixed_power_checkbox.value else None,
         seed=int(seed_input.value) if int(seed_input.value) != 0 else None,
     )
+
+    if manual_pos_toggle.value:
+        for line in position_textarea.value.splitlines():
+            parts = [p.strip() for p in line.split(',') if p.strip()]
+            if not parts:
+                continue
+            kind = parts[0]
+            kv = {}
+            for p in parts[1:]:
+                if '=' in p:
+                    k, v = p.split('=', 1)
+                    kv[k.strip()] = v.strip()
+            try:
+                idx = int(kv.get('id', ''))
+                x = float(kv.get('x', ''))
+                y = float(kv.get('y', ''))
+            except ValueError:
+                continue
+            if kind.startswith('node'):
+                for n in sim.nodes:
+                    if n.id == idx:
+                        n.x = x
+                        n.y = y
+                        break
+            elif kind.startswith('gw') or kind.startswith('gateway'):
+                for gw in sim.gateways:
+                    if gw.id == idx:
+                        gw.x = x
+                        gw.y = y
+                        break
 
     # Appliquer le profil ADR sélectionné
     if selected_adr_module:
@@ -469,6 +503,12 @@ def on_fixed_power_toggle(event):
 fixed_sf_checkbox.param.watch(on_fixed_sf_toggle, "value")
 fixed_power_checkbox.param.watch(on_fixed_power_toggle, "value")
 
+# --- Affichage zone manuelle ---
+def on_manual_toggle(event):
+    position_textarea.visible = event.new
+
+manual_pos_toggle.param.watch(on_manual_toggle, "value")
+
 # --- Boutons ADR ---
 adr1_button.on_click(lambda event: select_adr(adr_standard_1, "ADR 1"))
 adr2_button.on_click(lambda event: select_adr(adr_2, "ADR 2"))
@@ -520,6 +560,7 @@ metrics_col.width = 220
 center_col = pn.Column(
     map_pane,
     sf_hist_pane,
+    pn.Column(manual_pos_toggle, position_textarea, width=250),
     sizing_mode="stretch_width",
 )
 center_col.width = 550
