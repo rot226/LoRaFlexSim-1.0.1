@@ -19,7 +19,9 @@ from launcher.simulator import Simulator  # noqa: E402
 from launcher import adr_standard_1, adr_2, adr_3  # noqa: E402
 
 # --- Initialisation Panel ---
-pn.extension("plotly")
+pn.extension("plotly", raw_css=[
+    ".coord-textarea textarea {font-size: 14pt;}",
+])
 # Définition du titre de la page via le document Bokeh directement
 pn.state.curdoc.title = "Simulateur LoRa"
 
@@ -79,7 +81,13 @@ fast_forward_button = pn.widgets.Button(name="Accélérer jusqu'à la fin", butt
 
 # --- Positions manuelles ---
 manual_pos_toggle = pn.widgets.Checkbox(name="Positions manuelles")
-position_textarea = pn.widgets.TextAreaInput(name="Coordonnées", height=100, visible=False)
+position_textarea = pn.widgets.TextAreaInput(
+    name="Coordonnées",
+    height=100,
+    visible=False,
+    width=400,
+    css_classes=["coord-textarea"],
+)
 
 # --- Boutons de contrôle ---
 start_button = pn.widgets.Button(name="Lancer la simulation", button_type="success")
@@ -560,10 +568,10 @@ metrics_col.width = 220
 center_col = pn.Column(
     map_pane,
     sf_hist_pane,
-    pn.Column(manual_pos_toggle, position_textarea, width=250),
+    pn.Column(manual_pos_toggle, position_textarea, width=400),
     sizing_mode="stretch_width",
 )
-center_col.width = 550
+center_col.width = 650
 
 dashboard = pn.Row(
     controls,
