@@ -231,7 +231,7 @@ class Node:
                 self.alive = False
 
     def consume_until(self, current_time: float) -> None:
-        """Accumulates energy from ``last_state_time`` up to ``current_time``."""
+        """Accumulate energy from ``last_state_time`` to ``current_time``."""
         dt = current_time - self.last_state_time
         if dt <= 0:
             self.last_state_time = current_time
