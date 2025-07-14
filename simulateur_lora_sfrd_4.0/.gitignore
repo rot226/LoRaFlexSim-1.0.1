@@ -1,6 +1,7 @@
-# Ignore compiled Python files
+# Python cache and bytecode files
 __pycache__/
 *.py[cod]
+$py.class
 
 # Virtual environments
 env/
