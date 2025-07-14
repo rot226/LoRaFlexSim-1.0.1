@@ -13,12 +13,12 @@ def clean_csv(input_path: str, output_path: str | None = None) -> str:
         Path to CSV file to clean.
     output_path : str | None
         Destination path for cleaned CSV. If None, ``input_path`` is used with
-        ``_clean" suffix.
+        ``_clean`` suffix.
 
     Returns
     -------
     str
-        Path to the cleaned CSV file.
+        Path to the cleaned CSV file on disk.
     """
     df = pd.read_csv(input_path)
 
