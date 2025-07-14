@@ -32,6 +32,7 @@ chrono_callback = None
 start_time = None
 elapsed_time = 0
 max_real_time = None
+paused = False
 selected_adr_module = adr_standard_1
 
 # --- Widgets de configuration ---
@@ -92,6 +93,7 @@ position_textarea = pn.widgets.TextAreaInput(
 # --- Boutons de contrôle ---
 start_button = pn.widgets.Button(name="Lancer la simulation", button_type="success")
 stop_button = pn.widgets.Button(name="Arrêter la simulation", button_type="warning", disabled=True)
+pause_button = pn.widgets.Button(name="Pause", button_type="primary", disabled=True)
 
 # --- Nouveau bouton d'export et message d'état ---
 export_button = pn.widgets.Button(name="Exporter résultats (dossier courant)", button_type="primary", disabled=True)
@@ -242,7 +244,7 @@ def step_simulation():
 
 # --- Bouton "Lancer la simulation" ---
 def on_start(event):
-    global sim, sim_callback, start_time, chrono_callback, elapsed_time, max_real_time
+    global sim, sim_callback, start_time, chrono_callback, elapsed_time, max_real_time, paused
     elapsed_time = 0
 
     # Arrêter toutes les callbacks au cas où
@@ -349,6 +351,10 @@ def on_start(event):
     start_button.disabled = True
     stop_button.disabled = False
     fast_forward_button.disabled = False
+    pause_button.disabled = False
+    pause_button.name = "Pause"
+    pause_button.button_type = "primary"
+    paused = False
     export_button.disabled = True
     export_message.object = "Clique sur Exporter pour générer le fichier CSV après la simulation."
 
@@ -358,7 +364,7 @@ def on_start(event):
 
 # --- Bouton "Arrêter la simulation" ---
 def on_stop(event):
-    global sim, sim_callback, chrono_callback, start_time, max_real_time
+    global sim, sim_callback, chrono_callback, start_time, max_real_time, paused
     if sim is None or not sim.running:
         return
 
@@ -392,6 +398,10 @@ def on_stop(event):
     start_button.disabled = False
     stop_button.disabled = True
     fast_forward_button.disabled = True
+    pause_button.disabled = True
+    pause_button.name = "Pause"
+    pause_button.button_type = "primary"
+    paused = False
     export_button.disabled = False
 
     start_time = None
@@ -485,6 +495,38 @@ def fast_forward(event=None):
 fast_forward_button.on_click(fast_forward)
 
 
+# --- Bouton "Pause/Reprendre" ---
+def on_pause(event=None):
+    global sim_callback, chrono_callback, start_time, elapsed_time, paused
+    if sim is None or not sim.running:
+        return
+
+    if not paused:
+        if sim_callback:
+            sim_callback.stop()
+            sim_callback = None
+        if chrono_callback:
+            chrono_callback.stop()
+            chrono_callback = None
+        if start_time is not None:
+            elapsed_time = time.time() - start_time
+        pause_button.name = "Reprendre"
+        pause_button.button_type = "success"
+        paused = True
+    else:
+        start_time = time.time() - elapsed_time
+        if sim_callback is None:
+            sim_callback = pn.state.add_periodic_callback(step_simulation, period=100, timeout=None)
+        if chrono_callback is None:
+            chrono_callback = pn.state.add_periodic_callback(periodic_chrono_update, period=100, timeout=None)
+        pause_button.name = "Pause"
+        pause_button.button_type = "primary"
+        paused = False
+
+
+pause_button.on_click(on_pause)
+
+
 # --- Case à cocher mobilité : pour mobilité à chaud, hors simulation ---
 def on_mobility_toggle(event):
     global sim
@@ -549,7 +591,7 @@ controls = pn.WidgetBox(
     mobility_speed_max_input,
     real_time_duration_input,
     pn.Row(start_button, stop_button),
-    pn.Row(fast_forward_button),
+    pn.Row(fast_forward_button, pause_button),
     export_button,
     export_message,
 )
