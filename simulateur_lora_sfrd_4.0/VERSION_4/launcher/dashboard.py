@@ -442,7 +442,7 @@ def fast_forward(event=None):
     if sim and sim.running:
         if sim.packets_to_send == 0:
             export_message.object = (
-                "⚠️ Défini un nombre de paquets supérieur à 0 "
+                "⚠️ Définissez un nombre de paquets supérieur à 0 "
                 "pour utiliser l'accélération."
             )
             return

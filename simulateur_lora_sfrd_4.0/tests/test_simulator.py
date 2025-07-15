@@ -249,3 +249,39 @@ def test_simulator_seed_reproducibility():
     gw2 = [(g.x, g.y) for g in sim2.gateways]
     assert pos1 == pos2
     assert gw1 == gw2
+
+
+def _downlink_exchange(node: Node, gw: Gateway, ch: Channel, deliver: bool):
+    """Helper to simulate a downlink reception or loss."""
+    server = NetworkServer()
+    server.gateways = [gw]
+    server.nodes = [node]
+    server.channel = ch
+    server.send_downlink(node, b"data")
+    assert node.downlink_pending == 1
+
+    frame = gw.pop_downlink(node.id)
+    assert frame is not None
+    distance = node.distance_to(gw)
+    rssi, snr = ch.compute_rssi(node.tx_power, distance)
+    snr_threshold = ch.sensitivity_dBm.get(node.sf, -float("inf")) - ch.noise_floor_dBm()
+    if deliver and snr >= snr_threshold:
+        node.handle_downlink(frame)
+    else:
+        node.downlink_pending = max(0, node.downlink_pending - 1)
+
+
+def test_downlink_pending_decrement_success():
+    ch = Channel(shadowing_std=0)
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=ch)
+    gw = Gateway(1, 0.0, 0.0)
+    _downlink_exchange(node, gw, ch, deliver=True)
+    assert node.downlink_pending == 0
+
+
+def test_downlink_pending_decrement_failure():
+    ch = Channel(shadowing_std=0)
+    node = Node(2, 0.0, 0.0, 7, 14.0, channel=ch)
+    gw = Gateway(1, 15000.0, 0.0)
+    _downlink_exchange(node, gw, ch, deliver=False)
+    assert node.downlink_pending == 0
