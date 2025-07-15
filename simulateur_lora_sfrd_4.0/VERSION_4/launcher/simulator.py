@@ -483,6 +483,8 @@ class Simulator:
                 )
                 if snr >= snr_threshold:
                     node.handle_downlink(frame)
+                else:
+                    node.downlink_pending = max(0, node.downlink_pending - 1)
                 selected_gw = gw
                 break
             # Replanifier selon la classe du nœud

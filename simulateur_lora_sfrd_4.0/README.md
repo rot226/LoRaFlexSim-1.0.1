@@ -82,5 +82,4 @@ The tests compare RSSI and airtime calculations against theoretical values and c
 
 The current package version is defined in `pyproject.toml`.
 See `CHANGELOG.md` for a summary of releases.
-
 This project is licensed under the [MIT License](LICENSE).
