@@ -16,7 +16,9 @@ Bienvenue ! Ce projet est un **simulateur complet de réseau LoRa**, inspiré du
 panel serve launcher/dashboard.py --show
 ```
 Définissez la valeur du champ **Graine** pour réutiliser le même placement de
-nœuds d'une simulation à l'autre.
+nœuds d'une simulation à l'autre. Le champ **Nombre de runs** permet quant à lui
+d'enchaîner automatiquement plusieurs simulations identiques (la graine est
+incrémentée à chaque run).
 4. **Exécutez des simulations en ligne de commande :**
    ```bash
    python run.py --nodes 30 --gateways 1 --mode Random --interval 10 --steps 100 --output resultats.csv
