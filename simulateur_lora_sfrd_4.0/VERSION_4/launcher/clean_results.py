@@ -53,7 +53,11 @@ def main() -> None:
     args = parser.parse_args()
 
     cleaned = clean_csv(args.csv_file, args.output)
-    print(f"Fichier nettoyé enregistré dans {cleaned}")
+    if args.output is None:
+        default_path = os.path.splitext(args.csv_file)[0] + "_clean.csv"
+        print(f"Fichier nettoyé enregistré dans {default_path}")
+    else:
+        print(f"Fichier nettoyé enregistré dans {cleaned}")
 
 
 if __name__ == "__main__":
