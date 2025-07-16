@@ -20,3 +20,18 @@ def test_simulate_throughput_bps():
     assert delivered == 10
     expected_throughput = delivered * run.PAYLOAD_SIZE * 8 / 10
     assert throughput == expected_throughput
+
+
+def test_main_runs_multiple_times(monkeypatch):
+    calls = []
+
+    def fake_simulate(*args, **kwargs):
+        calls.append(1)
+        return (1, 2, 3, 4, 5, 6)
+
+    monkeypatch.setattr(run, "simulate", fake_simulate)
+    results, avg = run.main(["--runs", "3"])
+
+    assert len(calls) == 3
+    assert results == [(1, 2, 3, 4, 5, 6)] * 3
+    assert avg == (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)

@@ -23,8 +23,10 @@ nœuds d'une simulation à l'autre.
    python run.py --nodes 20 --mode Random --interval 15
    python run.py --nodes 5 --mode Periodic --interval 10
    ```
-   Ajoutez l'option `--seed` pour reproduire exactement le placement des nœuds
-   et passerelles.
+    Ajoutez l'option `--seed` pour reproduire exactement le placement des nœuds
+    et passerelles.
+    Utilisez `--runs <n>` pour exécuter plusieurs simulations d'affilée et
+    obtenir une moyenne des métriques.
 
 ## Exemples d'utilisation avancés
 
