@@ -68,6 +68,14 @@ You can analyze the resulting CSV file with:
 python examples/analyse_resultats.py advanced.csv
 ```
 
+If you collected several runs into one CSV via the dashboard or
+`python VERSION_4/run.py --runs <n> --output results.csv`, use
+`analyse_runs.py` to compute the average metrics for each run:
+
+```bash
+python examples/analyse_runs.py results.csv
+```
+
 ## Validating results
 
 Run the test suite to ensure everything works as expected:

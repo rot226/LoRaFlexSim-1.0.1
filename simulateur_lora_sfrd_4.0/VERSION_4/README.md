@@ -164,6 +164,14 @@ python examples/analyse_resultats.py resultats1.csv resultats2.csv
 Le script affiche le PDR moyen puis sauvegarde un graphique dans
 `pdr_par_nodes.png`.
 
+Si le même fichier CSV contient plusieurs runs produits avec le dashboard ou
+`run.py --runs`, le script `analyse_runs.py` permet d'obtenir les moyennes par
+run :
+
+```bash
+python examples/analyse_runs.py resultats.csv
+```
+
 ## Validation des résultats
 
 L'exécution de `pytest` permet de vérifier la cohérence des calculs de RSSI et le traitement des collisions :
