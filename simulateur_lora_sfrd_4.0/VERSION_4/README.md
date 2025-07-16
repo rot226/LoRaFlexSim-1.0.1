@@ -21,7 +21,7 @@ d'enchaîner automatiquement plusieurs simulations identiques (la graine est
 incrémentée à chaque run).
 4. **Exécutez des simulations en ligne de commande :**
    ```bash
-   python run.py --nodes 30 --gateways 1 --mode Random --interval 10 --steps 100 --output resultats.csv
+   python run.py --nodes 30 --gateways 1 --mode Random --interval 10 --steps 100 --output résultats.csv
    python run.py --nodes 20 --mode Random --interval 15
    python run.py --nodes 5 --mode Periodic --interval 10
    ```
@@ -173,7 +173,7 @@ Si le même fichier CSV contient plusieurs runs produits avec le dashboard ou
 run :
 
 ```bash
-python examples/analyse_runs.py resultats.csv
+python examples/analyse_runs.py résultats.csv
 ```
 
 ## Validation des résultats

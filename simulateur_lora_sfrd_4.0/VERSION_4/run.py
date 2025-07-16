@@ -144,6 +144,9 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
 
+    if args.runs < 1:
+        parser.error("--runs must be >= 1")
+
     logging.info(
         f"Simulation d'un réseau LoRa : {args.nodes} nœuds, {args.gateways} gateways, "
         f"{args.channels} canaux, mode={args.mode}, "

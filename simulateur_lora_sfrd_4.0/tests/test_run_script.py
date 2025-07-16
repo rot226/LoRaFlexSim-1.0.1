@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+import pytest
 
 # Allow importing the VERSION_4 package from the repository root
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,3 +36,25 @@ def test_main_runs_multiple_times(monkeypatch):
     assert len(calls) == 3
     assert results == [(1, 2, 3, 4, 5, 6)] * 3
     assert avg == (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+
+
+def test_simulate_invalid_arguments():
+    with pytest.raises(ValueError):
+        run.simulate(
+            nodes=0,
+            gateways=1,
+            mode="Periodic",
+            interval=1,
+            steps=10,
+            channels=1,
+        )
+
+    with pytest.raises(ValueError):
+        run.simulate(
+            nodes=1,
+            gateways=1,
+            mode="Periodic",
+            interval=1,
+            steps=10,
+            channels=0,
+        )
