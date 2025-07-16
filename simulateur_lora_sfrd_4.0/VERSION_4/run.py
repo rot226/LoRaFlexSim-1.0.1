@@ -92,7 +92,7 @@ def simulate(nodes, gateways, mode, interval, steps, channels=1):
     )
 
 
-if __name__ == "__main__":
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Simulateur LoRa – Mode CLI")
     parser.add_argument(
         "--nodes", type=int, default=10, help="Nombre de nœuds"
@@ -122,6 +122,12 @@ if __name__ == "__main__":
         help="Nombre de pas de temps de la simulation",
     )
     parser.add_argument(
+        "--runs",
+        type=int,
+        default=1,
+        help="Nombre d'exécutions à réaliser",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         help="Fichier CSV pour sauvegarder les résultats (optionnel)",
@@ -136,15 +142,13 @@ if __name__ == "__main__":
         type=int,
         help="Graine aléatoire pour reproduire les résultats",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     logging.info(
         f"Simulation d'un réseau LoRa : {args.nodes} nœuds, {args.gateways} gateways, "
         f"{args.channels} canaux, mode={args.mode}, "
         f"intervalle={args.interval}, steps={args.steps}"
     )
-    if args.seed is not None:
-        random.seed(args.seed)
     if args.lorawan_demo:
         from launcher.node import Node
         from launcher.gateway import Gateway
@@ -163,25 +167,40 @@ if __name__ == "__main__":
         )
         sys.exit()
 
-    delivered, collisions, pdr, energy, avg_delay, throughput = simulate(
-        args.nodes,
-        args.gateways,
-        args.mode,
-        args.interval,
-        args.steps,
-        args.channels,
-    )
+    results = []
+    for i in range(args.runs):
+        if args.seed is not None:
+            random.seed(args.seed + i)
+
+        delivered, collisions, pdr, energy, avg_delay, throughput = simulate(
+            args.nodes,
+            args.gateways,
+            args.mode,
+            args.interval,
+            args.steps,
+            args.channels,
+        )
+        results.append(
+            (delivered, collisions, pdr, energy, avg_delay, throughput)
+        )
+        logging.info(
+            f"Run {i + 1}/{args.runs} : PDR={pdr:.2f}% , Paquets livrés={delivered}, Collisions={collisions}, "
+            f"Énergie consommée={energy:.1f} unités, Délai moyen={avg_delay:.2f} unités de temps, "
+            f"Débit moyen={throughput:.2f} bps"
+        )
+
+    averages = [
+        sum(r[i] for r in results) / len(results) for i in range(len(results[0]))
+    ]
     logging.info(
-        f"Résultats : PDR={pdr:.2f}% , Paquets livrés={delivered}, Collisions={collisions}, "
-        f"Énergie consommée={energy:.1f} unités, Délai moyen={avg_delay:.2f} unités de temps, "
-        f"Débit moyen={throughput:.2f} bps"
+        f"Moyenne : PDR={averages[2]:.2f}% , Paquets livrés={averages[0]:.2f}, Collisions={averages[1]:.2f}, "
+        f"Énergie consommée={averages[3]:.1f} unités, Délai moyen={averages[4]:.2f} unités de temps, "
+        f"Débit moyen={averages[5]:.2f} bps"
     )
 
-    # Sauvegarde des résultats dans un CSV si demandé
     if args.output:
         with open(args.output, mode="w", newline="") as f:
             writer = csv.writer(f)
-            # En-tête
             writer.writerow(
                 [
                     "nodes",
@@ -190,6 +209,7 @@ if __name__ == "__main__":
                     "mode",
                     "interval",
                     "steps",
+                    "run",
                     "delivered",
                     "collisions",
                     "PDR(%)",
@@ -198,21 +218,28 @@ if __name__ == "__main__":
                     "throughput_bps",
                 ]
             )
-            # Données
-            writer.writerow(
-                [
-                    args.nodes,
-                    args.gateways,
-                    args.channels,
-                    args.mode,
-                    args.interval,
-                    args.steps,
-                    delivered,
-                    collisions,
-                    f"{pdr:.2f}",
-                    f"{energy:.1f}",
-                    f"{avg_delay:.2f}",
-                    f"{throughput:.2f}",
-                ]
-            )
+            for run_idx, (d, c, p, e, ad, th) in enumerate(results, start=1):
+                writer.writerow(
+                    [
+                        args.nodes,
+                        args.gateways,
+                        args.channels,
+                        args.mode,
+                        args.interval,
+                        args.steps,
+                        run_idx,
+                        d,
+                        c,
+                        f"{p:.2f}",
+                        f"{e:.1f}",
+                        f"{ad:.2f}",
+                        f"{th:.2f}",
+                    ]
+                )
         logging.info(f"Résultats enregistrés dans {args.output}")
+
+    return results, tuple(averages)
+
+
+if __name__ == "__main__":
+    main()

@@ -40,6 +40,7 @@ python run.py --nodes 20 --steps 100
 ```
 
 Add `--seed <n>` to obtain the same node placement on each run.
+Use `--runs <n>` to repeat the simulation several times and average the metrics.
 
 You can also execute the simulator directly from the repository root:
 
