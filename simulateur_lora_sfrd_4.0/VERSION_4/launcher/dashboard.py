@@ -5,6 +5,7 @@ import panel as pn
 import plotly.graph_objects as go
 import time
 import threading
+import pandas as pd
 
 # Assurer la résolution correcte des imports quel que soit le répertoire
 # depuis lequel ce fichier est exécuté. On ajoute le dossier parent
@@ -34,6 +35,9 @@ elapsed_time = 0
 max_real_time = None
 paused = False
 selected_adr_module = adr_standard_1
+total_runs = 1
+current_run = 0
+runs_events: list[pd.DataFrame] = []
 
 # --- Widgets de configuration ---
 num_nodes_input = pn.widgets.IntInput(name="Nombre de nœuds", value=20, step=1, start=1)
@@ -47,6 +51,7 @@ packets_input = pn.widgets.IntInput(name="Nombre de paquets (0=infin)", value=0,
 seed_input = pn.widgets.IntInput(
     name="Graine (0 = aléatoire)", value=0, step=1, start=0
 )
+num_runs_input = pn.widgets.IntInput(name="Nombre de runs", value=1, start=1)
 adr_node_checkbox = pn.widgets.Checkbox(name="ADR nœud", value=False)
 adr_server_checkbox = pn.widgets.Checkbox(name="ADR serveur", value=False)
 
@@ -243,17 +248,20 @@ def step_simulation():
 
 
 # --- Bouton "Lancer la simulation" ---
-def on_start(event):
+def setup_simulation(seed_offset: int = 0):
+    """Crée et démarre un simulateur avec les paramètres du tableau de bord."""
     global sim, sim_callback, start_time, chrono_callback, elapsed_time, max_real_time, paused
     elapsed_time = 0
 
-    # Arrêter toutes les callbacks au cas où
     if sim_callback:
         sim_callback.stop()
         sim_callback = None
     if chrono_callback:
         chrono_callback.stop()
         chrono_callback = None
+
+    seed_val = int(seed_input.value)
+    seed = seed_val + seed_offset if seed_val != 0 else None
 
     sim = Simulator(
         num_nodes=int(num_nodes_input.value),
@@ -270,7 +278,7 @@ def on_start(event):
         channel_distribution="random" if channel_dist_select.value == "Aléatoire" else "round-robin",
         fixed_sf=int(sf_value_input.value) if fixed_sf_checkbox.value else None,
         fixed_tx_power=float(tx_power_input.value) if fixed_power_checkbox.value else None,
-        seed=int(seed_input.value) if int(seed_input.value) != 0 else None,
+        seed=seed,
     )
 
     if manual_pos_toggle.value:
@@ -347,6 +355,7 @@ def on_start(event):
     mobility_speed_min_input.disabled = True
     mobility_speed_max_input.disabled = True
     seed_input.disabled = True
+    num_runs_input.disabled = True
     real_time_duration_input.disabled = True
     start_button.disabled = True
     stop_button.disabled = False
@@ -362,9 +371,19 @@ def on_start(event):
     sim_callback = pn.state.add_periodic_callback(step_simulation, period=100, timeout=None)
 
 
+# --- Bouton "Lancer la simulation" ---
+def on_start(event):
+    global total_runs, current_run, runs_events
+    total_runs = int(num_runs_input.value)
+    current_run = 1
+    runs_events.clear()
+    setup_simulation(seed_offset=0)
+
+
 # --- Bouton "Arrêter la simulation" ---
 def on_stop(event):
     global sim, sim_callback, chrono_callback, start_time, max_real_time, paused
+    global current_run, total_runs, runs_events
     if sim is None or not sim.running:
         return
 
@@ -375,6 +394,19 @@ def on_stop(event):
     if chrono_callback:
         chrono_callback.stop()
         chrono_callback = None
+
+    try:
+        df = sim.get_events_dataframe()
+        if df is not None:
+            runs_events.append(df.assign(run=current_run))
+    except Exception:
+        pass
+
+    if current_run < total_runs:
+        current_run += 1
+        seed_offset = current_run - 1
+        setup_simulation(seed_offset=seed_offset)
+        return
 
     num_nodes_input.disabled = False
     num_gateways_input.disabled = False
@@ -394,6 +426,7 @@ def on_stop(event):
     mobility_speed_min_input.disabled = False
     mobility_speed_max_input.disabled = False
     seed_input.disabled = False
+    num_runs_input.disabled = False
     real_time_duration_input.disabled = False
     start_button.disabled = False
     stop_button.disabled = True
@@ -411,14 +444,13 @@ def on_stop(event):
 
 # --- Export CSV local : Méthode universelle ---
 def exporter_csv(event=None):
-    global sim
-    if sim is not None:
+    global runs_events
+    if runs_events:
         try:
-            df = sim.get_events_dataframe()
+            df = pd.concat(runs_events, ignore_index=True)
             if df.empty:
                 export_message.object = "⚠️ Aucune donnée à exporter !"
                 return
-            # Nom de fichier unique avec date et heure
             timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
             chemin = os.path.join(os.getcwd(), f"resultats_simulation_{timestamp}.csv")
             df.to_csv(chemin, index=False, encoding="utf-8")
@@ -577,6 +609,7 @@ controls = pn.WidgetBox(
     interval_input,
     packets_input,
     seed_input,
+    num_runs_input,
     adr_node_checkbox,
     adr_server_checkbox,
     pn.Row(adr1_button, adr2_button, adr3_button, adr_active_badge),
