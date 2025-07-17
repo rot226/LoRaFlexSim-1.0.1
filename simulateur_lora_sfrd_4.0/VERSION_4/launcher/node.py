@@ -39,6 +39,8 @@ class Node:
         tx_power: float,
         channel=None,
         devaddr: int | None = None,
+        join_eui: int = 0,
+        dev_eui: int | None = None,
         class_type: str = 'A',
         battery_capacity_j: float | None = None,
         energy_profile: EnergyProfile | None = None,
@@ -58,6 +60,8 @@ class Node:
             (``None`` pour capacité illimitée).
         :param energy_profile: Paramètres de consommation d'énergie (profil
             FLoRa par défaut).
+        :param join_eui: Identifiant de l'application pour OTAA.
+        :param dev_eui: Identifiant unique du périphérique pour OTAA.
         """
         # Identité et paramètres initiaux
         self.id = node_id
@@ -106,6 +110,8 @@ class Node:
         self.activated = activated
         self.devaddr = devaddr if devaddr is not None else (node_id if activated else None)
         self.appkey = appkey or bytes(16)
+        self.join_eui = join_eui
+        self.dev_eui = dev_eui if dev_eui is not None else node_id
         self.devnonce = 0
         self.nwkskey = b""
         self.appskey = b""
@@ -282,7 +288,7 @@ class Node:
         from .lorawan import LoRaWANFrame, JoinRequest
 
         if not self.activated:
-            req = JoinRequest(0, self.id, self.devnonce)
+            req = JoinRequest(self.join_eui, self.dev_eui, self.devnonce)
             self.devnonce = (self.devnonce + 1) & 0xFFFF
             return req
 
@@ -324,9 +330,12 @@ class Node:
         )
 
         if isinstance(frame, JoinAccept):
+            from .lorawan import derive_session_keys
+
             self.devaddr = frame.dev_addr
-            self.nwkskey = frame.nwk_skey
-            self.appskey = frame.app_skey
+            self.nwkskey, self.appskey = derive_session_keys(
+                self.appkey, (self.devnonce - 1) & 0xFFFF, frame.app_nonce, frame.net_id
+            )
             self.activated = True
             self.downlink_pending = max(0, self.downlink_pending - 1)
             return
