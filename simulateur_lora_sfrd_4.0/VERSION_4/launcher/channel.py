@@ -4,6 +4,12 @@ import random
 class Channel:
     """Représente le canal de propagation radio pour LoRa."""
 
+    ENV_PRESETS = {
+        "urban": (2.7, 6.0),
+        "suburban": (2.3, 4.0),
+        "rural": (2.0, 2.0),
+    }
+
     def __init__(
         self,
         frequency_hz: float = 868e6,
@@ -21,6 +27,7 @@ class Channel:
         tx_power_std: float = 0.0,
         interference_dB: float = 0.0,
         detection_threshold_dBm: float = -float("inf"),
+        environment: str | None = None,
     ):
         """
         Initialise le canal radio avec paramètres de propagation.
@@ -41,7 +48,18 @@ class Channel:
         :param interference_dB: Bruit supplémentaire moyen dû aux interférences.
         :param detection_threshold_dBm: RSSI minimal détectable (dBm). Les
             signaux plus faibles sont ignorés.
+        :param environment: Chaîne optionnelle pour charger un preset
+            ("urban", "suburban" ou "rural").
         """
+
+        if environment is not None:
+            env = environment.lower()
+            if env not in self.ENV_PRESETS:
+                raise ValueError(f"Unknown environment preset: {environment}")
+            path_loss_exp, shadowing_std = self.ENV_PRESETS[env]
+            self.environment = env
+        else:
+            self.environment = None
 
         self.frequency_hz = frequency_hz
         self.path_loss_exp = path_loss_exp
