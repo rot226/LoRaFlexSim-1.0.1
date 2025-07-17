@@ -1,6 +1,5 @@
 import configparser
 from pathlib import Path
-from typing import List, Tuple, Dict
 
 def load_config(path: str | Path) -> tuple[list[dict], list[dict]]:
     """Load node and gateway positions from an INI-style configuration file.

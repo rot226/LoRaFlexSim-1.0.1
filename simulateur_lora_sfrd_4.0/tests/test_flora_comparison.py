@@ -8,9 +8,9 @@ pytest.importorskip("pandas")
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from VERSION_4.launcher.channel import Channel
-from VERSION_4.launcher.simulator import Simulator
-from VERSION_4.launcher.compare_flora import load_flora_metrics, compare_with_sim
+from VERSION_4.launcher.channel import Channel  # noqa: E402
+from VERSION_4.launcher.simulator import Simulator  # noqa: E402
+from VERSION_4.launcher.compare_flora import load_flora_metrics, compare_with_sim  # noqa: E402
 
 
 def _make_sim(num_nodes: int) -> Simulator:
