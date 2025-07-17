@@ -105,6 +105,9 @@ Depuis cette mise à jour, la largeur de bande (`bandwidth`) et le codage
 et introduire des variations aléatoires de puissance avec `tx_power_std`.
 Un seuil de détection peut être fixé via `detection_threshold_dBm` (par
 exemple `-110` dBm comme dans FLoRa) pour ignorer les signaux trop faibles.
+Le paramètre `min_interference_time` de `Simulator` permet de définir une durée
+de chevauchement sous laquelle deux paquets ne sont pas considérés comme en
+collision.
 
 ## SF et puissance initiaux
 

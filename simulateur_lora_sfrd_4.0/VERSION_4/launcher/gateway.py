@@ -21,9 +21,18 @@ class Gateway:
         # Downlink frames waiting for the corresponding node receive windows
         self.downlink_buffer: dict[int, list] = {}
 
-    def start_reception(self, event_id: int, node_id: int, sf: int, rssi: float,
-                        end_time: float, capture_threshold: float, current_time: float,
-                        frequency: float):
+    def start_reception(
+        self,
+        event_id: int,
+        node_id: int,
+        sf: int,
+        rssi: float,
+        end_time: float,
+        capture_threshold: float,
+        current_time: float,
+        frequency: float,
+        min_interference_time: float = 0.0,
+    ):
         """
         Tente de démarrer la réception d'une nouvelle transmission sur cette passerelle.
         Gère les collisions et le capture effect.
@@ -34,6 +43,9 @@ class Gateway:
         :param end_time: Temps (simulation) auquel la transmission se termine.
         :param capture_threshold: Seuil de capture en dB pour considérer qu'un signal plus fort peut être décodé malgré les interférences.
         :param frequency: Fréquence radio de la transmission (Hz).
+        :param min_interference_time: Durée d'interférence tolérée (s). Les
+            transmissions qui ne se chevauchent pas plus longtemps que cette
+            valeur ne sont pas considérées comme en collision.
         """
         # Ne considérer que les transmissions de même SF et de même fréquence
         # pour les collisions. Les transmissions sur d'autres fréquences sont
@@ -41,12 +53,22 @@ class Gateway:
         # Récupérer les transmissions actives sur le même SF et la même
         # fréquence qui ne sont pas terminées au current_time.
         concurrent_transmissions = [
-            t for t in self.active_transmissions
-            if t['sf'] == sf and t['frequency'] == frequency and t['end_time'] > current_time
+            t
+            for t in self.active_transmissions
+            if t['sf'] == sf
+            and t['frequency'] == frequency
+            and t['end_time'] > current_time
         ]
 
+        # Filtrer les transmissions dont le chevauchement est significatif
+        interfering_transmissions = []
+        for t in concurrent_transmissions:
+            overlap = min(t['end_time'], end_time) - current_time
+            if overlap > min_interference_time:
+                interfering_transmissions.append(t)
+
         # Liste des transmissions en collision potentielles (y compris la nouvelle)
-        colliders = concurrent_transmissions.copy()
+        colliders = interfering_transmissions.copy()
         # Ajouter la nouvelle transmission elle-même
         new_transmission = {
             'event_id': event_id,
@@ -55,12 +77,13 @@ class Gateway:
             'frequency': frequency,
             'rssi': rssi,
             'end_time': end_time,
-            'lost_flag': False
+            'start_time': current_time,
+            'lost_flag': False,
         }
         colliders.append(new_transmission)
 
-        if not concurrent_transmissions:
-            # Aucun paquet actif sur cette SF: on peut recevoir normalement (pas de collision)
+        if not interfering_transmissions:
+            # Aucun paquet actif (ou chevauchement inférieur au seuil)
             self.active_transmissions.append(new_transmission)
             logger.debug(
                 f"Gateway {self.id}: new transmission {event_id} from node {node_id} "
@@ -88,7 +111,7 @@ class Gateway:
                 else:
                     t['lost_flag'] = True   # perdants
             # Retirer toutes les transmissions concurrentes actives qui sont perdantes
-            for t in concurrent_transmissions:
+            for t in interfering_transmissions:
                 if t['lost_flag']:
                     try:
                         self.active_transmissions.remove(t)
@@ -105,7 +128,7 @@ class Gateway:
             for t in colliders:
                 t['lost_flag'] = True
             # Retirer tous les paquets concurrents actifs (ils ne seront pas décodés finalement)
-            for t in concurrent_transmissions:
+            for t in interfering_transmissions:
                 try:
                     self.active_transmissions.remove(t)
                 except ValueError:

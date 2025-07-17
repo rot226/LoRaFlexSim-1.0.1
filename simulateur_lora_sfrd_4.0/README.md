@@ -8,6 +8,7 @@ This repository contains a lightweight LoRa network simulator implemented in Pyt
 - Multi-channel radio support
 - Advanced channel model with loss and noise parameters
 - Configurable bandwidth and coding rate per channel
+- Capture effect and a minimum interference time to ignore very short overlaps
 - Initial spreading factor and power selection
 - Full LoRaWAN ADR layer following the official specification (LinkADRReq/Ans,
   ADRACKReq, channel mask, NbTrans, ADR_ACK_DELAY fallback) and derived from the
