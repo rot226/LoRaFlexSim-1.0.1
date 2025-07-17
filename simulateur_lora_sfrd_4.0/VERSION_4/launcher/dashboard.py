@@ -471,6 +471,7 @@ export_button.on_click(exporter_csv)
 # --- Bouton d'accélération ---
 def fast_forward(event=None):
     global sim, sim_callback, chrono_callback, start_time, max_real_time
+    doc = pn.state.curdoc
     if sim and sim.running:
         if sim.packets_to_send == 0:
             export_message.object = (
@@ -519,7 +520,7 @@ def fast_forward(event=None):
                 update_map()
                 on_stop(None)
 
-            pn.state.curdoc.add_next_tick_callback(update_ui)
+            doc.add_next_tick_callback(update_ui)
 
         threading.Thread(target=run_and_update, daemon=True).start()
 
