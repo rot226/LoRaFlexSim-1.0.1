@@ -6,7 +6,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import VERSION_4.run as run
+import VERSION_4.run as run  # noqa: E402
 
 
 def test_simulate_throughput_bps():
