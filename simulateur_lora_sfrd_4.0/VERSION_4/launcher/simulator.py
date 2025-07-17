@@ -57,6 +57,7 @@ class Simulator:
                  fixed_tx_power: float | None = None,
                  battery_capacity_j: float | None = None,
                  payload_size_bytes: int = 20,
+                 node_class: str = 'A',
                  detection_threshold_dBm: float = -float("inf"),
                  min_interference_time: float = 0.0,
                  seed: int | None = None,
@@ -85,6 +86,7 @@ class Simulator:
         :param fixed_tx_power: Si défini, puissance d'émission initiale commune (dBm).
         :param battery_capacity_j: Capacité de la batterie attribuée à chaque nœud (J). ``None`` pour illimité.
         :param payload_size_bytes: Taille du payload utilisé pour calculer l'airtime (octets).
+        :param node_class: Classe LoRaWAN commune à tous les nœuds ('A', 'B' ou 'C').
         :param detection_threshold_dBm: RSSI minimal requis pour qu'une
             réception soit prise en compte.
         :param min_interference_time: Chevauchement temporel toléré entre
@@ -108,6 +110,7 @@ class Simulator:
         self.fixed_tx_power = fixed_tx_power
         self.battery_capacity_j = battery_capacity_j
         self.payload_size_bytes = payload_size_bytes
+        self.node_class = node_class
         self.detection_threshold_dBm = detection_threshold_dBm
         self.min_interference_time = min_interference_time
         # Activation ou non de la mobilité des nœuds
@@ -178,8 +181,16 @@ class Simulator:
             sf = self.fixed_sf if self.fixed_sf is not None else random.randint(7, 12)
             tx_power = self.fixed_tx_power if self.fixed_tx_power is not None else 14.0
             channel = self.multichannel.select_mask(0xFFFF)
-            node = Node(node_id, x, y, sf, tx_power, channel=channel,
-                        battery_capacity_j=self.battery_capacity_j)
+            node = Node(
+                node_id,
+                x,
+                y,
+                sf,
+                tx_power,
+                channel=channel,
+                class_type=self.node_class,
+                battery_capacity_j=self.battery_capacity_j,
+            )
             # Enregistrer les états initiaux du nœud pour rapport ultérieur
             node.initial_x = x
             node.initial_y = y
