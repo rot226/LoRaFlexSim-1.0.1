@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from VERSION_4.launcher.channel import Channel  # noqa: E402
-from VERSION_4.launcher.simulator import Simulator  # noqa: E402
+from VERSION_4.launcher.simulator import Simulator, EventType  # noqa: E402
 from VERSION_4.launcher.node import Node  # noqa: E402
 from VERSION_4.launcher.gateway import Gateway  # noqa: E402
 from VERSION_4.launcher.server import NetworkServer  # noqa: E402
@@ -326,3 +326,38 @@ def test_min_interference_time_avoids_collision():
     assert sim.packets_lost_collision == 0
     for node in sim.nodes:
         assert node.packets_success == 1
+
+
+def test_duty_cycle_enforces_delay():
+    """Next transmission should be postponed when duty cycle is enabled."""
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=0.1,
+        packets_to_send=2,
+        mobility=False,
+        duty_cycle=0.1,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    node = sim.nodes[0]
+    gw = sim.gateways[0]
+    node.x = gw.x
+    node.y = gw.y
+    sim.event_queue.clear()
+    sim.event_id_counter = 0
+    sim.schedule_event(node, 0.0)
+
+    # Process until the next transmission for the same node is scheduled
+    first_tx_id = 0
+    while sim.step():
+        if sim.event_queue and sim.event_queue[0].type == EventType.TX_START and sim.event_queue[0].id != first_tx_id:
+            break
+
+    next_time = sim.event_queue[0].time
+    # With duty cycle 10%, airtime ~0.0566s => next allowed time ~0.566s
+    assert next_time == pytest.approx(0.566, rel=0.05)

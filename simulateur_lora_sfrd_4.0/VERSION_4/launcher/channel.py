@@ -59,7 +59,8 @@ class Channel:
         self.bandwidth = bandwidth
         self.coding_rate = coding_rate
         self.preamble_symbols = 8
-        self.low_data_rate_threshold = 11  # SF >= 11 -> Low Data Rate Optimization activé
+        # Low Data Rate Optimization activée au-delà de ce SF
+        self.low_data_rate_threshold = 11  # SF >= 11 -> Low Data Rate Optimization activée
 
         # Sensibilité approximative par SF (dBm) pour BW=125kHz, CR=4/5
         self.sensitivity_dBm = {

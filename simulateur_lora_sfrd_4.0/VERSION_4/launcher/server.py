@@ -1,4 +1,5 @@
 import logging
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,10 @@ class NetworkServer:
                     max_snr = max(node.snr_history)
                     required = REQUIRED_SNR.get(node.sf, -20.0)
                     margin = max_snr - required - MARGIN_DB
-                    nstep = int(round(margin / 3.0))
+                    # Round away from zero to determine the number of 3 dB steps
+                    nstep = math.floor(abs(margin) / 3.0 + 0.5)
+                    if margin < 0:
+                        nstep = -nstep
 
                     sf = node.sf
                     power = node.tx_power
