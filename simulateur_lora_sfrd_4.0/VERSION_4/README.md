@@ -156,6 +156,30 @@ Lancer l'exemple minimal :
 python run.py --lorawan-demo
 ```
 
+## Differences from FLoRa
+
+This Python rewrite preserves most concepts of the OMNeT++ model but intentionally simplifies others.
+
+**Fully supported**
+- duty cycle enforcement and capture effect
+- multi-channel transmissions and channel distribution
+- node mobility with smooth trajectories
+- battery consumption using the FLoRa energy profile
+- ADR commands (`LinkADRReq/Ans`, `ADRACKReq`, channel mask, `NbTrans`)
+
+**Partially implemented**
+- OTAA join procedure and basic downlink queue
+- limited support for classes B and C
+- only a subset of MAC commands (`LinkCheck`, `DeviceTime`)
+
+**Omitted**
+- OMNeT++ GUI and detailed physical layer simulation
+- regional channel plans and the full MAC command set
+
+To reproduce FLoRa INI scenarios:
+1. Enable **Mode FLoRa complet** to set `-110 dBm` detection and a `5 s` interference window.
+2. Use **Positions manuelles** to enter the same node and gateway coordinates as in the INI file.
+3. Fill in **Graine** to keep the exact placement across runs.
 ## Format du fichier CSV
 
 L'option `--output` de `run.py` permet d'enregistrer les métriques de la
