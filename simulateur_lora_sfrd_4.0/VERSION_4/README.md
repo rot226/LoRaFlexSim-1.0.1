@@ -19,6 +19,10 @@ Définissez la valeur du champ **Graine** pour réutiliser le même placement de
 nœuds d'une simulation à l'autre. Le champ **Nombre de runs** permet quant à lui
 d'enchaîner automatiquement plusieurs simulations identiques (la graine est
 incrémentée à chaque run).
+Activez l'option **Positions manuelles** pour saisir les coordonnées exactes de
+certains nœuds ou passerelles ; chaque ligne suit par exemple `node,id=3,x=120,y=40`
+ou `gw,id=1,x=10,y=80`. Cela permet notamment de reprendre les positions
+fournies dans l'INI de FLoRa.
 4. **Exécutez des simulations en ligne de commande :**
    ```bash
    python run.py --nodes 30 --gateways 1 --mode Random --interval 10 --steps 100 --output résultats.csv
@@ -111,8 +115,10 @@ collision.
 
 Le tableau de bord propose désormais un bouton **Mode FLoRa complet**. Quand il
 est activé, `detection_threshold_dBm` est automatiquement fixé à `-110` dBm et
-`min_interference_time` appliqué pour mieux coller au modèle FLoRa. Les champs
-restent modifiables si ce mode est désactivé.
+`min_interference_time` à `5` s, valeurs tirées du fichier INI de FLoRa. Les
+champs restent modifiables si ce mode est désactivé. Pour reproduire fidèlement
+les scénarios FLoRa d'origine, pensez également à renseigner les positions des
+nœuds telles qu'indiquées dans l'INI.
 
 ## SF et puissance initiaux
 
