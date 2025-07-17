@@ -127,12 +127,21 @@ collision.
 Un module optionnel `advanced_channel.py` introduit des modèles de
 propagation supplémentaires inspirés de la couche physique OMNeT++. Le
 mode `cost231` applique la formule Hata COST‑231 avec les hauteurs de
-stations paramétrables. Il est également possible de simuler un fading
-`rayleigh` pour représenter des multi-trajets plus réalistes.
+stations paramétrables. Un mode `okumura_hata` reprend la variante
+d'origine (urbain, suburbain ou zone ouverte). Le mode `3d` calcule la
+distance réelle en 3D entre l'émetteur et le récepteur. Il est également
+possible de simuler un fading `rayleigh` pour représenter des
+multi-trajets plus réalistes. Des pertes liées aux conditions météo
+peuvent être ajoutées via `weather_loss_dB_per_km`.
 
 ```python
 from launcher.advanced_channel import AdvancedChannel
-ch = AdvancedChannel(propagation_model="cost231", fading="rayleigh")
+ch = AdvancedChannel(
+    propagation_model="okumura_hata",
+    terrain="suburban",
+    weather_loss_dB_per_km=1.0,
+    fading="rayleigh",
+)
 ```
 
 Les autres paramètres (fréquence, bruit, etc.) sont transmis au
