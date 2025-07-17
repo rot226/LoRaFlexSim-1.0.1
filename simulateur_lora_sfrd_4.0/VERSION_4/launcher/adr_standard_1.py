@@ -6,7 +6,7 @@ from .simulator import Simulator
 def apply(sim: Simulator) -> None:
     """Configure ADR variant adr_standard_1 (LoRaWAN defaults)."""
     Simulator.MARGIN_DB = 15.0
-    sim.adr_node = True
+    sim.adr_node = False
     sim.adr_server = True
     sim.network_server.adr_enabled = True
     for node in sim.nodes:
