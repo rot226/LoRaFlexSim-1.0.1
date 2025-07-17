@@ -110,6 +110,56 @@ class DeviceTimeAns:
         return DeviceTimeAns(secs, frac)
 
 
+@dataclass
+class JoinRequest:
+    """Simplified OTAA join request frame."""
+
+    join_eui: int
+    dev_eui: int
+    dev_nonce: int
+
+    def to_bytes(self) -> bytes:
+        return (
+            self.join_eui.to_bytes(8, "little")
+            + self.dev_eui.to_bytes(8, "little")
+            + self.dev_nonce.to_bytes(2, "little")
+        )
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "JoinRequest":
+        if len(data) < 18:
+            raise ValueError("Invalid JoinRequest")
+        join_eui = int.from_bytes(data[0:8], "little")
+        dev_eui = int.from_bytes(data[8:16], "little")
+        dev_nonce = int.from_bytes(data[16:18], "little")
+        return JoinRequest(join_eui, dev_eui, dev_nonce)
+
+
+@dataclass
+class JoinAccept:
+    """Simplified OTAA join accept frame."""
+
+    dev_addr: int
+    nwk_skey: bytes
+    app_skey: bytes
+
+    def to_bytes(self) -> bytes:
+        return (
+            self.dev_addr.to_bytes(4, "little")
+            + self.nwk_skey
+            + self.app_skey
+        )
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "JoinAccept":
+        if len(data) < 4 + 16 + 16:
+            raise ValueError("Invalid JoinAccept")
+        dev_addr = int.from_bytes(data[0:4], "little")
+        nwk_skey = data[4:20]
+        app_skey = data[20:36]
+        return JoinAccept(dev_addr, nwk_skey, app_skey)
+
+
 def compute_rx1(end_time: float) -> float:
     """Return the opening time of RX1 window after an uplink."""
     return end_time + 1.0

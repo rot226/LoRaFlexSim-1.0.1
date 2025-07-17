@@ -23,6 +23,8 @@ class NetworkServer:
         self.nodes = []
         self.gateways = []
         self.channel = None
+        self.net_id = 0
+        self.next_devaddr = 1
 
     # ------------------------------------------------------------------
     # Downlink management
@@ -30,7 +32,7 @@ class NetworkServer:
     def send_downlink(
         self,
         node,
-        payload: bytes = b"",
+        payload: bytes | object = b"",
         confirmed: bool = False,
         adr_command: tuple | None = None,
         request_ack: bool = False,
@@ -41,15 +43,23 @@ class NetworkServer:
             LinkADRReq,
             SF_TO_DR,
             DBM_TO_TX_POWER_INDEX,
+            JoinAccept,
         )
 
         gw = self.gateways[0] if self.gateways else None
         if gw is None:
             return
         fctrl = 0x20 if request_ack else 0
-        frame = LoRaWANFrame(
-            mhdr=0x60, fctrl=fctrl, fcnt=node.fcnt_down, payload=payload, confirmed=confirmed
-        )
+        if isinstance(payload, JoinAccept):
+            frame = payload
+        else:
+            frame = LoRaWANFrame(
+                mhdr=0x60,
+                fctrl=fctrl,
+                fcnt=node.fcnt_down,
+                payload=payload,
+                confirmed=confirmed,
+            )
         if adr_command:
             if len(adr_command) == 2:
                 sf, power = adr_command
@@ -66,6 +76,23 @@ class NetworkServer:
             node.downlink_pending += 1
         except AttributeError:
             pass
+
+    def _derive_keys(self, appkey: bytes, devnonce: int, appnonce: int) -> tuple[bytes, bytes]:
+        import hashlib
+
+        data = appkey + devnonce.to_bytes(2, "little") + appnonce.to_bytes(3, "little")
+        digest = hashlib.sha256(data).digest()
+        return digest[:16], digest[16:32]
+
+    def _activate(self, node):
+        from .lorawan import JoinAccept
+
+        appnonce = self.next_devaddr & 0xFFFFFF
+        devaddr = self.next_devaddr
+        self.next_devaddr += 1
+        nwk_skey, app_skey = self._derive_keys(node.appkey, node.devnonce, appnonce)
+        frame = JoinAccept(devaddr, nwk_skey, app_skey)
+        self.send_downlink(node, frame)
 
     def receive(self, event_id: int, node_id: int, gateway_id: int, rssi: float | None = None):
         """
@@ -87,6 +114,9 @@ class NetworkServer:
         logger.debug(f"NetworkServer: packet event {event_id} from node {node_id} received via gateway {gateway_id}.")
 
         node = next((n for n in self.nodes if n.id == node_id), None)
+        if node and not getattr(node, "activated", True):
+            self._activate(node)
+
         if node and node.last_adr_ack_req:
             # Device requested an ADR acknowledgement
             self.send_downlink(node)

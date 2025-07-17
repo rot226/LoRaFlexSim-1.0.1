@@ -473,7 +473,7 @@ class Simulator:
                 else:
                     new_queue = []
                     for evt in self.event_queue:
-                        if evt.type == EventType.TX_END:
+                        if evt.type in (EventType.TX_END, EventType.RX_WINDOW):
                             new_queue.append(evt)
                     heapq.heapify(new_queue)
                     self.event_queue = new_queue

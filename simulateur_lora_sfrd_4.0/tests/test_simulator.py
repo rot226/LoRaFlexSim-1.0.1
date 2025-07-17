@@ -361,3 +361,46 @@ def test_duty_cycle_enforces_delay():
     next_time = sim.event_queue[0].time
     # With duty cycle 10%, airtime ~0.0566s => next allowed time ~0.566s
     assert next_time == pytest.approx(0.566, rel=0.05)
+
+
+def test_prepare_uplink_join_request():
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel(), activated=False)
+    frame = node.prepare_uplink(b"payload")
+    from VERSION_4.launcher.lorawan import JoinRequest
+
+    assert isinstance(frame, JoinRequest)
+    assert node.devnonce == 1
+
+
+def test_network_server_activation():
+    ch = Channel(shadowing_std=0)
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=ch, activated=False)
+    gw = Gateway(1, 0.0, 0.0)
+    server = NetworkServer()
+    server.gateways = [gw]
+    server.nodes = [node]
+    server.channel = ch
+
+    server.receive(0, node.id, gw.id)
+    frame = gw.pop_downlink(node.id)
+    from VERSION_4.launcher.lorawan import JoinAccept
+
+    assert isinstance(frame, JoinAccept)
+    node.handle_downlink(frame)
+    assert node.activated
+
+
+def test_simulator_join_accept_downlink():
+    sim = _make_sim(num_nodes=1, same_start=False)
+    node = sim.nodes[0]
+    gw = sim.gateways[0]
+    node.activated = False
+    node.devaddr = None
+    node.x = gw.x
+    node.y = gw.y
+    sim.event_queue.clear()
+    sim.event_id_counter = 0
+    sim.schedule_event(node, 0.0)
+    while sim.step():
+        pass
+    assert node.activated
