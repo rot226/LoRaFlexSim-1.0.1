@@ -10,6 +10,13 @@ class Channel:
         "rural": (2.0, 2.0),
     }
 
+    # Preset frequency plans for common regions
+    REGION_CHANNELS: dict[str, list[float]] = {
+        "EU868": [868.1e6, 868.3e6, 868.5e6],
+        "US915": [902.3e6 + 200e3 * i for i in range(8)],
+        "AU915": [915.2e6 + 200e3 * i for i in range(8)],
+    }
+
     def __init__(
         self,
         frequency_hz: float = 868e6,
@@ -28,6 +35,8 @@ class Channel:
         interference_dB: float = 0.0,
         detection_threshold_dBm: float = -float("inf"),
         environment: str | None = None,
+        region: str | None = None,
+        channel_index: int = 0,
     ):
         """
         Initialise le canal radio avec paramètres de propagation.
@@ -50,6 +59,11 @@ class Channel:
             signaux plus faibles sont ignorés.
         :param environment: Chaîne optionnelle pour charger un preset
             ("urban", "suburban" ou "rural").
+        :param region: Nom d'un plan de fréquences prédéfini ("EU868", "US915",
+            etc.). S'il est fourni, ``frequency_hz`` est ignoré et remplacé par
+            la fréquence correspondante du canal ``channel_index``.
+        :param channel_index: Index du canal à utiliser dans le plan de la
+            région choisie.
         """
 
         if environment is not None:
@@ -60,6 +74,20 @@ class Channel:
             self.environment = env
         else:
             self.environment = None
+
+        if region is not None:
+            reg = region.upper()
+            if reg not in self.REGION_CHANNELS:
+                raise ValueError(f"Unknown region preset: {region}")
+            freqs = self.REGION_CHANNELS[reg]
+            if channel_index < 0 or channel_index >= len(freqs):
+                raise ValueError("channel_index out of range for region preset")
+            frequency_hz = freqs[channel_index]
+            self.region = reg
+            self.channel_index = channel_index
+        else:
+            self.region = None
+            self.channel_index = channel_index
 
         self.frequency_hz = frequency_hz
         self.path_loss_exp = path_loss_exp
@@ -145,3 +173,16 @@ class Channel:
         t_preamble = (self.preamble_symbols + 4.25) * ts
         t_payload = n_payload * ts
         return t_preamble + t_payload
+
+    # ------------------------------------------------------------------
+    # Helpers for region frequency presets
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def region_channels(cls, region: str, **kwargs) -> list["Channel"]:
+        """Return a list of ``Channel`` objects for the given region preset."""
+        reg = region.upper()
+        if reg not in cls.REGION_CHANNELS:
+            raise ValueError(f"Unknown region preset: {region}")
+        return [cls(frequency_hz=f, region=reg, channel_index=i, **kwargs)
+                for i, f in enumerate(cls.REGION_CHANNELS[reg])]
