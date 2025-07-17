@@ -553,7 +553,6 @@ class Simulator:
             if node.class_type.upper() != "C":
                 node.state = "sleep"
             self.network_server.deliver_scheduled(node.id, time)
-            selected_gw = None
             for gw in self.gateways:
                 frame = gw.pop_downlink(node.id)
                 if not frame:
@@ -571,7 +570,6 @@ class Simulator:
                     node.handle_downlink(frame)
                 else:
                     node.downlink_pending = max(0, node.downlink_pending - 1)
-                selected_gw = gw
                 break
             # Replanifier selon la classe du nœud
             if node.class_type.upper() == "C":

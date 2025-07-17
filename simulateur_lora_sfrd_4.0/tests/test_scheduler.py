@@ -4,10 +4,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from VERSION_4.launcher.node import Node
-from VERSION_4.launcher.gateway import Gateway
-from VERSION_4.launcher.channel import Channel
-from VERSION_4.launcher.server import NetworkServer
+from VERSION_4.launcher.node import Node  # noqa: E402
+from VERSION_4.launcher.gateway import Gateway  # noqa: E402
+from VERSION_4.launcher.channel import Channel  # noqa: E402
+from VERSION_4.launcher.server import NetworkServer  # noqa: E402
 
 
 def test_scheduled_downlink_delivery():

@@ -4,9 +4,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import pytest
+import pytest  # noqa: E402
 
-from VERSION_4.launcher.lorawan import (
+from VERSION_4.launcher.lorawan import (  # noqa: E402
     NewChannelReq,
     RXParamSetupReq,
     DevStatusAns,
