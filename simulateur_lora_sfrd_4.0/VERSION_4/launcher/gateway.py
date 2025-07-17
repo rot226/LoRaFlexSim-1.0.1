@@ -32,6 +32,8 @@ class Gateway:
         current_time: float,
         frequency: float,
         min_interference_time: float = 0.0,
+        noise_floor: float | None = None,
+        capture_mode: str = "basic",
     ):
         """
         Tente de démarrer la réception d'une nouvelle transmission sur cette passerelle.
@@ -46,6 +48,9 @@ class Gateway:
         :param min_interference_time: Durée d'interférence tolérée (s). Les
             transmissions qui ne se chevauchent pas plus longtemps que cette
             valeur ne sont pas considérées comme en collision.
+        :param noise_floor: Niveau de bruit pour le calcul du SNR (mode avancé).
+        :param capture_mode: "basic" pour l'ancien comportement, "advanced" pour
+            un calcul basé sur le SNR.
         """
         key = (sf, frequency)
         concurrent_transmissions = [
@@ -85,16 +90,25 @@ class Gateway:
             return
 
         # Sinon, on a une collision potentielle: déterminer le capture effect
-        # Trouver la transmission la plus forte en RSSI dans colliders
-        colliders.sort(key=lambda t: t['rssi'], reverse=True)
-        strongest = colliders[0]
-        second_strongest_rssi = colliders[1]['rssi'] if len(colliders) > 1 else None
+        # Tri décroissant selon la puissance ou le SNR
+        if capture_mode == "advanced" and noise_floor is not None:
+            snrs = [t['rssi'] - noise_floor for t in colliders]
+            indices = sorted(range(len(colliders)), key=lambda i: snrs[i], reverse=True)
+            strongest = colliders[indices[0]]
+            second = snrs[indices[1]] if len(indices) > 1 else None
+            strongest_metric = snrs[indices[0]]
+        else:
+            colliders.sort(key=lambda t: t['rssi'], reverse=True)
+            strongest = colliders[0]
+            second = colliders[1]['rssi'] if len(colliders) > 1 else None
+            strongest_metric = strongest['rssi']
 
-        # Vérifier si le plus fort est suffisamment au-dessus du second (et des autres)
         capture = False
-        if second_strongest_rssi is not None:
-            if strongest['rssi'] - second_strongest_rssi >= capture_threshold:
+        if second is not None:
+            if strongest_metric - second >= capture_threshold:
                 capture = True
+        else:
+            capture = True
 
         if capture:
             # Le signal le plus fort sera décodé, les autres sont perdus

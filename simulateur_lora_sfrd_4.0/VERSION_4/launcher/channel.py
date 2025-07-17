@@ -1,5 +1,6 @@
 import math
 import random
+from .omnet_model import OmnetModel
 
 class Channel:
     """Représente le canal de propagation radio pour LoRa."""
@@ -34,6 +35,11 @@ class Channel:
         receiver_noise_floor_dBm: float = -174.0,
         noise_figure_dB: float = 6.0,
         noise_floor_std: float = 0.0,
+        # OMNeT++ inspired options
+        fine_fading_std: float = 0.0,
+        fading_correlation: float = 0.9,
+        variable_noise_std: float = 0.0,
+        advanced_capture: bool = False,
         *,
         bandwidth: float = 125e3,
         coding_rate: int = 1,
@@ -69,6 +75,11 @@ class Channel:
         :param interference_dB: Bruit supplémentaire moyen dû aux interférences.
         :param detection_threshold_dBm: RSSI minimal détectable (dBm). Les
             signaux plus faibles sont ignorés.
+        :param fine_fading_std: Écart-type du fading temporel fin.
+        :param fading_correlation: Facteur de corrélation temporelle pour le
+            fading et le bruit variable.
+        :param variable_noise_std: Variation lente du bruit thermique en dB.
+        :param advanced_capture: Active un mode de capture inspiré de FLoRa.
         :param environment: Chaîne optionnelle pour charger un preset
             ("urban", "suburban" ou "rural").
         :param region: Nom d'un plan de fréquences prédéfini ("EU868", "US915",
@@ -115,6 +126,8 @@ class Channel:
         self.tx_power_std = tx_power_std
         self.interference_dB = interference_dB
         self.detection_threshold_dBm = detection_threshold_dBm
+        self.omnet = OmnetModel(fine_fading_std, fading_correlation, variable_noise_std)
+        self.advanced_capture = advanced_capture
 
         # Paramètres LoRa (BW 125 kHz, CR 4/5, préambule 8, CRC activé)
         self.bandwidth = bandwidth
@@ -145,6 +158,7 @@ class Channel:
         noise = thermal + self.noise_figure_dB + self.interference_dB
         if self.noise_floor_std > 0:
             noise += random.gauss(0, self.noise_floor_std)
+        noise += self.omnet.noise_variation()
         return noise
 
     def path_loss(self, distance: float) -> float:
@@ -186,6 +200,7 @@ class Channel:
             rssi += random.gauss(0, self.fast_fading_std)
         if self.time_variation_std > 0:
             rssi += random.gauss(0, self.time_variation_std)
+        rssi += self.omnet.fine_fading()
         snr = rssi - self.noise_floor_dBm()
         if sf is not None:
             snr += 10 * math.log10(2 ** sf)

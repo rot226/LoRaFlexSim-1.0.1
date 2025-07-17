@@ -395,6 +395,8 @@ class Simulator:
                     self.current_time,
                     node.channel.frequency_hz,
                     self.min_interference_time,
+                    noise_floor=node.channel.noise_floor_dBm(),
+                    capture_mode="advanced" if node.channel.advanced_capture else "basic",
                 )
 
             # Retenir le meilleur RSSI/SNR mesuré pour cette transmission
