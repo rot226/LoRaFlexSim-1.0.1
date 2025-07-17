@@ -103,6 +103,8 @@ Depuis cette mise à jour, la largeur de bande (`bandwidth`) et le codage
 (`coding_rate`) sont également configurables lors de la création d'un
 `Channel`. On peut modéliser des interférences externes via `interference_dB`
 et introduire des variations aléatoires de puissance avec `tx_power_std`.
+Un seuil de détection peut être fixé via `detection_threshold_dBm` (par
+exemple `-110` dBm comme dans FLoRa) pour ignorer les signaux trop faibles.
 
 ## SF et puissance initiaux
 

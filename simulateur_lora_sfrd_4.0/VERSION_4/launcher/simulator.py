@@ -54,6 +54,7 @@ class Simulator:
                  fixed_tx_power: float | None = None,
                  battery_capacity_j: float | None = None,
                  payload_size_bytes: int = 20,
+                 detection_threshold_dBm: float = -float("inf"),
                  seed: int | None = None):
         """
         Initialise la simulation LoRa avec les entités et paramètres donnés.
@@ -79,6 +80,8 @@ class Simulator:
         :param fixed_tx_power: Si défini, puissance d'émission initiale commune (dBm).
         :param battery_capacity_j: Capacité de la batterie attribuée à chaque nœud (J). ``None`` pour illimité.
         :param payload_size_bytes: Taille du payload utilisé pour calculer l'airtime (octets).
+        :param detection_threshold_dBm: RSSI minimal requis pour qu'une
+            réception soit prise en compte.
         :param seed: Graine aléatoire pour reproduire le placement des nœuds et
             passerelles. ``None`` pour un tirage aléatoire différent à chaque
             exécution.
@@ -96,6 +99,7 @@ class Simulator:
         self.fixed_tx_power = fixed_tx_power
         self.battery_capacity_j = battery_capacity_j
         self.payload_size_bytes = payload_size_bytes
+        self.detection_threshold_dBm = detection_threshold_dBm
         # Activation ou non de la mobilité des nœuds
         self.mobility_enabled = mobility
         self.mobility_model = SmoothMobility(area_size, mobility_speed[0], mobility_speed[1])
@@ -106,11 +110,23 @@ class Simulator:
         # Initialiser la gestion multi-canaux
         if isinstance(channels, MultiChannel):
             self.multichannel = channels
+            if detection_threshold_dBm != -float("inf"):
+                for ch in self.multichannel.channels:
+                    ch.detection_threshold_dBm = detection_threshold_dBm
         else:
             if channels is None:
-                ch_list = [Channel()]
+                ch_list = [Channel(detection_threshold_dBm=detection_threshold_dBm)]
             else:
-                ch_list = channels
+                ch_list = []
+                for ch in channels:
+                    if isinstance(ch, Channel):
+                        if detection_threshold_dBm != -float("inf"):
+                            ch.detection_threshold_dBm = detection_threshold_dBm
+                        ch_list.append(ch)
+                    else:
+                        ch_list.append(
+                            Channel(frequency_hz=float(ch), detection_threshold_dBm=detection_threshold_dBm)
+                        )
             self.multichannel = MultiChannel(ch_list, method=channel_distribution)
 
         # Compatibilité : premier canal par défaut
@@ -296,6 +312,8 @@ class Simulator:
             for gw in self.gateways:
                 distance = node.distance_to(gw)
                 rssi, snr = node.channel.compute_rssi(tx_power, distance)
+                if rssi < node.channel.detection_threshold_dBm:
+                    continue  # trop faible pour être détecté
                 snr_threshold = (
                     node.channel.sensitivity_dBm.get(sf, -float("inf"))
                     - node.channel.noise_floor_dBm()
@@ -477,6 +495,9 @@ class Simulator:
                     continue
                 distance = node.distance_to(gw)
                 rssi, snr = node.channel.compute_rssi(node.tx_power, distance)
+                if rssi < node.channel.detection_threshold_dBm:
+                    node.downlink_pending = max(0, node.downlink_pending - 1)
+                    continue
                 snr_threshold = (
                     node.channel.sensitivity_dBm.get(node.sf, -float("inf"))
                     - node.channel.noise_floor_dBm()
