@@ -136,6 +136,13 @@ energy_indicator = pn.indicators.Number(name="Énergie Tx (J)", value=0.0, forma
 delay_indicator = pn.indicators.Number(name="Délai moyen (s)", value=0.0, format="{value:.3f}")
 throughput_indicator = pn.indicators.Number(name="Débit (bps)", value=0.0, format="{value:.2f}")
 
+# Tableau récapitulatif du PDR par nœud (global et récent)
+pdr_table = pn.pane.DataFrame(
+    pd.DataFrame(columns=["Node", "PDR", "Recent PDR"]),
+    height=200,
+    width=220,
+)
+
 # --- Chronomètre ---
 chrono_indicator = pn.indicators.Number(name="Durée simulation (s)", value=0, format="{value:.1f}")
 
@@ -304,6 +311,17 @@ def step_simulation():
     energy_indicator.value = metrics["energy_J"]
     delay_indicator.value = metrics["avg_delay_s"]
     throughput_indicator.value = metrics["throughput_bps"]
+    table_df = pd.DataFrame(
+        {
+            "Node": list(metrics["pdr_by_node"].keys()),
+            "PDR": list(metrics["pdr_by_node"].values()),
+            "Recent PDR": [
+                metrics["recent_pdr_by_node"][nid]
+                for nid in metrics["pdr_by_node"].keys()
+            ],
+        }
+    )
+    pdr_table.object = table_df
     sf_dist = metrics["sf_distribution"]
     sf_fig = go.Figure(
         data=[go.Bar(x=[f"SF{sf}" for sf in sf_dist.keys()], y=list(sf_dist.values()))]
@@ -568,12 +586,24 @@ def on_stop(event):
         energy_indicator.value = avg.get("energy_J", 0.0)
         delay_indicator.value = avg.get("avg_delay_s", 0.0)
         throughput_indicator.value = avg.get("throughput_bps", 0.0)
+        last = runs_metrics[-1]
+        table_df = pd.DataFrame(
+            {
+                "Node": list(last["pdr_by_node"].keys()),
+                "PDR": list(last["pdr_by_node"].values()),
+                "Recent PDR": [
+                    last["recent_pdr_by_node"][nid]
+                    for nid in last["pdr_by_node"].keys()
+                ],
+            }
+        )
+        pdr_table.object = table_df
     export_message.object = "✅ Simulation terminée. Tu peux exporter les résultats."
 
 
 # --- Export CSV local : Méthode universelle ---
 def exporter_csv(event=None):
-    global runs_events
+    global runs_events, runs_metrics
     if runs_events:
         try:
             df = pd.concat(runs_events, ignore_index=True)
@@ -583,7 +613,13 @@ def exporter_csv(event=None):
             timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
             chemin = os.path.join(os.getcwd(), f"resultats_simulation_{timestamp}.csv")
             df.to_csv(chemin, index=False, encoding="utf-8")
-            export_message.object = f"✅ Résultats exportés : <b>{chemin}</b><br>(Ouvre-le avec Excel ou pandas)"
+            metrics_path = os.path.join(os.getcwd(), f"metrics_{timestamp}.csv")
+            if runs_metrics:
+                pd.DataFrame(runs_metrics).to_csv(metrics_path, index=False, encoding="utf-8")
+            export_message.object = (
+                f"✅ Résultats exportés : <b>{chemin}</b><br>"
+                f"Métriques : <b>{metrics_path}</b><br>(Ouvre-les avec Excel ou pandas)"
+            )
             try:
                 os.startfile(os.getcwd())
             except Exception:
@@ -791,6 +827,7 @@ metrics_col = pn.Column(
     energy_indicator,
     delay_indicator,
     throughput_indicator,
+    pdr_table,
 )
 metrics_col.width = 220
 
