@@ -43,7 +43,7 @@ class Simulator:
     REQUIRED_SNR = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
     MARGIN_DB = 15.0            # marge d'installation en dB (typiquement 15 dB)
     PER_THRESHOLD = 0.1         # Seuil de Packet Error Rate pour déclencher ADR
-    
+
     def __init__(self, num_nodes: int = 10, num_gateways: int = 1, area_size: float = 1000.0,
                  transmission_mode: str = 'Random', packet_interval: float = 60.0,
                  packets_to_send: int = 0, adr_node: bool = False, adr_server: bool = False,
@@ -141,7 +141,7 @@ class Simulator:
         self.seed = seed
         if self.seed is not None:
             random.seed(self.seed)
-        
+
         # Générer les passerelles
         self.gateways = []
         reset_ids()
@@ -156,7 +156,7 @@ class Simulator:
                 gw_x = random.random() * area_size
                 gw_y = random.random() * area_size
             self.gateways.append(Gateway(gw_id, gw_x, gw_y))
-        
+
         # Générer les nœuds aléatoirement dans l'aire et assigner un SF/power initiaux
         self.nodes = []
         for _ in range(self.num_nodes):
@@ -188,13 +188,13 @@ class Simulator:
         self.network_server.nodes = self.nodes
         self.network_server.gateways = self.gateways
         self.network_server.channel = self.channel
-        
+
         # File d'événements (min-heap)
         self.event_queue: list[Event] = []
         self.node_map = {node.id: node for node in self.nodes}
         self.current_time = 0.0
         self.event_id_counter = 0
-        
+
         # Statistiques cumulatives
         self.packets_sent = 0
         self.packets_delivered = 0
@@ -204,10 +204,10 @@ class Simulator:
         self.total_delay = 0.0
         self.delivered_count = 0
         self.retransmissions = 0
-        
+
         # Journal des événements (pour export CSV)
         self.events_log: list[dict] = []
-        
+
         # Planifier le premier envoi de chaque nœud
         for node in self.nodes:
             if self.transmission_mode.lower() == 'random':
@@ -227,10 +227,10 @@ class Simulator:
                     self.event_queue,
                     Event(0.0, EventType.RX_WINDOW, eid, node.id),
                 )
-        
+
         # Indicateur d'exécution de la simulation
         self.running = True
-    
+
     def schedule_event(self, node: Node, time: float):
         """Planifie un événement de transmission pour un nœud à l'instant donné."""
         if not node.alive:
@@ -247,7 +247,7 @@ class Simulator:
         logger.debug(
             f"Scheduled transmission {event_id} for node {node.id} at t={time:.2f}s"
         )
-    
+
     def schedule_mobility(self, node: Node, time: float):
         """Planifie un événement de mobilité (déplacement aléatoire) pour un nœud à l'instant donné."""
         if not node.alive:
@@ -261,7 +261,7 @@ class Simulator:
         logger.debug(
             f"Scheduled mobility {event_id} for node {node.id} at t={time:.2f}s"
         )
-    
+
     def step(self) -> bool:
         """Exécute le prochain événement planifié. Retourne False si plus d'événement à traiter."""
         if not self.running or not self.event_queue:
@@ -279,7 +279,7 @@ class Simulator:
         node.consume_until(time)
         if not node.alive:
             return True
-        
+
         if priority == EventType.TX_START:
             # Début d'une transmission émise par 'node'
             node_id = node.id
@@ -308,7 +308,7 @@ class Simulator:
             # Marquer le nœud comme en cours de transmission
             node.in_transmission = True
             node.current_end_time = end_time
-            
+
             heard_by_any = False
             best_rssi = None
             # Propagation du paquet vers chaque passerelle
@@ -341,7 +341,7 @@ class Simulator:
                     node.channel.frequency_hz,
                     self.min_interference_time,
                 )
-            
+
             # Retenir le meilleur RSSI/SNR mesuré pour cette transmission
             node.last_rssi = best_rssi if heard_by_any else None
             node.last_snr = best_snr if heard_by_any else None
@@ -364,7 +364,7 @@ class Simulator:
                 self.event_queue,
                 Event(rx2, EventType.RX_WINDOW, ev2, node.id),
             )
-            
+
             # Journaliser l'événement de transmission (résultat inconnu à ce stade)
             self.events_log.append({
                 'event_id': event_id,
@@ -380,7 +380,7 @@ class Simulator:
                 'gateway_id': None
             })
             return True
-        
+
         elif priority == EventType.TX_END:
             # Fin d'une transmission – traitement de la réception/perte
             node_id = node.id
@@ -416,7 +416,7 @@ class Simulator:
                     entry['result'] = 'Success' if delivered else ('CollisionLoss' if entry['heard'] else 'NoCoverage')
                     entry['gateway_id'] = self.network_server.event_gateway.get(event_id, None) if delivered else None
                     break
-            
+
             # Mettre à jour l'historique du nœud pour calculer les statistiques
             # récentes et éventuellement déclencher l'ADR.
             snr_value = None
@@ -480,7 +480,7 @@ class Simulator:
                     logger.debug("Packet limit reached – no more new events will be scheduled.")
 
             return True
-        
+
         elif priority == EventType.RX_WINDOW:
             # Fenêtre de réception RX1/RX2 pour un nœud
             node.add_energy(
@@ -560,10 +560,10 @@ class Simulator:
                 if self.mobility_enabled and (self.packets_to_send == 0 or self.packets_sent < self.packets_to_send):
                     self.schedule_mobility(node, time + self.mobility_model.step)
             return True
-        
+
         # Si autre type d'événement (non prévu)
         return True
-    
+
     def run(self, max_steps: int | None = None):
         """Exécute la simulation en traitant les événements jusqu'à épuisement ou jusqu'à une limite optionnelle."""
         step_count = 0
@@ -572,11 +572,11 @@ class Simulator:
             step_count += 1
             if max_steps and step_count >= max_steps:
                 break
-    
+
     def stop(self):
         """Arrête la simulation en cours."""
         self.running = False
-    
+
     def get_metrics(self) -> dict:
         """Retourne un dictionnaire des métriques actuelles de la simulation."""
         total_sent = self.packets_sent
@@ -617,10 +617,10 @@ class Simulator:
             'pdr_by_gateway': pdr_by_gateway,
             'retransmissions': self.retransmissions,
         }
-    
+
     def get_events_dataframe(self) -> 'pd.DataFrame | None':
         """
-        Retourne un DataFrame pandas contenant le log de tous les événements de 
+        Retourne un DataFrame pandas contenant le log de tous les événements de
         transmission enrichi des états initiaux et finaux des nœuds.
         """
         if pd is None:
