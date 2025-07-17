@@ -505,4 +505,6 @@ class Node:
         """Return RX1 and RX2 times for the last uplink."""
         from .lorawan import compute_rx1, compute_rx2
 
-        return compute_rx1(end_time), compute_rx2(end_time)
+        rx1 = compute_rx1(end_time, self.rx_delay)
+        rx2 = compute_rx2(end_time, self.rx_delay)
+        return rx1, rx2
