@@ -504,6 +504,15 @@ class Node:
                         self.pending_mac_cmd = BeaconTimingAns(0, 0).to_bytes()
                 except Exception:
                     pass
+            elif len(frame.payload) >= 2 and frame.payload[0] == 0x01:
+                try:
+                    from .lorawan import ResetConf, ResetInd
+
+                    conf = ResetConf.from_bytes(frame.payload[:2])
+                    self.lorawan_minor = conf.minor
+                    self.pending_mac_cmd = ResetInd(conf.minor).to_bytes()
+                except Exception:
+                    pass
             elif frame.payload.startswith(b"ADR:"):
                 try:
                     _, sf_str, pwr_str = frame.payload.decode().split(":")

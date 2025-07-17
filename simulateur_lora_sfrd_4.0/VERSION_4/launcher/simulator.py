@@ -552,6 +552,7 @@ class Simulator:
             )
             if node.class_type.upper() != "C":
                 node.state = "sleep"
+            self.network_server.deliver_scheduled(node.id, time)
             selected_gw = None
             for gw in self.gateways:
                 frame = gw.pop_downlink(node.id)
@@ -620,6 +621,7 @@ class Simulator:
                 return True
             node.last_state_time = time + node.profile.rx_window_duration
             node.state = "sleep"
+            self.network_server.deliver_scheduled(node.id, time)
             for gw in self.gateways:
                 frame = gw.pop_downlink(node.id)
                 if not frame:

@@ -86,6 +86,38 @@ class LinkCheckAns:
 
 
 @dataclass
+class ResetInd:
+    """Inform the network server that the device has reset."""
+
+    minor: int
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x01, self.minor & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "ResetInd":
+        if len(data) < 2 or data[0] != 0x01:
+            raise ValueError("Invalid ResetInd")
+        return ResetInd(minor=data[1])
+
+
+@dataclass
+class ResetConf:
+    """Acknowledge a ResetInd from the device."""
+
+    minor: int
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x01, self.minor & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "ResetConf":
+        if len(data) < 2 or data[0] != 0x01:
+            raise ValueError("Invalid ResetConf")
+        return ResetConf(minor=data[1])
+
+
+@dataclass
 class DutyCycleReq:
     max_duty_cycle: int
 

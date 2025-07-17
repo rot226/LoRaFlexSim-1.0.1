@@ -1,5 +1,6 @@
 import logging
 import math
+from .downlink_scheduler import DownlinkScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class NetworkServer:
         self.channel = None
         self.net_id = 0
         self.next_devaddr = 1
+        self.scheduler = DownlinkScheduler()
 
     # ------------------------------------------------------------------
     # Downlink management
@@ -36,7 +38,8 @@ class NetworkServer:
         confirmed: bool = False,
         adr_command: tuple | None = None,
         request_ack: bool = False,
-    ):
+        at_time: float | None = None,
+        ):
         """Queue a downlink frame for a node via the first gateway."""
         from .lorawan import (
             LoRaWANFrame,
@@ -71,7 +74,10 @@ class NetworkServer:
             p_idx = DBM_TO_TX_POWER_INDEX.get(int(power), 0)
             frame.payload = LinkADRReq(dr, p_idx, chmask, nbtrans).to_bytes()
         node.fcnt_down += 1
-        gw.buffer_downlink(node.id, frame)
+        if at_time is None:
+            gw.buffer_downlink(node.id, frame)
+        else:
+            self.scheduler.schedule(node.id, at_time, frame, gw)
         try:
             node.downlink_pending += 1
         except AttributeError:
@@ -81,6 +87,12 @@ class NetworkServer:
         from .lorawan import derive_session_keys
 
         return derive_session_keys(appkey, devnonce, appnonce, self.net_id)
+
+    def deliver_scheduled(self, node_id: int, current_time: float) -> None:
+        """Move ready scheduled frames to the gateway buffer."""
+        frame, gw = self.scheduler.pop_ready(node_id, current_time)
+        if frame and gw:
+            gw.buffer_downlink(node_id, frame)
 
     def _activate(self, node):
         from .lorawan import JoinAccept

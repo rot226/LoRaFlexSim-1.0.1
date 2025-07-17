@@ -202,9 +202,9 @@ This Python rewrite preserves most concepts of the OMNeT++ model but intentional
 - ADR commands (`LinkADRReq/Ans`, `ADRACKReq`, channel mask, `NbTrans`)
 
 **Partially implemented**
-- OTAA join procedure and basic downlink queue
-- limited support for classes B and C
-- only a subset of MAC commands (`LinkCheck`, `DeviceTime`)
+- OTAA join procedure and scheduled downlink queue
+- preliminary support for classes B and C
+- a larger subset of MAC commands (LinkCheck, DeviceTime, DutyCycle, BeaconFreq, Reset)
 
 **Omitted**
 - OMNeT++ GUI and detailed physical layer simulation
