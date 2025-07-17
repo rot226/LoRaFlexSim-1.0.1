@@ -83,6 +83,11 @@ python examples/run_flora_example.py --runs 5 --seed 123
 The script prints the Packet Delivery Ratio and spreading factor histogram for
 each run.
 
+You can now load similar scenarios directly from an INI file using
+``Simulator(config_file="file.ini")``. The file must define ``[gateways]`` and
+``[nodes]`` sections listing the coordinates (and optionally SF and power) of
+each entity.
+
 Use a preset propagation environment from Python:
 
 ```python

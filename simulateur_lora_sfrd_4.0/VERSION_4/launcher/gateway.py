@@ -14,10 +14,10 @@ class Gateway:
         self.id = gateway_id
         self.x = x
         self.y = y
-        # Liste des transmissions actuellement en cours de réception sur cette passerelle
-        # Chaque élément est un dictionnaire avec 'event_id', 'node_id', 'sf',
-        # 'frequency', 'rssi', 'end_time' et 'lost_flag'
-        self.active_transmissions: list[dict] = []
+        # Transmissions en cours indexées par (sf, frequency)
+        self.active_map: dict[tuple[int, float], list[dict]] = {}
+        # Mapping event_id -> (key, dict) for quick removal
+        self.active_by_event: dict[int, tuple[tuple[int, float], dict]] = {}
         # Downlink frames waiting for the corresponding node receive windows
         self.downlink_buffer: dict[int, list] = {}
 
@@ -47,17 +47,9 @@ class Gateway:
             transmissions qui ne se chevauchent pas plus longtemps que cette
             valeur ne sont pas considérées comme en collision.
         """
-        # Ne considérer que les transmissions de même SF et de même fréquence
-        # pour les collisions. Les transmissions sur d'autres fréquences sont
-        # traitées indépendamment.
-        # Récupérer les transmissions actives sur le même SF et la même
-        # fréquence qui ne sont pas terminées au current_time.
+        key = (sf, frequency)
         concurrent_transmissions = [
-            t
-            for t in self.active_transmissions
-            if t['sf'] == sf
-            and t['frequency'] == frequency
-            and t['end_time'] > current_time
+            t for t in self.active_map.get(key, []) if t['end_time'] > current_time
         ]
 
         # Filtrer les transmissions dont le chevauchement est significatif
@@ -84,7 +76,8 @@ class Gateway:
 
         if not interfering_transmissions:
             # Aucun paquet actif (ou chevauchement inférieur au seuil)
-            self.active_transmissions.append(new_transmission)
+            self.active_map.setdefault(key, []).append(new_transmission)
+            self.active_by_event[event_id] = (key, new_transmission)
             logger.debug(
                 f"Gateway {self.id}: new transmission {event_id} from node {node_id} "
                 f"(SF{sf}, {frequency/1e6:.3f} MHz) started, RSSI={rssi:.1f} dBm."
@@ -114,13 +107,15 @@ class Gateway:
             for t in interfering_transmissions:
                 if t['lost_flag']:
                     try:
-                        self.active_transmissions.remove(t)
-                    except ValueError:
+                        self.active_map[key].remove(t)
+                        self.active_by_event.pop(t['event_id'], None)
+                    except (ValueError, KeyError):
                         pass
             # Ajouter la transmission la plus forte si c'est la nouvelle (sinon elle est déjà dans active_transmissions)
             if strongest is new_transmission:
                 new_transmission['lost_flag'] = False
-                self.active_transmissions.append(new_transmission)
+                self.active_map.setdefault(key, []).append(new_transmission)
+                self.active_by_event[event_id] = (key, new_transmission)
             # Sinon, la nouvelle transmission est perdue (on ne l'ajoute pas)
             logger.debug(f"Gateway {self.id}: collision avec capture – paquet {strongest['event_id']} capturé, autres perdus.")
         else:
@@ -130,8 +125,9 @@ class Gateway:
             # Retirer tous les paquets concurrents actifs (ils ne seront pas décodés finalement)
             for t in interfering_transmissions:
                 try:
-                    self.active_transmissions.remove(t)
-                except ValueError:
+                    self.active_map[key].remove(t)
+                    self.active_by_event.pop(t['event_id'], None)
+                except (ValueError, KeyError):
                     pass
             # Ne pas ajouter la nouvelle transmission car tout est perdu (pas de décodage possible)
             logger.debug(f"Gateway {self.id}: collision sans capture – toutes les transmissions en collision sont perdues.")
@@ -147,19 +143,21 @@ class Gateway:
         :param network_server: L'objet NetworkServer pour notifier la réception d'un paquet décodé.
         :param node_id: Identifiant du nœud ayant transmis.
         """
-        # Rechercher la transmission correspondante dans la liste active
-        for t in list(self.active_transmissions):
-            if t['event_id'] == event_id:
-                # Retirer de la liste active
-                self.active_transmissions.remove(t)
-                # Si elle n'était pas marquée perdue, on considère le paquet reçu avec succès
-                if not t['lost_flag']:
-                    network_server.receive(event_id, node_id, self.id, t['rssi'])
-                    logger.debug(f"Gateway {self.id}: successfully received event {event_id} from node {node_id}.")
-                else:
-                    # Paquet perdu sur cette passerelle (collision ou signal trop faible), on ne notifie pas le serveur
-                    logger.debug(f"Gateway {self.id}: event {event_id} from node {node_id} was lost and not received.")
-                break  # event_id unique traité, on peut sortir de la boucle
+        key, t = self.active_by_event.pop(event_id, (None, None))
+        if t is not None and key is not None:
+            try:
+                self.active_map[key].remove(t)
+            except (ValueError, KeyError):
+                pass
+            if not t['lost_flag']:
+                network_server.receive(event_id, node_id, self.id, t['rssi'])
+                logger.debug(
+                    f"Gateway {self.id}: successfully received event {event_id} from node {node_id}."
+                )
+            else:
+                logger.debug(
+                    f"Gateway {self.id}: event {event_id} from node {node_id} was lost and not received."
+                )
 
     # ------------------------------------------------------------------
     # Downlink handling
