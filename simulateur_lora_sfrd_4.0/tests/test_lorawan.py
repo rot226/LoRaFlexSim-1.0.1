@@ -10,6 +10,8 @@ from VERSION_4.launcher.lorawan import (
     NewChannelReq,
     RXParamSetupReq,
     DevStatusAns,
+    PingSlotInfoReq,
+    BeaconTimingAns,
 )
 
 
@@ -31,6 +33,20 @@ def test_dev_status_ans_roundtrip():
     ans = DevStatusAns(battery=200, margin=10)
     data = ans.to_bytes()
     parsed = DevStatusAns.from_bytes(data)
+    assert parsed == ans
+
+
+def test_ping_slot_info_req_roundtrip():
+    req = PingSlotInfoReq(5)
+    data = req.to_bytes()
+    parsed = PingSlotInfoReq.from_bytes(data)
+    assert parsed == req
+
+
+def test_beacon_timing_ans_roundtrip():
+    ans = BeaconTimingAns(256, 3)
+    data = ans.to_bytes()
+    parsed = BeaconTimingAns.from_bytes(data)
     assert parsed == ans
 
 
