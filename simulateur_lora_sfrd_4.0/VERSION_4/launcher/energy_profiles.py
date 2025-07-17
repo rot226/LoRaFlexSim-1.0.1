@@ -16,8 +16,8 @@ class EnergyProfile:
     voltage_v: float = 3.3
     sleep_current_a: float = 1e-6
     rx_current_a: float = 11e-3
-    process_current_a: float = 5e-3
-    rx_window_duration: float = 0.1
+    process_current_a: float = 0.0
+    rx_window_duration: float = 0.0
     tx_current_map_a: dict[float, float] | None = None
 
     def get_tx_current(self, power_dBm: float) -> float:

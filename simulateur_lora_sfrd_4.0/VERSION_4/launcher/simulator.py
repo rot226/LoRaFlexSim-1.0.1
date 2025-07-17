@@ -26,6 +26,8 @@ class EventType(IntEnum):
     TX_START = 1
     MOBILITY = 2
     RX_WINDOW = 3
+    BEACON = 4
+    PING_SLOT = 5
 
 
 @dataclass(order=True, slots=True)
@@ -107,6 +109,11 @@ class Simulator:
         # Activation ou non de la mobilité des nœuds
         self.mobility_enabled = mobility
         self.mobility_model = SmoothMobility(area_size, mobility_speed[0], mobility_speed[1])
+
+        # Class B/C settings
+        self.beacon_interval = 128.0
+        self.ping_slot_interval = 1.0
+        self.ping_slot_offset = 2.0
 
         # Gestion du duty cycle (activé par défaut à 1 %)
         self.duty_cycle_manager = DutyCycleManager(duty_cycle) if duty_cycle else None
@@ -228,6 +235,14 @@ class Simulator:
                     Event(0.0, EventType.RX_WINDOW, eid, node.id),
                 )
 
+        # Première émission de beacon pour la synchronisation Class B
+        eid = self.event_id_counter
+        self.event_id_counter += 1
+        heapq.heappush(
+            self.event_queue,
+            Event(0.0, EventType.BEACON, eid, 0),
+        )
+
         # Indicateur d'exécution de la simulation
         self.running = True
 
@@ -272,13 +287,14 @@ class Simulator:
         priority = event.type
         event_id = event.id
         node = self.node_map.get(event.node_id)
-        if node is None:
+        if node is None and priority != EventType.BEACON:
             return True
         # Avancer le temps de simulation
         self.current_time = time
-        node.consume_until(time)
-        if not node.alive:
-            return True
+        if node is not None:
+            node.consume_until(time)
+            if not node.alive:
+                return True
 
         if priority == EventType.TX_START:
             # Début d'une transmission émise par 'node'
@@ -387,7 +403,7 @@ class Simulator:
             # Marquer la fin de transmission du nœud
             node.in_transmission = False
             node.current_end_time = None
-            node.state = "processing"
+            node.state = "rx" if node.class_type.upper() == "C" else "processing"
             # Notifier chaque passerelle de la fin de réception
             for gw in self.gateways:
                 gw.end_reception(event_id, self.network_server, node_id)
@@ -483,16 +499,20 @@ class Simulator:
 
         elif priority == EventType.RX_WINDOW:
             # Fenêtre de réception RX1/RX2 pour un nœud
-            node.add_energy(
-                node.profile.rx_current_a
-                * node.profile.voltage_v
-                * node.profile.rx_window_duration,
-                "rx",
-            )
+            if node.class_type.upper() != "C":
+                node.add_energy(
+                    node.profile.rx_current_a
+                    * node.profile.voltage_v
+                    * node.profile.rx_window_duration,
+                    "rx",
+                )
             if not node.alive:
                 return True
-            node.last_state_time = time + node.profile.rx_window_duration
-            node.state = "sleep"
+            node.last_state_time = time + (
+                node.profile.rx_window_duration if node.class_type.upper() != "C" else 0.0
+            )
+            if node.class_type.upper() != "C":
+                node.state = "sleep"
             selected_gw = None
             for gw in self.gateways:
                 frame = gw.pop_downlink(node.id)
@@ -514,15 +534,7 @@ class Simulator:
                 selected_gw = gw
                 break
             # Replanifier selon la classe du nœud
-            if node.class_type.upper() == "B":
-                nxt = time + 30.0
-                eid = self.event_id_counter
-                self.event_id_counter += 1
-                heapq.heappush(
-                    self.event_queue,
-                    Event(nxt, EventType.RX_WINDOW, eid, node.id),
-                )
-            elif node.class_type.upper() == "C" and selected_gw and selected_gw.downlink_buffer.get(node.id):
+            if node.class_type.upper() == "C":
                 nxt = time + 1.0
                 eid = self.event_id_counter
                 self.event_id_counter += 1
@@ -530,6 +542,65 @@ class Simulator:
                     self.event_queue,
                     Event(nxt, EventType.RX_WINDOW, eid, node.id),
                 )
+            return True
+
+        elif priority == EventType.BEACON:
+            nxt = time + self.beacon_interval
+            eid = self.event_id_counter
+            self.event_id_counter += 1
+            heapq.heappush(
+                self.event_queue,
+                Event(nxt, EventType.BEACON, eid, 0),
+            )
+            for n in self.nodes:
+                if n.class_type.upper() == "B":
+                    ping_time = time + self.ping_slot_offset
+                    eid = self.event_id_counter
+                    self.event_id_counter += 1
+                    heapq.heappush(
+                        self.event_queue,
+                        Event(ping_time, EventType.PING_SLOT, eid, n.id),
+                    )
+            return True
+
+        elif priority == EventType.PING_SLOT:
+            if node.class_type.upper() != "B":
+                return True
+            node.add_energy(
+                node.profile.rx_current_a
+                * node.profile.voltage_v
+                * node.profile.rx_window_duration,
+                "rx",
+            )
+            if not node.alive:
+                return True
+            node.last_state_time = time + node.profile.rx_window_duration
+            node.state = "sleep"
+            for gw in self.gateways:
+                frame = gw.pop_downlink(node.id)
+                if not frame:
+                    continue
+                distance = node.distance_to(gw)
+                rssi, snr = node.channel.compute_rssi(node.tx_power, distance)
+                if rssi < node.channel.detection_threshold_dBm:
+                    node.downlink_pending = max(0, node.downlink_pending - 1)
+                    continue
+                snr_threshold = (
+                    node.channel.sensitivity_dBm.get(node.sf, -float("inf"))
+                    - node.channel.noise_floor_dBm()
+                )
+                if snr >= snr_threshold:
+                    node.handle_downlink(frame)
+                else:
+                    node.downlink_pending = max(0, node.downlink_pending - 1)
+                break
+            nxt = time + self.beacon_interval
+            eid = self.event_id_counter
+            self.event_id_counter += 1
+            heapq.heappush(
+                self.event_queue,
+                Event(nxt, EventType.PING_SLOT, eid, node.id),
+            )
             return True
 
         elif priority == EventType.MOBILITY:

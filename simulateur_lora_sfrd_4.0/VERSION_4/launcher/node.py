@@ -140,6 +140,8 @@ class Node:
         # Energy accounting state
         self.last_state_time = 0.0
         self.state = 'sleep'
+        if self.class_type.upper() == 'C':
+            self.state = 'rx'
 
     @property
     def battery_level(self) -> float:

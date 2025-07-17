@@ -1,6 +1,7 @@
 import math
 import sys
 from pathlib import Path
+import heapq
 
 import pytest
 import random
@@ -10,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from VERSION_4.launcher.channel import Channel  # noqa: E402
-from VERSION_4.launcher.simulator import Simulator, EventType  # noqa: E402
+from VERSION_4.launcher.simulator import Simulator, EventType, Event  # noqa: E402
 from VERSION_4.launcher.node import Node  # noqa: E402
 from VERSION_4.launcher.gateway import Gateway  # noqa: E402
 from VERSION_4.launcher.server import NetworkServer  # noqa: E402
@@ -404,3 +405,54 @@ def test_simulator_join_accept_downlink():
     while sim.step():
         pass
     assert node.activated
+
+
+def test_beacon_schedules_ping_slot():
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=1,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    node = sim.nodes[0]
+    node.class_type = "B"
+    sim.step()  # process beacon
+    assert any(evt.type == EventType.PING_SLOT for evt in sim.event_queue)
+
+
+def test_class_c_continuous_rx_energy():
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=1,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    node = sim.nodes[0]
+    node.class_type = "C"
+    node.state = "rx"
+    node.last_state_time = 0.0
+    sim.event_queue.clear()
+    sim.event_id_counter = 0
+    eid = sim.event_id_counter
+    sim.event_id_counter += 1
+    heapq.heappush(sim.event_queue, Event(10.0, EventType.RX_WINDOW, eid, node.id))
+    sim.step()
+    expected = node.profile.rx_current_a * node.profile.voltage_v * 10.0
+    assert node.energy_rx == pytest.approx(expected)
+    assert node.state == "rx"
