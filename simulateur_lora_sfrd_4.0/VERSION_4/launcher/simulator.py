@@ -296,9 +296,9 @@ class Simulator:
             # Mettre à jour les compteurs de paquets émis
             self.packets_sent += 1
             node.increment_sent()
-            # Énergie consommée par la transmission (E = P(mW) * t)
-            p_mW = 10 ** (tx_power / 10.0)  # convertir dBm en mW
-            energy_J = (p_mW / 1000.0) * duration
+            # Énergie consommée par la transmission (E = I * V * t)
+            current_a = node.profile.get_tx_current(tx_power)
+            energy_J = current_a * node.profile.voltage_v * duration
             self.total_energy_J += energy_J
             node.add_energy(energy_J, "tx")
             if not node.alive:
