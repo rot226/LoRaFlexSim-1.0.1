@@ -358,14 +358,14 @@ class JoinAccept:
         return JoinAccept(app_nonce, net_id, dev_addr)
 
 
-def compute_rx1(end_time: float) -> float:
+def compute_rx1(end_time: float, rx_delay: float = 1.0) -> float:
     """Return the opening time of RX1 window after an uplink."""
-    return end_time + 1.0
+    return end_time + rx_delay
 
 
-def compute_rx2(end_time: float) -> float:
+def compute_rx2(end_time: float, rx_delay: float = 1.0) -> float:
     """Return the opening time of RX2 window after an uplink."""
-    return end_time + 2.0
+    return end_time + rx_delay + 1.0
 
 
 def derive_session_keys(app_key: bytes, dev_nonce: int, app_nonce: int, net_id: int) -> tuple[bytes, bytes]:
