@@ -91,8 +91,9 @@ class NetworkServer:
     def deliver_scheduled(self, node_id: int, current_time: float) -> None:
         """Move ready scheduled frames to the gateway buffer."""
         frame, gw = self.scheduler.pop_ready(node_id, current_time)
-        if frame and gw:
+        while frame and gw:
             gw.buffer_downlink(node_id, frame)
+            frame, gw = self.scheduler.pop_ready(node_id, current_time)
 
     def _activate(self, node):
         from .lorawan import JoinAccept
@@ -100,7 +101,8 @@ class NetworkServer:
         appnonce = self.next_devaddr & 0xFFFFFF
         devaddr = self.next_devaddr
         self.next_devaddr += 1
-        nwk_skey, app_skey = self._derive_keys(node.appkey, node.devnonce, appnonce)
+        devnonce = (node.devnonce - 1) & 0xFFFF
+        nwk_skey, app_skey = self._derive_keys(node.appkey, devnonce, appnonce)
         # Store derived keys server-side but send only join parameters
         frame = JoinAccept(appnonce, self.net_id, devaddr)
         node.nwkskey = nwk_skey
