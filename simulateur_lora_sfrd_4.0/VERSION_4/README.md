@@ -200,9 +200,9 @@ This Python rewrite preserves most concepts of the OMNeT++ model but intentional
 - predefined regional channel plans (EU868, US915, AU915, AS923, IN865, KR920)
 - customizable energy profiles
 - ADR commands (`LinkADRReq/Ans`, `ADRACKReq`, channel mask, `NbTrans`)
+- OTAA join procedure and scheduled downlink queue
 
 **Partially implemented**
-- OTAA join procedure and scheduled downlink queue
 - preliminary support for classes B and C
 - a larger subset of MAC commands (LinkCheck, DeviceTime, DutyCycle, BeaconFreq, Reset)
 

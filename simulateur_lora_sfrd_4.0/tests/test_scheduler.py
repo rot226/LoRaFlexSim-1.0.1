@@ -25,3 +25,19 @@ def test_scheduled_downlink_delivery():
     frame = gw.pop_downlink(node.id)
     assert frame is not None
     assert isinstance(frame.payload, bytes) and frame.payload == b"data"
+
+
+def test_multiple_scheduled_frames():
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    gw = Gateway(1, 0.0, 0.0)
+    ns = NetworkServer()
+    ns.gateways = [gw]
+    ns.nodes = [node]
+    ns.send_downlink(node, b"one", at_time=1.0)
+    ns.send_downlink(node, b"two", at_time=1.0)
+
+    ns.deliver_scheduled(node.id, 1.0)
+    frames = [gw.pop_downlink(node.id), gw.pop_downlink(node.id)]
+    payloads = sorted(f.payload for f in frames if f is not None)
+    assert payloads == [b"one", b"two"]
+    assert gw.pop_downlink(node.id) is None
