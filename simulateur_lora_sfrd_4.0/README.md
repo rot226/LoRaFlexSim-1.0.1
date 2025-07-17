@@ -30,7 +30,7 @@ pip install -r requirements.txt
 panel serve launcher/dashboard.py --show
 
 # From the repository root use
-panel serve simulateur_lora_sfrd_4.0/VERSION_4/launcher/dashboard.py --show
+panel serve VERSION_4/launcher/dashboard.py --show
 
 The dashboard now exposes a **Seed** input. Set the same value on
 subsequent runs to keep the node placement identical.
