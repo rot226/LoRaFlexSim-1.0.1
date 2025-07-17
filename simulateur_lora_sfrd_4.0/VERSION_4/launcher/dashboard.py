@@ -85,6 +85,15 @@ mobility_speed_max_input = pn.widgets.FloatInput(name="Vitesse max (m/s)", value
 real_time_duration_input = pn.widgets.FloatInput(name="Durée réelle max (s)", value=0.0, step=1.0, start=0.0)
 fast_forward_button = pn.widgets.Button(name="Accélérer jusqu'à la fin", button_type="primary", disabled=True)
 
+# --- Paramètres radio FLoRa ---
+flora_mode_toggle = pn.widgets.Toggle(name="Mode FLoRa complet", button_type="default", value=False)
+detection_threshold_input = pn.widgets.FloatInput(
+    name="Seuil détection (dBm)", value=-110.0, step=1.0, start=-150.0
+)
+min_interference_input = pn.widgets.FloatInput(
+    name="Min interference (s)", value=0.0, step=0.1, start=0.0
+)
+
 # --- Positions manuelles ---
 manual_pos_toggle = pn.widgets.Checkbox(name="Positions manuelles")
 position_textarea = pn.widgets.TextAreaInput(
@@ -278,6 +287,8 @@ def setup_simulation(seed_offset: int = 0):
         channel_distribution="random" if channel_dist_select.value == "Aléatoire" else "round-robin",
         fixed_sf=int(sf_value_input.value) if fixed_sf_checkbox.value else None,
         fixed_tx_power=float(tx_power_input.value) if fixed_power_checkbox.value else None,
+        detection_threshold_dBm=float(detection_threshold_input.value),
+        min_interference_time=float(min_interference_input.value),
         seed=seed,
     )
 
@@ -354,6 +365,9 @@ def setup_simulation(seed_offset: int = 0):
     mobility_checkbox.disabled = True
     mobility_speed_min_input.disabled = True
     mobility_speed_max_input.disabled = True
+    flora_mode_toggle.disabled = True
+    detection_threshold_input.disabled = True
+    min_interference_input.disabled = True
     seed_input.disabled = True
     num_runs_input.disabled = True
     real_time_duration_input.disabled = True
@@ -425,6 +439,9 @@ def on_stop(event):
     mobility_checkbox.disabled = False
     mobility_speed_min_input.disabled = False
     mobility_speed_max_input.disabled = False
+    flora_mode_toggle.disabled = False
+    detection_threshold_input.disabled = False
+    min_interference_input.disabled = False
     seed_input.disabled = False
     num_runs_input.disabled = False
     real_time_duration_input.disabled = False
@@ -592,6 +609,21 @@ def on_manual_toggle(event):
 
 manual_pos_toggle.param.watch(on_manual_toggle, "value")
 
+# --- Mode FLoRa complet ---
+def on_flora_toggle(event):
+    if event.new:
+        detection_threshold_input.value = -110.0
+        min_interference_input.value = 0.0
+        detection_threshold_input.disabled = True
+        min_interference_input.disabled = True
+        flora_mode_toggle.button_type = "primary"
+    else:
+        detection_threshold_input.disabled = False
+        min_interference_input.disabled = False
+        flora_mode_toggle.button_type = "default"
+
+flora_mode_toggle.param.watch(on_flora_toggle, "value")
+
 # --- Boutons ADR ---
 adr1_button.on_click(lambda event: select_adr(adr_standard_1, "ADR 1"))
 adr2_button.on_click(lambda event: select_adr(adr_2, "ADR 2"))
@@ -623,6 +655,9 @@ controls = pn.WidgetBox(
     mobility_checkbox,
     mobility_speed_min_input,
     mobility_speed_max_input,
+    flora_mode_toggle,
+    detection_threshold_input,
+    min_interference_input,
     real_time_duration_input,
     pn.Row(start_button, stop_button),
     pn.Row(fast_forward_button, pause_button),
