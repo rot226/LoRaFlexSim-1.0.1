@@ -2,6 +2,7 @@
 from .node import Node
 from .gateway import Gateway
 from .channel import Channel
+from .advanced_channel import AdvancedChannel
 from .multichannel import MultiChannel
 from .server import NetworkServer
 from .simulator import Simulator
@@ -13,6 +14,7 @@ __all__ = [
     "Node",
     "Gateway",
     "Channel",
+    "AdvancedChannel",
     "MultiChannel",
     "NetworkServer",
     "Simulator",
