@@ -95,6 +95,16 @@ detection_threshold_input = pn.widgets.FloatInput(
 min_interference_input = pn.widgets.FloatInput(
     name="Min interference (s)", value=0.0, step=0.1, start=0.0
 )
+# --- Paramètres supplémentaires ---
+battery_capacity_input = pn.widgets.FloatInput(
+    name="Capacité batterie (J)", value=0.0, step=10.0, start=0.0
+)
+payload_size_input = pn.widgets.IntInput(
+    name="Taille payload (o)", value=20, step=1, start=1
+)
+node_class_select = pn.widgets.RadioButtonGroup(
+    name="Classe LoRaWAN", options=["A", "B", "C"], value="A"
+)
 # Lorsque le mode FLoRa est activé, cette valeur est fixée à 5 s
 
 # --- Positions manuelles ---
@@ -290,6 +300,9 @@ def setup_simulation(seed_offset: int = 0):
         channel_distribution="random" if channel_dist_select.value == "Aléatoire" else "round-robin",
         fixed_sf=int(sf_value_input.value) if fixed_sf_checkbox.value else None,
         fixed_tx_power=float(tx_power_input.value) if fixed_power_checkbox.value else None,
+        battery_capacity_j=float(battery_capacity_input.value) if battery_capacity_input.value > 0 else None,
+        payload_size_bytes=int(payload_size_input.value),
+        node_class=node_class_select.value,
         detection_threshold_dBm=float(detection_threshold_input.value),
         min_interference_time=float(min_interference_input.value),
         seed=seed,
@@ -371,6 +384,9 @@ def setup_simulation(seed_offset: int = 0):
     flora_mode_toggle.disabled = True
     detection_threshold_input.disabled = True
     min_interference_input.disabled = True
+    battery_capacity_input.disabled = True
+    payload_size_input.disabled = True
+    node_class_select.disabled = True
     seed_input.disabled = True
     num_runs_input.disabled = True
     real_time_duration_input.disabled = True
@@ -464,6 +480,9 @@ def on_stop(event):
     flora_mode_toggle.disabled = False
     detection_threshold_input.disabled = False
     min_interference_input.disabled = False
+    battery_capacity_input.disabled = False
+    payload_size_input.disabled = False
+    node_class_select.disabled = False
     seed_input.disabled = False
     num_runs_input.disabled = False
     real_time_duration_input.disabled = False
@@ -694,6 +713,9 @@ controls = pn.WidgetBox(
     flora_mode_toggle,
     detection_threshold_input,
     min_interference_input,
+    battery_capacity_input,
+    payload_size_input,
+    node_class_select,
     real_time_duration_input,
     pn.Row(start_button, stop_button),
     pn.Row(fast_forward_button, pause_button),

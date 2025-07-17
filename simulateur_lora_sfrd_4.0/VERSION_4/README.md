@@ -87,6 +87,7 @@ Le tableau de bord permet maintenant de fixer une **durée réelle maximale** en
 ## Suivi de batterie
 
 Chaque nœud peut être doté d'une capacité d'énergie (en joules) grâce au paramètre `battery_capacity_j` du `Simulator`. La consommation est calculée selon le profil d'énergie FLoRa (courants typiques en veille, réception, etc.) puis retranchée de cette réserve. Le champ `battery_remaining_j` indique l'autonomie restante.
+Un champ **Capacité batterie (J)** est disponible dans le tableau de bord pour saisir facilement cette valeur (mettre `0` pour une capacité illimitée).
 
 ## Paramètres radio avancés
 
@@ -156,6 +157,8 @@ Lancer l'exemple minimal :
 ```bash
 python run.py --lorawan-demo
 ```
+
+Le tableau de bord inclut désormais un sélecteur **Classe LoRaWAN** permettant de choisir entre les modes A, B ou C pour l'ensemble des nœuds, ainsi qu'un champ **Taille payload (o)** afin de définir la longueur utilisée pour calculer l'airtime. Ces réglages facilitent la reproduction fidèle des scénarios FLoRa.
 
 ## Differences from FLoRa
 
