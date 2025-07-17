@@ -99,6 +99,13 @@ réception :
 - `noise_figure` : facteur de bruit du récepteur en dB.
 - `noise_floor_std` : écart-type de la variation aléatoire du bruit (dB).
 - `fast_fading_std` : amplitude du fading multipath en dB.
+- `environment` : preset rapide pour le modèle de propagation
+  (`urban`, `suburban` ou `rural`).
+
+```python
+from launcher.channel import Channel
+canal = Channel(environment="urban")
+```
 
 Ces valeurs influencent le calcul du RSSI et du SNR retournés par
 `Channel.compute_rssi`.

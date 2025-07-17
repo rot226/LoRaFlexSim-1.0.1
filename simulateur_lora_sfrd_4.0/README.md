@@ -8,6 +8,7 @@ This repository contains a lightweight LoRa network simulator implemented in Pyt
 - Multi-channel radio support
 - Advanced channel model with loss and noise parameters
 - Configurable bandwidth and coding rate per channel
+- Preset propagation environments (urban/suburban/rural) for quick channel setup
 - Capture effect and a minimum interference time to ignore very short overlaps
 - Initial spreading factor and power selection
 - Full LoRaWAN ADR layer following the official specification (LinkADRReq/Ans,
@@ -62,6 +63,13 @@ python VERSION_4/run.py --nodes 50 --gateways 2 --channels 3 \
 
 # LoRaWAN demo with downlinks
 python VERSION_4/run.py --lorawan-demo --steps 100 --output lorawan.csv
+```
+
+Use a preset propagation environment from Python:
+
+```python
+from VERSION_4.launcher.channel import Channel
+suburban = Channel(environment="suburban")
 ```
 
 You can analyze the resulting CSV file with:
