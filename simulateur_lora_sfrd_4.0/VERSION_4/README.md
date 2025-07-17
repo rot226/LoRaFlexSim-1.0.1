@@ -122,6 +122,23 @@ Le paramètre `min_interference_time` de `Simulator` permet de définir une dur�
 de chevauchement sous laquelle deux paquets ne sont pas considérés comme en
 collision.
 
+### Modélisation physique détaillée
+
+Un module optionnel `advanced_channel.py` introduit des modèles de
+propagation supplémentaires inspirés de la couche physique OMNeT++. Le
+mode `cost231` applique la formule Hata COST‑231 avec les hauteurs de
+stations paramétrables. Il est également possible de simuler un fading
+`rayleigh` pour représenter des multi-trajets plus réalistes.
+
+```python
+from launcher.advanced_channel import AdvancedChannel
+ch = AdvancedChannel(propagation_model="cost231", fading="rayleigh")
+```
+
+Les autres paramètres (fréquence, bruit, etc.) sont transmis au
+constructeur de `Channel` classique et restent compatibles avec le
+tableau de bord.
+
 Le tableau de bord propose désormais un bouton **Mode FLoRa complet**. Quand il
 est activé, `detection_threshold_dBm` est automatiquement fixé à `-110` dBm et
 `min_interference_time` à `5` s, valeurs tirées du fichier INI de FLoRa. Les
