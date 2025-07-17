@@ -77,6 +77,15 @@ If you collected several runs into one CSV via the dashboard or
 python examples/analyse_runs.py results.csv
 ```
 
+## Cleaning results
+
+Remove duplicated rows and `NaN` values from a CSV file using
+`clean_results.py`. The cleaned file is saved as `<file>_clean.csv`:
+
+```bash
+python VERSION_4/launcher/clean_results.py results.csv
+```
+
 ## Validating results
 
 Run the test suite to ensure everything works as expected:

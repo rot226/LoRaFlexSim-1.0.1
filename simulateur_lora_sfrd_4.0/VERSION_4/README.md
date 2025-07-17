@@ -176,6 +176,15 @@ run :
 python examples/analyse_runs.py résultats.csv
 ```
 
+## Nettoyage des résultats
+
+Le script `launcher/clean_results.py` supprime les doublons et les valeurs
+manquantes d'un fichier CSV, puis sauvegarde `<fichier>_clean.csv` :
+
+```bash
+python VERSION_4/launcher/clean_results.py résultats.csv
+```
+
 ## Validation des résultats
 
 L'exécution de `pytest` permet de vérifier la cohérence des calculs de RSSI et le traitement des collisions :
