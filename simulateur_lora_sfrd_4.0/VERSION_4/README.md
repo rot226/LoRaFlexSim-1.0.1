@@ -216,7 +216,7 @@ paramètre `fast_fading_std` afin de simuler un canal multipath et utiliser
 
 To reproduce FLoRa INI scenarios:
 1. Enable **Mode FLoRa complet** to set `-110 dBm` detection and a `5 s` interference window.
-2. Use **Positions manuelles** to enter the same node and gateway coordinates as in the INI file.
+2. Provide the INI file path to ``Simulator(config_file=...)`` or use **Positions manuelles** to enter the coordinates manually.
 3. Fill in **Graine** to keep the exact placement across runs.
 4. Or run `python examples/run_flora_example.py` to execute a preset scenario with ADR 1.
 ## Format du fichier CSV

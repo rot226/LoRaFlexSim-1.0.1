@@ -60,6 +60,7 @@ class Simulator:
                  node_class: str = 'A',
                  detection_threshold_dBm: float = -float("inf"),
                  min_interference_time: float = 0.0,
+                 config_file: str | None = None,
                  seed: int | None = None,
                  class_c_rx_interval: float = 1.0):
         """
@@ -91,6 +92,9 @@ class Simulator:
             réception soit prise en compte.
         :param min_interference_time: Chevauchement temporel toléré entre
             transmissions avant de les considérer en collision (s).
+        :param config_file: Fichier INI listant les positions des nœuds et
+            passerelles à charger. Lorsque défini, ``num_nodes`` et
+            ``num_gateways`` sont ignorés.
         :param seed: Graine aléatoire pour reproduire le placement des nœuds et
             passerelles. ``None`` pour un tirage aléatoire différent à chaque
             exécution.
@@ -113,6 +117,7 @@ class Simulator:
         self.node_class = node_class
         self.detection_threshold_dBm = detection_threshold_dBm
         self.min_interference_time = min_interference_time
+        self.config_file = config_file
         # Activation ou non de la mobilité des nœuds
         self.mobility_enabled = mobility
         self.mobility_model = SmoothMobility(area_size, mobility_speed[0], mobility_speed[1])
@@ -160,26 +165,44 @@ class Simulator:
         # Générer les passerelles
         self.gateways = []
         reset_ids()
-        for _ in range(self.num_gateways):
+        cfg_nodes = None
+        cfg_gateways = None
+        if config_file:
+            from .config_loader import load_config
+            cfg_nodes, cfg_gateways = load_config(config_file)
+            if cfg_gateways:
+                self.num_gateways = len(cfg_gateways)
+            if cfg_nodes:
+                self.num_nodes = len(cfg_nodes)
+
+        for idx in range(self.num_gateways):
             gw_id = next_gateway_id()
-            if self.num_gateways == 1:
-                # Une seule passerelle au centre de l'aire
+            if cfg_gateways and idx < len(cfg_gateways):
+                gw_x = cfg_gateways[idx]["x"]
+                gw_y = cfg_gateways[idx]["y"]
+            elif self.num_gateways == 1:
                 gw_x = area_size / 2.0
                 gw_y = area_size / 2.0
             else:
-                # Plusieurs passerelles placées aléatoirement
                 gw_x = random.random() * area_size
                 gw_y = random.random() * area_size
             self.gateways.append(Gateway(gw_id, gw_x, gw_y))
 
         # Générer les nœuds aléatoirement dans l'aire et assigner un SF/power initiaux
         self.nodes = []
-        for _ in range(self.num_nodes):
+        for idx in range(self.num_nodes):
             node_id = next_node_id()
-            x = random.random() * area_size
-            y = random.random() * area_size
-            sf = self.fixed_sf if self.fixed_sf is not None else random.randint(7, 12)
-            tx_power = self.fixed_tx_power if self.fixed_tx_power is not None else 14.0
+            if cfg_nodes and idx < len(cfg_nodes):
+                ncfg = cfg_nodes[idx]
+                x = ncfg["x"]
+                y = ncfg["y"]
+                sf = ncfg.get("sf", self.fixed_sf if self.fixed_sf is not None else random.randint(7, 12))
+                tx_power = ncfg.get("tx_power", self.fixed_tx_power if self.fixed_tx_power is not None else 14.0)
+            else:
+                x = random.random() * area_size
+                y = random.random() * area_size
+                sf = self.fixed_sf if self.fixed_sf is not None else random.randint(7, 12)
+                tx_power = self.fixed_tx_power if self.fixed_tx_power is not None else 14.0
             channel = self.multichannel.select_mask(0xFFFF)
             node = Node(
                 node_id,
