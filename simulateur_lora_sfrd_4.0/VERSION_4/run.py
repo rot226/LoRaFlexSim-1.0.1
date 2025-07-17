@@ -111,8 +111,9 @@ def main(argv=None):
     )
     parser.add_argument(
         "--mode",
-        choices=["Random", "Periodic"],
-        default="Random",
+        choices=["random", "periodic"],
+        default="random",
+        type=str.lower,
         help="Mode de transmission",
     )
     parser.add_argument(
