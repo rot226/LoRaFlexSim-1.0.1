@@ -30,10 +30,22 @@ class Node:
         last_move_time (float) : Dernier instant (s) où la position a été mise à jour (mobilité).
     """
 
-    def __init__(self, node_id: int, x: float, y: float, sf: int, tx_power: float,
-                 channel=None, devaddr: int | None = None, class_type: str = 'A',
-                 battery_capacity_j: float | None = None,
-                 energy_profile: EnergyProfile | None = None):
+    def __init__(
+        self,
+        node_id: int,
+        x: float,
+        y: float,
+        sf: int,
+        tx_power: float,
+        channel=None,
+        devaddr: int | None = None,
+        class_type: str = 'A',
+        battery_capacity_j: float | None = None,
+        energy_profile: EnergyProfile | None = None,
+        *,
+        activated: bool = True,
+        appkey: bytes | None = None,
+    ):
         """
         Initialise le nœud avec ses paramètres de départ.
 
@@ -89,7 +101,12 @@ class Node:
         self.path_duration = 0.0
 
         # LoRaWAN specific parameters
-        self.devaddr = devaddr if devaddr is not None else node_id
+        self.activated = activated
+        self.devaddr = devaddr if devaddr is not None else (node_id if activated else None)
+        self.appkey = appkey or bytes(16)
+        self.devnonce = 0
+        self.nwkskey = b""
+        self.appskey = b""
         self.fcnt_up = 0
         self.fcnt_down = 0
         self.class_type = class_type
@@ -257,8 +274,13 @@ class Node:
     # LoRaWAN helper methods
     # ------------------------------------------------------------------
     def prepare_uplink(self, payload: bytes, confirmed: bool = False):
-        """Build an uplink LoRaWAN frame and increment the counter."""
-        from .lorawan import LoRaWANFrame
+        """Build an uplink LoRaWAN frame or OTAA JoinRequest."""
+        from .lorawan import LoRaWANFrame, JoinRequest
+
+        if not self.activated:
+            req = JoinRequest(0, self.id, self.devnonce)
+            self.devnonce = (self.devnonce + 1) & 0xFFFF
+            return req
 
         if self.pending_mac_cmd:
             payload = self.pending_mac_cmd + payload
@@ -294,7 +316,16 @@ class Node:
             DeviceTimeAns,
             DR_TO_SF,
             TX_POWER_INDEX_TO_DBM,
+            JoinAccept,
         )
+
+        if isinstance(frame, JoinAccept):
+            self.devaddr = frame.dev_addr
+            self.nwkskey = frame.nwk_skey
+            self.appskey = frame.app_skey
+            self.activated = True
+            self.downlink_pending = max(0, self.downlink_pending - 1)
+            return
 
         self.fcnt_down = frame.fcnt + 1
         if self.adr:
