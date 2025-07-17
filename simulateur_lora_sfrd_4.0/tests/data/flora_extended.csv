@@ -1,0 +1,2 @@
+run,sent,received,collisions,energy_J,throughput_bps,sf7,sf8,sf9,sf10,sf11,sf12,collisions_sf7,collisions_sf8,collisions_sf9,collisions_sf10,collisions_sf11,collisions_sf12
+1,2,2,0,0.022404,104.692309,2,0,0,0,0,0,0,0,0,0,0,0
