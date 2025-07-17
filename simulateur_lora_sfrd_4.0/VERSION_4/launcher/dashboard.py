@@ -95,6 +95,7 @@ detection_threshold_input = pn.widgets.FloatInput(
 min_interference_input = pn.widgets.FloatInput(
     name="Min interference (s)", value=0.0, step=0.1, start=0.0
 )
+# Lorsque le mode FLoRa est activé, cette valeur est fixée à 5 s
 
 # --- Positions manuelles ---
 manual_pos_toggle = pn.widgets.Checkbox(name="Positions manuelles")
@@ -647,7 +648,8 @@ manual_pos_toggle.param.watch(on_manual_toggle, "value")
 def on_flora_toggle(event):
     if event.new:
         detection_threshold_input.value = -110.0
-        min_interference_input.value = 0.0
+        # En mode FLoRa, la durée minimale d'interférence est fixée à 5 s
+        min_interference_input.value = 5.0
         detection_threshold_input.disabled = True
         min_interference_input.disabled = True
         flora_mode_toggle.button_type = "primary"
