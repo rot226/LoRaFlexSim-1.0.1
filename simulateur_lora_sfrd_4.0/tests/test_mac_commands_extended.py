@@ -17,6 +17,8 @@ from VERSION_4.launcher.lorawan import (
     PingSlotInfoAns,
     BeaconTimingReq,
     BeaconTimingAns,
+    ResetConf,
+    ResetInd,
 )
 
 
@@ -70,3 +72,11 @@ def test_handle_beacon_timing_req():
     ans = BeaconTimingAns.from_bytes(node.pending_mac_cmd)
     assert ans.delay == 0
     assert ans.channel == 0
+
+
+def test_handle_reset_conf():
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    frame = LoRaWANFrame(0, 0, 0, ResetConf(1).to_bytes())
+    node.handle_downlink(frame)
+    assert node.lorawan_minor == 1
+    assert node.pending_mac_cmd == ResetInd(1).to_bytes()
