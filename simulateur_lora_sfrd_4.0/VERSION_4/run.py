@@ -29,6 +29,10 @@ def simulate(nodes, gateways, mode, interval, steps, channels=1):
     if steps <= 0:
         raise ValueError("steps must be > 0")
 
+    mode_lower = mode.lower()
+    if mode_lower not in {"random", "periodic"}:
+        raise ValueError("mode must be 'Random' or 'Periodic'")
+
     # Initialisation des compteurs
     total_transmissions = 0
     collisions = 0
@@ -41,7 +45,7 @@ def simulate(nodes, gateways, mode, interval, steps, channels=1):
     node_channels = {node: node % channels for node in range(nodes)}
     node_gateways = {node: node % max(1, gateways) for node in range(nodes)}
     for node in range(nodes):
-        if mode.lower() == "periodic":
+        if mode_lower == "periodic":
             t = 0
             while t < steps:
                 send_times[node].append(t)
