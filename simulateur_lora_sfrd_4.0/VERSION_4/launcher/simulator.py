@@ -689,6 +689,14 @@ class Simulator:
                 gateway_counts[gw_id] += 1
         pdr_by_gateway = {gw_id: count / total_sent if total_sent > 0 else 0.0 for gw_id, count in gateway_counts.items()}
 
+        pdr_by_class: dict[str, float] = {}
+        class_types = {n.class_type for n in self.nodes}
+        for ct in class_types:
+            nodes_cls = [n for n in self.nodes if n.class_type == ct]
+            sent_cls = sum(n.packets_sent for n in nodes_cls)
+            delivered_cls = sum(n.packets_success for n in nodes_cls)
+            pdr_by_class[ct] = delivered_cls / sent_cls if sent_cls > 0 else 0.0
+
         return {
             'PDR': pdr,
             'collisions': self.packets_lost_collision,
@@ -700,6 +708,7 @@ class Simulator:
             'recent_pdr_by_node': recent_pdr_by_node,
             'pdr_by_sf': pdr_by_sf,
             'pdr_by_gateway': pdr_by_gateway,
+            'pdr_by_class': pdr_by_class,
             'retransmissions': self.retransmissions,
         }
 
