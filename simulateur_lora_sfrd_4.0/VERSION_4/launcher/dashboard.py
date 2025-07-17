@@ -120,6 +120,9 @@ position_textarea = pn.widgets.TextAreaInput(
     css_classes=["coord-textarea"],
 )
 
+# Chargement d'un fichier .ini issu de FLoRa
+ini_file_input = pn.widgets.FileInput(name="Fichier INI FLoRa", accept=".ini")
+
 # --- Boutons de contrôle ---
 start_button = pn.widgets.Button(name="Lancer la simulation", button_type="success")
 stop_button = pn.widgets.Button(name="Arrêter la simulation", button_type="warning", disabled=True)
@@ -139,16 +142,8 @@ throughput_indicator = pn.indicators.Number(name="Débit (bps)", value=0.0, form
 # Indicateur de retransmissions
 retrans_indicator = pn.indicators.Number(name="Retransmissions", value=0, format="{value:d}")
 
-# Tableaux récapitulatifs par SF, passerelle et classe
-pdr_sf_table = pn.pane.DataFrame(
-    pd.DataFrame(columns=["SF", "PDR"]), height=150, width=180
-)
-pdr_gateway_table = pn.pane.DataFrame(
-    pd.DataFrame(columns=["Gateway", "PDR"]), height=150, width=180
-)
-pdr_class_table = pn.pane.DataFrame(
-    pd.DataFrame(columns=["Classe", "PDR"]), height=150, width=180
-)
+# Les tableaux de PDR détaillés ne sont plus affichés dans le tableau de bord
+# mais les données sont conservées pour être exportées en fin de simulation.
 
 # Tableau récapitulatif du PDR par nœud (global et récent)
 pdr_table = pn.pane.DataFrame(
@@ -337,21 +332,8 @@ def step_simulation():
         }
     )
     pdr_table.object = table_df
-    sf_df = pd.DataFrame(
-        {"SF": [f"SF{sf}" for sf in metrics["pdr_by_sf"].keys()],
-         "PDR": list(metrics["pdr_by_sf"].values())}
-    )
-    pdr_sf_table.object = sf_df
-    gw_df = pd.DataFrame(
-        {"Gateway": [f"GW{g}" for g in metrics["pdr_by_gateway"].keys()],
-         "PDR": list(metrics["pdr_by_gateway"].values())}
-    )
-    pdr_gateway_table.object = gw_df
-    class_df = pd.DataFrame(
-        {"Classe": list(metrics["pdr_by_class"].keys()),
-         "PDR": list(metrics["pdr_by_class"].values())}
-    )
-    pdr_class_table.object = class_df
+    # Les PDR détaillés par SF, passerelle et classe sont calculés mais non
+    # affichés. Ils seront exportés dans le fichier de résultats.
     sf_dist = metrics["sf_distribution"]
     sf_fig = go.Figure(
         data=[go.Bar(x=[f"SF{sf}" for sf in sf_dist.keys()], y=list(sf_dist.values()))]
@@ -363,9 +345,6 @@ def step_simulation():
         yaxis_range=[0, sim.num_nodes],
     )
     sf_hist_pane.object = sf_fig
-    pdr_sf_table.object = pd.DataFrame({"SF": [], "PDR": []})
-    pdr_gateway_table.object = pd.DataFrame({"Gateway": [], "PDR": []})
-    pdr_class_table.object = pd.DataFrame({"Classe": [], "PDR": []})
     retrans_indicator.value = 0
     update_map()
     if not cont:
@@ -392,6 +371,15 @@ def setup_simulation(seed_offset: int = 0):
     seed_val = int(seed_input.value)
     seed = seed_val + seed_offset if seed_val != 0 else None
 
+    config_path = None
+    if ini_file_input.value:
+        import tempfile
+
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".ini")
+        tmp.write(ini_file_input.value)
+        tmp.flush()
+        config_path = tmp.name
+
     sim = Simulator(
         num_nodes=int(num_nodes_input.value),
         num_gateways=int(num_gateways_input.value),
@@ -412,6 +400,7 @@ def setup_simulation(seed_offset: int = 0):
         node_class=node_class_select.value,
         detection_threshold_dBm=float(detection_threshold_input.value),
         min_interference_time=float(min_interference_input.value),
+        config_file=config_path,
         seed=seed,
     )
 
@@ -565,18 +554,7 @@ def on_stop(event):
             delay_indicator.value = avg.get("avg_delay_s", 0.0)
             throughput_indicator.value = avg.get("throughput_bps", 0.0)
             retrans_indicator.value = avg.get("retransmissions", 0)
-            pdr_sf_table.object = pd.DataFrame(
-                {"SF": [f"SF{sf}" for sf in avg.get("pdr_by_sf", {}).keys()],
-                 "PDR": list(avg.get("pdr_by_sf", {}).values())}
-            )
-            pdr_gateway_table.object = pd.DataFrame(
-                {"Gateway": [f"GW{g}" for g in avg.get("pdr_by_gateway", {}).keys()],
-                 "PDR": list(avg.get("pdr_by_gateway", {}).values())}
-            )
-            pdr_class_table.object = pd.DataFrame(
-                {"Classe": list(avg.get("pdr_by_class", {}).keys()),
-                 "PDR": list(avg.get("pdr_by_class", {}).values())}
-            )
+            # PDR détaillés disponibles dans le fichier exporté uniquement
         current_run += 1
         seed_offset = current_run - 1
         setup_simulation(seed_offset=seed_offset)
@@ -646,18 +624,7 @@ def on_stop(event):
             }
         )
         pdr_table.object = table_df
-        pdr_sf_table.object = pd.DataFrame(
-            {"SF": [f"SF{sf}" for sf in last.get("pdr_by_sf", {}).keys()],
-             "PDR": list(last.get("pdr_by_sf", {}).values())}
-        )
-        pdr_gateway_table.object = pd.DataFrame(
-            {"Gateway": [f"GW{g}" for g in last.get("pdr_by_gateway", {}).keys()],
-             "PDR": list(last.get("pdr_by_gateway", {}).values())}
-        )
-        pdr_class_table.object = pd.DataFrame(
-            {"Classe": list(last.get("pdr_by_class", {}).keys()),
-             "PDR": list(last.get("pdr_by_class", {}).values())}
-        )
+        # Les tableaux détaillés ne sont plus mis à jour ici
     export_message.object = "✅ Simulation terminée. Tu peux exporter les résultats."
 
 
@@ -675,7 +642,8 @@ def exporter_csv(event=None):
             df.to_csv(chemin, index=False, encoding="utf-8")
             metrics_path = os.path.join(os.getcwd(), f"metrics_{timestamp}.csv")
             if runs_metrics:
-                pd.DataFrame(runs_metrics).to_csv(metrics_path, index=False, encoding="utf-8")
+                metrics_df = pd.json_normalize(runs_metrics)
+                metrics_df.to_csv(metrics_path, index=False, encoding="utf-8")
             export_message.object = (
                 f"✅ Résultats exportés : <b>{chemin}</b><br>"
                 f"Métriques : <b>{metrics_path}</b><br>(Ouvre-les avec Excel ou pandas)"
@@ -733,18 +701,7 @@ def fast_forward(event=None):
                 delay_indicator.value = metrics["avg_delay_s"]
                 throughput_indicator.value = metrics["throughput_bps"]
                 retrans_indicator.value = metrics["retransmissions"]
-                pdr_sf_table.object = pd.DataFrame(
-                    {"SF": [f"SF{sf}" for sf in metrics["pdr_by_sf"].keys()],
-                     "PDR": list(metrics["pdr_by_sf"].values())}
-                )
-                pdr_gateway_table.object = pd.DataFrame(
-                    {"Gateway": [f"GW{g}" for g in metrics["pdr_by_gateway"].keys()],
-                     "PDR": list(metrics["pdr_by_gateway"].values())}
-                )
-                pdr_class_table.object = pd.DataFrame(
-                    {"Classe": list(metrics["pdr_by_class"].keys()),
-                     "PDR": list(metrics["pdr_by_class"].values())}
-                )
+                # Les détails de PDR ne sont pas affichés en direct
                 sf_dist = metrics["sf_distribution"]
                 sf_fig = go.Figure(
                     data=[go.Bar(x=[f"SF{sf}" for sf in sf_dist.keys()], y=list(sf_dist.values()))]
@@ -867,6 +824,7 @@ controls = pn.WidgetBox(
     packets_input,
     seed_input,
     num_runs_input,
+    ini_file_input,
     adr_node_checkbox,
     adr_server_checkbox,
     pn.Row(adr1_button, adr2_button, adr3_button, adr_active_badge),
@@ -912,14 +870,6 @@ center_col = pn.Column(
     sf_hist_pane,
     pn.Row(
         pn.Column(manual_pos_toggle, position_textarea, width=400),
-        pn.Column(
-            pn.Row(
-                pn.Column(pn.pane.Markdown("**PDR par SF**"), pdr_sf_table),
-                pn.Column(pn.pane.Markdown("**PDR par passerelle**"), pdr_gateway_table),
-                pn.Column(pn.pane.Markdown("**PDR par classe**"), pdr_class_table),
-            ),
-            width=600,
-        ),
     ),
     sizing_mode="stretch_width",
 )
