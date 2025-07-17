@@ -137,27 +137,27 @@ class JoinRequest:
 
 @dataclass
 class JoinAccept:
-    """Simplified OTAA join accept frame."""
+    """Simplified OTAA join accept frame carrying join parameters."""
 
+    app_nonce: int
+    net_id: int
     dev_addr: int
-    nwk_skey: bytes
-    app_skey: bytes
 
     def to_bytes(self) -> bytes:
         return (
-            self.dev_addr.to_bytes(4, "little")
-            + self.nwk_skey
-            + self.app_skey
+            self.app_nonce.to_bytes(3, "little")
+            + self.net_id.to_bytes(3, "little")
+            + self.dev_addr.to_bytes(4, "little")
         )
 
     @staticmethod
     def from_bytes(data: bytes) -> "JoinAccept":
-        if len(data) < 4 + 16 + 16:
+        if len(data) < 10:
             raise ValueError("Invalid JoinAccept")
-        dev_addr = int.from_bytes(data[0:4], "little")
-        nwk_skey = data[4:20]
-        app_skey = data[20:36]
-        return JoinAccept(dev_addr, nwk_skey, app_skey)
+        app_nonce = int.from_bytes(data[0:3], "little")
+        net_id = int.from_bytes(data[3:6], "little")
+        dev_addr = int.from_bytes(data[6:10], "little")
+        return JoinAccept(app_nonce, net_id, dev_addr)
 
 
 def compute_rx1(end_time: float) -> float:
@@ -168,3 +168,17 @@ def compute_rx1(end_time: float) -> float:
 def compute_rx2(end_time: float) -> float:
     """Return the opening time of RX2 window after an uplink."""
     return end_time + 2.0
+
+
+def derive_session_keys(app_key: bytes, dev_nonce: int, app_nonce: int, net_id: int) -> tuple[bytes, bytes]:
+    """Derive session keys in a simplified manner."""
+    import hashlib
+
+    data = (
+        app_key
+        + dev_nonce.to_bytes(2, "little")
+        + app_nonce.to_bytes(3, "little")
+        + net_id.to_bytes(3, "little")
+    )
+    digest = hashlib.sha256(data).digest()
+    return digest[:16], digest[16:32]

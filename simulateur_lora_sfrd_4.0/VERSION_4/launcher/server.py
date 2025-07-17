@@ -78,11 +78,9 @@ class NetworkServer:
             pass
 
     def _derive_keys(self, appkey: bytes, devnonce: int, appnonce: int) -> tuple[bytes, bytes]:
-        import hashlib
+        from .lorawan import derive_session_keys
 
-        data = appkey + devnonce.to_bytes(2, "little") + appnonce.to_bytes(3, "little")
-        digest = hashlib.sha256(data).digest()
-        return digest[:16], digest[16:32]
+        return derive_session_keys(appkey, devnonce, appnonce, self.net_id)
 
     def _activate(self, node):
         from .lorawan import JoinAccept
@@ -91,7 +89,10 @@ class NetworkServer:
         devaddr = self.next_devaddr
         self.next_devaddr += 1
         nwk_skey, app_skey = self._derive_keys(node.appkey, node.devnonce, appnonce)
-        frame = JoinAccept(devaddr, nwk_skey, app_skey)
+        # Store derived keys server-side but send only join parameters
+        frame = JoinAccept(appnonce, self.net_id, devaddr)
+        node.nwkskey = nwk_skey
+        node.appskey = app_skey
         self.send_downlink(node, frame)
 
     def receive(self, event_id: int, node_id: int, gateway_id: int, rssi: float | None = None):
