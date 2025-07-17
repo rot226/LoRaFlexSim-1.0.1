@@ -17,3 +17,15 @@ def test_environment_preset_values():
 def test_invalid_environment():
     with pytest.raises(ValueError):
         Channel(environment="unknown")
+
+
+def test_invalid_fading_model():
+    with pytest.raises(ValueError):
+        Channel(fading_model="invalid")
+
+
+def test_rayleigh_fading_computation():
+    ch = Channel(fading_model="rayleigh", fast_fading_std=1.0, shadowing_std=0)
+    rssi, snr = ch.compute_rssi(14.0, 10.0)
+    assert isinstance(rssi, float)
+    assert isinstance(snr, float)

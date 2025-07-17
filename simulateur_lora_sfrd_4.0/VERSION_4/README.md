@@ -99,6 +99,8 @@ réception :
 - `noise_figure` : facteur de bruit du récepteur en dB.
 - `noise_floor_std` : écart-type de la variation aléatoire du bruit (dB).
 - `fast_fading_std` : amplitude du fading multipath en dB.
+- `fading_model` : `"gaussian"` (défaut) ou `"rayleigh"` pour choisir le type de
+  fading multipath appliqué.
 - `environment` : preset rapide pour le modèle de propagation
   (`urban`, `suburban` ou `rural`).
 

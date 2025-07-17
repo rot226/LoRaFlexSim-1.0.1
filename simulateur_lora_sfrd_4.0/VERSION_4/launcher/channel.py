@@ -1,5 +1,8 @@
 import math
 import random
+from typing import Literal
+
+import numpy as np
 
 class Channel:
     """Représente le canal de propagation radio pour LoRa."""
@@ -16,6 +19,7 @@ class Channel:
         path_loss_exp: float = 2.7,
         shadowing_std: float = 6.0,
         fast_fading_std: float = 0.0,
+        fading_model: Literal["gaussian", "rayleigh"] = "gaussian",
         cable_loss_dB: float = 0.0,
         receiver_noise_floor_dBm: float = -174.0,
         noise_figure_dB: float = 6.0,
@@ -35,7 +39,10 @@ class Channel:
         :param frequency_hz: Fréquence en Hz (par défaut 868 MHz).
         :param path_loss_exp: Exposant de perte de parcours (log-distance).
         :param shadowing_std: Écart-type du shadowing (variations aléatoires en dB), 0 pour ignorer.
-        :param fast_fading_std: Variation rapide de l'amplitude (dB) pour simuler le fading multipath.
+        :param fast_fading_std: Intensité du fading multipath (dB). Utilisé avec
+            ``fading_model``.
+        :param fading_model: ``"gaussian"`` pour un fading additif ou ``"rayleigh"``
+            pour un modèle multipath plus réaliste.
         :param cable_loss_dB: Pertes fixes dues au câble/connectique (dB).
         :param receiver_noise_floor_dBm: Niveau de bruit thermique de référence (dBm/Hz).
         :param noise_figure_dB: Facteur de bruit ajouté par le récepteur (dB).
@@ -60,6 +67,11 @@ class Channel:
             self.environment = env
         else:
             self.environment = None
+
+        fading_model = fading_model.lower()
+        if fading_model not in {"gaussian", "rayleigh"}:
+            raise ValueError(f"Unknown fading model: {fading_model}")
+        self.fading_model: Literal["gaussian", "rayleigh"] = fading_model
 
         self.frequency_hz = frequency_hz
         self.path_loss_exp = path_loss_exp
@@ -128,7 +140,13 @@ class Channel:
         if self.tx_power_std > 0:
             rssi += random.gauss(0, self.tx_power_std)
         if self.fast_fading_std > 0:
-            rssi += random.gauss(0, self.fast_fading_std)
+            if self.fading_model == "gaussian":
+                rssi += random.gauss(0, self.fast_fading_std)
+            else:  # rayleigh
+                amp = np.random.rayleigh(scale=self.fast_fading_std)
+                fade_db = 20 * math.log10(amp / self.fast_fading_std)
+                fade_db -= 20 * math.log10(math.sqrt(math.pi / 2))
+                rssi += fade_db
         snr = rssi - self.noise_floor_dBm()
         return rssi, snr
 
