@@ -141,6 +141,8 @@ class Node:
         self.ping_slot_periodicity: int | None = None
         self.beacon_delay: int | None = None
         self.beacon_channel: int | None = None
+        # LoRaWAN minor version (ResetInd/Conf). Default 0 as per spec
+        self.lorawan_minor: int = 0
 
         # ADR state (LoRaWAN specification)
         self.adr = True
