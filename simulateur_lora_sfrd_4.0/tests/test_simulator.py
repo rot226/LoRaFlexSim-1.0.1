@@ -517,3 +517,59 @@ def test_class_c_continuous_rx_energy():
     expected = node.profile.rx_current_a * node.profile.voltage_v * 10.0
     assert node.energy_rx == pytest.approx(expected)
     assert node.state == "rx"
+
+
+def test_ping_slot_periodicity_respected():
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=1,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    node = sim.nodes[0]
+    node.class_type = "B"
+    node.ping_slot_periodicity = 1
+    sim.step()  # process beacon
+    ping_slots = [e for e in sim.event_queue if e.type == EventType.PING_SLOT]
+    assert ping_slots[0].time == pytest.approx(sim.ping_slot_offset)
+    assert ping_slots[1].time == pytest.approx(sim.ping_slot_offset + 2 * sim.ping_slot_interval)
+
+
+def test_downlink_delivered_in_ping_slot():
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=1,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    node = sim.nodes[0]
+    node.class_type = "B"
+    gw = sim.gateways[0]
+    node.x = gw.x
+    node.y = gw.y
+    sim.event_queue.clear()
+    sim.event_id_counter = 0
+    heapq.heappush(sim.event_queue, Event(0.0, EventType.RX_WINDOW, 0, node.id))
+    heapq.heappush(sim.event_queue, Event(0.0, EventType.BEACON, 1, 0))
+    sim.network_server.send_downlink(node, b"data", at_time=sim.ping_slot_offset)
+    while sim.step():
+        if sim.current_time > sim.ping_slot_offset + 0.1:
+            break
+    assert node.fcnt_down == 1
+    assert node.downlink_pending == 0

@@ -595,6 +595,8 @@ class Simulator:
             end_of_cycle = nxt
             for n in self.nodes:
                 if n.class_type.upper() == "B":
+                    periodicity = 2 ** (getattr(n, "ping_slot_periodicity", 0) or 0)
+                    interval = self.ping_slot_interval * periodicity
                     slot = time + self.ping_slot_offset
                     while slot < end_of_cycle:
                         eid = self.event_id_counter
@@ -603,7 +605,7 @@ class Simulator:
                             self.event_queue,
                             Event(slot, EventType.PING_SLOT, eid, n.id),
                         )
-                        slot += self.ping_slot_interval
+                        slot += interval
             return True
 
         elif priority == EventType.PING_SLOT:
@@ -625,12 +627,17 @@ class Simulator:
                 if not frame:
                     continue
                 distance = node.distance_to(gw)
-                rssi, snr = node.channel.compute_rssi(node.tx_power, distance, node.sf)
+                sf = node.sf
+                if node.ping_slot_dr is not None:
+                    from .lorawan import DR_TO_SF
+
+                    sf = DR_TO_SF.get(node.ping_slot_dr, node.sf)
+                rssi, snr = node.channel.compute_rssi(node.tx_power, distance, sf)
                 if rssi < node.channel.detection_threshold_dBm:
                     node.downlink_pending = max(0, node.downlink_pending - 1)
                     continue
                 snr_threshold = (
-                    node.channel.sensitivity_dBm.get(node.sf, -float("inf"))
+                    node.channel.sensitivity_dBm.get(sf, -float("inf"))
                     - node.channel.noise_floor_dBm()
                 )
                 if snr >= snr_threshold:
