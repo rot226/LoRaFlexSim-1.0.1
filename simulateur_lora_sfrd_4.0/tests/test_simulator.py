@@ -104,6 +104,19 @@ def test_metrics_retransmissions():
     assert sim.packets_sent == 2
 
 
+def test_metrics_pdr_by_class():
+    sim = _make_sim(num_nodes=2, same_start=False)
+    sim.nodes[0].class_type = "A"
+    sim.nodes[1].class_type = "C"
+    while sim.step():
+        pass
+    metrics = sim.get_metrics()
+    assert "pdr_by_class" in metrics
+    assert set(metrics["pdr_by_class"].keys()) == {"A", "C"}
+    assert metrics["pdr_by_class"]["A"] == pytest.approx(1.0)
+    assert metrics["pdr_by_class"]["C"] == pytest.approx(1.0)
+
+
 def test_lorawan_frame_handling():
     node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
     up = node.prepare_uplink(b"ping", confirmed=True)
