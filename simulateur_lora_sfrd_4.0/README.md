@@ -1,12 +1,13 @@
 # LoRa Network Simulator 4.0
 
-This repository contains a lightweight LoRa network simulator implemented in Python. The latest code resides in the `VERSION_4` directory and is based on a simplified version of the FLoRa model so it can run without OMNeT++.
+This repository contains a lightweight LoRa network simulator implemented in Python. The latest code resides in the `VERSION_4` directory and is based on a simplified version of the FLoRa model so it can run without OMNeT++. This approach omits the detailed OMNeT++ physical layer, which may reduce accuracy compared to full-stack simulators.
 
 ## Features
 - Duty cycle enforcement to mimic real LoRa constraints
 - Optional node mobility with Bezier interpolation
 - Multi-channel radio support
 - Advanced channel model with loss and noise parameters
+- Optional multipath fading and external interference modeling
 - Configurable bandwidth and coding rate per channel
 - Preset propagation environments (urban/suburban/rural) for quick channel setup
 - Capture effect and a minimum interference time to ignore very short overlaps

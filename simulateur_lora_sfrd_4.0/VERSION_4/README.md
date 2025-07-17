@@ -113,8 +113,9 @@ Ces valeurs influencent le calcul du RSSI et du SNR retournés par
 Depuis cette mise à jour, la largeur de bande (`bandwidth`) et le codage
 (`coding_rate`) sont également configurables lors de la création d'un
 `Channel`. On peut modéliser des interférences externes via `interference_dB`
-et introduire des variations aléatoires de puissance avec `tx_power_std`.
-Un seuil de détection peut être fixé via `detection_threshold_dBm` (par
+et simuler un environnement multipath avec `fast_fading_std`. Des variations
+aléatoires de puissance sont possibles grâce à `tx_power_std`. Un seuil de
+détection peut être fixé via `detection_threshold_dBm` (par
 exemple `-110` dBm comme dans FLoRa) pour ignorer les signaux trop faibles.
 Le paramètre `min_interference_time` de `Simulator` permet de définir une durée
 de chevauchement sous laquelle deux paquets ne sont pas considérés comme en
@@ -175,6 +176,10 @@ This Python rewrite preserves most concepts of the OMNeT++ model but intentional
 **Omitted**
 - OMNeT++ GUI and detailed physical layer simulation
 - regional channel plans and the full MAC command set
+
+Pour obtenir des résultats plus proches du terrain, vous pouvez activer le
+paramètre `fast_fading_std` afin de simuler un canal multipath et utiliser
+`interference_dB` pour représenter un bruit extérieur constant ou variable.
 
 To reproduce FLoRa INI scenarios:
 1. Enable **Mode FLoRa complet** to set `-110 dBm` detection and a `5 s` interference window.
