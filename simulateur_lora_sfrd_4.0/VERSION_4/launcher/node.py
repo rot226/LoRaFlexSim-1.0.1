@@ -148,6 +148,8 @@ class Node:
         self.force_rejoin_type: int | None = None
         # LoRaWAN minor version (ResetInd/Conf). Default 0 as per spec
         self.lorawan_minor: int = 0
+        # Last beacon time for Class B scheduling
+        self.last_beacon_time: float = 0.0
 
         # ADR state (LoRaWAN specification)
         self.adr = True
@@ -596,3 +598,19 @@ class Node:
         rx1 = compute_rx1(end_time, self.rx_delay)
         rx2 = compute_rx2(end_time, self.rx_delay)
         return rx1, rx2
+
+    def next_ping_slot_time(
+        self,
+        current_time: float,
+        beacon_interval: float,
+        ping_slot_interval: float,
+        ping_slot_offset: float,
+    ) -> float:
+        """Return the next ping slot time after ``current_time``."""
+        periodicity = 2 ** (self.ping_slot_periodicity or 0)
+        first_slot = self.last_beacon_time + ping_slot_offset
+        if current_time <= first_slot:
+            return first_slot
+        interval = ping_slot_interval * periodicity
+        slots = math.ceil((current_time - first_slot) / interval)
+        return first_slot + slots * interval

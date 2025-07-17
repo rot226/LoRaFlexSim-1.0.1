@@ -595,6 +595,7 @@ class Simulator:
             end_of_cycle = nxt
             for n in self.nodes:
                 if n.class_type.upper() == "B":
+                    n.last_beacon_time = time
                     periodicity = 2 ** (getattr(n, "ping_slot_periodicity", 0) or 0)
                     interval = self.ping_slot_interval * periodicity
                     slot = time + self.ping_slot_offset

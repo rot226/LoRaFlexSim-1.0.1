@@ -16,6 +16,23 @@ class DownlinkScheduler:
         )
         self._counter += 1
 
+    def schedule_class_b(
+        self,
+        node,
+        after_time: float,
+        frame,
+        gateway,
+        beacon_interval: float,
+        ping_slot_interval: float,
+        ping_slot_offset: float,
+    ) -> float:
+        """Schedule ``frame`` for ``node`` at its next ping slot."""
+        t = node.next_ping_slot_time(
+            after_time, beacon_interval, ping_slot_interval, ping_slot_offset
+        )
+        self.schedule(node.id, t, frame, gateway)
+        return t
+
     def pop_ready(self, node_id: int, current_time: float):
         """Return the next ready frame for ``node_id`` if any."""
         q = self.queue.get(node_id)
