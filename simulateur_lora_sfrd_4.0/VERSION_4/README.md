@@ -169,6 +169,8 @@ This Python rewrite preserves most concepts of the OMNeT++ model but intentional
 - multi-channel transmissions and channel distribution
 - node mobility with smooth trajectories
 - battery consumption using the FLoRa energy profile
+- predefined regional channel plans (EU868, US915, AU915, AS923, IN865, KR920)
+- customizable energy profiles
 - ADR commands (`LinkADRReq/Ans`, `ADRACKReq`, channel mask, `NbTrans`)
 
 **Partially implemented**
@@ -178,7 +180,7 @@ This Python rewrite preserves most concepts of the OMNeT++ model but intentional
 
 **Omitted**
 - OMNeT++ GUI and detailed physical layer simulation
-- regional channel plans and the full MAC command set
+- the full MAC command set
 
 Pour obtenir des résultats plus proches du terrain, vous pouvez activer le
 paramètre `fast_fading_std` afin de simuler un canal multipath et utiliser

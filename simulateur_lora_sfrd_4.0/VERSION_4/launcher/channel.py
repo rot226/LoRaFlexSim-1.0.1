@@ -15,6 +15,10 @@ class Channel:
         "EU868": [868.1e6, 868.3e6, 868.5e6],
         "US915": [902.3e6 + 200e3 * i for i in range(8)],
         "AU915": [915.2e6 + 200e3 * i for i in range(8)],
+        # Additional presets for Asian regions
+        "AS923": [923.2e6, 923.4e6, 923.6e6],
+        "IN865": [865.1e6, 865.3e6, 865.5e6],
+        "KR920": [920.9e6, 921.1e6, 921.3e6],
     }
 
     def __init__(
@@ -177,6 +181,11 @@ class Channel:
     # ------------------------------------------------------------------
     # Helpers for region frequency presets
     # ------------------------------------------------------------------
+
+    @classmethod
+    def register_region(cls, name: str, frequencies: list[float]) -> None:
+        """Register a new region frequency plan."""
+        cls.REGION_CHANNELS[name.upper()] = list(frequencies)
 
     @classmethod
     def region_channels(cls, region: str, **kwargs) -> list["Channel"]:
