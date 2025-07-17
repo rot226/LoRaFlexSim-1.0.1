@@ -52,10 +52,14 @@ class AdvancedChannel:
 
     # ------------------------------------------------------------------
     def compute_rssi(self, tx_power_dBm: float, distance: float) -> tuple[float, float]:
-        rssi, _ = self.base.compute_rssi(tx_power_dBm, distance)
-        # remove previous fading then apply new
+        """Return RSSI and SNR for the advanced channel."""
+        base_rssi, base_snr = self.base.compute_rssi(tx_power_dBm, distance)
+        noise = base_rssi - base_snr
+
+        rssi = base_rssi
         if self.fading == "rayleigh":
             u = random.random()
             rayleigh = math.sqrt(-2.0 * math.log(max(u, 1e-12)))
             rssi += 20 * math.log10(rayleigh)
-        return rssi, rssi - self.base.noise_floor_dBm()
+
+        return rssi, rssi - noise
