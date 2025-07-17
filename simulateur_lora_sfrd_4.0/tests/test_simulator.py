@@ -428,6 +428,54 @@ def test_beacon_schedules_ping_slot():
     assert any(evt.type == EventType.PING_SLOT for evt in sim.event_queue)
 
 
+def test_beacon_schedules_multiple_ping_slots():
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=1,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    node = sim.nodes[0]
+    node.class_type = "B"
+    sim.step()  # process beacon
+    ping_slots = [evt for evt in sim.event_queue if evt.type == EventType.PING_SLOT]
+    assert len(ping_slots) > 1
+
+
+def test_class_c_rx_interval_setting():
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=1,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+        class_c_rx_interval=2.0,
+    )
+    node = sim.nodes[0]
+    node.class_type = "C"
+    sim.event_queue.clear()
+    sim.event_id_counter = 0
+    heapq.heappush(sim.event_queue, Event(0.0, EventType.RX_WINDOW, 0, node.id))
+    sim.step()
+    rx_events = [e for e in sim.event_queue if e.type == EventType.RX_WINDOW]
+    assert rx_events and rx_events[0].time == pytest.approx(2.0)
+
+
 def test_class_c_continuous_rx_energy():
     ch = Channel(shadowing_std=0)
     sim = Simulator(

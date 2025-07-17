@@ -1,6 +1,7 @@
 import heapq
 import logging
 import random
+import math
 from dataclasses import dataclass
 from enum import IntEnum
 
@@ -58,7 +59,8 @@ class Simulator:
                  payload_size_bytes: int = 20,
                  detection_threshold_dBm: float = -float("inf"),
                  min_interference_time: float = 0.0,
-                 seed: int | None = None):
+                 seed: int | None = None,
+                 class_c_rx_interval: float = 1.0):
         """
         Initialise la simulation LoRa avec les entités et paramètres donnés.
         :param num_nodes: Nombre de nœuds à simuler.
@@ -90,6 +92,8 @@ class Simulator:
         :param seed: Graine aléatoire pour reproduire le placement des nœuds et
             passerelles. ``None`` pour un tirage aléatoire différent à chaque
             exécution.
+        :param class_c_rx_interval: Période entre deux vérifications de
+            downlink pour les nœuds de classe C (s).
         """
         # Paramètres de simulation
         self.num_nodes = num_nodes
@@ -114,6 +118,7 @@ class Simulator:
         self.beacon_interval = 128.0
         self.ping_slot_interval = 1.0
         self.ping_slot_offset = 2.0
+        self.class_c_rx_interval = class_c_rx_interval
 
         # Gestion du duty cycle (activé par défaut à 1 %)
         self.duty_cycle_manager = DutyCycleManager(duty_cycle) if duty_cycle else None
@@ -535,7 +540,7 @@ class Simulator:
                 break
             # Replanifier selon la classe du nœud
             if node.class_type.upper() == "C":
-                nxt = time + 1.0
+                nxt = time + self.class_c_rx_interval
                 eid = self.event_id_counter
                 self.event_id_counter += 1
                 heapq.heappush(
@@ -545,22 +550,27 @@ class Simulator:
             return True
 
         elif priority == EventType.BEACON:
-            nxt = time + self.beacon_interval
+            nxt = math.ceil((time + 1e-9) / self.beacon_interval) * self.beacon_interval
+            if nxt == time:
+                nxt += self.beacon_interval
             eid = self.event_id_counter
             self.event_id_counter += 1
             heapq.heappush(
                 self.event_queue,
                 Event(nxt, EventType.BEACON, eid, 0),
             )
+            end_of_cycle = nxt
             for n in self.nodes:
                 if n.class_type.upper() == "B":
-                    ping_time = time + self.ping_slot_offset
-                    eid = self.event_id_counter
-                    self.event_id_counter += 1
-                    heapq.heappush(
-                        self.event_queue,
-                        Event(ping_time, EventType.PING_SLOT, eid, n.id),
-                    )
+                    slot = time + self.ping_slot_offset
+                    while slot < end_of_cycle:
+                        eid = self.event_id_counter
+                        self.event_id_counter += 1
+                        heapq.heappush(
+                            self.event_queue,
+                            Event(slot, EventType.PING_SLOT, eid, n.id),
+                        )
+                        slot += self.ping_slot_interval
             return True
 
         elif priority == EventType.PING_SLOT:
@@ -594,13 +604,6 @@ class Simulator:
                 else:
                     node.downlink_pending = max(0, node.downlink_pending - 1)
                 break
-            nxt = time + self.beacon_interval
-            eid = self.event_id_counter
-            self.event_id_counter += 1
-            heapq.heappush(
-                self.event_queue,
-                Event(nxt, EventType.PING_SLOT, eid, node.id),
-            )
             return True
 
         elif priority == EventType.MOBILITY:
