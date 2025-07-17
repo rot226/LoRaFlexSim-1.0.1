@@ -26,6 +26,8 @@ def simulate(nodes, gateways, mode, interval, steps, channels=1):
         raise ValueError("channels must be >= 1")
     if interval <= 0:
         raise ValueError("interval must be > 0")
+    if steps <= 0:
+        raise ValueError("steps must be > 0")
 
     # Initialisation des compteurs
     total_transmissions = 0

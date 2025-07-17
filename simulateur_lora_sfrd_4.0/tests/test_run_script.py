@@ -58,3 +58,24 @@ def test_simulate_invalid_arguments():
             steps=10,
             channels=0,
         )
+
+    # Ensure invalid steps values raise errors
+    with pytest.raises(ValueError):
+        run.simulate(
+            nodes=1,
+            gateways=1,
+            mode="Periodic",
+            interval=1,
+            steps=0,
+            channels=1,
+        )
+
+    with pytest.raises(ValueError):
+        run.simulate(
+            nodes=1,
+            gateways=1,
+            mode="Periodic",
+            interval=1,
+            steps=-5,
+            channels=1,
+        )
