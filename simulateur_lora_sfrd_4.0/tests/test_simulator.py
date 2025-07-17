@@ -4,13 +4,14 @@ from pathlib import Path
 
 import pytest
 import random
+import heapq
 
 # Allow importing the VERSION_4 package from the repository root
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from VERSION_4.launcher.channel import Channel  # noqa: E402
-from VERSION_4.launcher.simulator import Simulator, EventType  # noqa: E402
+from VERSION_4.launcher.simulator import Simulator, EventType, Event  # noqa: E402
 from VERSION_4.launcher.node import Node  # noqa: E402
 from VERSION_4.launcher.gateway import Gateway  # noqa: E402
 from VERSION_4.launcher.server import NetworkServer  # noqa: E402
@@ -361,3 +362,63 @@ def test_duty_cycle_enforces_delay():
     next_time = sim.event_queue[0].time
     # With duty cycle 10%, airtime ~0.0566s => next allowed time ~0.566s
     assert next_time == pytest.approx(0.566, rel=0.05)
+
+
+def test_class_b_beacon_ping_slot_scheduling():
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=0,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    node = sim.nodes[0]
+    node.class_type = "B"
+    node.ping_slot_delay = 1.0
+    sim.event_queue.clear()
+    sim.event_id_counter = 0
+    # Beacon at t=0
+    eid = sim.event_id_counter
+    sim.event_id_counter += 1
+    heapq.heappush(sim.event_queue, Event(0.0, EventType.BEACON, eid, -1))
+    sim.schedule_event(node, 5.0)
+    sim.step()
+    times = [e.time for e in sim.event_queue if e.type == EventType.RX_WINDOW and e.node_id == node.id]
+    assert 0.0 in times
+    assert 1.0 in times
+
+
+def test_class_c_continuous_reception_energy():
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=1,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    node = sim.nodes[0]
+    node.class_type = "C"
+    node.state = "rx"
+    sim.event_queue.clear()
+    sim.event_id_counter = 0
+    sim.schedule_event(node, 1.0)
+    eid = sim.event_id_counter
+    sim.event_id_counter += 1
+    heapq.heappush(sim.event_queue, Event(0.0, EventType.RX_WINDOW, eid, node.id))
+    sim.run(max_steps=5)
+    assert node.energy_rx > 0
+    assert node.state == "rx"

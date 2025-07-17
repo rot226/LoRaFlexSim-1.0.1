@@ -26,6 +26,7 @@ class EventType(IntEnum):
     TX_START = 1
     MOBILITY = 2
     RX_WINDOW = 3
+    BEACON = 4
 
 
 @dataclass(order=True, slots=True)
@@ -56,6 +57,7 @@ class Simulator:
                  payload_size_bytes: int = 20,
                  detection_threshold_dBm: float = -float("inf"),
                  min_interference_time: float = 0.0,
+                 beacon_period: float = 30.0,
                  seed: int | None = None):
         """
         Initialise la simulation LoRa avec les entités et paramètres donnés.
@@ -88,6 +90,8 @@ class Simulator:
         :param seed: Graine aléatoire pour reproduire le placement des nœuds et
             passerelles. ``None`` pour un tirage aléatoire différent à chaque
             exécution.
+        :param beacon_period: Intervalle entre deux diffusions de beacon pour les
+            nœuds de classe B.
         """
         # Paramètres de simulation
         self.num_nodes = num_nodes
@@ -104,6 +108,7 @@ class Simulator:
         self.payload_size_bytes = payload_size_bytes
         self.detection_threshold_dBm = detection_threshold_dBm
         self.min_interference_time = min_interference_time
+        self.beacon_period = beacon_period
         # Activation ou non de la mobilité des nœuds
         self.mobility_enabled = mobility
         self.mobility_model = SmoothMobility(area_size, mobility_speed[0], mobility_speed[1])
@@ -228,6 +233,14 @@ class Simulator:
                     Event(0.0, EventType.RX_WINDOW, eid, node.id),
                 )
 
+        # Schedule first beacon for Class B operation
+        eid = self.event_id_counter
+        self.event_id_counter += 1
+        heapq.heappush(
+            self.event_queue,
+            Event(0.0, EventType.BEACON, eid, -1),
+        )
+
         # Indicateur d'exécution de la simulation
         self.running = True
 
@@ -272,13 +285,14 @@ class Simulator:
         priority = event.type
         event_id = event.id
         node = self.node_map.get(event.node_id)
-        if node is None:
+        if node is None and priority != EventType.BEACON:
             return True
         # Avancer le temps de simulation
         self.current_time = time
-        node.consume_until(time)
-        if not node.alive:
-            return True
+        if node is not None:
+            node.consume_until(time)
+            if not node.alive:
+                return True
 
         if priority == EventType.TX_START:
             # Début d'une transmission émise par 'node'
@@ -478,21 +492,27 @@ class Simulator:
                     heapq.heapify(new_queue)
                     self.event_queue = new_queue
                     logger.debug("Packet limit reached – no more new events will be scheduled.")
-
+            if node.class_type.upper() == "C":
+                node.state = "rx"
+                node.last_state_time = self.current_time
             return True
 
         elif priority == EventType.RX_WINDOW:
-            # Fenêtre de réception RX1/RX2 pour un nœud
-            node.add_energy(
-                node.profile.rx_current_a
-                * node.profile.voltage_v
-                * node.profile.rx_window_duration,
-                "rx",
-            )
-            if not node.alive:
-                return True
-            node.last_state_time = time + node.profile.rx_window_duration
-            node.state = "sleep"
+            # Fenêtre de réception RX1/RX2 ou ping slot
+            if node.class_type.upper() != "C":
+                node.add_energy(
+                    node.profile.rx_current_a
+                    * node.profile.voltage_v
+                    * node.profile.rx_window_duration,
+                    "rx",
+                )
+                if not node.alive:
+                    return True
+                node.last_state_time = time + node.profile.rx_window_duration
+                node.state = "sleep"
+            else:
+                node.last_state_time = time
+                node.state = "rx"
             selected_gw = None
             for gw in self.gateways:
                 frame = gw.pop_downlink(node.id)
@@ -514,15 +534,7 @@ class Simulator:
                 selected_gw = gw
                 break
             # Replanifier selon la classe du nœud
-            if node.class_type.upper() == "B":
-                nxt = time + 30.0
-                eid = self.event_id_counter
-                self.event_id_counter += 1
-                heapq.heappush(
-                    self.event_queue,
-                    Event(nxt, EventType.RX_WINDOW, eid, node.id),
-                )
-            elif node.class_type.upper() == "C" and selected_gw and selected_gw.downlink_buffer.get(node.id):
+            if node.class_type.upper() == "C":
                 nxt = time + 1.0
                 eid = self.event_id_counter
                 self.event_id_counter += 1
@@ -530,6 +542,30 @@ class Simulator:
                     self.event_queue,
                     Event(nxt, EventType.RX_WINDOW, eid, node.id),
                 )
+            return True
+
+        elif priority == EventType.BEACON:
+            # Diffusion d'un beacon pour les nœuds de classe B
+            for n in self.nodes:
+                if n.class_type.upper() == "B":
+                    eid = self.event_id_counter
+                    self.event_id_counter += 1
+                    heapq.heappush(
+                        self.event_queue,
+                        Event(time, EventType.RX_WINDOW, eid, n.id),
+                    )
+                    eid = self.event_id_counter
+                    self.event_id_counter += 1
+                    heapq.heappush(
+                        self.event_queue,
+                        Event(time + n.ping_slot_delay, EventType.RX_WINDOW, eid, n.id),
+                    )
+            eid = self.event_id_counter
+            self.event_id_counter += 1
+            heapq.heappush(
+                self.event_queue,
+                Event(time + self.beacon_period, EventType.BEACON, eid, -1),
+            )
             return True
 
         elif priority == EventType.MOBILITY:

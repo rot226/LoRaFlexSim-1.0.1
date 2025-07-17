@@ -120,9 +120,12 @@ class Node:
         self.last_adr_ack_req: bool = False
         self._nb_trans_left: int = 0
 
+        # Class B/C specific parameters
+        self.ping_slot_delay = 1.0 if class_type.upper() == "B" else 0.0
+
         # Energy accounting state
         self.last_state_time = 0.0
-        self.state = 'sleep'
+        self.state = 'rx' if class_type.upper() == 'C' else 'sleep'
 
     @property
     def battery_level(self) -> float:
