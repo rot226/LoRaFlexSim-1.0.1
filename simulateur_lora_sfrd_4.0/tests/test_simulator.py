@@ -42,7 +42,7 @@ def test_channel_compute_rssi_and_airtime():
     assert at == pytest.approx(expected_at, rel=1e-6)
 
 
-def _make_sim(num_nodes: int, same_start: bool) -> Simulator:
+def _make_sim(num_nodes: int, same_start: bool, min_interference_time: float = 0.0) -> Simulator:
     ch = Channel(shadowing_std=0)
     sim = Simulator(
         num_nodes=num_nodes,
@@ -56,6 +56,7 @@ def _make_sim(num_nodes: int, same_start: bool) -> Simulator:
         channels=[ch],
         fixed_sf=7,
         fixed_tx_power=14.0,
+        min_interference_time=min_interference_time,
     )
     gw = sim.gateways[0]
     for n in sim.nodes:
@@ -315,3 +316,13 @@ def test_detection_threshold_blocks_packet():
         pass
     assert sim.packets_delivered == 0
     assert sim.packets_lost_no_signal == 1
+
+
+def test_min_interference_time_avoids_collision():
+    sim = _make_sim(num_nodes=2, same_start=True, min_interference_time=1.0)
+    while sim.step():
+        pass
+    assert sim.packets_delivered == 2
+    assert sim.packets_lost_collision == 0
+    for node in sim.nodes:
+        assert node.packets_success == 1

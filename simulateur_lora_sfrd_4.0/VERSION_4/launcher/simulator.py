@@ -55,6 +55,7 @@ class Simulator:
                  battery_capacity_j: float | None = None,
                  payload_size_bytes: int = 20,
                  detection_threshold_dBm: float = -float("inf"),
+                 min_interference_time: float = 0.0,
                  seed: int | None = None):
         """
         Initialise la simulation LoRa avec les entités et paramètres donnés.
@@ -82,6 +83,8 @@ class Simulator:
         :param payload_size_bytes: Taille du payload utilisé pour calculer l'airtime (octets).
         :param detection_threshold_dBm: RSSI minimal requis pour qu'une
             réception soit prise en compte.
+        :param min_interference_time: Chevauchement temporel toléré entre
+            transmissions avant de les considérer en collision (s).
         :param seed: Graine aléatoire pour reproduire le placement des nœuds et
             passerelles. ``None`` pour un tirage aléatoire différent à chaque
             exécution.
@@ -100,6 +103,7 @@ class Simulator:
         self.battery_capacity_j = battery_capacity_j
         self.payload_size_bytes = payload_size_bytes
         self.detection_threshold_dBm = detection_threshold_dBm
+        self.min_interference_time = min_interference_time
         # Activation ou non de la mobilité des nœuds
         self.mobility_enabled = mobility
         self.mobility_model = SmoothMobility(area_size, mobility_speed[0], mobility_speed[1])
@@ -335,6 +339,7 @@ class Simulator:
                     node.channel.capture_threshold_dB,
                     self.current_time,
                     node.channel.frequency_hz,
+                    self.min_interference_time,
                 )
             
             # Retenir le meilleur RSSI/SNR mesuré pour cette transmission
