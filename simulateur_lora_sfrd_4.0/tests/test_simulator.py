@@ -265,7 +265,7 @@ def _downlink_exchange(node: Node, gw: Gateway, ch: Channel, deliver: bool):
     distance = node.distance_to(gw)
     rssi, snr = ch.compute_rssi(node.tx_power, distance)
     snr_threshold = ch.sensitivity_dBm.get(node.sf, -float("inf")) - ch.noise_floor_dBm()
-    if deliver and snr >= snr_threshold:
+    if deliver and rssi >= ch.detection_threshold_dBm and snr >= snr_threshold:
         node.handle_downlink(frame)
     else:
         node.downlink_pending = max(0, node.downlink_pending - 1)
@@ -285,3 +285,33 @@ def test_downlink_pending_decrement_failure():
     gw = Gateway(1, 15000.0, 0.0)
     _downlink_exchange(node, gw, ch, deliver=False)
     assert node.downlink_pending == 0
+
+
+def test_detection_threshold_blocks_packet():
+    ch = Channel(shadowing_std=0, detection_threshold_dBm=-110)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=5000.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=1,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    node = sim.nodes[0]
+    gw = sim.gateways[0]
+    node.x = 3000.0
+    node.y = 0.0
+    gw.x = 0.0
+    gw.y = 0.0
+    sim.event_queue.clear()
+    sim.event_id_counter = 0
+    sim.schedule_event(node, 0.0)
+    while sim.step():
+        pass
+    assert sim.packets_delivered == 0
+    assert sim.packets_lost_no_signal == 1

@@ -20,6 +20,7 @@ class Channel:
         capture_threshold_dB: float = 6.0,
         tx_power_std: float = 0.0,
         interference_dB: float = 0.0,
+        detection_threshold_dBm: float = -float("inf"),
     ):
         """
         Initialise le canal radio avec paramètres de propagation.
@@ -38,6 +39,8 @@ class Channel:
         :param capture_threshold_dB: Seuil de capture pour le décodage simultané.
         :param tx_power_std: Écart-type de la variation aléatoire de puissance TX.
         :param interference_dB: Bruit supplémentaire moyen dû aux interférences.
+        :param detection_threshold_dBm: RSSI minimal détectable (dBm). Les
+            signaux plus faibles sont ignorés.
         """
 
         self.frequency_hz = frequency_hz
@@ -50,6 +53,7 @@ class Channel:
         self.noise_floor_std = noise_floor_std
         self.tx_power_std = tx_power_std
         self.interference_dB = interference_dB
+        self.detection_threshold_dBm = detection_threshold_dBm
 
         # Paramètres LoRa (BW 125 kHz, CR 4/5, préambule 8, CRC activé)
         self.bandwidth = bandwidth
