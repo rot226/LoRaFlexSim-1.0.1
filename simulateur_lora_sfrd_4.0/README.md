@@ -84,6 +84,8 @@ python examples/run_flora_example.py --runs 5 --seed 123
 
 The script prints the Packet Delivery Ratio and spreading factor histogram for
 each run.
+Pass the `--flora-csv <file>` option to automatically compare these metrics with
+an official FLoRa CSV export using `compare_with_sim`.
 
 You can now load similar scenarios directly from an INI file using
 ``Simulator(config_file="file.ini")``. The file must define ``[gateways]`` and
@@ -138,6 +140,8 @@ spreading factor histogram. The test file
 `tests/test_flora_comparison.py` demonstrates how to compare these
 values with those returned by `Simulator.get_metrics` to validate the
 Python implementation against OMNeT++ runs.
+You can also supply a reference CSV to `examples/run_flora_example.py` via
+`--flora-csv` to perform this check outside the test suite.
 
 ## Versioning
 

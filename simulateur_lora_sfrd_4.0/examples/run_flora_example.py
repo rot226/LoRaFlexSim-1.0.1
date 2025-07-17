@@ -1,6 +1,7 @@
 import argparse
 from VERSION_4.launcher.simulator import Simulator
 from VERSION_4.launcher.adr_standard_1 import apply as adr1
+from VERSION_4.launcher.compare_flora import compare_with_sim
 
 NODE_POSITIONS = [
     (450.45, 490.0),
@@ -12,7 +13,7 @@ NODE_POSITIONS = [
 GW_POSITION = (500.0, 500.0)
 
 
-def run_simulation(runs: int, seed: int | None = None):
+def run_simulation(runs: int, seed: int | None = None, flora_csv: str | None = None):
     metrics = []
     for i in range(runs):
         sim = Simulator(
@@ -44,6 +45,10 @@ def run_simulation(runs: int, seed: int | None = None):
         metrics.append(m)
         print(f"Run {i+1}/{runs} PDR: {m['PDR']:.2%}")
         print("SF distribution:", m['sf_distribution'])
+        if flora_csv:
+            match = compare_with_sim(m, flora_csv)
+            status = "matches" if match else "differs from"
+            print(f"-> Metrics {status} FLoRa reference")
     # compute averages
     avg: dict[str, float] = {}
     for k, v in metrics[0].items():
@@ -57,8 +62,9 @@ def main():
     parser = argparse.ArgumentParser(description="Run FLoRa-like scenario")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs")
     parser.add_argument("--seed", type=int, help="Base random seed")
+    parser.add_argument("--flora-csv", type=str, help="Path to reference FLoRa CSV")
     args = parser.parse_args()
-    run_simulation(args.runs, args.seed)
+    run_simulation(args.runs, args.seed, args.flora_csv)
 
 
 if __name__ == "__main__":
