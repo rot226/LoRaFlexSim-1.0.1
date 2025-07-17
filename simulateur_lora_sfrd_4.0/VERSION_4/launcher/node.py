@@ -141,6 +141,11 @@ class Node:
         self.ping_slot_periodicity: int | None = None
         self.beacon_delay: int | None = None
         self.beacon_channel: int | None = None
+        self.rekey_key_type: int | None = None
+        self.rejoin_time_n: int | None = None
+        self.rejoin_count_n: int | None = None
+        self.force_rejoin_period: int | None = None
+        self.force_rejoin_type: int | None = None
         # LoRaWAN minor version (ResetInd/Conf). Default 0 as per spec
         self.lorawan_minor: int = 0
 
@@ -434,6 +439,25 @@ class Node:
                     self.rx_delay = req.delay
                 except Exception:
                     pass
+            elif len(frame.payload) >= 2 and frame.payload[0] == 0x0B:
+                try:
+                    from .lorawan import RekeyInd, RekeyConf
+
+                    ind = RekeyInd.from_bytes(frame.payload[:2])
+                    self.rekey_key_type = ind.key_type
+                    self.pending_mac_cmd = RekeyConf(ind.key_type).to_bytes()
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 2 and frame.payload[0] == 0x0C:
+                try:
+                    from .lorawan import ADRParamSetupReq, ADRParamSetupAns
+
+                    req = ADRParamSetupReq.from_bytes(frame.payload[:2])
+                    self.adr_ack_limit = req.adr_ack_limit
+                    self.adr_ack_delay = req.adr_ack_delay
+                    self.pending_mac_cmd = ADRParamSetupAns().to_bytes()
+                except Exception:
+                    pass
             elif len(frame.payload) >= 2 and frame.payload[0] == 0x09:
                 try:
                     from .lorawan import TxParamSetupReq
@@ -441,6 +465,25 @@ class Node:
                     req = TxParamSetupReq.from_bytes(frame.payload[:2])
                     self.eirp = req.eirp
                     self.dwell_time = req.dwell_time
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 3 and frame.payload[0] == 0x0E:
+                try:
+                    from .lorawan import ForceRejoinReq
+
+                    req = ForceRejoinReq.from_bytes(frame.payload[:3])
+                    self.force_rejoin_period = req.period
+                    self.force_rejoin_type = req.rejoin_type
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 2 and frame.payload[0] == 0x0F:
+                try:
+                    from .lorawan import RejoinParamSetupReq, RejoinParamSetupAns
+
+                    req = RejoinParamSetupReq.from_bytes(frame.payload[:2])
+                    self.rejoin_time_n = req.max_time_n
+                    self.rejoin_count_n = req.max_count_n
+                    self.pending_mac_cmd = RejoinParamSetupAns().to_bytes()
                 except Exception:
                     pass
             elif len(frame.payload) >= 5 and frame.payload[0] == 0x0A:
@@ -503,7 +546,16 @@ class Node:
                         self.beacon_channel = ans.channel
                     else:
                         BeaconTimingReq.from_bytes(frame.payload[:1])
-                        self.pending_mac_cmd = BeaconTimingAns(0, 0).to_bytes()
+                    self.pending_mac_cmd = BeaconTimingAns(0, 0).to_bytes()
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 2 and frame.payload[0] == 0x20:
+                try:
+                    from .lorawan import DeviceModeInd, DeviceModeConf
+
+                    req = DeviceModeInd.from_bytes(frame.payload[:2])
+                    self.class_type = req.class_mode
+                    self.pending_mac_cmd = DeviceModeConf(req.class_mode).to_bytes()
                 except Exception:
                     pass
             elif len(frame.payload) >= 2 and frame.payload[0] == 0x01:

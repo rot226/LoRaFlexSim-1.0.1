@@ -396,6 +396,147 @@ class DeviceTimeAns:
 
 
 @dataclass
+class RekeyInd:
+    """Start a root key refresh procedure."""
+
+    key_type: int = 0
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x0B, self.key_type & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "RekeyInd":
+        if len(data) < 2 or data[0] != 0x0B:
+            raise ValueError("Invalid RekeyInd")
+        return RekeyInd(data[1])
+
+
+@dataclass
+class RekeyConf:
+    """Acknowledge a RekeyInd from the network."""
+
+    key_type: int = 0
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x0B, self.key_type & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "RekeyConf":
+        if len(data) < 2 or data[0] != 0x0B:
+            raise ValueError("Invalid RekeyConf")
+        return RekeyConf(data[1])
+
+
+@dataclass
+class ADRParamSetupReq:
+    adr_ack_limit: int
+    adr_ack_delay: int
+
+    def to_bytes(self) -> bytes:
+        param = ((self.adr_ack_limit & 0x0F) << 4) | (self.adr_ack_delay & 0x0F)
+        return bytes([0x0C, param])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "ADRParamSetupReq":
+        if len(data) < 2 or data[0] != 0x0C:
+            raise ValueError("Invalid ADRParamSetupReq")
+        param = data[1]
+        return ADRParamSetupReq((param >> 4) & 0x0F, param & 0x0F)
+
+
+@dataclass
+class ADRParamSetupAns:
+    status: int = 0b111
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x0C, self.status])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "ADRParamSetupAns":
+        if len(data) < 2 or data[0] != 0x0C:
+            raise ValueError("Invalid ADRParamSetupAns")
+        return ADRParamSetupAns(status=data[1])
+
+
+@dataclass
+class ForceRejoinReq:
+    period: int
+    rejoin_type: int = 0
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x0E, self.period & 0xFF, self.rejoin_type & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "ForceRejoinReq":
+        if len(data) < 3 or data[0] != 0x0E:
+            raise ValueError("Invalid ForceRejoinReq")
+        return ForceRejoinReq(period=data[1], rejoin_type=data[2])
+
+
+@dataclass
+class RejoinParamSetupReq:
+    max_time_n: int
+    max_count_n: int
+
+    def to_bytes(self) -> bytes:
+        param = ((self.max_time_n & 0x0F) << 4) | (self.max_count_n & 0x0F)
+        return bytes([0x0F, param])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "RejoinParamSetupReq":
+        if len(data) < 2 or data[0] != 0x0F:
+            raise ValueError("Invalid RejoinParamSetupReq")
+        param = data[1]
+        return RejoinParamSetupReq((param >> 4) & 0x0F, param & 0x0F)
+
+
+@dataclass
+class RejoinParamSetupAns:
+    status: int = 0b11
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x0F, self.status])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "RejoinParamSetupAns":
+        if len(data) < 2 or data[0] != 0x0F:
+            raise ValueError("Invalid RejoinParamSetupAns")
+        return RejoinParamSetupAns(status=data[1])
+
+
+@dataclass
+class DeviceModeInd:
+    class_mode: str
+
+    def to_bytes(self) -> bytes:
+        mapping = {"A": 0, "B": 1, "C": 2}
+        return bytes([0x20, mapping.get(self.class_mode, 0) & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "DeviceModeInd":
+        if len(data) < 2 or data[0] != 0x20:
+            raise ValueError("Invalid DeviceModeInd")
+        mapping = {0: "A", 1: "B", 2: "C"}
+        return DeviceModeInd(mapping.get(data[1] & 0x03, "A"))
+
+
+@dataclass
+class DeviceModeConf:
+    class_mode: str
+
+    def to_bytes(self) -> bytes:
+        mapping = {"A": 0, "B": 1, "C": 2}
+        return bytes([0x20, mapping.get(self.class_mode, 0) & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "DeviceModeConf":
+        if len(data) < 2 or data[0] != 0x20:
+            raise ValueError("Invalid DeviceModeConf")
+        mapping = {0: "A", 1: "B", 2: "C"}
+        return DeviceModeConf(mapping.get(data[1] & 0x03, "A"))
+
+
+@dataclass
 class JoinRequest:
     """Simplified OTAA join request frame."""
 

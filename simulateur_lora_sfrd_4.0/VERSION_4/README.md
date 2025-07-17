@@ -204,11 +204,12 @@ This Python rewrite preserves most concepts of the OMNeT++ model but intentional
 
 **Partially implemented**
 - preliminary support for classes B and C
-- a larger subset of MAC commands (LinkCheck, DeviceTime, DutyCycle, BeaconFreq, Reset)
 
 **Omitted**
 - OMNeT++ GUI and detailed physical layer simulation
-- the full MAC command set
+
+The simulator now handles the full LoRaWAN MAC command set, including ADR parameter setup,
+rekeying, rejoin management and device mode changes.
 
 Pour obtenir des résultats plus proches du terrain, vous pouvez activer le
 paramètre `fast_fading_std` afin de simuler un canal multipath et utiliser
