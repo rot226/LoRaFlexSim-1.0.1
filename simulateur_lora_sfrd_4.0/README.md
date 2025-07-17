@@ -8,6 +8,8 @@ This repository contains a lightweight LoRa network simulator implemented in Pyt
 - Multi-channel radio support
 - Advanced channel model with loss and noise parameters
 - Optional multipath fading and external interference modeling
+- Antenna gains and cable losses for accurate link budgets
+- Optional LoRa spreading gain applied to SNR
 - Additional COST231 path loss, Okumura‑Hata model and 3D propagation via `AdvancedChannel`
 - Terrain and weather based attenuation parameters
 - Configurable bandwidth and coding rate per channel

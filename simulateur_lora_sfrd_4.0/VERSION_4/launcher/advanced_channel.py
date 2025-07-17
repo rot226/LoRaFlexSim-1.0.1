@@ -15,10 +15,24 @@ class AdvancedChannel:
         mobile_height: float = 1.5,
         propagation_model: str = "cost231",
         fading: str = "rayleigh",
+        rician_k: float = 1.0,
         terrain: str = "urban",
         weather_loss_dB_per_km: float = 0.0,
         **kwargs,
     ) -> None:
+        """Initialise the advanced channel with optional propagation models.
+
+        :param base_station_height: Hauteur de la passerelle (m).
+        :param mobile_height: Hauteur de l'émetteur mobile (m).
+        :param propagation_model: Nom du modèle de perte (``cost231``,
+            ``okumura_hata`` ou ``3d``).
+        :param fading: Type de fading (``rayleigh`` ou ``rician``).
+        :param rician_k: Facteur ``K`` pour le fading rician.
+        :param terrain: Type de terrain pour Okumura‑Hata.
+        :param weather_loss_dB_per_km: Atténuation météo en dB/km.
+        :param kwargs: Paramètres transmis au constructeur de :class:`Channel`.
+        """
+
         from .channel import Channel
 
         self.base = Channel(**kwargs)
@@ -26,6 +40,7 @@ class AdvancedChannel:
         self.mobile_height = mobile_height
         self.propagation_model = propagation_model
         self.fading = fading
+        self.rician_k = rician_k
         self.terrain = terrain.lower()
         self.weather_loss_dB_per_km = weather_loss_dB_per_km
 
@@ -88,17 +103,27 @@ class AdvancedChannel:
         return pl
 
     # ------------------------------------------------------------------
-    def compute_rssi(self, tx_power_dBm: float, distance: float) -> tuple[float, float]:
+    def compute_rssi(
+        self, tx_power_dBm: float, distance: float, sf: int | None = None
+    ) -> tuple[float, float]:
         """Return RSSI and SNR for the advanced channel."""
         loss = self.path_loss(distance)
         if self.base.shadowing_std > 0:
             loss += random.gauss(0, self.base.shadowing_std)
 
-        rssi = tx_power_dBm - loss - self.base.cable_loss_dB
+        rssi = (
+            tx_power_dBm
+            + self.base.tx_antenna_gain_dB
+            + self.base.rx_antenna_gain_dB
+            - loss
+            - self.base.cable_loss_dB
+        )
         if self.base.tx_power_std > 0:
             rssi += random.gauss(0, self.base.tx_power_std)
         if self.base.fast_fading_std > 0:
             rssi += random.gauss(0, self.base.fast_fading_std)
+        if self.base.time_variation_std > 0:
+            rssi += random.gauss(0, self.base.time_variation_std)
 
         noise = self.base.noise_floor_dBm()
 
@@ -106,5 +131,14 @@ class AdvancedChannel:
             u = random.random()
             rayleigh = math.sqrt(-2.0 * math.log(max(u, 1e-12)))
             rssi += 20 * math.log10(rayleigh)
+        elif self.fading == "rician":
+            sigma = math.sqrt(1.0 / (2.0 * (self.rician_k + 1.0)))
+            in_phase = random.gauss(math.sqrt(self.rician_k / (self.rician_k + 1.0)), sigma)
+            quadrature = random.gauss(0.0, sigma)
+            amp = math.sqrt(in_phase ** 2 + quadrature ** 2)
+            rssi += 20 * math.log10(max(amp, 1e-12))
 
-        return rssi, rssi - noise
+        snr = rssi - noise
+        if sf is not None:
+            snr += 10 * math.log10(2 ** sf)
+        return rssi, snr

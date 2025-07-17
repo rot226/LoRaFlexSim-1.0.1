@@ -29,3 +29,22 @@ def test_region_channels_helper_returns_list():
     chans = Channel.region_channels("US915")
     assert len(chans) == len(Channel.REGION_CHANNELS["US915"])
     assert all(isinstance(c, Channel) for c in chans)
+
+
+def test_spreading_gain_improves_snr():
+    ch = Channel(shadowing_std=0)
+    _, snr7 = ch.compute_rssi(14.0, 100.0, sf=7)
+    _, snr12 = ch.compute_rssi(14.0, 100.0, sf=12)
+    assert snr12 > snr7
+
+
+def test_antenna_gains_increase_rssi():
+    base = Channel(shadowing_std=0)
+    gch = Channel(
+        shadowing_std=0,
+        tx_antenna_gain_dB=2.0,
+        rx_antenna_gain_dB=3.0,
+    )
+    r1, _ = base.compute_rssi(14.0, 50.0)
+    r2, _ = gch.compute_rssi(14.0, 50.0)
+    assert r2 > r1

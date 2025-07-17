@@ -347,7 +347,7 @@ class Simulator:
             best_snr = None
             for gw in self.gateways:
                 distance = node.distance_to(gw)
-                rssi, snr = node.channel.compute_rssi(tx_power, distance)
+                rssi, snr = node.channel.compute_rssi(tx_power, distance, sf)
                 if rssi < node.channel.detection_threshold_dBm:
                     continue  # trop faible pour être détecté
                 snr_threshold = (
@@ -535,7 +535,7 @@ class Simulator:
                 if not frame:
                     continue
                 distance = node.distance_to(gw)
-                rssi, snr = node.channel.compute_rssi(node.tx_power, distance)
+                rssi, snr = node.channel.compute_rssi(node.tx_power, distance, node.sf)
                 if rssi < node.channel.detection_threshold_dBm:
                     node.downlink_pending = max(0, node.downlink_pending - 1)
                     continue
@@ -602,7 +602,7 @@ class Simulator:
                 if not frame:
                     continue
                 distance = node.distance_to(gw)
-                rssi, snr = node.channel.compute_rssi(node.tx_power, distance)
+                rssi, snr = node.channel.compute_rssi(node.tx_power, distance, node.sf)
                 if rssi < node.channel.detection_threshold_dBm:
                     node.downlink_pending = max(0, node.downlink_pending - 1)
                     continue

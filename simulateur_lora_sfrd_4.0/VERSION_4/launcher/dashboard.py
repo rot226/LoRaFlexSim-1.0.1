@@ -225,7 +225,7 @@ def toggle_heatmap(event=None):
             best_rssi = -float("inf")
             for gw in sim.gateways:
                 d = math.hypot(x - gw.x, y - gw.y)
-                rssi, _ = sim.channel.compute_rssi(14.0, d)
+                rssi, _ = sim.channel.compute_rssi(14.0, d, sf=7)
                 if rssi > best_rssi:
                     best_rssi = rssi
             z[i, j] = best_rssi
