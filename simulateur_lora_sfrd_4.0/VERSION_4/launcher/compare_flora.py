@@ -40,3 +40,12 @@ def compare_with_sim(sim_metrics: dict[str, Any], flora_csv: str | Path, *, pdr_
     pdr_match = abs(sim_metrics.get("PDR", 0.0) - flora_metrics["PDR"]) <= pdr_tol
     sf_match = sim_metrics.get("sf_distribution") == flora_metrics["sf_distribution"]
     return pdr_match and sf_match
+
+
+def load_flora_rx_stats(csv_path: str | Path) -> dict[str, Any]:
+    """Load average RSSI/SNR and collisions from a FLoRa export."""
+    df = pd.read_csv(csv_path)
+    rssi = float(df["rssi"].mean()) if "rssi" in df.columns else 0.0
+    snr = float(df["snr"].mean()) if "snr" in df.columns else 0.0
+    collisions = int(df["collisions"].sum()) if "collisions" in df.columns else 0
+    return {"rssi": rssi, "snr": snr, "collisions": collisions}

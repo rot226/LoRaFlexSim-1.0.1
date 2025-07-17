@@ -18,6 +18,10 @@ class AdvancedChannel:
         rician_k: float = 1.0,
         terrain: str = "urban",
         weather_loss_dB_per_km: float = 0.0,
+        fine_fading_std: float = 0.0,
+        fading_correlation: float = 0.9,
+        variable_noise_std: float = 0.0,
+        advanced_capture: bool = False,
         **kwargs,
     ) -> None:
         """Initialise the advanced channel with optional propagation models.
@@ -31,11 +35,21 @@ class AdvancedChannel:
         :param terrain: Type de terrain pour Okumura‑Hata.
         :param weather_loss_dB_per_km: Atténuation météo en dB/km.
         :param kwargs: Paramètres transmis au constructeur de :class:`Channel`.
+        :param fine_fading_std: Écart-type du fading temporel fin.
+        :param fading_correlation: Facteur de corrélation temporelle.
+        :param variable_noise_std: Variation lente du bruit thermique.
+        :param advanced_capture: Active un mode de capture avancée.
         """
 
         from .channel import Channel
 
-        self.base = Channel(**kwargs)
+        self.base = Channel(
+            fine_fading_std=fine_fading_std,
+            fading_correlation=fading_correlation,
+            variable_noise_std=variable_noise_std,
+            advanced_capture=advanced_capture,
+            **kwargs,
+        )
         self.base_station_height = base_station_height
         self.mobile_height = mobile_height
         self.propagation_model = propagation_model
@@ -124,6 +138,7 @@ class AdvancedChannel:
             rssi += random.gauss(0, self.base.fast_fading_std)
         if self.base.time_variation_std > 0:
             rssi += random.gauss(0, self.base.time_variation_std)
+        rssi += self.base.omnet.fine_fading()
 
         noise = self.base.noise_floor_dBm()
 
