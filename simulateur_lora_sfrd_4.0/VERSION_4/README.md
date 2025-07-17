@@ -200,15 +200,14 @@ This Python rewrite preserves most concepts of the OMNeT++ model but intentional
 - predefined regional channel plans (EU868, US915, AU915, AS923, IN865, KR920)
 - customizable energy profiles
 - ADR commands (`LinkADRReq/Ans`, `ADRACKReq`, channel mask, `NbTrans`)
+- full set of LoRaWAN MAC commands
 
 **Partially implemented**
 - OTAA join procedure and scheduled downlink queue
 - preliminary support for classes B and C
-- a larger subset of MAC commands (LinkCheck, DeviceTime, DutyCycle, BeaconFreq, Reset)
 
 **Omitted**
 - OMNeT++ GUI and detailed physical layer simulation
-- the full MAC command set
 
 Pour obtenir des résultats plus proches du terrain, vous pouvez activer le
 paramètre `fast_fading_std` afin de simuler un canal multipath et utiliser

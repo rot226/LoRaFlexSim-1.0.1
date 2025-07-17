@@ -151,6 +151,9 @@ class Node:
         self.adr_ack_cnt = 0
         self.adr_ack_limit = 64
         self.adr_ack_delay = 32
+        self.rejoin_max_time = 0
+        self.rejoin_max_count = 0
+        self.force_rejoin = False
 
         # Additional state used by the simulator
         self.history: list[dict] = []
@@ -450,6 +453,53 @@ class Node:
                     req = DlChannelReq.from_bytes(frame.payload[:5])
                     self.dl_channels[req.ch_index] = req.frequency
                     self.pending_mac_cmd = DlChannelAns().to_bytes()
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 2 and frame.payload[0] == 0x0B:
+                try:
+                    from .lorawan import RekeyConf, RekeyInd
+
+                    conf = RekeyConf.from_bytes(frame.payload[:2])
+                    self.lorawan_minor = conf.minor
+                    self.pending_mac_cmd = RekeyInd(conf.minor).to_bytes()
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 2 and frame.payload[0] == 0x0C:
+                try:
+                    from .lorawan import ADRParamSetupReq, ADRParamSetupAns
+
+                    req = ADRParamSetupReq.from_bytes(frame.payload[:2])
+                    self.adr_ack_limit = req.adr_ack_limit
+                    self.adr_ack_delay = req.adr_ack_delay
+                    self.pending_mac_cmd = ADRParamSetupAns().to_bytes()
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 3 and frame.payload[0] == 0x0E:
+                try:
+                    from .lorawan import ForceRejoinReq
+
+                    ForceRejoinReq.from_bytes(frame.payload[:3])
+                    self.force_rejoin = True
+                    self.activated = False
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 3 and frame.payload[0] == 0x0F:
+                try:
+                    from .lorawan import RejoinParamSetupReq, RejoinParamSetupAns
+
+                    req = RejoinParamSetupReq.from_bytes(frame.payload[:3])
+                    self.rejoin_max_time = req.max_time_n
+                    self.rejoin_max_count = req.max_count_n
+                    self.pending_mac_cmd = RejoinParamSetupAns().to_bytes()
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 2 and frame.payload[0] == 0x20:
+                try:
+                    from .lorawan import DeviceModeInd, DeviceModeConf
+
+                    req = DeviceModeInd.from_bytes(frame.payload[:2])
+                    self.class_type = req.class_mode
+                    self.pending_mac_cmd = DeviceModeConf(req.class_mode).to_bytes()
                 except Exception:
                     pass
             elif frame.payload == DevStatusReq().to_bytes():

@@ -12,6 +12,15 @@ from VERSION_4.launcher.lorawan import (  # noqa: E402
     DevStatusAns,
     PingSlotInfoReq,
     BeaconTimingAns,
+    ADRParamSetupReq,
+    ADRParamSetupAns,
+    ForceRejoinReq,
+    RejoinParamSetupReq,
+    RejoinParamSetupAns,
+    RekeyInd,
+    RekeyConf,
+    DeviceModeInd,
+    DeviceModeConf,
 )
 
 
@@ -48,6 +57,60 @@ def test_beacon_timing_ans_roundtrip():
     data = ans.to_bytes()
     parsed = BeaconTimingAns.from_bytes(data)
     assert parsed == ans
+
+
+def test_adr_param_setup_req_roundtrip():
+    req = ADRParamSetupReq(5, 9)
+    data = req.to_bytes()
+    parsed = ADRParamSetupReq.from_bytes(data)
+    assert parsed == req
+
+
+def test_adr_param_setup_ans_roundtrip():
+    ans = ADRParamSetupAns()
+    data = ans.to_bytes()
+    parsed = ADRParamSetupAns.from_bytes(data)
+    assert isinstance(parsed, ADRParamSetupAns)
+
+
+def test_force_rejoin_req_roundtrip():
+    req = ForceRejoinReq(2, 10, 5)
+    data = req.to_bytes()
+    parsed = ForceRejoinReq.from_bytes(data)
+    assert parsed == req
+
+
+def test_rejoin_param_setup_roundtrip():
+    req = RejoinParamSetupReq(3, 7)
+    data = req.to_bytes()
+    parsed = RejoinParamSetupReq.from_bytes(data)
+    assert parsed == req
+    ans = RejoinParamSetupAns()
+    data_ans = ans.to_bytes()
+    parsed_ans = RejoinParamSetupAns.from_bytes(data_ans)
+    assert parsed_ans == ans
+
+
+def test_rekey_roundtrip():
+    ind = RekeyInd(1)
+    data = ind.to_bytes()
+    parsed_ind = RekeyInd.from_bytes(data)
+    assert parsed_ind == ind
+    conf = RekeyConf(1)
+    data_conf = conf.to_bytes()
+    parsed_conf = RekeyConf.from_bytes(data_conf)
+    assert parsed_conf == conf
+
+
+def test_device_mode_roundtrip():
+    ind = DeviceModeInd("B")
+    data = ind.to_bytes()
+    parsed_ind = DeviceModeInd.from_bytes(data)
+    assert parsed_ind == ind
+    conf = DeviceModeConf("B")
+    data_conf = conf.to_bytes()
+    parsed_conf = DeviceModeConf.from_bytes(data_conf)
+    assert parsed_conf == conf
 
 
 def test_rx_delay_affects_receive_windows():

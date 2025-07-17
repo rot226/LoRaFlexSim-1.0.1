@@ -267,6 +267,148 @@ class DlChannelAns:
 
 
 @dataclass
+class RekeyInd:
+    """Notify the network server that new root keys are in use."""
+
+    minor: int
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x0B, self.minor & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "RekeyInd":
+        if len(data) < 2 or data[0] != 0x0B:
+            raise ValueError("Invalid RekeyInd")
+        return RekeyInd(minor=data[1])
+
+
+@dataclass
+class RekeyConf:
+    """Acknowledge a RekeyInd command."""
+
+    minor: int
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x0B, self.minor & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "RekeyConf":
+        if len(data) < 2 or data[0] != 0x0B:
+            raise ValueError("Invalid RekeyConf")
+        return RekeyConf(minor=data[1])
+
+
+@dataclass
+class ADRParamSetupReq:
+    adr_ack_limit: int
+    adr_ack_delay: int
+
+    def to_bytes(self) -> bytes:
+        param = ((self.adr_ack_limit & 0x0F) << 4) | (self.adr_ack_delay & 0x0F)
+        return bytes([0x0C, param])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "ADRParamSetupReq":
+        if len(data) < 2 or data[0] != 0x0C:
+            raise ValueError("Invalid ADRParamSetupReq")
+        param = data[1]
+        return ADRParamSetupReq((param >> 4) & 0x0F, param & 0x0F)
+
+
+@dataclass
+class ADRParamSetupAns:
+    def to_bytes(self) -> bytes:
+        return bytes([0x0C])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "ADRParamSetupAns":
+        if len(data) < 1 or data[0] != 0x0C:
+            raise ValueError("Invalid ADRParamSetupAns")
+        return ADRParamSetupAns()
+
+
+@dataclass
+class ForceRejoinReq:
+    rejoin_type: int
+    period: int
+    max_retries: int
+
+    def to_bytes(self) -> bytes:
+        param = ((self.rejoin_type & 0x07) << 5) | (self.period & 0x1F)
+        return bytes([0x0E, param, self.max_retries & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "ForceRejoinReq":
+        if len(data) < 3 or data[0] != 0x0E:
+            raise ValueError("Invalid ForceRejoinReq")
+        param = data[1]
+        rejoin_type = (param >> 5) & 0x07
+        period = param & 0x1F
+        return ForceRejoinReq(rejoin_type, period, data[2])
+
+
+@dataclass
+class RejoinParamSetupReq:
+    max_time_n: int
+    max_count_n: int
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x0F, self.max_time_n & 0xFF, self.max_count_n & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "RejoinParamSetupReq":
+        if len(data) < 3 or data[0] != 0x0F:
+            raise ValueError("Invalid RejoinParamSetupReq")
+        return RejoinParamSetupReq(data[1], data[2])
+
+
+@dataclass
+class RejoinParamSetupAns:
+    status: int = 0b01
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x0F, self.status])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "RejoinParamSetupAns":
+        if len(data) < 2 or data[0] != 0x0F:
+            raise ValueError("Invalid RejoinParamSetupAns")
+        return RejoinParamSetupAns(status=data[1])
+
+
+@dataclass
+class DeviceModeInd:
+    class_mode: str
+
+    def to_bytes(self) -> bytes:
+        mode = {"A": 0, "B": 1, "C": 2}.get(self.class_mode.upper(), 0)
+        return bytes([0x20, mode & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "DeviceModeInd":
+        if len(data) < 2 or data[0] != 0x20:
+            raise ValueError("Invalid DeviceModeInd")
+        modes = {0: "A", 1: "B", 2: "C"}
+        return DeviceModeInd(modes.get(data[1] & 0x03, "A"))
+
+
+@dataclass
+class DeviceModeConf:
+    class_mode: str
+
+    def to_bytes(self) -> bytes:
+        mode = {"A": 0, "B": 1, "C": 2}.get(self.class_mode.upper(), 0)
+        return bytes([0x20, mode & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "DeviceModeConf":
+        if len(data) < 2 or data[0] != 0x20:
+            raise ValueError("Invalid DeviceModeConf")
+        modes = {0: "A", 1: "B", 2: "C"}
+        return DeviceModeConf(modes.get(data[1] & 0x03, "A"))
+
+
+@dataclass
 class PingSlotChannelReq:
     frequency: int
     dr: int

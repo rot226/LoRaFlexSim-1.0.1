@@ -19,7 +19,14 @@ from VERSION_4.launcher.lorawan import (  # noqa: E402
     BeaconTimingAns,
     ResetConf,
     ResetInd,
-)
+    ADRParamSetupReq,
+    ADRParamSetupAns,
+    ForceRejoinReq,
+    RejoinParamSetupReq,
+    RejoinParamSetupAns,
+    DeviceModeInd,
+    DeviceModeConf,
+    )
 
 
 def test_handle_duty_cycle_req():
@@ -80,3 +87,39 @@ def test_handle_reset_conf():
     node.handle_downlink(frame)
     assert node.lorawan_minor == 1
     assert node.pending_mac_cmd == ResetInd(1).to_bytes()
+
+
+def test_handle_adr_param_setup_req():
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    frame = LoRaWANFrame(0, 0, 0, ADRParamSetupReq(10, 5).to_bytes())
+    node.handle_downlink(frame)
+    assert node.adr_ack_limit == 10
+    assert node.adr_ack_delay == 5
+    assert node.pending_mac_cmd == ADRParamSetupAns().to_bytes()
+
+
+def test_handle_force_rejoin_req():
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    req = ForceRejoinReq(1, 5, 3)
+    frame = LoRaWANFrame(0, 0, 0, req.to_bytes())
+    node.handle_downlink(frame)
+    assert node.force_rejoin
+    assert not node.activated
+
+
+def test_handle_rejoin_param_setup_req():
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    req = RejoinParamSetupReq(2, 4)
+    frame = LoRaWANFrame(0, 0, 0, req.to_bytes())
+    node.handle_downlink(frame)
+    assert node.rejoin_max_time == 2
+    assert node.rejoin_max_count == 4
+    assert node.pending_mac_cmd == RejoinParamSetupAns().to_bytes()
+
+
+def test_handle_device_mode_ind():
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    frame = LoRaWANFrame(0, 0, 0, DeviceModeInd("C").to_bytes())
+    node.handle_downlink(frame)
+    assert node.class_type == "C"
+    assert node.pending_mac_cmd == DeviceModeConf("C").to_bytes()
