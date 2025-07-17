@@ -38,6 +38,8 @@ selected_adr_module = adr_standard_1
 total_runs = 1
 current_run = 0
 runs_events: list[pd.DataFrame] = []
+runs_metrics: list[dict] = []
+auto_fast_forward = False
 
 # --- Widgets de configuration ---
 num_nodes_input = pn.widgets.IntInput(name="Nombre de nœuds", value=20, step=1, start=1)
@@ -373,21 +375,24 @@ def setup_simulation(seed_offset: int = 0):
 
 # --- Bouton "Lancer la simulation" ---
 def on_start(event):
-    global total_runs, current_run, runs_events
+    global total_runs, current_run, runs_events, runs_metrics
     total_runs = int(num_runs_input.value)
     current_run = 1
     runs_events.clear()
+    runs_metrics.clear()
     setup_simulation(seed_offset=0)
 
 
 # --- Bouton "Arrêter la simulation" ---
 def on_stop(event):
     global sim, sim_callback, chrono_callback, start_time, max_real_time, paused
-    global current_run, total_runs, runs_events
+    global current_run, total_runs, runs_events, auto_fast_forward
     if sim is None or not sim.running:
         return
 
     sim.running = False
+    if event is not None:
+        auto_fast_forward = False
     if sim_callback:
         sim_callback.stop()
         sim_callback = None
@@ -401,11 +406,27 @@ def on_stop(event):
             runs_events.append(df.assign(run=current_run))
     except Exception:
         pass
+    try:
+        runs_metrics.append(sim.get_metrics())
+    except Exception:
+        pass
 
     if current_run < total_runs:
+        if runs_metrics:
+            avg = {
+                key: sum(m[key] for m in runs_metrics) / len(runs_metrics)
+                for key in runs_metrics[0].keys()
+            }
+            pdr_indicator.value = avg.get("PDR", 0.0)
+            collisions_indicator.value = avg.get("collisions", 0)
+            energy_indicator.value = avg.get("energy_J", 0.0)
+            delay_indicator.value = avg.get("avg_delay_s", 0.0)
+            throughput_indicator.value = avg.get("throughput_bps", 0.0)
         current_run += 1
         seed_offset = current_run - 1
         setup_simulation(seed_offset=seed_offset)
+        if auto_fast_forward:
+            fast_forward()
         return
 
     num_nodes_input.disabled = False
@@ -439,6 +460,18 @@ def on_stop(event):
 
     start_time = None
     max_real_time = None
+    auto_fast_forward = False
+    if runs_metrics:
+        avg = {
+            key: sum(m[key] for m in runs_metrics) / len(runs_metrics)
+            for key in runs_metrics[0].keys()
+            if key in runs_metrics[0]
+        }
+        pdr_indicator.value = avg.get("PDR", 0.0)
+        collisions_indicator.value = avg.get("collisions", 0)
+        energy_indicator.value = avg.get("energy_J", 0.0)
+        delay_indicator.value = avg.get("avg_delay_s", 0.0)
+        throughput_indicator.value = avg.get("throughput_bps", 0.0)
     export_message.object = "✅ Simulation terminée. Tu peux exporter les résultats."
 
 
@@ -470,9 +503,10 @@ export_button.on_click(exporter_csv)
 
 # --- Bouton d'accélération ---
 def fast_forward(event=None):
-    global sim, sim_callback, chrono_callback, start_time, max_real_time
+    global sim, sim_callback, chrono_callback, start_time, max_real_time, auto_fast_forward
     doc = pn.state.curdoc
     if sim and sim.running:
+        auto_fast_forward = True
         if sim.packets_to_send == 0:
             export_message.object = (
                 "⚠️ Définissez un nombre de paquets supérieur à 0 "
