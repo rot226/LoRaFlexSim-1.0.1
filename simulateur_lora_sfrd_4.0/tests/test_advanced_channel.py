@@ -33,3 +33,10 @@ def test_rayleigh_fading_variability():
     r1, _ = adv.compute_rssi(14.0, 100.0)
     r2, _ = adv.compute_rssi(14.0, 100.0)
     assert r1 != r2
+
+
+def test_rician_fading_variability():
+    adv = AdvancedChannel(fading="rician", rician_k=2.0)
+    r1, _ = adv.compute_rssi(14.0, 100.0)
+    r2, _ = adv.compute_rssi(14.0, 100.0)
+    assert r1 != r2

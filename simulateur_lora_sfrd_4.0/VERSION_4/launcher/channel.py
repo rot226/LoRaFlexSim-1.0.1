@@ -28,6 +28,9 @@ class Channel:
         shadowing_std: float = 6.0,
         fast_fading_std: float = 0.0,
         cable_loss_dB: float = 0.0,
+        tx_antenna_gain_dB: float = 0.0,
+        rx_antenna_gain_dB: float = 0.0,
+        time_variation_std: float = 0.0,
         receiver_noise_floor_dBm: float = -174.0,
         noise_figure_dB: float = 6.0,
         noise_floor_std: float = 0.0,
@@ -50,6 +53,11 @@ class Channel:
         :param shadowing_std: Écart-type du shadowing (variations aléatoires en dB), 0 pour ignorer.
         :param fast_fading_std: Variation rapide de l'amplitude (dB) pour simuler le fading multipath.
         :param cable_loss_dB: Pertes fixes dues au câble/connectique (dB).
+        :param tx_antenna_gain_dB: Gain de l'antenne émettrice (dB).
+        :param rx_antenna_gain_dB: Gain de l'antenne réceptrice (dB).
+        :param time_variation_std: Écart-type d'une variation aléatoire
+            appliquée au RSSI à chaque appel pour représenter un canal
+            temporellement variable.
         :param receiver_noise_floor_dBm: Niveau de bruit thermique de référence (dBm/Hz).
         :param noise_figure_dB: Facteur de bruit ajouté par le récepteur (dB).
         :param noise_floor_std: Écart-type de la variation aléatoire du bruit
@@ -98,6 +106,9 @@ class Channel:
         self.shadowing_std = shadowing_std  # σ en dB (ex: 6.0 pour environnement urbain/suburbain)
         self.fast_fading_std = fast_fading_std
         self.cable_loss_dB = cable_loss_dB
+        self.tx_antenna_gain_dB = tx_antenna_gain_dB
+        self.rx_antenna_gain_dB = rx_antenna_gain_dB
+        self.time_variation_std = time_variation_std
         self.receiver_noise_floor_dBm = receiver_noise_floor_dBm
         self.noise_figure_dB = noise_figure_dB
         self.noise_floor_std = noise_floor_std
@@ -149,19 +160,35 @@ class Channel:
         pl = pl_d0 + 10 * self.path_loss_exp * math.log10(max(distance, 1.0) / 1.0)
         return pl
 
-    def compute_rssi(self, tx_power_dBm: float, distance: float) -> tuple[float, float]:
-        """Calcule le RSSI et le SNR attendus à une certaine distance."""
+    def compute_rssi(
+        self, tx_power_dBm: float, distance: float, sf: int | None = None
+    ) -> tuple[float, float]:
+        """Calcule le RSSI et le SNR attendus à une certaine distance.
+
+        Un gain additionnel peut être appliqué si ``sf`` est renseigné pour
+        représenter l'effet d'étalement de spectre LoRa.
+        """
         # Calcul de la perte de propagation
         loss = self.path_loss(distance)
         if self.shadowing_std > 0:
             loss += random.gauss(0, self.shadowing_std)
-        # RSSI = P_tx - pertes - pertes câble
-        rssi = tx_power_dBm - loss - self.cable_loss_dB
+        # RSSI = P_tx + gains antennes - pertes - pertes câble
+        rssi = (
+            tx_power_dBm
+            + self.tx_antenna_gain_dB
+            + self.rx_antenna_gain_dB
+            - loss
+            - self.cable_loss_dB
+        )
         if self.tx_power_std > 0:
             rssi += random.gauss(0, self.tx_power_std)
         if self.fast_fading_std > 0:
             rssi += random.gauss(0, self.fast_fading_std)
+        if self.time_variation_std > 0:
+            rssi += random.gauss(0, self.time_variation_std)
         snr = rssi - self.noise_floor_dBm()
+        if sf is not None:
+            snr += 10 * math.log10(2 ** sf)
         return rssi, snr
 
     def airtime(self, sf: int, payload_size: int = 20) -> float:

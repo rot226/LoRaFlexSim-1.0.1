@@ -130,9 +130,11 @@ mode `cost231` applique la formule Hata COST‑231 avec les hauteurs de
 stations paramétrables. Un mode `okumura_hata` reprend la variante
 d'origine (urbain, suburbain ou zone ouverte). Le mode `3d` calcule la
 distance réelle en 3D entre l'émetteur et le récepteur. Il est également
-possible de simuler un fading `rayleigh` pour représenter des
-multi-trajets plus réalistes. Des pertes liées aux conditions météo
-peuvent être ajoutées via `weather_loss_dB_per_km`.
+possible de simuler un fading `rayleigh` ou `rician` pour représenter des
+multi-trajets plus réalistes. Des gains d'antenne et pertes de câble
+peuvent être précisés, ainsi qu'une variation temporelle du bruit grâce
+à `noise_floor_std`. Des pertes liées aux conditions météo peuvent être
+ajoutées via `weather_loss_dB_per_km`.
 
 ```python
 from launcher.advanced_channel import AdvancedChannel
