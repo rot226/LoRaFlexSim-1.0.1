@@ -69,6 +69,19 @@ python VERSION_4/run.py --nodes 50 --gateways 2 --channels 3 \
 python VERSION_4/run.py --lorawan-demo --steps 100 --output lorawan.csv
 ```
 
+### FLoRa INI scenario example
+
+To reproduce a typical FLoRa configuration and check the SF distribution per
+node, run the helper script below. It applies the "Mode FLoRa complet" settings
+with ADR variant 1 and fixed node positions:
+
+```bash
+python examples/run_flora_example.py --runs 5 --seed 123
+```
+
+The script prints the Packet Delivery Ratio and spreading factor histogram for
+each run.
+
 Use a preset propagation environment from Python:
 
 ```python
