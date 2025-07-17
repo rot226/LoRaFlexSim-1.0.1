@@ -9,7 +9,7 @@ DEFAULT_ENERGY_PROFILE = FLORA_PROFILE
 class Node:
     """
     Représente un nœud IoT (LoRa) dans la simulation, avec suivi complet des métriques de performance.
-    
+
     Attributs :
         id (int) : Identifiant unique du nœud.
         initial_x (float), initial_y (float) : Position initiale du nœud (mètres).
@@ -62,7 +62,7 @@ class Node:
 
         # Profil énergétique utilisé pour calculer la consommation
         self.profile = energy_profile or DEFAULT_ENERGY_PROFILE
-        
+
         # Énergie et compteurs de paquets
         self.energy_consumed = 0.0
         self.energy_tx = 0.0
@@ -77,7 +77,7 @@ class Node:
         self.battery_capacity_j = float('inf') if battery_capacity_j is None else battery_capacity_j
         self.battery_remaining_j = self.battery_capacity_j
         self.alive = True
-        
+
         # Paramètres de mobilité (initialement immobile)
         self.speed = 0.0       # Vitesse en m/s
         self.direction = 0.0   # Direction en radians
@@ -135,9 +135,9 @@ class Node:
 
     def distance_to(self, other) -> float:
         """
-        Calcule la distance euclidienne (mètres) entre ce nœud et un autre objet possédant 
+        Calcule la distance euclidienne (mètres) entre ce nœud et un autre objet possédant
         des attributs x et y (par exemple une passerelle).
-        
+
         :param other: Objet avec attributs x et y.
         :return: Distance euclidienne (mètres).
         """
@@ -154,8 +154,8 @@ class Node:
 
     def to_dict(self) -> dict:
         """
-        Retourne les données finales du nœud sous forme de dictionnaire, prêt pour 
-        l'export en DataFrame/CSV. 
+        Retourne les données finales du nœud sous forme de dictionnaire, prêt pour
+        l'export en DataFrame/CSV.
         Les positions finales et valeurs finales de SF/TxPower sont les valeurs courantes.
         """
         return {
@@ -347,7 +347,7 @@ class Node:
                     idx -= 1
                     self.tx_power = TX_POWER_INDEX_TO_DBM[idx]
             self.adr_ack_cnt = 0
-            
+
     def schedule_receive_windows(self, end_time: float):
         """Return RX1 and RX2 times for the last uplink."""
         from .lorawan import compute_rx1, compute_rx2

@@ -32,7 +32,7 @@ class RandomWaypoint:
 
     def move(self, node, current_time: float):
         """
-        Met à jour la position du nœud en le déplaçant selon sa vitesse et sa direction 
+        Met à jour la position du nœud en le déplaçant selon sa vitesse et sa direction
         sur le laps de temps écoulé depuis son dernier déplacement, puis gère les rebonds aux bordures.
         :param node: Nœud à déplacer.
         :param current_time: Temps actuel de la simulation (secondes).
