@@ -285,10 +285,9 @@ Ce projet est distribué sous licence [MIT](../LICENSE).
 
 ## Améliorations possibles
 
-Pour aller plus loin, on pourrait :
+Les points suivants ont été intégrés au simulateur :
 
-- **Calculer des PDR par nœud ou par type de trafic.** Chaque nœud dispose déjà d'un historique de ses transmissions. On peut ainsi déterminer un taux de livraison individuel ou différencié suivant la classe ou le mode d'envoi.
-- **Conserver un historique glissant pour afficher un PDR moyen sur les dernières transmissions.** Le simulateur stocke désormais les vingt derniers événements de chaque nœud et calcule un PDR « récent ».
-- **Ajouter des indicateurs supplémentaires :** PDR par SF, par passerelle et par nœud sont exposés via la méthode `get_metrics()`.
-- **Intégrer des métriques de QoS :** délai moyen et nombre de retransmissions sont suivis pour affiner la vision du réseau.
+- **PDR par nœud et par type de trafic.** Chaque nœud maintient l'historique de ses vingt dernières transmissions afin de calculer un taux de livraison global et récent. Ces valeurs sont visibles dans le tableau de bord et exportées dans un fichier `metrics_*.csv`.
+- **Historique glissant et indicateurs QoS.** Le simulateur calcule désormais le délai moyen de livraison ainsi que le nombre de retransmissions sur la période récente.
+- **Indicateurs supplémentaires.** La méthode `get_metrics()` retourne le PDR par SF, passerelle, classe et nœud. Le tableau de bord affiche un récapitulatif et l'export produit deux fichiers CSV : un pour les événements détaillés et un pour les métriques agrégées.
 
