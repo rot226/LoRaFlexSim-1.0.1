@@ -9,6 +9,7 @@ from .simulator import Simulator
 from .duty_cycle import DutyCycleManager
 from .smooth_mobility import SmoothMobility
 from .lorawan import LoRaWANFrame, compute_rx1, compute_rx2
+from .downlink_scheduler import DownlinkScheduler
 
 __all__ = [
     "Node",
@@ -23,6 +24,7 @@ __all__ = [
     "LoRaWANFrame",
     "compute_rx1",
     "compute_rx2",
+    "DownlinkScheduler",
 ]
 
 for name in __all__:

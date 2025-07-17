@@ -122,6 +122,19 @@ class Node:
         self.pending_mac_cmd = None
         self.need_downlink_ack = False
 
+        # Parameters configured by MAC commands
+        self.max_duty_cycle = 0
+        self.rx1_dr_offset = 0
+        self.rx2_datarate = 0
+        self.rx2_frequency = 869525000
+        self.rx_delay = 1
+        self.eirp = 0
+        self.dwell_time = 0
+        self.dl_channels: dict[int, int] = {}
+        self.ping_slot_frequency: int | None = None
+        self.ping_slot_dr: int | None = None
+        self.beacon_frequency: int | None = None
+
         # ADR state (LoRaWAN specification)
         self.adr = True
         self.nb_trans = 1
@@ -324,6 +337,21 @@ class Node:
             LinkCheckAns,
             DeviceTimeReq,
             DeviceTimeAns,
+            DutyCycleReq,
+            RXParamSetupReq,
+            RXParamSetupAns,
+            RXTimingSetupReq,
+            TxParamSetupReq,
+            DlChannelReq,
+            DlChannelAns,
+            DevStatusReq,
+            DevStatusAns,
+            NewChannelReq,
+            NewChannelAns,
+            PingSlotChannelReq,
+            PingSlotChannelAns,
+            BeaconFreqReq,
+            BeaconFreqAns,
             DR_TO_SF,
             TX_POWER_INDEX_TO_DBM,
             JoinAccept,
@@ -370,6 +398,83 @@ class Node:
                 self.pending_mac_cmd = LinkCheckAns(margin=255, gw_cnt=1).to_bytes()
             elif frame.payload == DeviceTimeReq().to_bytes():
                 self.pending_mac_cmd = DeviceTimeAns(int(self.fcnt_up)).to_bytes()
+            elif len(frame.payload) >= 2 and frame.payload[0] == 0x04:
+                try:
+                    from .lorawan import DutyCycleReq
+
+                    req = DutyCycleReq.from_bytes(frame.payload[:2])
+                    self.max_duty_cycle = req.max_duty_cycle
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 5 and frame.payload[0] == 0x05:
+                try:
+                    from .lorawan import RXParamSetupReq, RXParamSetupAns
+
+                    req = RXParamSetupReq.from_bytes(frame.payload[:5])
+                    self.rx1_dr_offset = req.rx1_dr_offset
+                    self.rx2_datarate = req.rx2_datarate
+                    self.rx2_frequency = req.frequency
+                    self.pending_mac_cmd = RXParamSetupAns().to_bytes()
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 2 and frame.payload[0] == 0x08:
+                try:
+                    from .lorawan import RXTimingSetupReq
+
+                    req = RXTimingSetupReq.from_bytes(frame.payload[:2])
+                    self.rx_delay = req.delay
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 2 and frame.payload[0] == 0x09:
+                try:
+                    from .lorawan import TxParamSetupReq
+
+                    req = TxParamSetupReq.from_bytes(frame.payload[:2])
+                    self.eirp = req.eirp
+                    self.dwell_time = req.dwell_time
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 5 and frame.payload[0] == 0x0A:
+                try:
+                    from .lorawan import DlChannelReq, DlChannelAns
+
+                    req = DlChannelReq.from_bytes(frame.payload[:5])
+                    self.dl_channels[req.ch_index] = req.frequency
+                    self.pending_mac_cmd = DlChannelAns().to_bytes()
+                except Exception:
+                    pass
+            elif frame.payload == DevStatusReq().to_bytes():
+                lvl = int(self.battery_level * 255)
+                margin = int(self.last_snr) if self.last_snr is not None else 0
+                self.pending_mac_cmd = DevStatusAns(battery=lvl, margin=margin).to_bytes()
+            elif len(frame.payload) >= 6 and frame.payload[0] == 0x07:
+                try:
+                    from .lorawan import NewChannelReq, NewChannelAns
+
+                    req = NewChannelReq.from_bytes(frame.payload[:6])
+                    self.dl_channels[req.ch_index] = req.frequency
+                    self.pending_mac_cmd = NewChannelAns().to_bytes()
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 5 and frame.payload[0] == 0x11:
+                try:
+                    from .lorawan import PingSlotChannelReq, PingSlotChannelAns
+
+                    req = PingSlotChannelReq.from_bytes(frame.payload[:5])
+                    self.ping_slot_frequency = req.frequency
+                    self.ping_slot_dr = req.dr
+                    self.pending_mac_cmd = PingSlotChannelAns().to_bytes()
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 4 and frame.payload[0] == 0x13:
+                try:
+                    from .lorawan import BeaconFreqReq, BeaconFreqAns
+
+                    req = BeaconFreqReq.from_bytes(frame.payload[:4])
+                    self.beacon_frequency = req.frequency
+                    self.pending_mac_cmd = BeaconFreqAns().to_bytes()
+                except Exception:
+                    pass
             elif frame.payload.startswith(b"ADR:"):
                 try:
                     _, sf_str, pwr_str = frame.payload.decode().split(":")
