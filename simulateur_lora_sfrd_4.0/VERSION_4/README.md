@@ -109,6 +109,11 @@ Le paramètre `min_interference_time` de `Simulator` permet de définir une dur�
 de chevauchement sous laquelle deux paquets ne sont pas considérés comme en
 collision.
 
+Le tableau de bord propose désormais un bouton **Mode FLoRa complet**. Quand il
+est activé, `detection_threshold_dBm` est automatiquement fixé à `-110` dBm et
+`min_interference_time` appliqué pour mieux coller au modèle FLoRa. Les champs
+restent modifiables si ce mode est désactivé.
+
 ## SF et puissance initiaux
 
 Deux nouvelles cases à cocher du tableau de bord permettent de fixer le
