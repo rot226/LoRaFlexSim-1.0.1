@@ -1,8 +1,10 @@
 import os
 import sys
+import math
 
 import panel as pn
 import plotly.graph_objects as go
+import numpy as np
 import time
 import threading
 import pandas as pd
@@ -30,6 +32,7 @@ pn.state.curdoc.title = "Simulateur LoRa"
 sim = None
 sim_callback = None
 chrono_callback = None
+map_anim_callback = None
 start_time = None
 elapsed_time = 0
 max_real_time = None
@@ -144,6 +147,10 @@ map_pane = pn.pane.Plotly(height=600, sizing_mode="stretch_width")
 # --- Pane pour l'histogramme SF ---
 sf_hist_pane = pn.pane.Plotly(height=250, sizing_mode="stretch_width")
 
+# --- Heatmap de couverture ---
+heatmap_button = pn.widgets.Button(name="Afficher la heatmap", button_type="primary")
+heatmap_pane = pn.pane.Plotly(height=600, sizing_mode="stretch_width", visible=False)
+
 
 # --- Mise à jour de la carte ---
 def update_map():
@@ -191,6 +198,51 @@ def update_map():
         margin=dict(l=20, r=20, t=40, b=20),
     )
     map_pane.object = fig
+
+
+def toggle_heatmap(event=None):
+    """Afficher ou masquer la heatmap de couverture."""
+    if heatmap_pane.visible:
+        heatmap_pane.visible = False
+        heatmap_button.name = "Afficher la heatmap"
+        return
+    if sim is None:
+        return
+    area = sim.area_size
+    res = 30
+    xs = np.linspace(0, area, res)
+    ys = np.linspace(0, area, res)
+    z = np.zeros((res, res))
+    for i, y in enumerate(ys):
+        for j, x in enumerate(xs):
+            best_rssi = -float("inf")
+            for gw in sim.gateways:
+                d = math.hypot(x - gw.x, y - gw.y)
+                rssi, _ = sim.channel.compute_rssi(14.0, d)
+                if rssi > best_rssi:
+                    best_rssi = rssi
+            z[i, j] = best_rssi
+    fig = go.Figure()
+    fig.add_trace(go.Heatmap(x=xs, y=ys, z=z, colorscale="Viridis"))
+    fig.add_scatter(
+        x=[gw.x for gw in sim.gateways],
+        y=[gw.y for gw in sim.gateways],
+        mode="markers",
+        marker=dict(symbol="star", color="red", size=28, line=dict(width=1, color="black")),
+        name="Passerelles",
+    )
+    fig.update_layout(
+        title="Heatmap couverture (RSSI)",
+        xaxis_title="X (m)",
+        yaxis_title="Y (m)",
+        xaxis_range=[0, area],
+        yaxis_range=[0, area],
+        yaxis=dict(scaleanchor="x", scaleratio=1),
+        margin=dict(l=20, r=20, t=40, b=20),
+    )
+    heatmap_pane.object = fig
+    heatmap_pane.visible = True
+    heatmap_button.name = "Masquer la heatmap"
 
 
 # --- Callback pour changer le label de l'intervalle selon le mode d'émission ---
@@ -272,12 +324,15 @@ def step_simulation():
 # --- Bouton "Lancer la simulation" ---
 def setup_simulation(seed_offset: int = 0):
     """Crée et démarre un simulateur avec les paramètres du tableau de bord."""
-    global sim, sim_callback, start_time, chrono_callback, elapsed_time, max_real_time, paused
+    global sim, sim_callback, map_anim_callback, start_time, chrono_callback, elapsed_time, max_real_time, paused
     elapsed_time = 0
 
     if sim_callback:
         sim_callback.stop()
         sim_callback = None
+    if map_anim_callback:
+        map_anim_callback.stop()
+        map_anim_callback = None
     if chrono_callback:
         chrono_callback.stop()
         chrono_callback = None
@@ -402,6 +457,7 @@ def setup_simulation(seed_offset: int = 0):
 
     sim.running = True
     sim_callback = pn.state.add_periodic_callback(step_simulation, period=100, timeout=None)
+    map_anim_callback = pn.state.add_periodic_callback(update_map, period=200, timeout=None)
 
 
 # --- Bouton "Lancer la simulation" ---
@@ -416,7 +472,7 @@ def on_start(event):
 
 # --- Bouton "Arrêter la simulation" ---
 def on_stop(event):
-    global sim, sim_callback, chrono_callback, start_time, max_real_time, paused
+    global sim, sim_callback, chrono_callback, map_anim_callback, start_time, max_real_time, paused
     global current_run, total_runs, runs_events, auto_fast_forward
     if sim is None or not sim.running:
         return
@@ -427,6 +483,9 @@ def on_stop(event):
     if sim_callback:
         sim_callback.stop()
         sim_callback = None
+    if map_anim_callback:
+        map_anim_callback.stop()
+        map_anim_callback = None
     if chrono_callback:
         chrono_callback.stop()
         chrono_callback = None
@@ -687,6 +746,7 @@ adr3_button.on_click(lambda event: select_adr(adr_3, "ADR 3"))
 # --- Associer les callbacks aux boutons ---
 start_button.on_click(on_start)
 stop_button.on_click(on_stop)
+heatmap_button.on_click(toggle_heatmap)
 
 # --- Mise en page du dashboard ---
 controls = pn.WidgetBox(
@@ -736,6 +796,8 @@ metrics_col.width = 220
 
 center_col = pn.Column(
     map_pane,
+    heatmap_button,
+    heatmap_pane,
     sf_hist_pane,
     pn.Column(manual_pos_toggle, position_textarea, width=400),
     sizing_mode="stretch_width",
