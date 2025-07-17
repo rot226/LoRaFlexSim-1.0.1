@@ -12,6 +12,9 @@ from VERSION_4.launcher.lorawan import (  # noqa: E402
     DevStatusAns,
     PingSlotInfoReq,
     BeaconTimingAns,
+    ADRParamSetupReq,
+    RejoinParamSetupReq,
+    DeviceModeInd,
 )
 
 
@@ -59,4 +62,25 @@ def test_rx_delay_affects_receive_windows():
     rx1, rx2 = node.schedule_receive_windows(10.0)
     assert rx1 == pytest.approx(13.0)
     assert rx2 == pytest.approx(14.0)
+
+
+def test_adr_param_setup_req_roundtrip():
+    req = ADRParamSetupReq(3, 5)
+    data = req.to_bytes()
+    parsed = ADRParamSetupReq.from_bytes(data)
+    assert parsed == req
+
+
+def test_rejoin_param_setup_req_roundtrip():
+    req = RejoinParamSetupReq(2, 7)
+    data = req.to_bytes()
+    parsed = RejoinParamSetupReq.from_bytes(data)
+    assert parsed == req
+
+
+def test_device_mode_ind_roundtrip():
+    ind = DeviceModeInd("C")
+    data = ind.to_bytes()
+    parsed = DeviceModeInd.from_bytes(data)
+    assert parsed == ind
 
