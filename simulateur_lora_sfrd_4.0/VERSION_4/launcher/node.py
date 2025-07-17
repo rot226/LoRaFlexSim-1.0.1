@@ -86,9 +86,11 @@ class Node:
         self.packets_collision = 0
 
         # Batterie (énergie disponible restante)
-        self.battery_capacity_j = float('inf') if battery_capacity_j is None else battery_capacity_j
+        self.battery_capacity_j = (
+            float("inf") if battery_capacity_j is None else battery_capacity_j
+        )
         self.battery_remaining_j = self.battery_capacity_j
-        self.alive = True
+        self.alive = self.battery_remaining_j > 0
 
         # Paramètres de mobilité (initialement immobile)
         self.speed = 0.0       # Vitesse en m/s
