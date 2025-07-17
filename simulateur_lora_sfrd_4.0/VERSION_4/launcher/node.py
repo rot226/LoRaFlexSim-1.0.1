@@ -43,7 +43,7 @@ class Node:
         dev_eui: int | None = None,
         class_type: str = 'A',
         battery_capacity_j: float | None = None,
-        energy_profile: EnergyProfile | None = None,
+        energy_profile: EnergyProfile | str | None = None,
         *,
         activated: bool = True,
         appkey: bytes | None = None,
@@ -58,8 +58,8 @@ class Node:
         :param tx_power: Puissance d'émission initiale (dBm).
         :param battery_capacity_j: Capacité totale de la batterie en joules
             (``None`` pour capacité illimitée).
-        :param energy_profile: Paramètres de consommation d'énergie (profil
-            FLoRa par défaut).
+        :param energy_profile: Instance ou nom de profil énergétique
+            (``FLORA_PROFILE`` par défaut).
         :param join_eui: Identifiant de l'application pour OTAA.
         :param dev_eui: Identifiant unique du périphérique pour OTAA.
         """
@@ -77,7 +77,11 @@ class Node:
         self.channel = channel
 
         # Profil énergétique utilisé pour calculer la consommation
-        self.profile = energy_profile or DEFAULT_ENERGY_PROFILE
+        if isinstance(energy_profile, str):
+            from .energy_profiles import get_profile
+            self.profile = get_profile(energy_profile)
+        else:
+            self.profile = energy_profile or DEFAULT_ENERGY_PROFILE
 
         # Énergie et compteurs de paquets
         self.energy_consumed = 0.0

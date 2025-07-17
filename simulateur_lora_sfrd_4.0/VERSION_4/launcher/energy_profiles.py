@@ -30,3 +30,36 @@ class EnergyProfile:
 
 # Default profile based on the FLoRa model (OMNeT++)
 FLORA_PROFILE = EnergyProfile(tx_current_map_a=DEFAULT_TX_CURRENT_MAP_A)
+
+# Example of a lower power transceiver profile
+LOW_POWER_TX_MAP_A: dict[float, float] = {
+    2.0: 0.015,
+    5.0: 0.022,
+    8.0: 0.029,
+    11.0: 0.040,
+    14.0: 0.055,
+}
+
+LOW_POWER_PROFILE = EnergyProfile(rx_current_a=7e-3, tx_current_map_a=LOW_POWER_TX_MAP_A)
+
+# ------------------------------------------------------------------
+# Profile registry helpers
+# ------------------------------------------------------------------
+
+PROFILES: dict[str, EnergyProfile] = {
+    "flora": FLORA_PROFILE,
+    "low_power": LOW_POWER_PROFILE,
+}
+
+
+def register_profile(name: str, profile: EnergyProfile) -> None:
+    """Register a named energy profile."""
+    PROFILES[name.lower()] = profile
+
+
+def get_profile(name: str) -> EnergyProfile:
+    """Retrieve a named energy profile."""
+    key = name.lower()
+    if key not in PROFILES:
+        raise KeyError(f"Unknown energy profile: {name}")
+    return PROFILES[key]

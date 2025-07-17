@@ -18,6 +18,8 @@ This repository contains a lightweight LoRa network simulator implemented in Pyt
   FLoRa model
 - Optional battery model to track remaining energy per node
   (FLoRa energy profile)
+- Regional channel plans for EU868, US915, AU915 and Asian bands
+- Customizable energy profiles with a simple registry
 
 ## Quick start
 
