@@ -260,6 +260,30 @@ class PingSlotChannelAns:
 
 
 @dataclass
+class PingSlotInfoReq:
+    """Request the network server to return the ping slot periodicity."""
+
+    periodicity: int
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x10, self.periodicity & 0x07])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "PingSlotInfoReq":
+        if len(data) < 2 or data[0] != 0x10:
+            raise ValueError("Invalid PingSlotInfoReq")
+        return PingSlotInfoReq(data[1] & 0x07)
+
+
+@dataclass
+class PingSlotInfoAns:
+    """Acknowledge a PingSlotInfoReq."""
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x10])
+
+
+@dataclass
 class BeaconFreqReq:
     frequency: int
 
@@ -281,6 +305,37 @@ class BeaconFreqAns:
 
     def to_bytes(self) -> bytes:
         return bytes([0x13, self.status])
+
+
+@dataclass
+class BeaconTimingReq:
+    """Request the delay and channel of the next beacon."""
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x12])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "BeaconTimingReq":
+        if len(data) < 1 or data[0] != 0x12:
+            raise ValueError("Invalid BeaconTimingReq")
+        return BeaconTimingReq()
+
+
+@dataclass
+class BeaconTimingAns:
+    delay: int
+    channel: int
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x12]) + self.delay.to_bytes(2, "little") + bytes([self.channel & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "BeaconTimingAns":
+        if len(data) < 4 or data[0] != 0x12:
+            raise ValueError("Invalid BeaconTimingAns")
+        delay = int.from_bytes(data[1:3], "little")
+        channel = data[3]
+        return BeaconTimingAns(delay, channel)
 
 
 @dataclass

@@ -138,6 +138,9 @@ class Node:
         self.ping_slot_frequency: int | None = None
         self.ping_slot_dr: int | None = None
         self.beacon_frequency: int | None = None
+        self.ping_slot_periodicity: int | None = None
+        self.beacon_delay: int | None = None
+        self.beacon_channel: int | None = None
 
         # ADR state (LoRaWAN specification)
         self.adr = True
@@ -470,6 +473,15 @@ class Node:
                     self.pending_mac_cmd = PingSlotChannelAns().to_bytes()
                 except Exception:
                     pass
+            elif len(frame.payload) >= 2 and frame.payload[0] == 0x10:
+                try:
+                    from .lorawan import PingSlotInfoReq, PingSlotInfoAns
+
+                    req = PingSlotInfoReq.from_bytes(frame.payload[:2])
+                    self.ping_slot_periodicity = req.periodicity
+                    self.pending_mac_cmd = PingSlotInfoAns().to_bytes()
+                except Exception:
+                    pass
             elif len(frame.payload) >= 4 and frame.payload[0] == 0x13:
                 try:
                     from .lorawan import BeaconFreqReq, BeaconFreqAns
@@ -477,6 +489,19 @@ class Node:
                     req = BeaconFreqReq.from_bytes(frame.payload[:4])
                     self.beacon_frequency = req.frequency
                     self.pending_mac_cmd = BeaconFreqAns().to_bytes()
+                except Exception:
+                    pass
+            elif len(frame.payload) >= 1 and frame.payload[0] == 0x12:
+                try:
+                    from .lorawan import BeaconTimingReq, BeaconTimingAns
+
+                    if len(frame.payload) >= 4:
+                        ans = BeaconTimingAns.from_bytes(frame.payload[:4])
+                        self.beacon_delay = ans.delay
+                        self.beacon_channel = ans.channel
+                    else:
+                        BeaconTimingReq.from_bytes(frame.payload[:1])
+                        self.pending_mac_cmd = BeaconTimingAns(0, 0).to_bytes()
                 except Exception:
                     pass
             elif frame.payload.startswith(b"ADR:"):

@@ -13,6 +13,10 @@ from VERSION_4.launcher.lorawan import (
     DevStatusReq,
     DevStatusAns,
     PingSlotChannelReq,
+    PingSlotInfoReq,
+    PingSlotInfoAns,
+    BeaconTimingReq,
+    BeaconTimingAns,
 )
 
 
@@ -48,3 +52,21 @@ def test_handle_ping_slot_channel_req():
     node.handle_downlink(frame)
     assert node.ping_slot_frequency == 869525000
     assert node.ping_slot_dr == 3
+
+
+def test_handle_ping_slot_info_req():
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    req = PingSlotInfoReq(2)
+    frame = LoRaWANFrame(0, 0, 0, req.to_bytes())
+    node.handle_downlink(frame)
+    assert node.ping_slot_periodicity == 2
+    assert node.pending_mac_cmd == PingSlotInfoAns().to_bytes()
+
+
+def test_handle_beacon_timing_req():
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    frame = LoRaWANFrame(0, 0, 0, BeaconTimingReq().to_bytes())
+    node.handle_downlink(frame)
+    ans = BeaconTimingAns.from_bytes(node.pending_mac_cmd)
+    assert ans.delay == 0
+    assert ans.channel == 0
