@@ -883,11 +883,13 @@ fast_forward_button.on_click(fast_forward)
 
 # --- Bouton "Pause/Reprendre" ---
 def on_pause(event=None):
+    """Toggle simulation pause state safely."""
     global sim_callback, chrono_callback, start_time, elapsed_time, paused
     if sim is None or not sim.running:
         return
 
     if not paused:
+        # Pausing the simulation
         if sim_callback:
             sim_callback.stop()
             sim_callback = None
@@ -896,11 +898,14 @@ def on_pause(event=None):
             chrono_callback = None
         if start_time is not None:
             elapsed_time = time.time() - start_time
+        start_time = None  # Freeze chrono while paused
         pause_button.name = "Reprendre"
         pause_button.button_type = "success"
         paused = True
     else:
-        start_time = time.time() - elapsed_time
+        # Resuming the simulation
+        if start_time is None:
+            start_time = time.time() - elapsed_time
         if sim_callback is None:
             sim_callback = pn.state.add_periodic_callback(step_simulation, period=100, timeout=None)
         if chrono_callback is None:
