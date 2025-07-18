@@ -485,6 +485,19 @@ def step_simulation():
 def setup_simulation(seed_offset: int = 0):
     """Crée et démarre un simulateur avec les paramètres du tableau de bord."""
     global sim, sim_callback, map_anim_callback, start_time, chrono_callback, elapsed_time, max_real_time, paused
+
+    # Empêcher de relancer si une simulation est déjà en cours
+    if sim is not None and getattr(sim, "running", False):
+        export_message.object = "⚠️ Simulation déjà en cours !"
+        return
+
+    # Valider que des paquets ou une durée réelle sont définis
+    if int(packets_input.value) <= 0 and float(real_time_duration_input.value) <= 0:
+        export_message.object = (
+            "⚠️ Définissez un nombre de paquets ou une durée réelle supérieurs à 0 !"
+        )
+        return
+
     elapsed_time = 0
 
     if sim_callback:
@@ -639,6 +652,19 @@ def setup_simulation(seed_offset: int = 0):
 # --- Bouton "Lancer la simulation" ---
 def on_start(event):
     global total_runs, current_run, runs_events, runs_metrics
+
+    # Vérifier qu'une simulation n'est pas déjà en cours
+    if sim is not None and getattr(sim, "running", False):
+        export_message.object = "⚠️ Simulation déjà en cours !"
+        return
+
+    # Valider les entrées avant de démarrer
+    if int(packets_input.value) <= 0 and float(real_time_duration_input.value) <= 0:
+        export_message.object = (
+            "⚠️ Définissez un nombre de paquets ou une durée réelle supérieurs à 0 !"
+        )
+        return
+
     total_runs = int(num_runs_input.value)
     current_run = 1
     runs_events.clear()
