@@ -231,6 +231,7 @@ profil radio ``flora`` est aussi sélectionné pour appliquer l'exposant et la
 variance de shadowing correspondants. Les champs restent modifiables si ce mode
 est désactivé. Pour reproduire fidèlement les scénarios FLoRa d'origine, pensez
 également à renseigner les positions des nœuds telles qu'indiquées dans l'INI.
+L'équivalent en script consiste à passer `flora_mode=True` au constructeur `Simulator`.
 
 ## SF et puissance initiaux
 
@@ -291,10 +292,11 @@ paramètre `fast_fading_std` afin de simuler un canal multipath et utiliser
 `interference_dB` pour représenter un bruit extérieur constant ou variable.
 
 To reproduce FLoRa INI scenarios:
-1. Enable **Mode FLoRa complet** to set `-110 dBm` detection and a `5 s` interference window.
-2. Provide the INI file path to ``Simulator(config_file=...)`` or use **Positions manuelles** to enter the coordinates manually.
-3. Fill in **Graine** to keep the exact placement across runs.
-4. Or run `python examples/run_flora_example.py` to execute a preset scenario with ADR 1.
+1. Pass `flora_mode=True` when creating the `Simulator` (or enable **Mode FLoRa complet**). This applies the official `-110 dBm` detection threshold and a `5 s` interference window.
+2. Apply the ADR1 algorithm with `from VERSION_4.launcher.adr_standard_1 import apply as adr1` then `adr1(sim)`.
+3. Provide the INI file path to `Simulator(config_file=...)` or use **Positions manuelles** to enter the coordinates manually.
+4. Fill in **Graine** to keep the exact placement across runs.
+5. Or run `python examples/run_flora_example.py` which combines these settings.
 ## Format du fichier CSV
 
 L'option `--output` de `run.py` permet d'enregistrer les métriques de la
