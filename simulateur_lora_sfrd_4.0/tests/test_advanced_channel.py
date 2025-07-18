@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from VERSION_4.launcher.advanced_channel import AdvancedChannel  # noqa: E402
+import random
 
 
 def test_cost231_path_loss_vs_log_distance():
@@ -40,3 +41,11 @@ def test_rician_fading_variability():
     r1, _ = adv.compute_rssi(14.0, 100.0)
     r2, _ = adv.compute_rssi(14.0, 100.0)
     assert r1 != r2
+
+
+def test_variable_noise_changes_snr():
+    random.seed(0)
+    adv = AdvancedChannel(fading="", shadowing_std=0, variable_noise_std=5.0)
+    _, snr1 = adv.compute_rssi(14.0, 100.0)
+    _, snr2 = adv.compute_rssi(14.0, 100.0)
+    assert snr1 != snr2
