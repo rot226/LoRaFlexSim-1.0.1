@@ -160,6 +160,14 @@ python tools/compare_flora_report.py flora.csv results.csv
 Two images named `report_metrics.png` and `report_sf.png` are written in
 the current directory.
 
+### Calibration systématique avec FLoRa
+
+To keep the simulator aligned with the reference implementation, regularly run
+`tools/compare_flora_report.py` against a FLoRa CSV export. Study the generated
+metrics and SF distribution charts to tune the channel parameters (path loss,
+noise, fast fading) until the difference on PDR, SF histograms and energy
+consumption becomes minimal.
+
 ## Versioning
 
 The current package version is defined in `pyproject.toml`.
