@@ -183,6 +183,9 @@ throughput_indicator = pn.indicators.Number(name="Débit (bps)", value=0.0, form
 # Indicateur de retransmissions
 retrans_indicator = pn.indicators.Number(name="Retransmissions", value=0, format="{value:d}")
 
+# Barre de progression pour l'accélération
+fast_forward_progress = pn.indicators.Progress(name="Avancement", value=0, width=200, visible=False)
+
 # Les tableaux de PDR détaillés ne sont plus affichés dans le tableau de bord
 # mais les données sont conservées pour être exportées en fin de simulation.
 
@@ -729,6 +732,8 @@ def on_stop(event):
     start_time = None
     max_real_time = None
     auto_fast_forward = False
+    fast_forward_progress.visible = False
+    fast_forward_progress.value = 0
     if runs_metrics:
         avg = average_numeric_metrics(runs_metrics)
         pdr_indicator.value = avg.get("PDR", 0.0)
@@ -800,6 +805,9 @@ def fast_forward(event=None):
             )
             return
 
+        fast_forward_progress.visible = True
+        fast_forward_progress.value = 0
+
         # Disable buttons during fast forward
         fast_forward_button.disabled = True
         stop_button.disabled = True
@@ -820,9 +828,23 @@ def fast_forward(event=None):
         max_real_time = None
 
         def run_and_update():
-            sim.run()
+            total_packets = (
+                sim.packets_to_send * sim.num_nodes if sim.packets_to_send > 0 else None
+            )
+            last = -1
+            while sim.event_queue and sim.running:
+                sim.step()
+                if total_packets:
+                    pct = int(sim.packets_sent / total_packets * 100)
+                    if pct != last:
+                        last = pct
+                        if session_alive():
+                            doc.add_next_tick_callback(
+                                lambda val=pct: setattr(fast_forward_progress, "value", val)
+                            )
 
             def update_ui():
+                fast_forward_progress.value = 100
                 if not session_alive():
                     _cleanup_callbacks()
                     return
@@ -979,6 +1001,7 @@ controls = pn.WidgetBox(
     real_time_duration_input,
     pn.Row(start_button, stop_button),
     pn.Row(fast_forward_button, pause_button),
+    fast_forward_progress,
     export_button,
     export_message,
 )
