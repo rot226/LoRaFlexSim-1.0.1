@@ -106,8 +106,8 @@ def cross_validate(
     for pl in path_loss_values:
         for sh in shadowing_values:
             err = 0.0
-            for flora in refs:
-                m = _run_sim(pl, sh, runs, seed)
+            for idx, flora in enumerate(refs):
+                m = _run_sim(pl, sh, runs, (seed + idx) if seed is not None else None)
                 pdr_diff = abs(m.get("PDR", 0.0) - flora.get("PDR", 0.0))
                 sim_sf = m.get("sf_distribution", {})
                 flora_sf = flora.get("sf_distribution", {})
