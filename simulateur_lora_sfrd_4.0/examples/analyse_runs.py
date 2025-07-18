@@ -46,4 +46,5 @@ if "PDR(%)" in avg.columns:
     plt.title("PDR moyen par run")
     plt.tight_layout()
     plt.savefig("pdr_par_run.png")
+    plt.close()
     print("Graphique enregistré dans pdr_par_run.png")
