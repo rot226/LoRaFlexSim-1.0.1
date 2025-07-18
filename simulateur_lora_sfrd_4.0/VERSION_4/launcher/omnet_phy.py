@@ -39,7 +39,15 @@ class OmnetPHY:
         noise += self.model.noise_variation()
         return noise
 
-    def compute_rssi(self, tx_power_dBm: float, distance: float, sf: int | None = None) -> tuple[float, float]:
+    def compute_rssi(
+        self,
+        tx_power_dBm: float,
+        distance: float,
+        sf: int | None = None,
+        *,
+        freq_offset_hz: float | None = None,
+        sync_offset_s: float | None = None,
+    ) -> tuple[float, float]:
         ch = self.channel
         loss = self.path_loss(distance)
         if ch.shadowing_std > 0:

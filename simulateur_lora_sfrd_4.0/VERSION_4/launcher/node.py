@@ -45,6 +45,11 @@ class Node:
         battery_capacity_j: float | None = None,
         energy_profile: EnergyProfile | str | None = None,
         *,
+        frequency_offset_hz: float = 0.0,
+        freq_offset_std_hz: float = 0.0,
+        sync_offset_s: float = 0.0,
+        sync_offset_std_s: float = 0.0,
+        offset_correlation: float = 0.9,
         activated: bool = True,
         appkey: bytes | None = None,
     ):
@@ -75,6 +80,16 @@ class Node:
         self.tx_power = tx_power
         # Canal radio attribué (peut être modifié par le simulateur)
         self.channel = channel
+        # Offsets de fréquence et de synchronisation (corrélés dans le temps)
+        from .advanced_channel import _CorrelatedValue
+        self._freq_offset = _CorrelatedValue(
+            frequency_offset_hz, freq_offset_std_hz, offset_correlation
+        )
+        self._sync_offset = _CorrelatedValue(
+            sync_offset_s, sync_offset_std_s, offset_correlation
+        )
+        self.current_freq_offset = frequency_offset_hz
+        self.current_sync_offset = sync_offset_s
 
         # Profil énergétique utilisé pour calculer la consommation
         if isinstance(energy_profile, str):
@@ -200,6 +215,12 @@ class Node:
         dx = self.x - other.x
         dy = self.y - other.y
         return math.hypot(dx, dy)
+
+    # ------------------------------------------------------------------
+    def update_offsets(self) -> None:
+        """Sample correlated frequency and timing offsets."""
+        self.current_freq_offset = self._freq_offset.sample()
+        self.current_sync_offset = self._sync_offset.sample()
 
     def __repr__(self):
         """
