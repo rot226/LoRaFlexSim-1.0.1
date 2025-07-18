@@ -61,6 +61,12 @@ class LinkADRAns:
     def to_bytes(self) -> bytes:
         return bytes([0x03, self.status])
 
+    @staticmethod
+    def from_bytes(data: bytes) -> "LinkADRAns":
+        if len(data) < 2 or data[0] != 0x03:
+            raise ValueError("Invalid LinkADRAns")
+        return LinkADRAns(status=data[1])
+
 
 @dataclass
 class LinkCheckReq:
@@ -158,6 +164,12 @@ class RXParamSetupAns:
     def to_bytes(self) -> bytes:
         return bytes([0x05, self.status])
 
+    @staticmethod
+    def from_bytes(data: bytes) -> "RXParamSetupAns":
+        if len(data) < 2 or data[0] != 0x05:
+            raise ValueError("Invalid RXParamSetupAns")
+        return RXParamSetupAns(status=data[1])
+
 
 @dataclass
 class DevStatusReq:
@@ -208,6 +220,12 @@ class NewChannelAns:
 
     def to_bytes(self) -> bytes:
         return bytes([0x07, self.status])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "NewChannelAns":
+        if len(data) < 2 or data[0] != 0x07:
+            raise ValueError("Invalid NewChannelAns")
+        return NewChannelAns(status=data[1])
 
 
 @dataclass
@@ -265,6 +283,12 @@ class DlChannelAns:
     def to_bytes(self) -> bytes:
         return bytes([0x0A, self.status])
 
+    @staticmethod
+    def from_bytes(data: bytes) -> "DlChannelAns":
+        if len(data) < 2 or data[0] != 0x0A:
+            raise ValueError("Invalid DlChannelAns")
+        return DlChannelAns(status=data[1])
+
 
 @dataclass
 class PingSlotChannelReq:
@@ -290,6 +314,12 @@ class PingSlotChannelAns:
     def to_bytes(self) -> bytes:
         return bytes([0x11, self.status])
 
+    @staticmethod
+    def from_bytes(data: bytes) -> "PingSlotChannelAns":
+        if len(data) < 2 or data[0] != 0x11:
+            raise ValueError("Invalid PingSlotChannelAns")
+        return PingSlotChannelAns(status=data[1])
+
 
 @dataclass
 class PingSlotInfoReq:
@@ -314,6 +344,12 @@ class PingSlotInfoAns:
     def to_bytes(self) -> bytes:
         return bytes([0x10])
 
+    @staticmethod
+    def from_bytes(data: bytes) -> "PingSlotInfoAns":
+        if len(data) < 1 or data[0] != 0x10:
+            raise ValueError("Invalid PingSlotInfoAns")
+        return PingSlotInfoAns()
+
 
 @dataclass
 class BeaconFreqReq:
@@ -337,6 +373,12 @@ class BeaconFreqAns:
 
     def to_bytes(self) -> bytes:
         return bytes([0x13, self.status])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "BeaconFreqAns":
+        if len(data) < 2 or data[0] != 0x13:
+            raise ValueError("Invalid BeaconFreqAns")
+        return BeaconFreqAns(status=data[1])
 
 
 @dataclass
