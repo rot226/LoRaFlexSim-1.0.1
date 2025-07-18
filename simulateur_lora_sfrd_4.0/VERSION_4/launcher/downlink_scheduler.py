@@ -10,6 +10,21 @@ class DownlinkScheduler:
         # Track when each gateway becomes free to transmit
         self._gateway_busy: dict[int, float] = {}
 
+    @staticmethod
+    def _payload_length(frame) -> int:
+        """Return the byte length of ``frame`` payload."""
+        if hasattr(frame, "payload"):
+            try:
+                return len(frame.payload)
+            except Exception:
+                pass
+        if hasattr(frame, "to_bytes"):
+            try:
+                return len(frame.to_bytes())
+            except Exception:
+                pass
+        return 0
+
     def schedule(self, node_id: int, time: float, frame, gateway):
         """Schedule a frame for a given node at ``time`` via ``gateway``."""
         heapq.heappush(
@@ -27,9 +42,9 @@ class DownlinkScheduler:
         beacon_interval: float,
         ping_slot_interval: float,
         ping_slot_offset: float,
-        ) -> float:
+    ) -> float:
         """Schedule ``frame`` for ``node`` at its next ping slot."""
-        duration = node.channel.airtime(node.sf, len(getattr(frame, "payload", b"")))
+        duration = node.channel.airtime(node.sf, self._payload_length(frame))
         t = node.next_ping_slot_time(
             after_time, beacon_interval, ping_slot_interval, ping_slot_offset
         )
@@ -42,7 +57,7 @@ class DownlinkScheduler:
 
     def schedule_class_c(self, node, time: float, frame, gateway):
         """Schedule a frame for a Class C node at ``time``."""
-        duration = node.channel.airtime(node.sf, len(getattr(frame, "payload", b"")))
+        duration = node.channel.airtime(node.sf, self._payload_length(frame))
         busy = self._gateway_busy.get(gateway.id, 0.0)
         if time < busy:
             time = busy
