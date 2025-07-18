@@ -478,7 +478,7 @@ def step_simulation():
         return
 
 
-# --- Bouton "Lancer la simulation" ---
+# --- Préparation de la simulation ---
 def setup_simulation(seed_offset: int = 0):
     """Crée et démarre un simulateur avec les paramètres du tableau de bord."""
     global sim, sim_callback, map_anim_callback, start_time, chrono_callback, elapsed_time, max_real_time, paused
