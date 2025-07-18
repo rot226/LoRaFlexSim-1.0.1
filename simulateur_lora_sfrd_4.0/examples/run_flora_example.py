@@ -1,4 +1,10 @@
 import argparse
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
 from VERSION_4.launcher.simulator import Simulator
 from VERSION_4.launcher.adr_standard_1 import apply as adr1
 from VERSION_4.launcher.compare_flora import compare_with_sim
