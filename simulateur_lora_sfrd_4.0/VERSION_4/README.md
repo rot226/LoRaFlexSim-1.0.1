@@ -113,7 +113,7 @@ aléatoire des fréquences entre les nœuds.
 
 Le tableau de bord permet maintenant de fixer une **durée réelle maximale** en secondes. Lorsque cette limite est atteinte, la simulation s'arrête automatiquement. Un bouton « Accélérer jusqu'à la fin » lance l'exécution rapide pour obtenir aussitôt les métriques finales.
 **Attention :** cette accélération ne fonctionne que si un nombre fini de paquets est défini. Si le champ *Nombre de paquets* vaut 0 (infini), la simulation ne se termine jamais et l'export reste impossible.
-Depuis la version 4.0.1, l'accélération désactive aussi la mobilité restante lorsque toutes les transmissions ont été envoyées afin d'éviter un blocage du simulateur.
+Depuis la version 4.0.1, une fois toutes les transmissions envoyées, l'accélération désactive la mobilité des nœuds restants afin d'éviter un blocage du simulateur.
 
 ## Suivi de batterie
 
