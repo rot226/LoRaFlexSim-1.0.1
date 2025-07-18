@@ -39,6 +39,8 @@ def load_flora_metrics(csv_path: str | Path) -> dict[str, Any]:
     else:
         energy = 0.0
 
+    collisions = int(df["collisions"].sum()) if "collisions" in df.columns else 0
+
     collision_cols = [c for c in df.columns if c.startswith("collisions_sf")]
     collision_dist = {int(c.split("sf")[1]): int(df[c].sum()) for c in collision_cols}
 
@@ -48,6 +50,7 @@ def load_flora_metrics(csv_path: str | Path) -> dict[str, Any]:
         "throughput_bps": throughput,
         "energy_J": energy,
         "collision_distribution": collision_dist,
+        "collisions": collisions,
     }
 
 

@@ -137,11 +137,12 @@ The tests compare RSSI and airtime calculations against theoretical values and c
 ### Cross-check with FLoRa
 
 The module `VERSION_4/launcher/compare_flora.py` reads CSV exports from
-the FLoRa simulator and extracts the Packet Delivery Ratio and the
-spreading factor histogram. The test file
-`tests/test_flora_comparison.py` demonstrates how to compare these
-values with those returned by `Simulator.get_metrics` to validate the
-Python implementation against OMNeT++ runs.
+the FLoRa simulator and extracts several metrics: Packet Delivery Ratio,
+spreading factor histogram, energy consumption, throughput and packet
+collisions.  The test file `tests/test_flora_comparison.py` demonstrates
+how to compare these values with those returned by
+`Simulator.get_metrics` to validate the Python implementation against
+OMNeT++ runs.
 You can also supply a reference CSV to `examples/run_flora_example.py` via
 `--flora-csv` to perform this check outside the test suite.
 

@@ -74,6 +74,7 @@ def test_compare_with_flora_sample():
     assert metrics["PDR"] == pytest.approx(flora_metrics["PDR"])
     assert metrics["throughput_bps"] == pytest.approx(flora_metrics["throughput_bps"], rel=1e-3)
     assert metrics["energy_J"] == pytest.approx(flora_metrics["energy_J"], rel=1e-3)
+    assert metrics["collisions"] == flora_metrics["collisions"]
     assert compare_with_sim(metrics, flora_csv)
 
     sim_cd = {7: sum(n.packets_collision for n in sim.nodes if n.sf == 7)}
@@ -87,5 +88,6 @@ def test_collision_distribution_against_flora():
     flora_csv = Path(__file__).parent / "data" / "flora_collisions.csv"
     flora_metrics = load_flora_metrics(flora_csv)
     sim_cd = {7: sum(n.packets_collision for n in sim.nodes if n.sf == 7)}
+    assert sim.packets_lost_collision == flora_metrics["collisions"]
     assert sim.packets_lost_collision == sum(flora_metrics["collision_distribution"].values())
     assert sim_cd == flora_metrics["collision_distribution"]
