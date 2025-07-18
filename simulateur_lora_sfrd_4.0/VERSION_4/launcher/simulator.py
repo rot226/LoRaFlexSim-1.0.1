@@ -641,13 +641,17 @@ class Simulator:
                 break
             # Replanifier selon la classe du nœud
             if node.class_type.upper() == "C":
-                nxt = time + self.class_c_rx_interval
-                eid = self.event_id_counter
-                self.event_id_counter += 1
-                heapq.heappush(
-                    self.event_queue,
-                    Event(nxt, EventType.RX_WINDOW, eid, node.id),
-                )
+                if not (
+                    self.packets_to_send != 0
+                    and all(n.packets_sent >= self.packets_to_send for n in self.nodes)
+                ):
+                    nxt = time + self.class_c_rx_interval
+                    eid = self.event_id_counter
+                    self.event_id_counter += 1
+                    heapq.heappush(
+                        self.event_queue,
+                        Event(nxt, EventType.RX_WINDOW, eid, node.id),
+                    )
             return True
 
         elif priority == EventType.BEACON:
