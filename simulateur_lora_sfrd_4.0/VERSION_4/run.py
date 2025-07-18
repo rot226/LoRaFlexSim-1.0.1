@@ -74,7 +74,10 @@ def simulate(nodes, gateways, mode, interval, steps, channels=1):
                     if nb_tx == 1:
                         delivered += 1
                         energy_consumed += 1.0
-                        delays.append(0)
+                        # Utiliser 1 pas de temps comme délai de base pour un
+                        # paquet livré afin que le délai moyen reflète les
+                        # transmissions effectivement réussies.
+                        delays.append(1)
                     else:
                         collisions += nb_tx
                         energy_consumed += nb_tx * 1.0

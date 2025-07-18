@@ -79,3 +79,19 @@ def test_simulate_invalid_arguments():
             steps=-5,
             channels=1,
         )
+
+
+def test_avg_delay_not_zero():
+    results, averages = run.main([
+        "--nodes",
+        "1",
+        "--mode",
+        "periodic",
+        "--interval",
+        "1",
+        "--steps",
+        "5",
+    ])
+    # avg_delay is the 5th item in the tuple returned by run.main
+    assert results[0][4] != 0
+    assert averages[4] != 0
