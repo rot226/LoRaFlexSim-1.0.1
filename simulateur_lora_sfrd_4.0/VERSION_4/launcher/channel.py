@@ -40,6 +40,7 @@ class Channel:
         fading_correlation: float = 0.9,
         variable_noise_std: float = 0.0,
         advanced_capture: bool = False,
+        phy_model: str = "",
         system_loss_dB: float = 0.0,
         rssi_offset_dB: float = 0.0,
         snr_offset_dB: float = 0.0,
@@ -83,6 +84,7 @@ class Channel:
             fading et le bruit variable.
         :param variable_noise_std: Variation lente du bruit thermique en dB.
         :param advanced_capture: Active un mode de capture inspiré de FLoRa.
+        :param phy_model: "omnet" pour utiliser le module OMNeT++.
         :param system_loss_dB: Pertes fixes supplémentaires (par ex. pertes
             système) appliquées à la perte de parcours.
         :param rssi_offset_dB: Décalage appliqué au RSSI calculé (dB).
@@ -135,6 +137,7 @@ class Channel:
         self.detection_threshold_dBm = detection_threshold_dBm
         self.omnet = OmnetModel(fine_fading_std, fading_correlation, variable_noise_std)
         self.advanced_capture = advanced_capture
+        self.phy_model = phy_model
         self.system_loss_dB = system_loss_dB
         self.rssi_offset_dB = rssi_offset_dB
         self.snr_offset_dB = snr_offset_dB
@@ -158,12 +161,21 @@ class Channel:
         # Seuil de capture (différence de RSSI en dB pour qu'un signal plus fort capture la réception)
         self.capture_threshold_dB = capture_threshold_dB
 
+        if self.phy_model == "omnet":
+            from .omnet_phy import OmnetPHY
+            self.omnet_phy = OmnetPHY(self)
+            self.advanced_capture = True
+        else:
+            self.omnet_phy = None
+
     def noise_floor_dBm(self) -> float:
         """Retourne le niveau de bruit (dBm) pour la bande passante configurée.
 
         Le bruit peut varier autour de la valeur moyenne pour simuler un canal
         plus réaliste.
         """
+        if self.omnet_phy:
+            return self.omnet_phy.noise_floor()
         thermal = self.receiver_noise_floor_dBm + 10 * math.log10(self.bandwidth)
         noise = thermal + self.noise_figure_dB + self.interference_dB
         if self.noise_floor_std > 0:
@@ -173,14 +185,12 @@ class Channel:
 
     def path_loss(self, distance: float) -> float:
         """Calcule la perte de parcours (en dB) pour une distance donnée (m)."""
+        if self.omnet_phy:
+            return self.omnet_phy.path_loss(distance)
         if distance <= 0:
             return 0.0
-        # Modèle log-distance: PL(d) = PL(d0) + 10*gamma*log10(d/d0), avec d0 = 1 m.
-        # Calcul de la perte à 1 m en utilisant le modèle espace libre:
         freq_mhz = self.frequency_hz / 1e6
-        # FSPL à d0=1m: 32.45 + 20*log10(freq_MHz) - 60 dB (car 20*log10(0.001 km) = -60)
         pl_d0 = 32.45 + 20 * math.log10(freq_mhz) - 60.0
-        # Perte à la distance donnée
         pl = pl_d0 + 10 * self.path_loss_exp * math.log10(max(distance, 1.0) / 1.0)
         return pl + self.system_loss_dB
 
@@ -192,7 +202,8 @@ class Channel:
         Un gain additionnel peut être appliqué si ``sf`` est renseigné pour
         représenter l'effet d'étalement de spectre LoRa.
         """
-        # Calcul de la perte de propagation
+        if self.omnet_phy:
+            return self.omnet_phy.compute_rssi(tx_power_dBm, distance, sf)
         loss = self.path_loss(distance)
         if self.shadowing_std > 0:
             loss += random.gauss(0, self.shadowing_std)
