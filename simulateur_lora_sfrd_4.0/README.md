@@ -180,6 +180,17 @@ The resulting parameters typically give a correspondence above **99 %** with
 FLoRa on the provided dataset. The calibration is also executed during the
 test suite to ensure the simulator stays in sync with the reference model.
 
+To check several FLoRa exports at once and average the error over all of them
+use:
+
+```bash
+python tools/calibrate_flora.py examples/flora_full.csv examples/flora_interference.csv
+```
+
+In this cross-validation mode the script evaluates the Packet Delivery Ratio
+and spreading factor histograms across all inputs to pick the most consistent
+propagation parameters.
+
 ## Versioning
 
 The current package version is defined in `pyproject.toml`.
