@@ -11,6 +11,7 @@ from .smooth_mobility import SmoothMobility
 from .lorawan import LoRaWANFrame, compute_rx1, compute_rx2
 from .downlink_scheduler import DownlinkScheduler
 from .omnet_model import OmnetModel
+from .omnet_phy import OmnetPHY
 
 __all__ = [
     "Node",
@@ -27,6 +28,7 @@ __all__ = [
     "compute_rx2",
     "DownlinkScheduler",
     "OmnetModel",
+    "OmnetPHY",
 ]
 
 for name in __all__:

@@ -62,7 +62,8 @@ class Simulator:
                  min_interference_time: float = 0.0,
                  config_file: str | None = None,
                  seed: int | None = None,
-                 class_c_rx_interval: float = 1.0):
+                 class_c_rx_interval: float = 1.0,
+                 phy_model: str = ""):
         """
         Initialise la simulation LoRa avec les entités et paramètres donnés.
         :param num_nodes: Nombre de nœuds à simuler.
@@ -100,6 +101,7 @@ class Simulator:
             exécution.
         :param class_c_rx_interval: Période entre deux vérifications de
             downlink pour les nœuds de classe C (s).
+        :param phy_model: "omnet" pour activer le modèle physique OMNeT++.
         """
         # Paramètres de simulation
         self.num_nodes = num_nodes
@@ -118,6 +120,7 @@ class Simulator:
         self.detection_threshold_dBm = detection_threshold_dBm
         self.min_interference_time = min_interference_time
         self.config_file = config_file
+        self.phy_model = phy_model
         # Activation ou non de la mobilité des nœuds
         self.mobility_enabled = mobility
         self.mobility_model = SmoothMobility(area_size, mobility_speed[0], mobility_speed[1])
@@ -139,7 +142,7 @@ class Simulator:
                     ch.detection_threshold_dBm = detection_threshold_dBm
         else:
             if channels is None:
-                ch_list = [Channel(detection_threshold_dBm=detection_threshold_dBm)]
+                ch_list = [Channel(detection_threshold_dBm=detection_threshold_dBm, phy_model=phy_model)]
             else:
                 ch_list = []
                 for ch in channels:
@@ -149,7 +152,7 @@ class Simulator:
                         ch_list.append(ch)
                     else:
                         ch_list.append(
-                            Channel(frequency_hz=float(ch), detection_threshold_dBm=detection_threshold_dBm)
+                            Channel(frequency_hz=float(ch), detection_threshold_dBm=detection_threshold_dBm, phy_model=phy_model)
                         )
             self.multichannel = MultiChannel(ch_list, method=channel_distribution)
 
@@ -396,7 +399,10 @@ class Simulator:
                     node.channel.frequency_hz,
                     self.min_interference_time,
                     noise_floor=node.channel.noise_floor_dBm(),
-                    capture_mode="advanced" if node.channel.advanced_capture else "basic",
+                    capture_mode=(
+                        "omnet" if node.channel.phy_model == "omnet"
+                        else ("advanced" if node.channel.advanced_capture else "basic")
+                    ),
                 )
 
             # Retenir le meilleur RSSI/SNR mesuré pour cette transmission

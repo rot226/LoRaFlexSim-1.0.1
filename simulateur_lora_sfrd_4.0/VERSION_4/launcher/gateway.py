@@ -91,7 +91,7 @@ class Gateway:
 
         # Sinon, on a une collision potentielle: déterminer le capture effect
         # Tri décroissant selon la puissance ou le SNR
-        if capture_mode == "advanced" and noise_floor is not None:
+        if capture_mode in {"advanced", "omnet"} and noise_floor is not None:
             snrs = [t['rssi'] - noise_floor for t in colliders]
             indices = sorted(range(len(colliders)), key=lambda i: snrs[i], reverse=True)
             strongest = colliders[indices[0]]
