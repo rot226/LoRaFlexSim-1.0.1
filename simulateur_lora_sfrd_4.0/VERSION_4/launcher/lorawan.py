@@ -675,3 +675,47 @@ def derive_session_keys(app_key: bytes, dev_nonce: int, app_nonce: int, net_id: 
     )
     digest = hashlib.sha256(data).digest()
     return digest[:16], digest[16:32]
+
+
+class JoinServer:
+    """Simplified Join Server with device registry and nonce checking."""
+
+    def __init__(self, net_id: int = 0):
+        self.net_id = net_id
+        self._registry: dict[tuple[int, int], bytes] = {}
+        self._used_nonces: dict[tuple[int, int], set[int]] = {}
+        self._next_devaddr = 1
+
+    # ------------------------------------------------------------------
+    # Device management
+    # ------------------------------------------------------------------
+    def register(self, join_eui: int, dev_eui: int, app_key: bytes) -> None:
+        """Register a device with its AppKey for OTAA."""
+
+        self._registry[(join_eui, dev_eui)] = app_key
+        self._used_nonces.setdefault((join_eui, dev_eui), set())
+
+    # ------------------------------------------------------------------
+    # Join Request handling
+    # ------------------------------------------------------------------
+    def join(self, request: JoinRequest) -> tuple[JoinAccept, bytes, bytes]:
+        """Process a JoinRequest and return JoinAccept + session keys."""
+
+        key = self._registry.get((request.join_eui, request.dev_eui))
+        if key is None:
+            raise ValueError("Unknown device")
+
+        used = self._used_nonces[(request.join_eui, request.dev_eui)]
+        if request.dev_nonce in used:
+            raise ValueError("DevNonce already used")
+        used.add(request.dev_nonce)
+
+        appnonce = self._next_devaddr & 0xFFFFFF
+        devaddr = self._next_devaddr
+        self._next_devaddr += 1
+
+        nwk_skey, app_skey = derive_session_keys(
+            key, request.dev_nonce, appnonce, self.net_id
+        )
+        accept = JoinAccept(appnonce, self.net_id, devaddr)
+        return accept, nwk_skey, app_skey

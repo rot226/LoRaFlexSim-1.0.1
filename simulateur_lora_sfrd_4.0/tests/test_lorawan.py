@@ -102,3 +102,35 @@ def test_beacon_freq_ans_roundtrip():
     parsed = BeaconFreqAns.from_bytes(data)
     assert parsed == ans
 
+
+def test_join_server_success_and_rejoin():
+    from VERSION_4.launcher.lorawan import JoinServer, JoinRequest, JoinAccept
+
+    js = JoinServer(net_id=1)
+    js.register(1, 2, b"\x00" * 16)
+
+    req = JoinRequest(1, 2, 1)
+    accept, nwk, app = js.join(req)
+    assert isinstance(accept, JoinAccept)
+    assert len(nwk) == 16
+    assert len(app) == 16
+
+    with pytest.raises(ValueError):
+        js.join(req)  # reuse of the same dev nonce is invalid
+
+
+def test_join_server_invalid_keys():
+    from VERSION_4.launcher.lorawan import JoinServer, JoinRequest
+
+    js = JoinServer()
+    js.register(1, 2, b"\x11" * 16)
+
+    # Unknown JoinEUI/DevEUI pair
+    with pytest.raises(ValueError):
+        js.join(JoinRequest(2, 2, 1))
+
+    # Unknown DevEUI
+    with pytest.raises(ValueError):
+        js.join(JoinRequest(1, 3, 1))
+
+
