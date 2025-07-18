@@ -73,6 +73,7 @@ def generate_report(
     plt.legend()
     plt.tight_layout()
     plt.savefig(f"{output_prefix}_metrics.png")
+    plt.close()
 
     # SF distribution comparison if available
     if "sf_distribution" in flora and "sf_distribution" in sim:
@@ -84,6 +85,7 @@ def generate_report(
         plt.title("Spreading factor distribution")
         plt.tight_layout()
         plt.savefig(f"{output_prefix}_sf.png")
+        plt.close()
 
 
 def main() -> None:
