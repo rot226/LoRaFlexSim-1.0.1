@@ -47,6 +47,36 @@ python run.py --nodes 50 --gateways 2 --channels 3 \
 python run.py --lorawan-demo --steps 100 --output lorawan.csv
 ```
 
+### Exemples classes B et C
+
+Utilisez l'API Python pour tester les modes B et C :
+
+```python
+from launcher import Simulator
+
+# Nœuds en classe B avec slots réguliers
+sim_b = Simulator(num_nodes=10, node_class="B", beacon_interval=128,
+                  ping_slot_interval=1.0)
+sim_b.run(1000)
+
+# Nœuds en classe C à écoute quasi continue
+sim_c = Simulator(num_nodes=5, node_class="C", class_c_rx_interval=0.5)
+sim_c.run(500)
+
+```
+
+### Scénario de mobilité réaliste
+
+Les déplacements peuvent être rendus plus doux en ajustant la plage de vitesses :
+
+```python
+from launcher import Simulator
+
+sim = Simulator(num_nodes=20, num_gateways=3, area_size=2000.0, mobility=True,
+                mobility_speed=(1.0, 5.0))
+sim.run(1000)
+```
+
 ## Duty cycle
 
 Le simulateur applique par défaut un duty cycle de 1 % pour se rapprocher des
@@ -336,4 +366,21 @@ Les points suivants ont été intégrés au simulateur :
 - **PDR par nœud et par type de trafic.** Chaque nœud maintient l'historique de ses vingt dernières transmissions afin de calculer un taux de livraison global et récent. Ces valeurs sont visibles dans le tableau de bord et exportées dans un fichier `metrics_*.csv`.
 - **Historique glissant et indicateurs QoS.** Le simulateur calcule désormais le délai moyen de livraison ainsi que le nombre de retransmissions sur la période récente.
 - **Indicateurs supplémentaires.** La méthode `get_metrics()` retourne le PDR par SF, passerelle, classe et nœud. Le tableau de bord affiche un récapitulatif et l'export produit deux fichiers CSV : un pour les événements détaillés et un pour les métriques agrégées.
+
+## Limites actuelles
+
+Le simulateur reste volontairement léger et certaines fonctionnalités manquent
+encore de maturité :
+
+- La couche physique est simplifiée et n'imite pas parfaitement les comportements
+  réels des modems LoRa.
+- Les classes B et C sont gérées de manière basique : les pertes de beacon ou
+  la dérive temporelle ne sont pas simulées.
+- La mobilité s'appuie sur des trajets aléatoires sans prise en compte
+  d'obstacles ou de cartes géographiques.
+- Les aspects sécurité LoRaWAN (chiffrement complet, serveurs de jointure)
+  restent minimaux.
+
+Les contributions sont les bienvenues pour lever ces limitations ou proposer de
+nouvelles idées.
 
