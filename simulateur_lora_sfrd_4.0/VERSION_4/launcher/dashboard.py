@@ -43,6 +43,8 @@ current_run = 0
 runs_events: list[pd.DataFrame] = []
 runs_metrics: list[dict] = []
 auto_fast_forward = False
+timeline_fig = go.Figure()
+last_event_index = 0
 
 def session_alive() -> bool:
     """Return True if the Bokeh session is still active."""
@@ -271,33 +273,48 @@ def update_map():
 
 
 def update_timeline():
-    """Update the packet timeline figure."""
-    global sim
-    if sim is None or not sim.events_log or not session_alive():
-        timeline_pane.object = go.Figure()
+    """Update the packet timeline figure without clearing previous data."""
+    global sim, timeline_fig, last_event_index
+
+    if sim is None or not session_alive():
+        timeline_fig = go.Figure()
+        last_event_index = 0
+        timeline_pane.object = timeline_fig
         return
 
-    fig = go.Figure()
-    for ev in sim.events_log[-100:]:
+    if "timeline_fig" not in globals():
+        timeline_fig = go.Figure()
+        last_event_index = 0
+
+    if not sim.events_log:
+        timeline_pane.object = timeline_fig
+        return
+
+    for ev in sim.events_log[last_event_index:]:
+        if ev.get("result") is None:
+            # Only plot completed transmissions to avoid color updates later
+            continue
         node_id = ev["node_id"]
         start = ev["start_time"]
         end = ev["end_time"]
         color = "green" if ev.get("result") == "Success" else "red"
-        fig.add_scatter(
+        timeline_fig.add_scatter(
             x=[start, end],
             y=[node_id, node_id],
             mode="lines",
             line=dict(color=color),
             showlegend=False,
         )
+    last_event_index = len(sim.events_log)
 
-    fig.update_layout(
+    timeline_fig.update_layout(
         title="Timeline des paquets",
         xaxis_title="Temps (s)",
         yaxis_title="ID nœud",
+        xaxis_range=[0, sim.current_time],
         margin=dict(l=20, r=20, t=40, b=20),
     )
-    timeline_pane.object = fig
+    timeline_pane.object = timeline_fig
 
 
 def toggle_heatmap(event=None):
@@ -434,7 +451,6 @@ def step_simulation():
         yaxis_range=[0, sim.num_nodes],
     )
     sf_hist_pane.object = sf_fig
-    timeline_pane.object = go.Figure()
     retrans_indicator.value = 0
     update_map()
     update_timeline()
