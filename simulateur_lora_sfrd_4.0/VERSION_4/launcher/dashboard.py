@@ -137,7 +137,7 @@ position_textarea = pn.widgets.TextAreaInput(
     name="Coordonnées",
     height=100,
     visible=False,
-    width=400,
+    width=650,
     css_classes=["coord-textarea"],
 )
 
@@ -985,9 +985,8 @@ center_col = pn.Column(
     heatmap_button,
     heatmap_pane,
     sf_hist_pane,
-    timeline_pane,
     pn.Row(
-        pn.Column(manual_pos_toggle, position_textarea, width=400),
+        pn.Column(manual_pos_toggle, position_textarea, width=650),
     ),
     sizing_mode="stretch_width",
 )
