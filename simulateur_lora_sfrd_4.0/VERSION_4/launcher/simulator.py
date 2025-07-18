@@ -72,7 +72,8 @@ class Simulator:
         :param area_size: Taille de l'aire carrée (mètres) dans laquelle sont déployés nœuds et passerelles.
         :param transmission_mode: 'Random' pour transmissions aléatoires (Poisson) ou 'Periodic' pour périodiques.
         :param packet_interval: Intervalle moyen entre transmissions (si Random, moyenne en s; si Periodic, période fixe en s).
-        :param packets_to_send: Nombre total de paquets à émettre avant d'arrêter la simulation (0 = infini).
+        :param packets_to_send: Nombre de paquets à émettre **par nœud** avant
+            d'arrêter la simulation (0 = infini).
         :param adr_node: Activation de l'ADR côté nœud.
         :param adr_server: Activation de l'ADR côté serveur.
         :param duty_cycle: Facteur de duty cycle (ex: 0.01 pour 1 %). Par
@@ -561,7 +562,7 @@ class Simulator:
                 self.retransmissions += 1
                 self.schedule_event(node, self.current_time + 1.0)
             else:
-                if self.packets_to_send == 0 or self.packets_sent < self.packets_to_send:
+                if self.packets_to_send == 0 or node.packets_sent < self.packets_to_send:
                     if self.transmission_mode.lower() == 'random':
                         next_interval = random.expovariate(1.0 / self.packet_interval)
                     else:
@@ -569,13 +570,24 @@ class Simulator:
                     next_time = self.current_time + next_interval
                     self.schedule_event(node, next_time)
                 else:
+                    logger.debug(
+                        "Packet limit reached for node %s – no more events for this node.",
+                        node.id,
+                    )
+
+                if (
+                    self.packets_to_send != 0
+                    and all(n.packets_sent >= self.packets_to_send for n in self.nodes)
+                ):
                     new_queue = []
                     for evt in self.event_queue:
                         if evt.type in (EventType.TX_END, EventType.RX_WINDOW):
                             new_queue.append(evt)
                     heapq.heapify(new_queue)
                     self.event_queue = new_queue
-                    logger.debug("Packet limit reached – no more new events will be scheduled.")
+                    logger.debug(
+                        "Packet limit reached – no more new events will be scheduled."
+                    )
 
             return True
 
@@ -734,7 +746,9 @@ class Simulator:
                     'rssi_dBm': None,
                     'snr_dB': None
                 })
-                if self.mobility_enabled and (self.packets_to_send == 0 or self.packets_sent < self.packets_to_send):
+                if self.mobility_enabled and (
+                    self.packets_to_send == 0 or node.packets_sent < self.packets_to_send
+                ):
                     self.schedule_mobility(node, time + self.mobility_model.step)
             return True
 

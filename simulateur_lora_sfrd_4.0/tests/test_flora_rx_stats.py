@@ -23,7 +23,7 @@ def _make_colliding_sim() -> Simulator:
         area_size=10.0,
         transmission_mode="Periodic",
         packet_interval=10.0,
-        packets_to_send=2,
+        packets_to_send=1,
         mobility=False,
         duty_cycle=None,
         channels=[ch],

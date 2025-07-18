@@ -73,7 +73,9 @@ mode_select = pn.widgets.RadioButtonGroup(
     name="Mode d'émission", options=["Aléatoire", "Périodique"], value="Aléatoire"
 )
 interval_input = pn.widgets.FloatInput(name="Intervalle moyen (s)", value=30.0, step=1.0, start=0.1)
-packets_input = pn.widgets.IntInput(name="Nombre de paquets (0=infin)", value=0, step=1, start=0)
+packets_input = pn.widgets.IntInput(
+    name="Nombre de paquets par nœud (0=infin)", value=0, step=1, start=0
+)
 seed_input = pn.widgets.IntInput(
     name="Graine (0 = aléatoire)", value=0, step=1, start=0
 )
@@ -783,7 +785,7 @@ def fast_forward(event=None):
         auto_fast_forward = True
         if sim.packets_to_send == 0:
             export_message.object = (
-                "⚠️ Définissez un nombre de paquets supérieur à 0 "
+                "⚠️ Définissez un nombre de paquets par nœud supérieur à 0 "
                 "pour utiliser l'accélération."
             )
             return

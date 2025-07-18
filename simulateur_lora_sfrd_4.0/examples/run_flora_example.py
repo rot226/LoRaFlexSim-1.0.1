@@ -22,7 +22,7 @@ def run_simulation(runs: int, seed: int | None = None, flora_csv: str | None = N
             area_size=1000.0,
             transmission_mode="Random",
             packet_interval=100.0,
-            packets_to_send=5 * 80,
+            packets_to_send=80,
             adr_node=True,
             adr_server=True,
             mobility=False,
