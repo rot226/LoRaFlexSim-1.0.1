@@ -128,13 +128,13 @@ def test_lorawan_frame_handling():
     server = NetworkServer()
     server.gateways = [gw]
     server.nodes = [node]
-    server.send_downlink(node, b"", confirmed=True, adr_command=(9, 5.0), request_ack=True)
+    server.send_downlink(node, b"", confirmed=True, adr_command=(9, 4.0), request_ack=True)
 
     down = gw.pop_downlink(node.id)
     assert down is not None
     node.handle_downlink(down)
     assert node.sf == 9
-    assert node.tx_power == 5.0
+    assert node.tx_power == 4.0
     assert node.pending_mac_cmd == LinkADRAns().to_bytes()
     assert node.awaiting_ack is False
     assert node.need_downlink_ack
