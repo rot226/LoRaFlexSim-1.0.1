@@ -79,3 +79,19 @@ def test_simulate_invalid_arguments():
             steps=-5,
             channels=1,
         )
+
+
+def test_avg_delay_not_zero_with_collisions():
+    """Run a short simulation with collisions and ensure avg_delay is positive."""
+    delivered, collisions, pdr, energy, avg_delay, throughput = run.simulate(
+        nodes=2,
+        gateways=1,
+        mode="Periodic",
+        interval=1,
+        steps=5,
+        channels=1,
+    )
+    # There should be collisions when two nodes transmit on the same channel
+    assert collisions > 0
+    # Average delay should reflect the waiting time due to collisions
+    assert avg_delay > 0
