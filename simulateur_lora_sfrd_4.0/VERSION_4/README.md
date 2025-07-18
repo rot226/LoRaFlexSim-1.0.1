@@ -119,6 +119,9 @@ scénarios FLoRa. Voici la liste complète des options :
 - `config_file` : chemin d'un INI décrivant positions, SF et puissance.
 - `seed` : graine aléatoire pour reproduire le placement.
 - `class_c_rx_interval` : période de vérification des downlinks en classe C.
+- `beacon_interval` : durée séparant deux beacons pour la classe B (s).
+- `ping_slot_interval` : intervalle de base entre ping slots successifs (s).
+- `ping_slot_offset` : délai après le beacon avant le premier ping slot (s).
 
 ## Paramètres radio avancés
 
