@@ -9,21 +9,21 @@ import pandas as pd
 
 
 def load_flora_metrics(csv_path: str | Path) -> dict[str, Any]:
-"""Return metrics from a FLoRa CSV export.
+    """Return metrics from a FLoRa CSV export.
 
-The file is expected to contain at least the columns ``sent`` and ``received``
-to compute the PDR as well as ``sfX`` columns describing the spreading factor
-distribution.  Additional optional columns may be present:
+    The file is expected to contain at least the columns ``sent`` and ``received``
+    to compute the PDR as well as ``sfX`` columns describing the spreading factor
+    distribution.  Additional optional columns may be present:
 
-``throughput_bps``
-    Average throughput in bits per second.
-``energy`` or ``energy_J``
-    Energy consumption for the run.
-``collisions``
-    Total number of packet collisions.
-``collisions_sfX``
-    Number of collisions that occurred with spreading factor ``X``.
-"""
+    ``throughput_bps``
+        Average throughput in bits per second.
+    ``energy`` or ``energy_J``
+        Energy consumption for the run.
+    ``collisions``
+        Total number of packet collisions.
+    ``collisions_sfX``
+        Number of collisions that occurred with spreading factor ``X``.
+    """
     df = pd.read_csv(csv_path)
     total_sent = int(df["sent"].sum()) if "sent" in df.columns else 0
     total_recv = int(df["received"].sum()) if "received" in df.columns else 0
