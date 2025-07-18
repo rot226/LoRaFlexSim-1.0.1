@@ -659,9 +659,12 @@ def on_stop(event):
 
     if current_run < total_runs:
         if runs_metrics:
+            keys = set(runs_metrics[0])
+            for m in runs_metrics[1:]:
+                keys &= m.keys()
             avg = {
                 key: sum(m[key] for m in runs_metrics) / len(runs_metrics)
-                for key in runs_metrics[0].keys()
+                for key in keys
             }
             pdr_indicator.value = avg.get("PDR", 0.0)
             collisions_indicator.value = avg.get("collisions", 0)
@@ -716,10 +719,12 @@ def on_stop(event):
     max_real_time = None
     auto_fast_forward = False
     if runs_metrics:
+        keys = set(runs_metrics[0])
+        for m in runs_metrics[1:]:
+            keys &= m.keys()
         avg = {
             key: sum(m[key] for m in runs_metrics) / len(runs_metrics)
-            for key in runs_metrics[0].keys()
-            if key in runs_metrics[0]
+            for key in keys
         }
         pdr_indicator.value = avg.get("PDR", 0.0)
         collisions_indicator.value = avg.get("collisions", 0)
