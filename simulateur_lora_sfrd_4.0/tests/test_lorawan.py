@@ -64,6 +64,32 @@ def test_rx_delay_affects_receive_windows():
     assert rx2 == pytest.approx(14.0)
 
 
+def test_next_ping_slot_time_from_last_beacon():
+    from VERSION_4.launcher.node import Node
+    from VERSION_4.launcher.channel import Channel
+
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    node.class_type = "B"
+    node.last_beacon_time = 100.0
+    node.ping_slot_periodicity = 1
+
+    t1 = node.next_ping_slot_time(
+        current_time=100.0,
+        beacon_interval=120.0,
+        ping_slot_interval=2.0,
+        ping_slot_offset=0.5,
+    )
+    assert t1 == pytest.approx(100.5)
+
+    t2 = node.next_ping_slot_time(
+        current_time=102.5,
+        beacon_interval=120.0,
+        ping_slot_interval=2.0,
+        ping_slot_offset=0.5,
+    )
+    assert t2 == pytest.approx(104.5)
+
+
 def test_adr_param_setup_req_roundtrip():
     req = ADRParamSetupReq(3, 5)
     data = req.to_bytes()
