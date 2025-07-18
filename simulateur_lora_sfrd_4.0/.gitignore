@@ -12,4 +12,5 @@ env/
 # Results and user-generated files
 *.csv
 !tests/data/*.csv
+!examples/*.csv
 pdr_par_nodes.png

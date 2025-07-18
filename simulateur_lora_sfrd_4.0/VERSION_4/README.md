@@ -89,6 +89,37 @@ Le tableau de bord permet maintenant de fixer une **durée réelle maximale** en
 Chaque nœud peut être doté d'une capacité d'énergie (en joules) grâce au paramètre `battery_capacity_j` du `Simulator`. La consommation est calculée selon le profil d'énergie FLoRa (courants typiques en veille, réception, etc.) puis retranchée de cette réserve. Le champ `battery_remaining_j` indique l'autonomie restante.
 Un champ **Capacité batterie (J)** est disponible dans le tableau de bord pour saisir facilement cette valeur (mettre `0` pour une capacité illimitée).
 
+## Paramètres du simulateur
+
+Le constructeur `Simulator` accepte de nombreux arguments afin de reproduire les
+scénarios FLoRa. Voici la liste complète des options :
+
+- `num_nodes` : nombre de nœuds à créer lorsque aucun fichier INI n'est fourni.
+- `num_gateways` : nombre de passerelles générées automatiquement.
+- `area_size` : dimension (m) du carré dans lequel sont placés nœuds et
+  passerelles.
+- `transmission_mode` : `Random` (émissions Poisson) ou `Periodic`.
+- `packet_interval` : moyenne ou période fixe entre transmissions (s).
+- `packets_to_send` : nombre total de paquets avant arrêt (0 = infini).
+- `adr_node` / `adr_server` : active l'ADR côté nœud ou serveur.
+- `duty_cycle` : quota d'émission appliqué à chaque nœud (`None` pour désactiver).
+- `mobility` : active la mobilité aléatoire selon `mobility_speed`.
+- `channels` : instance de `MultiChannel` ou liste de fréquences/`Channel`.
+- `channel_distribution` : méthode d'affectation des canaux (`round-robin` ou
+  `random`).
+- `mobility_speed` : couple *(min, max)* définissant la vitesse des nœuds
+  mobiles (m/s).
+- `fixed_sf` / `fixed_tx_power` : valeurs initiales communes de SF et puissance.
+- `battery_capacity_j` : énergie disponible par nœud (`None` pour illimité).
+- `payload_size_bytes` : taille du payload utilisée pour calculer l'airtime.
+- `node_class` : classe LoRaWAN de tous les nœuds (`A`, `B` ou `C`).
+- `detection_threshold_dBm` : RSSI minimal pour qu'une réception soit valide.
+- `min_interference_time` : durée de chevauchement minimale pour déclarer une
+  collision (s).
+- `config_file` : chemin d'un INI décrivant positions, SF et puissance.
+- `seed` : graine aléatoire pour reproduire le placement.
+- `class_c_rx_interval` : période de vérification des downlinks en classe C.
+
 ## Paramètres radio avancés
 
 Le constructeur `Channel` accepte plusieurs options pour modéliser plus finement la
