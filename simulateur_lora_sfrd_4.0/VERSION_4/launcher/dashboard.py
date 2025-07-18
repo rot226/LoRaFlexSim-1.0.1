@@ -647,7 +647,9 @@ def on_start(event):
 def on_stop(event):
     global sim, sim_callback, chrono_callback, map_anim_callback, start_time, max_real_time, paused
     global current_run, total_runs, runs_events, auto_fast_forward
-    if sim is None or not sim.running:
+    # If called programmatically (e.g. after fast_forward), allow cleanup even
+    # if the simulation has already stopped.
+    if sim is None or (event is not None and not sim.running):
         return
 
     sim.running = False
