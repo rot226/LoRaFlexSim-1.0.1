@@ -471,7 +471,6 @@ def step_simulation():
         yaxis_range=[0, sim.num_nodes],
     )
     sf_hist_pane.object = sf_fig
-    retrans_indicator.value = 0
     update_map()
     update_timeline()
     if not cont:
@@ -503,7 +502,7 @@ def setup_simulation(seed_offset: int = 0):
         import tempfile
 
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".ini")
-        tmp.write(ini_file_input.value)
+        tmp.write(ini_file_input.value.encode())
         tmp.flush()
         config_path = tmp.name
 
