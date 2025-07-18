@@ -1,26 +1,41 @@
 import configparser
+import json
 from pathlib import Path
 
 def load_config(path: str | Path) -> tuple[list[dict], list[dict]]:
-    """Load node and gateway positions from an INI-style configuration file.
+    """Load node and gateway positions from an INI or JSON configuration file.
 
-    The file must define optional ``[gateways]`` and ``[nodes]`` sections. Each
-    value is a comma-separated list ``x,y[,sf,tx_power]``. Example::
+    ``path`` may point to a classic FLoRa-style INI file or a JSON document
+    describing the scenario.  INI files must define optional ``[gateways]`` and
+    ``[nodes]`` sections where each value is ``x,y[,sf,tx_power]``. JSON files
+    should contain two lists ``nodes`` and ``gateways`` with dictionaries.  SF
+    defaults to 7 and TX power to 14 dBm when omitted.
 
-        [gateways]
-        gw0 = 500,500
-
-        [nodes]
-        n0 = 450,490,12,14
-        n1 = 555,563
-
-    SF defaults to 7 and TX power to 14 dBm when omitted.
     Returns two lists of dictionaries for nodes and gateways respectively.
     """
-    cp = configparser.ConfigParser()
-    cp.read(path)
+
+    path = Path(path)
     nodes: list[dict] = []
     gateways: list[dict] = []
+
+    if path.suffix.lower() == ".json":
+        data = json.loads(path.read_text())
+        for gw in data.get("gateways", []):
+            gateways.append({
+                "x": float(gw.get("x", 0)),
+                "y": float(gw.get("y", 0)),
+            })
+        for nd in data.get("nodes", []):
+            nodes.append({
+                "x": float(nd.get("x", 0)),
+                "y": float(nd.get("y", 0)),
+                "sf": int(nd.get("sf", 7)),
+                "tx_power": float(nd.get("tx_power", 14.0)),
+            })
+        return nodes, gateways
+
+    cp = configparser.ConfigParser()
+    cp.read(path)
 
     if cp.has_section("gateways"):
         for _, value in cp.items("gateways"):

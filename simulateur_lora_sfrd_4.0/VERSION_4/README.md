@@ -116,7 +116,8 @@ scénarios FLoRa. Voici la liste complète des options :
 - `detection_threshold_dBm` : RSSI minimal pour qu'une réception soit valide.
 - `min_interference_time` : durée de chevauchement minimale pour déclarer une
   collision (s).
-- `config_file` : chemin d'un INI décrivant positions, SF et puissance.
+- `config_file` : chemin d'un fichier INI ou JSON décrivant
+  positions, SF et puissance.
 - `seed` : graine aléatoire pour reproduire le placement.
 - `class_c_rx_interval` : période de vérification des downlinks en classe C.
 - `beacon_interval` : durée séparant deux beacons pour la classe B (s).

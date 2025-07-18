@@ -97,7 +97,9 @@ in `examples/` (`flora_full.csv`, `flora_collisions.csv`, etc.) to help check
 your results.
 
 Any INI file must define ``[gateways]`` and ``[nodes]`` sections listing the
-coordinates (and optionally SF and power) of each entity.
+coordinates (and optionally SF and power) of each entity.  The loader also
+accepts a JSON document containing ``gateways`` and ``nodes`` lists to
+describe more complex scenarios.
 
 Use a preset propagation environment from Python:
 

@@ -163,6 +163,9 @@ map_pane = pn.pane.Plotly(height=600, sizing_mode="stretch_width")
 # --- Pane pour l'histogramme SF ---
 sf_hist_pane = pn.pane.Plotly(height=250, sizing_mode="stretch_width")
 
+# --- Timeline des paquets ---
+timeline_pane = pn.pane.Plotly(height=250, sizing_mode="stretch_width")
+
 # --- Heatmap de couverture ---
 heatmap_button = pn.widgets.Button(name="Afficher la heatmap", button_type="primary")
 heatmap_pane = pn.pane.Plotly(height=600, sizing_mode="stretch_width", visible=False)
@@ -200,6 +203,24 @@ def update_map():
         marker=dict(symbol="star", color="red", size=28, line=dict(width=1, color="black")),
         textfont=dict(color="white", size=14),
     )
+
+    # Dessiner les transmissions récentes
+    for ev in sim.events_log[-20:]:
+        gw_id = ev.get("gateway_id")
+        if gw_id is None:
+            continue
+        node = next((n for n in sim.nodes if n.id == ev["node_id"]), None)
+        gw = next((g for g in sim.gateways if g.id == gw_id), None)
+        if not node or not gw:
+            continue
+        color = "green" if ev.get("result") == "Success" else "red"
+        fig.add_scatter(
+            x=[node.x, gw.x],
+            y=[node.y, gw.y],
+            mode="lines",
+            line=dict(color=color, width=2),
+            showlegend=False,
+        )
     area = area_input.value
     # Add a small extra space on the Y axis so edge nodes remain fully visible
     extra_y = area * 0.125
@@ -214,6 +235,36 @@ def update_map():
         margin=dict(l=20, r=20, t=40, b=20),
     )
     map_pane.object = fig
+
+
+def update_timeline():
+    """Update the packet timeline figure."""
+    global sim
+    if sim is None or not sim.events_log:
+        timeline_pane.object = go.Figure()
+        return
+
+    fig = go.Figure()
+    for ev in sim.events_log[-100:]:
+        node_id = ev["node_id"]
+        start = ev["start_time"]
+        end = ev["end_time"]
+        color = "green" if ev.get("result") == "Success" else "red"
+        fig.add_scatter(
+            x=[start, end],
+            y=[node_id, node_id],
+            mode="lines",
+            line=dict(color=color),
+            showlegend=False,
+        )
+
+    fig.update_layout(
+        title="Timeline des paquets",
+        xaxis_title="Temps (s)",
+        yaxis_title="ID nœud",
+        margin=dict(l=20, r=20, t=40, b=20),
+    )
+    timeline_pane.object = fig
 
 
 def toggle_heatmap(event=None):
@@ -345,8 +396,10 @@ def step_simulation():
         yaxis_range=[0, sim.num_nodes],
     )
     sf_hist_pane.object = sf_fig
+    timeline_pane.object = go.Figure()
     retrans_indicator.value = 0
     update_map()
+    update_timeline()
     if not cont:
         on_stop(None)
         return
@@ -498,7 +551,10 @@ def setup_simulation(seed_offset: int = 0):
 
     sim.running = True
     sim_callback = pn.state.add_periodic_callback(step_simulation, period=100, timeout=None)
-    map_anim_callback = pn.state.add_periodic_callback(update_map, period=200, timeout=None)
+    def anim():
+        update_map()
+        update_timeline()
+    map_anim_callback = pn.state.add_periodic_callback(anim, period=200, timeout=None)
 
 
 # --- Bouton "Lancer la simulation" ---
@@ -868,6 +924,7 @@ center_col = pn.Column(
     heatmap_button,
     heatmap_pane,
     sf_hist_pane,
+    timeline_pane,
     pn.Row(
         pn.Column(manual_pos_toggle, position_textarea, width=400),
     ),
