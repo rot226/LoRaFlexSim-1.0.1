@@ -85,14 +85,18 @@ python examples/run_flora_example.py --runs 5 --seed 123
 ```
 
 The script prints the Packet Delivery Ratio and spreading factor histogram for
-each run.
-Pass the `--flora-csv <file>` option to automatically compare these metrics with
-an official FLoRa CSV export using `compare_with_sim`.
+each run. Pass the `--flora-csv <file>` option to automatically compare these
+metrics with an official FLoRa CSV export using `compare_with_sim`.
 
-You can now load similar scenarios directly from an INI file using
-``Simulator(config_file="file.ini")``. The file must define ``[gateways]`` and
-``[nodes]`` sections listing the coordinates (and optionally SF and power) of
-each entity.
+An example configuration file named `examples/flora_full.ini` reproduces the
+official positions used by FLoRa. Load it with
+``Simulator(config_file="examples/flora_full.ini")`` to start from the exact
+same coordinates. Several CSV exports from the OMNeT++ model are also provided
+in `examples/` (`flora_full.csv`, `flora_collisions.csv`, etc.) to help check
+your results.
+
+Any INI file must define ``[gateways]`` and ``[nodes]`` sections listing the
+coordinates (and optionally SF and power) of each entity.
 
 Use a preset propagation environment from Python:
 
