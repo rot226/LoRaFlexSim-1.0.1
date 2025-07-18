@@ -46,6 +46,24 @@ auto_fast_forward = False
 timeline_fig = go.Figure()
 last_event_index = 0
 
+
+def average_numeric_metrics(metrics_list: list[dict]) -> dict:
+    """Return the average of numeric metrics across runs.
+
+    Only keys whose values are numeric in all dictionaries are averaged.
+    """
+    if not metrics_list:
+        return {}
+    keys = set(metrics_list[0])
+    for m in metrics_list[1:]:
+        keys &= m.keys()
+    averages: dict = {}
+    for key in keys:
+        values = [m[key] for m in metrics_list]
+        if all(isinstance(v, (int, float)) for v in values):
+            averages[key] = sum(values) / len(values)
+    return averages
+
 def session_alive() -> bool:
     """Return True if the Bokeh session is still active."""
     doc = pn.state.curdoc
@@ -659,13 +677,7 @@ def on_stop(event):
 
     if current_run < total_runs:
         if runs_metrics:
-            keys = set(runs_metrics[0])
-            for m in runs_metrics[1:]:
-                keys &= m.keys()
-            avg = {
-                key: sum(m[key] for m in runs_metrics) / len(runs_metrics)
-                for key in keys
-            }
+            avg = average_numeric_metrics(runs_metrics)
             pdr_indicator.value = avg.get("PDR", 0.0)
             collisions_indicator.value = avg.get("collisions", 0)
             energy_indicator.value = avg.get("energy_J", 0.0)
@@ -719,13 +731,7 @@ def on_stop(event):
     max_real_time = None
     auto_fast_forward = False
     if runs_metrics:
-        keys = set(runs_metrics[0])
-        for m in runs_metrics[1:]:
-            keys &= m.keys()
-        avg = {
-            key: sum(m[key] for m in runs_metrics) / len(runs_metrics)
-            for key in keys
-        }
+        avg = average_numeric_metrics(runs_metrics)
         pdr_indicator.value = avg.get("PDR", 0.0)
         collisions_indicator.value = avg.get("collisions", 0)
         energy_indicator.value = avg.get("energy_J", 0.0)
