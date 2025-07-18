@@ -776,7 +776,8 @@ export_button.on_click(exporter_csv)
 
 # --- Bouton d'accélération ---
 def fast_forward(event=None):
-    global sim, sim_callback, chrono_callback, start_time, max_real_time, auto_fast_forward
+    global sim, sim_callback, chrono_callback, map_anim_callback
+    global start_time, max_real_time, auto_fast_forward
     doc = pn.state.curdoc
     if sim and sim.running:
         auto_fast_forward = True
@@ -795,6 +796,9 @@ def fast_forward(event=None):
         if sim_callback:
             sim_callback.stop()
             sim_callback = None
+        if map_anim_callback:
+            map_anim_callback.stop()
+            map_anim_callback = None
         if chrono_callback:
             chrono_callback.stop()
             chrono_callback = None
