@@ -44,6 +44,25 @@ runs_events: list[pd.DataFrame] = []
 runs_metrics: list[dict] = []
 auto_fast_forward = False
 
+def session_alive() -> bool:
+    """Return True if the Bokeh session is still active."""
+    doc = pn.state.curdoc
+    sc = getattr(doc, "session_context", None)
+    return bool(sc and getattr(sc, "session", None))
+
+def _cleanup_callbacks() -> None:
+    """Stop all periodic callbacks safely."""
+    global sim_callback, chrono_callback, map_anim_callback
+    for cb_name in ("sim_callback", "chrono_callback", "map_anim_callback"):
+        cb = globals().get(cb_name)
+        if cb is not None:
+            try:
+                cb.stop()
+            except Exception:
+                pass
+            globals()[cb_name] = None
+
+
 # --- Widgets de configuration ---
 num_nodes_input = pn.widgets.IntInput(name="Nombre de nœuds", value=20, step=1, start=1)
 num_gateways_input = pn.widgets.IntInput(name="Nombre de passerelles", value=1, step=1, start=1)
@@ -174,7 +193,7 @@ heatmap_pane = pn.pane.Plotly(height=600, sizing_mode="stretch_width", visible=F
 # --- Mise à jour de la carte ---
 def update_map():
     global sim
-    if sim is None:
+    if sim is None or not session_alive():
         return
     fig = go.Figure()
     x_nodes = [node.x for node in sim.nodes]
@@ -240,7 +259,7 @@ def update_map():
 def update_timeline():
     """Update the packet timeline figure."""
     global sim
-    if sim is None or not sim.events_log:
+    if sim is None or not sim.events_log or not session_alive():
         timeline_pane.object = go.Figure()
         return
 
@@ -353,6 +372,9 @@ _update_adr_badge("ADR 1")
 # --- Callback chrono ---
 def periodic_chrono_update():
     global chrono_indicator, start_time, elapsed_time, max_real_time
+    if not session_alive():
+        _cleanup_callbacks()
+        return
     if start_time is not None:
         elapsed_time = time.time() - start_time
         chrono_indicator.value = elapsed_time
@@ -362,7 +384,9 @@ def periodic_chrono_update():
 
 # --- Callback étape de simulation ---
 def step_simulation():
-    if sim is None:
+    if sim is None or not session_alive():
+        if not session_alive():
+            _cleanup_callbacks()
         return
     cont = sim.step()
     metrics = sim.get_metrics()
@@ -552,6 +576,9 @@ def setup_simulation(seed_offset: int = 0):
     sim.running = True
     sim_callback = pn.state.add_periodic_callback(step_simulation, period=100, timeout=None)
     def anim():
+        if not session_alive():
+            _cleanup_callbacks()
+            return
         update_map()
         update_timeline()
     map_anim_callback = pn.state.add_periodic_callback(anim, period=200, timeout=None)
@@ -750,6 +777,9 @@ def fast_forward(event=None):
             sim.run()
 
             def update_ui():
+                if not session_alive():
+                    _cleanup_callbacks()
+                    return
                 metrics = sim.get_metrics()
                 pdr_indicator.value = metrics["PDR"]
                 collisions_indicator.value = metrics["collisions"]
@@ -772,7 +802,8 @@ def fast_forward(event=None):
                 update_map()
                 on_stop(None)
 
-            doc.add_next_tick_callback(update_ui)
+            if session_alive():
+                doc.add_next_tick_callback(update_ui)
 
         threading.Thread(target=run_and_update, daemon=True).start()
 
@@ -939,3 +970,4 @@ dashboard = pn.Row(
     sizing_mode="stretch_width",
 )
 dashboard.servable(title="Simulateur LoRa")
+pn.state.on_session_destroyed(lambda session_context: _cleanup_callbacks())
