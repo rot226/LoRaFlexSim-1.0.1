@@ -75,6 +75,38 @@ python VERSION_4/run.py --nodes 50 --gateways 2 --channels 3 \
 python VERSION_4/run.py --lorawan-demo --steps 100 --output lorawan.csv
 ```
 
+### LoRaWAN class B/C examples
+
+The Python API exposes additional parameters to experiment with class B or
+class C behaviours. Below are minimal code snippets:
+
+```python
+from launcher import Simulator
+
+# Class B nodes with periodic ping slots
+sim_b = Simulator(num_nodes=10, node_class="B", beacon_interval=128,
+                  ping_slot_interval=1.0)
+sim_b.run(1000)
+
+# Class C nodes listening almost continuously
+sim_c = Simulator(num_nodes=5, node_class="C", class_c_rx_interval=0.5)
+sim_c.run(500)
+
+```
+
+### Realistic mobility scenario
+
+You can model smoother movements by enabling mobility and adjusting the speed
+range:
+
+```python
+from launcher import Simulator
+
+sim = Simulator(num_nodes=20, gateways=3, area_size=2000.0, mobility=True,
+                mobility_speed=(1.0, 5.0))
+sim.run(1000)
+```
+
 ### FLoRa INI scenario example
 
 To reproduce a typical FLoRa configuration and check the SF distribution per
@@ -185,3 +217,18 @@ test suite to ensure the simulator stays in sync with the reference model.
 The current package version is defined in `pyproject.toml`.
 See `CHANGELOG.md` for a summary of releases.
 This project is licensed under the [MIT License](LICENSE).
+
+## Current limitations
+
+This simulator aims to remain lightweight and therefore omits several advanced
+concepts:
+
+- The physical layer is greatly simplified and does not reproduce hardware
+  imperfections found in real devices.
+- Support for LoRaWAN classes B and C is functional but lacks extensive timing
+  drift or beacon loss handling.
+- Mobility relies on random Bezier paths without obstacles or terrain
+  constraints.
+- Security aspects (join server, encryption validation) are kept minimal.
+
+Contributions are welcome to improve these areas or add missing features.
