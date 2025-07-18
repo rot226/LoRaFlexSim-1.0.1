@@ -102,3 +102,17 @@ def test_beacon_freq_ans_roundtrip():
     parsed = BeaconFreqAns.from_bytes(data)
     assert parsed == ans
 
+
+def test_next_beacon_time_drift():
+    from VERSION_4.launcher.lorawan import next_beacon_time
+
+    t = next_beacon_time(0.1, 10.0, last_beacon=0.0, drift=0.1)
+    assert t == pytest.approx(11.0)
+
+
+def test_next_beacon_time_recover():
+    from VERSION_4.launcher.lorawan import next_beacon_time
+
+    t = next_beacon_time(35.0, 10.0, last_beacon=0.0, drift=0.0, loss_limit=2.0)
+    assert t == pytest.approx(40.0)
+

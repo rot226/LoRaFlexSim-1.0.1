@@ -7,6 +7,8 @@ class DownlinkScheduler:
     def __init__(self):
         self.queue: dict[int, list[tuple[float, int, object, object]]] = {}
         self._counter = 0
+        # Track when each gateway becomes free to transmit
+        self._gateway_busy: dict[int, float] = {}
 
     def schedule(self, node_id: int, time: float, frame, gateway):
         """Schedule a frame for a given node at ``time`` via ``gateway``."""
@@ -27,15 +29,25 @@ class DownlinkScheduler:
         ping_slot_offset: float,
         ) -> float:
         """Schedule ``frame`` for ``node`` at its next ping slot."""
+        duration = node.channel.airtime(node.sf, len(getattr(frame, "payload", b"")))
         t = node.next_ping_slot_time(
             after_time, beacon_interval, ping_slot_interval, ping_slot_offset
         )
+        busy = self._gateway_busy.get(gateway.id, 0.0)
+        if t < busy:
+            t = busy
         self.schedule(node.id, t, frame, gateway)
+        self._gateway_busy[gateway.id] = t + duration
         return t
 
-    def schedule_class_c(self, node_id: int, time: float, frame, gateway):
+    def schedule_class_c(self, node, time: float, frame, gateway):
         """Schedule a frame for a Class C node at ``time``."""
-        self.schedule(node_id, time, frame, gateway)
+        duration = node.channel.airtime(node.sf, len(getattr(frame, "payload", b"")))
+        busy = self._gateway_busy.get(gateway.id, 0.0)
+        if time < busy:
+            time = busy
+        self.schedule(node.id, time, frame, gateway)
+        self._gateway_busy[gateway.id] = time + duration
 
     def schedule_beacon(self, after_time: float, frame, gateway, beacon_interval: float) -> float:
         """Schedule a beacon frame at the next beacon time after ``after_time``."""
