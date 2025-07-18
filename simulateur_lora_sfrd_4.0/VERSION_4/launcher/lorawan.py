@@ -638,6 +638,31 @@ def compute_rx2(end_time: float, rx_delay: float = 1.0) -> float:
     return end_time + rx_delay + 1.0
 
 
+def next_beacon_time(after_time: float, beacon_interval: float) -> float:
+    """Return the next beacon time after ``after_time``."""
+    import math
+
+    return math.ceil((after_time + 1e-9) / beacon_interval) * beacon_interval
+
+
+def next_ping_slot_time(
+    last_beacon_time: float,
+    after_time: float,
+    periodicity: int,
+    ping_slot_interval: float,
+    ping_slot_offset: float,
+) -> float:
+    """Return the next ping slot time after ``after_time``."""
+    import math
+
+    first_slot = last_beacon_time + ping_slot_offset
+    if after_time <= first_slot:
+        return first_slot
+    interval = ping_slot_interval * (2 ** periodicity)
+    slots = math.ceil((after_time - first_slot) / interval)
+    return first_slot + slots * interval
+
+
 def derive_session_keys(app_key: bytes, dev_nonce: int, app_nonce: int, net_id: int) -> tuple[bytes, bytes]:
     """Derive session keys in a simplified manner."""
     import hashlib
