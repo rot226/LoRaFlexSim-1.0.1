@@ -177,6 +177,13 @@ def update_map():
     if sim is None:
         return
     fig = go.Figure()
+    area = area_input.value
+    # Add a small extra space on the Y axis so edge nodes remain fully visible
+    extra_y = area * 0.125
+    display_area_y = area + extra_y
+    pixel_to_unit = display_area_y / 600
+    node_offset = 16 * pixel_to_unit
+    gw_offset = 14 * pixel_to_unit
     x_nodes = [node.x for node in sim.nodes]
     y_nodes = [node.y for node in sim.nodes]
     node_ids = [str(node.id) for node in sim.nodes]
@@ -214,17 +221,24 @@ def update_map():
         if not node or not gw:
             continue
         color = "green" if ev.get("result") == "Success" else "red"
+        dx = gw.x - node.x
+        dy = gw.y - node.y
+        dist = math.hypot(dx, dy)
+        if dist:
+            sx = node.x + dx / dist * node_offset
+            sy = node.y + dy / dist * node_offset
+            ex = gw.x - dx / dist * gw_offset
+            ey = gw.y - dy / dist * gw_offset
+        else:
+            sx, sy = node.x, node.y
+            ex, ey = gw.x, gw.y
         fig.add_scatter(
-            x=[node.x, gw.x],
-            y=[node.y, gw.y],
+            x=[sx, ex],
+            y=[sy, ey],
             mode="lines",
             line=dict(color=color, width=2),
             showlegend=False,
         )
-    area = area_input.value
-    # Add a small extra space on the Y axis so edge nodes remain fully visible
-    extra_y = area * 0.125
-    display_area_y = area + extra_y
     fig.update_layout(
         title="Position des nœuds et passerelles",
         xaxis_title="X (m)",
