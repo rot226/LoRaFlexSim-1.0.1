@@ -75,6 +75,8 @@ class AdvancedChannel:
         freq_offset_std_hz: float = 0.0,
         sync_offset_s: float = 0.0,
         sync_offset_std_s: float = 0.0,
+        obstacle_map: list[list[float]] | None = None,
+        map_area_size: float | None = None,
         multipath_paths: int = 1,
         **kwargs,
     ) -> None:
@@ -102,6 +104,10 @@ class AdvancedChannel:
         :param sync_offset_std_s: Variation temporelle (écart-type en s) du
             décalage temporel.
         :param multipath_paths: Nombre de trajets multipath à simuler.
+        :param obstacle_map: Maillage décrivant les pertes additionnelles (dB)
+            sur le trajet. Une valeur négative bloque totalement la liaison.
+        :param map_area_size: Taille (mètres) correspondant au maillage pour
+            le calcul des obstacles.
         """
 
         from .channel import Channel
@@ -133,6 +139,13 @@ class AdvancedChannel:
         self._sync_offset = _CorrelatedValue(
             sync_offset_s, sync_offset_std_s, fading_correlation
         )
+        self.obstacle_map = obstacle_map
+        self.map_area_size = map_area_size
+        if obstacle_map:
+            self._rows = len(obstacle_map)
+            self._cols = len(obstacle_map[0]) if self._rows else 0
+        else:
+            self._rows = self._cols = 0
 
     # ------------------------------------------------------------------
     # Propagation models
@@ -152,6 +165,35 @@ class AdvancedChannel:
 
         if self.weather_loss_dB_per_km:
             loss += self.weather_loss_dB_per_km * (max(d, 1.0) / 1000.0)
+        return loss
+
+    # ------------------------------------------------------------------
+    def _obstacle_loss(
+        self, tx_pos: tuple[float, float], rx_pos: tuple[float, float]
+    ) -> float:
+        """Compute additional loss due to obstacles between two points."""
+        if not self.obstacle_map or not self.map_area_size or self._rows == 0:
+            return 0.0
+        visited: set[tuple[int, int]] = set()
+        steps = max(self._cols, self._rows)
+        loss = 0.0
+        for i in range(steps + 1):
+            t = i / steps
+            x = tx_pos[0] + (rx_pos[0] - tx_pos[0]) * t
+            y = tx_pos[1] + (rx_pos[1] - tx_pos[1]) * t
+            cx = int(x / self.map_area_size * self._cols)
+            cy = int(y / self.map_area_size * self._rows)
+            cx = min(max(cx, 0), self._cols - 1)
+            cy = min(max(cy, 0), self._rows - 1)
+            cell = (cy, cx)
+            if cell in visited:
+                continue
+            visited.add(cell)
+            val = float(self.obstacle_map[cy][cx])
+            if val < 0:
+                return float("inf")
+            if val > 0:
+                loss += val
         return loss
 
     def _cost231_loss(self, distance: float) -> float:
@@ -199,6 +241,8 @@ class AdvancedChannel:
         distance: float,
         sf: int | None = None,
         *,
+        tx_pos: tuple[float, float] | None = None,
+        rx_pos: tuple[float, float] | None = None,
         freq_offset_hz: float | None = None,
         sync_offset_s: float | None = None,
     ) -> tuple[float, float]:
@@ -215,6 +259,11 @@ class AdvancedChannel:
             sync_offset_s = self._sync_offset.sample()
 
         loss = self.path_loss(distance)
+        if tx_pos is not None and rx_pos is not None:
+            extra = self._obstacle_loss(tx_pos, rx_pos)
+            if extra == float("inf"):
+                return -float("inf"), -float("inf")
+            loss += extra
         if self.base.shadowing_std > 0:
             loss += random.gauss(0, self.base.shadowing_std)
 

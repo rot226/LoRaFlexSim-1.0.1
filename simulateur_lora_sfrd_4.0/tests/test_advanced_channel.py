@@ -64,3 +64,24 @@ def test_time_varying_offsets():
     _, snr1 = adv.compute_rssi(14.0, 100.0)
     _, snr2 = adv.compute_rssi(14.0, 100.0)
     assert snr1 != snr2
+
+
+def test_obstacle_map_extra_loss():
+    obstacle = [
+        [0.0, 0.0],
+        [0.0, 10.0],
+    ]
+    adv = AdvancedChannel(obstacle_map=obstacle, map_area_size=100.0, fading="")
+    r_clear, _ = adv.compute_rssi(
+        14.0,
+        80.0,
+        tx_pos=(10.0, 90.0),
+        rx_pos=(10.0, 10.0),
+    )
+    r_obst, _ = adv.compute_rssi(
+        14.0,
+        80.0,
+        tx_pos=(10.0, 90.0),
+        rx_pos=(90.0, 90.0),
+    )
+    assert r_obst < r_clear

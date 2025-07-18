@@ -377,12 +377,18 @@ class Simulator:
             best_snr = None
             for gw in self.gateways:
                 distance = node.distance_to(gw)
+                kwargs = {
+                    "freq_offset_hz": getattr(node, "current_freq_offset", 0.0),
+                    "sync_offset_s": getattr(node, "current_sync_offset", 0.0),
+                }
+                if hasattr(node.channel, "_obstacle_loss"):
+                    kwargs["tx_pos"] = (node.x, node.y)
+                    kwargs["rx_pos"] = (gw.x, gw.y)
                 rssi, snr = node.channel.compute_rssi(
                     tx_power,
                     distance,
                     sf,
-                    freq_offset_hz=getattr(node, "current_freq_offset", 0.0),
-                    sync_offset_s=getattr(node, "current_sync_offset", 0.0),
+                    **kwargs,
                 )
                 if rssi < node.channel.detection_threshold_dBm:
                     continue  # trop faible pour être détecté
@@ -579,12 +585,15 @@ class Simulator:
                 if not frame:
                     continue
                 distance = node.distance_to(gw)
+                kwargs = {"freq_offset_hz": 0.0, "sync_offset_s": 0.0}
+                if hasattr(node.channel, "_obstacle_loss"):
+                    kwargs["tx_pos"] = (gw.x, gw.y)
+                    kwargs["rx_pos"] = (node.x, node.y)
                 rssi, snr = node.channel.compute_rssi(
                     node.tx_power,
                     distance,
                     node.sf,
-                    freq_offset_hz=0.0,
-                    sync_offset_s=0.0,
+                    **kwargs,
                 )
                 if rssi < node.channel.detection_threshold_dBm:
                     node.downlink_pending = max(0, node.downlink_pending - 1)
@@ -660,12 +669,15 @@ class Simulator:
                     from .lorawan import DR_TO_SF
 
                     sf = DR_TO_SF.get(node.ping_slot_dr, node.sf)
+                kwargs = {"freq_offset_hz": 0.0, "sync_offset_s": 0.0}
+                if hasattr(node.channel, "_obstacle_loss"):
+                    kwargs["tx_pos"] = (gw.x, gw.y)
+                    kwargs["rx_pos"] = (node.x, node.y)
                 rssi, snr = node.channel.compute_rssi(
                     node.tx_power,
                     distance,
                     sf,
-                    freq_offset_hz=0.0,
-                    sync_offset_s=0.0,
+                    **kwargs,
                 )
                 if rssi < node.channel.detection_threshold_dBm:
                     node.downlink_pending = max(0, node.downlink_pending - 1)

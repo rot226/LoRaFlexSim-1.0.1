@@ -2,8 +2,22 @@ import math
 import random
 
 class RandomWaypoint:
-    """Modèle de mobilité aléatoire (Random Waypoint simplifié) pour les nœuds."""
-    def __init__(self, area_size: float, min_speed: float = 1.0, max_speed: float = 3.0):
+    """Modèle de mobilité aléatoire (Random Waypoint simplifié) pour les nœuds.
+
+    Le modèle peut être couplé à un maillage représentant des obstacles ou un
+    relief. Chaque cellule du maillage peut contenir un multiplicateur de
+    vitesse (``1.0`` par défaut). Une valeur négative indique un obstacle
+    infranchissable. Les déplacements sont alors ralentis ou déviés en fonction
+    de cette carte.
+    """
+
+    def __init__(
+        self,
+        area_size: float,
+        min_speed: float = 1.0,
+        max_speed: float = 3.0,
+        terrain: list[list[float]] | None = None,
+    ):
         """
         Initialise le modèle de mobilité.
         :param area_size: Taille de l'aire carrée de simulation (mètres).
@@ -13,6 +27,27 @@ class RandomWaypoint:
         self.area_size = area_size
         self.min_speed = min_speed
         self.max_speed = max_speed
+        self.terrain = terrain
+        if terrain:
+            self.rows = len(terrain)
+            self.cols = len(terrain[0]) if self.rows else 0
+        else:
+            self.rows = 0
+            self.cols = 0
+
+    # ------------------------------------------------------------------
+    def _terrain_factor(self, x: float, y: float) -> float | None:
+        """Return the speed factor for coordinates or ``None`` if blocked."""
+        if not self.terrain or self.rows == 0 or self.cols == 0:
+            return 1.0
+        cx = int(x / self.area_size * self.cols)
+        cy = int(y / self.area_size * self.rows)
+        cx = min(max(cx, 0), self.cols - 1)
+        cy = min(max(cy, 0), self.rows - 1)
+        val = float(self.terrain[cy][cx])
+        if val < 0:
+            return None
+        return val if val > 0 else 1.0
 
     def assign(self, node):
         """
@@ -41,9 +76,18 @@ class RandomWaypoint:
         dt = current_time - node.last_move_time
         if dt <= 0:
             return  # Pas de temps écoulé (ou appel redondant)
-        # Déplacer le nœud selon sa vitesse actuelle
-        node.x += node.vx * dt
-        node.y += node.vy * dt
+        # Ajuster le déplacement selon le relief/la carte
+        factor = self._terrain_factor(node.x, node.y)
+        if factor is None:
+            factor = 1.0
+        node.x += node.vx * dt * factor
+        node.y += node.vy * dt * factor
+        # Rebondir sur un obstacle infranchissable
+        if self._terrain_factor(node.x, node.y) is None:
+            node.x -= node.vx * dt * factor
+            node.y -= node.vy * dt * factor
+            node.vx = -node.vx
+            node.vy = -node.vy
         # Gérer les rebonds sur les frontières de la zone [0, area_size]
         # Axe X
         if node.x < 0.0:
