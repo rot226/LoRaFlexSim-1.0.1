@@ -600,16 +600,17 @@ class Node:
 
     def _check_adr_ack_delay(self) -> None:
         """Reduce data rate when ADR_ACK_DELAY has elapsed with no downlink."""
-        from .lorawan import DBM_TO_TX_POWER_INDEX, TX_POWER_INDEX_TO_DBM
+        from .lorawan import TX_POWER_INDEX_TO_DBM
 
         if self.adr_ack_cnt >= self.adr_ack_limit + self.adr_ack_delay:
             if self.sf < 12:
                 self.sf += 1
             else:
-                idx = DBM_TO_TX_POWER_INDEX.get(int(self.tx_power), 0)
-                if idx > 0:
-                    idx -= 1
-                    self.tx_power = TX_POWER_INDEX_TO_DBM[idx]
+                # LoRaWAN augmente normalement la puissance 
+                # par paliers lorsque SF=12 et qu'aucun downlink
+                # n'est reçu. Ici nous passons directement à la
+                # puissance maximale pour simplifier.
+                self.tx_power = TX_POWER_INDEX_TO_DBM[0]
             self.adr_ack_cnt = 0
 
     def schedule_receive_windows(self, end_time: float):
