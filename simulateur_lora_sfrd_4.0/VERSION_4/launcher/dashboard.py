@@ -729,7 +729,6 @@ def on_stop(event):
     pause_button.name = "Pause"
     pause_button.button_type = "primary"
     paused = False
-    export_button.disabled = False
 
     start_time = None
     max_real_time = None
@@ -758,6 +757,7 @@ def on_stop(event):
         pdr_table.object = table_df
         # Les tableaux détaillés ne sont plus mis à jour ici
     export_message.object = "✅ Simulation terminée. Tu peux exporter les résultats."
+    export_button.disabled = False
 
 
 # --- Export CSV local : Méthode universelle ---
