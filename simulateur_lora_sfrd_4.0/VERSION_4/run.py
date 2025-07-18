@@ -38,7 +38,9 @@ def simulate(nodes, gateways, mode, interval, steps, channels=1):
     collisions = 0
     delivered = 0
     energy_consumed = 0.0
-    delays = []  # stockera le délai de chaque paquet livré
+    # Liste des délais de livraison (0 pour chaque paquet car la transmission
+    # réussie est immédiate dans ce modèle simplifié)
+    delays = []
 
     # Génération des instants d'émission pour chaque nœud et attribution d'un canal
     send_times = {node: [] for node in range(nodes)}
