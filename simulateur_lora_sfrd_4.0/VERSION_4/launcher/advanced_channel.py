@@ -39,6 +39,22 @@ class _CorrelatedFading:
         return 20 * math.log10(max(amp, 1e-12))
 
 
+class _CorrelatedValue:
+    """Correlated random walk used for drifting offsets."""
+
+    def __init__(self, mean: float, std: float, correlation: float) -> None:
+        self.mean = mean
+        self.std = std
+        self.corr = correlation
+        self.value = mean
+
+    def sample(self) -> float:
+        self.value = self.corr * self.value + (1.0 - self.corr) * self.mean
+        if self.std > 0.0:
+            self.value += random.gauss(0.0, self.std)
+        return self.value
+
+
 class AdvancedChannel:
     """Optional channel with more detailed propagation models."""
 
@@ -56,7 +72,9 @@ class AdvancedChannel:
         variable_noise_std: float = 0.0,
         advanced_capture: bool = False,
         frequency_offset_hz: float = 0.0,
+        freq_offset_std_hz: float = 0.0,
         sync_offset_s: float = 0.0,
+        sync_offset_std_s: float = 0.0,
         multipath_paths: int = 1,
         **kwargs,
     ) -> None:
@@ -77,8 +95,12 @@ class AdvancedChannel:
         :param advanced_capture: Active un mode de capture avancée.
         :param frequency_offset_hz: Décalage fréquentiel moyen entre émetteur et
             récepteur (Hz).
+        :param freq_offset_std_hz: Variation temporelle (écart-type en Hz) du
+            décalage fréquentiel.
         :param sync_offset_s: Décalage temporel moyen (s) pour le calcul des
             collisions partielles.
+        :param sync_offset_std_s: Variation temporelle (écart-type en s) du
+            décalage temporel.
         :param multipath_paths: Nombre de trajets multipath à simuler.
         """
 
@@ -102,7 +124,15 @@ class AdvancedChannel:
         self.terrain = terrain.lower()
         self.weather_loss_dB_per_km = weather_loss_dB_per_km
         self.frequency_offset_hz = frequency_offset_hz
+        self.freq_offset_std_hz = freq_offset_std_hz
         self.sync_offset_s = sync_offset_s
+        self.sync_offset_std_s = sync_offset_std_s
+        self._freq_offset = _CorrelatedValue(
+            frequency_offset_hz, freq_offset_std_hz, fading_correlation
+        )
+        self._sync_offset = _CorrelatedValue(
+            sync_offset_s, sync_offset_std_s, fading_correlation
+        )
 
     # ------------------------------------------------------------------
     # Propagation models
@@ -175,12 +205,14 @@ class AdvancedChannel:
         """Return RSSI and SNR for the advanced channel.
 
         Additional optional frequency and timing offsets can be supplied to
-        emulate partial collisions or de-synchronised transmissions.
+        emulate partial collisions or de-synchronised transmissions. When not
+        specified, time‑varying offsets are drawn from correlated distributions
+        configured at construction.
         """
         if freq_offset_hz is None:
-            freq_offset_hz = self.frequency_offset_hz
+            freq_offset_hz = self._freq_offset.sample()
         if sync_offset_s is None:
-            sync_offset_s = self.sync_offset_s
+            sync_offset_s = self._sync_offset.sample()
 
         loss = self.path_loss(distance)
         if self.base.shadowing_std > 0:
