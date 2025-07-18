@@ -44,6 +44,11 @@ class Channel:
         system_loss_dB: float = 0.0,
         rssi_offset_dB: float = 0.0,
         snr_offset_dB: float = 0.0,
+        frequency_offset_hz: float = 0.0,
+        sync_offset_s: float = 0.0,
+        freq_drift_std_hz: float = 0.0,
+        clock_drift_std_s: float = 0.0,
+        temperature_K: float = 290.0,
         *,
         bandwidth: float = 125e3,
         coding_rate: int = 1,
@@ -89,6 +94,14 @@ class Channel:
             système) appliquées à la perte de parcours.
         :param rssi_offset_dB: Décalage appliqué au RSSI calculé (dB).
         :param snr_offset_dB: Décalage appliqué au SNR calculé (dB).
+        :param frequency_offset_hz: Désalignement fréquentiel moyen appliqué si
+            aucun offset n'est fourni lors du calcul.
+        :param sync_offset_s: Front d'attaque temporel moyen appliqué si aucun
+            offset n'est fourni.
+        :param freq_drift_std_hz: Écart-type de la dérive de fréquence simulée.
+        :param clock_drift_std_s: Écart-type de la dérive d'horloge simulée.
+        :param temperature_K: Température utilisée pour le calcul du bruit
+            thermique.
         :param environment: Chaîne optionnelle pour charger un preset
             ("urban", "suburban" ou "rural").
         :param region: Nom d'un plan de fréquences prédéfini ("EU868", "US915",
@@ -135,7 +148,19 @@ class Channel:
         self.tx_power_std = tx_power_std
         self.interference_dB = interference_dB
         self.detection_threshold_dBm = detection_threshold_dBm
-        self.omnet = OmnetModel(fine_fading_std, fading_correlation, variable_noise_std)
+        self.frequency_offset_hz = frequency_offset_hz
+        self.sync_offset_s = sync_offset_s
+        self.freq_drift_std_hz = freq_drift_std_hz
+        self.clock_drift_std_s = clock_drift_std_s
+        self.temperature_K = temperature_K
+        self.omnet = OmnetModel(
+            fine_fading_std,
+            fading_correlation,
+            variable_noise_std,
+            freq_drift_std=freq_drift_std_hz,
+            clock_drift_std=clock_drift_std_s,
+            temperature_K=temperature_K,
+        )
         self.advanced_capture = advanced_capture
         self.phy_model = phy_model
         self.system_loss_dB = system_loss_dB
@@ -176,7 +201,7 @@ class Channel:
         """
         if self.omnet_phy:
             return self.omnet_phy.noise_floor()
-        thermal = self.receiver_noise_floor_dBm + 10 * math.log10(self.bandwidth)
+        thermal = self.omnet.thermal_noise_dBm(self.bandwidth)
         noise = thermal + self.noise_figure_dB + self.interference_dB
         if self.noise_floor_std > 0:
             noise += random.gauss(0, self.noise_floor_std)
@@ -209,7 +234,13 @@ class Channel:
         représenter l'effet d'étalement de spectre LoRa.
         """
         if self.omnet_phy:
-            return self.omnet_phy.compute_rssi(tx_power_dBm, distance, sf)
+            return self.omnet_phy.compute_rssi(
+                tx_power_dBm,
+                distance,
+                sf,
+                freq_offset_hz=freq_offset_hz,
+                sync_offset_s=sync_offset_s,
+            )
         loss = self.path_loss(distance)
         if self.shadowing_std > 0:
             loss += random.gauss(0, self.shadowing_std)
@@ -229,10 +260,32 @@ class Channel:
             rssi += random.gauss(0, self.time_variation_std)
         rssi += self.omnet.fine_fading()
         rssi += self.rssi_offset_dB
+        if freq_offset_hz is None:
+            freq_offset_hz = self.frequency_offset_hz
+        if sync_offset_s is None:
+            sync_offset_s = self.sync_offset_s
+
         snr = rssi - self.noise_floor_dBm() + self.snr_offset_dB
+        penalty = self._alignment_penalty_db(freq_offset_hz, sync_offset_s, sf)
+        snr -= penalty
         if sf is not None:
             snr += 10 * math.log10(2 ** sf)
         return rssi, snr
+
+    def _alignment_penalty_db(
+        self, freq_offset_hz: float, sync_offset_s: float, sf: int | None
+    ) -> float:
+        """Return an SNR penalty due to imperfect alignment."""
+        bw = self.bandwidth
+        freq_factor = abs(freq_offset_hz) / (bw / 2.0)
+        if sf is not None:
+            symbol_time = (2 ** sf) / bw
+        else:
+            symbol_time = 1.0 / bw
+        time_factor = abs(sync_offset_s) / symbol_time
+        if freq_factor >= 1.0 and time_factor >= 1.0:
+            return float("inf")
+        return 10 * math.log10(1.0 + freq_factor ** 2 + time_factor ** 2)
 
     def airtime(self, sf: int, payload_size: int = 20) -> float:
         """Calcule l'airtime complet d'un paquet LoRa en secondes."""
