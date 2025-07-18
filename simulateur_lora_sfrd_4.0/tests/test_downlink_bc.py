@@ -74,3 +74,45 @@ def test_scheduler_programs_class_b_slot():
     assert node.downlink_pending == 0
     assert t == sim.ping_slot_offset
 
+
+def test_ping_slot_periodicity():
+    sim = _make_sim("B")
+    node = sim.nodes[0]
+    node.ping_slot_periodicity = 1
+    gw = sim.gateways[0]
+    sim.event_queue.clear()
+    sim.event_id_counter = 0
+    heapq.heappush(sim.event_queue, Event(0.0, EventType.RX_WINDOW, 0, node.id))
+    heapq.heappush(sim.event_queue, Event(0.0, EventType.BEACON, 1, 0))
+    from VERSION_4.launcher.lorawan import LoRaWANFrame
+
+    frame = LoRaWANFrame(mhdr=0x60, fctrl=0, fcnt=0, payload=b"data")
+    t = sim.network_server.scheduler.schedule_class_b(
+        node,
+        5.0,
+        frame,
+        gw,
+        sim.beacon_interval,
+        sim.ping_slot_interval,
+        sim.ping_slot_offset,
+    )
+    while sim.step():
+        if sim.current_time > t + 0.1:
+            break
+    assert node.fcnt_down == 1
+    assert t == 6.0
+
+
+def test_class_c_continuous_rx():
+    sim = _make_sim("C")
+    node = sim.nodes[0]
+    gw = sim.gateways[0]
+    sim.event_queue.clear()
+    sim.event_id_counter = 0
+    heapq.heappush(sim.event_queue, Event(0.0, EventType.RX_WINDOW, 0, node.id))
+    sim.network_server.send_downlink(node, b"data", at_time=1.5)
+    while sim.step():
+        if sim.current_time > 2.1:
+            break
+    assert node.fcnt_down == 1
+

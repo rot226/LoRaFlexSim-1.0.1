@@ -84,3 +84,21 @@ def test_device_mode_ind_roundtrip():
     parsed = DeviceModeInd.from_bytes(data)
     assert parsed == ind
 
+
+def test_ping_slot_channel_ans_roundtrip():
+    from VERSION_4.launcher.lorawan import PingSlotChannelAns
+
+    ans = PingSlotChannelAns(status=3)
+    data = ans.to_bytes()
+    parsed = PingSlotChannelAns.from_bytes(data)
+    assert parsed == ans
+
+
+def test_beacon_freq_ans_roundtrip():
+    from VERSION_4.launcher.lorawan import BeaconFreqAns
+
+    ans = BeaconFreqAns(status=1)
+    data = ans.to_bytes()
+    parsed = BeaconFreqAns.from_bytes(data)
+    assert parsed == ans
+
