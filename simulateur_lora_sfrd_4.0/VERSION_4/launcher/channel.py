@@ -9,6 +9,8 @@ class Channel:
         "urban": (2.7, 6.0),
         "suburban": (2.3, 4.0),
         "rural": (2.0, 2.0),
+        # Parameters matching the FLoRa log-normal shadowing model
+        "flora": (2.7, 3.57),
     }
 
     # Preset frequency plans for common regions

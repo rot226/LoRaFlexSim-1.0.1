@@ -166,7 +166,7 @@ réception :
 - `noise_floor_std` : écart-type de la variation aléatoire du bruit (dB).
 - `fast_fading_std` : amplitude du fading multipath en dB.
 - `environment` : preset rapide pour le modèle de propagation
-  (`urban`, `suburban` ou `rural`).
+  (`urban`, `suburban` ou `rural` ou `flora`).
 
 ```python
 from launcher.channel import Channel
@@ -225,10 +225,11 @@ FLoRa et un bruit variable peut être ajouté via ``variable_noise_std``.
 
 Le tableau de bord propose désormais un bouton **Mode FLoRa complet**. Quand il
 est activé, `detection_threshold_dBm` est automatiquement fixé à `-110` dBm et
-`min_interference_time` à `5` s, valeurs tirées du fichier INI de FLoRa. Les
-champs restent modifiables si ce mode est désactivé. Pour reproduire fidèlement
-les scénarios FLoRa d'origine, pensez également à renseigner les positions des
-nœuds telles qu'indiquées dans l'INI.
+`min_interference_time` à `5` s, valeurs tirées du fichier INI de FLoRa. Un
+profil radio ``flora`` est aussi sélectionné pour appliquer l'exposant et la
+variance de shadowing correspondants. Les champs restent modifiables si ce mode
+est désactivé. Pour reproduire fidèlement les scénarios FLoRa d'origine, pensez
+également à renseigner les positions des nœuds telles qu'indiquées dans l'INI.
 
 ## SF et puissance initiaux
 

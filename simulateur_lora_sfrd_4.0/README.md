@@ -118,7 +118,9 @@ python examples/run_flora_example.py --runs 5 --seed 123
 ```
 
 The script prints the Packet Delivery Ratio and spreading factor histogram for
-each run. Pass the `--flora-csv <file>` option to automatically compare these
+each run. ``Simulator`` now accepts ``flora_mode=True`` which enables the
+official detection threshold, interference window and a ``flora`` propagation
+profile. Pass the `--flora-csv <file>` option to automatically compare these
 metrics with an official FLoRa CSV export using `compare_with_sim`.
 
 An example configuration file named `examples/flora_full.ini` reproduces the

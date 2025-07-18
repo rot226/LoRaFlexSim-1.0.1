@@ -28,8 +28,7 @@ def run_simulation(runs: int, seed: int | None = None, flora_csv: str | None = N
             mobility=False,
             fixed_sf=12,
             fixed_tx_power=14.0,
-            detection_threshold_dBm=-110.0,
-            min_interference_time=5.0,
+            flora_mode=True,
             seed=(seed + i) if seed is not None else None,
         )
         # apply ADR 1 settings
