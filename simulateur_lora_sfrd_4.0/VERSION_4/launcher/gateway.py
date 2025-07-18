@@ -1,4 +1,5 @@
 import logging
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,10 @@ class Gateway:
         current_time: float,
         frequency: float,
         min_interference_time: float = 0.0,
+        *,
+        freq_offset: float = 0.0,
+        sync_offset: float = 0.0,
+        bandwidth: float = 125e3,
         noise_floor: float | None = None,
         capture_mode: str = "basic",
     ):
@@ -75,6 +80,9 @@ class Gateway:
             'rssi': rssi,
             'end_time': end_time,
             'start_time': current_time,
+            'freq_offset': freq_offset,
+            'sync_offset': sync_offset,
+            'bandwidth': bandwidth,
             'lost_flag': False,
         }
         colliders.append(new_transmission)
@@ -91,17 +99,38 @@ class Gateway:
 
         # Sinon, on a une collision potentielle: déterminer le capture effect
         # Tri décroissant selon la puissance ou le SNR
+        def _penalty(tx1, tx2):
+            freq_diff = tx1.get('freq_offset', 0.0) - tx2.get('freq_offset', 0.0)
+            time_diff = (tx1.get('start_time', 0.0) + tx1.get('sync_offset', 0.0)) - (
+                tx2.get('start_time', 0.0) + tx2.get('sync_offset', 0.0)
+            )
+            bw = tx1.get('bandwidth', bandwidth)
+            freq_factor = abs(freq_diff) / (bw / 2.0)
+            symbol_time = (2 ** tx1.get('sf', sf)) / bw
+            time_factor = abs(time_diff) / symbol_time
+            if freq_factor >= 1.0 and time_factor >= 1.0:
+                return float('inf')
+            return 10 * math.log10(1.0 + freq_factor ** 2 + time_factor ** 2)
+
         if capture_mode in {"advanced", "omnet"} and noise_floor is not None:
             snrs = [t['rssi'] - noise_floor for t in colliders]
             indices = sorted(range(len(colliders)), key=lambda i: snrs[i], reverse=True)
             strongest = colliders[indices[0]]
-            second = snrs[indices[1]] if len(indices) > 1 else None
             strongest_metric = snrs[indices[0]]
+            second = None
+            for idx in indices[1:]:
+                metric = snrs[idx] - _penalty(strongest, colliders[idx])
+                if second is None or metric > second:
+                    second = metric
         else:
             colliders.sort(key=lambda t: t['rssi'], reverse=True)
             strongest = colliders[0]
-            second = colliders[1]['rssi'] if len(colliders) > 1 else None
             strongest_metric = strongest['rssi']
+            second = None
+            for t in colliders[1:]:
+                metric = t['rssi'] - _penalty(strongest, t)
+                if second is None or metric > second:
+                    second = metric
 
         capture = False
         if second is not None:

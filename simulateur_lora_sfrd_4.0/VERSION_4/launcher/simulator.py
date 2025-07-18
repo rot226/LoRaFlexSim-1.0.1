@@ -367,13 +367,23 @@ class Simulator:
             node.in_transmission = True
             node.current_end_time = end_time
 
+            # Actualiser les offsets temps/fréquence utilisés pour cette émission
+            if hasattr(node, "update_offsets"):
+                node.update_offsets()
+
             heard_by_any = False
             best_rssi = None
             # Propagation du paquet vers chaque passerelle
             best_snr = None
             for gw in self.gateways:
                 distance = node.distance_to(gw)
-                rssi, snr = node.channel.compute_rssi(tx_power, distance, sf)
+                rssi, snr = node.channel.compute_rssi(
+                    tx_power,
+                    distance,
+                    sf,
+                    freq_offset_hz=getattr(node, "current_freq_offset", 0.0),
+                    sync_offset_s=getattr(node, "current_sync_offset", 0.0),
+                )
                 if rssi < node.channel.detection_threshold_dBm:
                     continue  # trop faible pour être détecté
                 snr_threshold = (
@@ -398,6 +408,9 @@ class Simulator:
                     self.current_time,
                     node.channel.frequency_hz,
                     self.min_interference_time,
+                    freq_offset=getattr(node, "current_freq_offset", 0.0),
+                    sync_offset=getattr(node, "current_sync_offset", 0.0),
+                    bandwidth=node.channel.bandwidth,
                     noise_floor=node.channel.noise_floor_dBm(),
                     capture_mode=(
                         "omnet" if node.channel.phy_model == "omnet"
@@ -566,7 +579,13 @@ class Simulator:
                 if not frame:
                     continue
                 distance = node.distance_to(gw)
-                rssi, snr = node.channel.compute_rssi(node.tx_power, distance, node.sf)
+                rssi, snr = node.channel.compute_rssi(
+                    node.tx_power,
+                    distance,
+                    node.sf,
+                    freq_offset_hz=0.0,
+                    sync_offset_s=0.0,
+                )
                 if rssi < node.channel.detection_threshold_dBm:
                     node.downlink_pending = max(0, node.downlink_pending - 1)
                     continue
@@ -641,7 +660,13 @@ class Simulator:
                     from .lorawan import DR_TO_SF
 
                     sf = DR_TO_SF.get(node.ping_slot_dr, node.sf)
-                rssi, snr = node.channel.compute_rssi(node.tx_power, distance, sf)
+                rssi, snr = node.channel.compute_rssi(
+                    node.tx_power,
+                    distance,
+                    sf,
+                    freq_offset_hz=0.0,
+                    sync_offset_s=0.0,
+                )
                 if rssi < node.channel.detection_threshold_dBm:
                     node.downlink_pending = max(0, node.downlink_pending - 1)
                     continue

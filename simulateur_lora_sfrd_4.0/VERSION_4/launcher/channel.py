@@ -195,7 +195,13 @@ class Channel:
         return pl + self.system_loss_dB
 
     def compute_rssi(
-        self, tx_power_dBm: float, distance: float, sf: int | None = None
+        self,
+        tx_power_dBm: float,
+        distance: float,
+        sf: int | None = None,
+        *,
+        freq_offset_hz: float | None = None,
+        sync_offset_s: float | None = None,
     ) -> tuple[float, float]:
         """Calcule le RSSI et le SNR attendus à une certaine distance.
 
