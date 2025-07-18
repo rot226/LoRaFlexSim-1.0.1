@@ -60,6 +60,7 @@ class Simulator:
                  node_class: str = 'A',
                  detection_threshold_dBm: float = -float("inf"),
                  min_interference_time: float = 0.0,
+                 flora_mode: bool = False,
                  config_file: str | None = None,
                  seed: int | None = None,
                  class_c_rx_interval: float = 1.0,
@@ -93,6 +94,8 @@ class Simulator:
             réception soit prise en compte.
         :param min_interference_time: Chevauchement temporel toléré entre
             transmissions avant de les considérer en collision (s).
+        :param flora_mode: Active automatiquement les réglages du mode FLoRa
+            complet (seuil -110 dBm et 5 s d'interférence minimale).
         :param config_file: Fichier INI listant les positions des nœuds et
             passerelles à charger. Lorsque défini, ``num_nodes`` et
             ``num_gateways`` sont ignorés.
@@ -117,8 +120,14 @@ class Simulator:
         self.battery_capacity_j = battery_capacity_j
         self.payload_size_bytes = payload_size_bytes
         self.node_class = node_class
+        if flora_mode:
+            if detection_threshold_dBm == -float("inf"):
+                detection_threshold_dBm = -110.0
+            if min_interference_time == 0.0:
+                min_interference_time = 5.0
         self.detection_threshold_dBm = detection_threshold_dBm
         self.min_interference_time = min_interference_time
+        self.flora_mode = flora_mode
         self.config_file = config_file
         self.phy_model = phy_model
         # Activation ou non de la mobilité des nœuds
@@ -142,7 +151,9 @@ class Simulator:
                     ch.detection_threshold_dBm = detection_threshold_dBm
         else:
             if channels is None:
-                ch_list = [Channel(detection_threshold_dBm=detection_threshold_dBm, phy_model=phy_model)]
+                env = "flora" if flora_mode else None
+                ch_list = [Channel(detection_threshold_dBm=detection_threshold_dBm,
+                                 phy_model=phy_model, environment=env)]
             else:
                 ch_list = []
                 for ch in channels:
@@ -152,7 +163,12 @@ class Simulator:
                         ch_list.append(ch)
                     else:
                         ch_list.append(
-                            Channel(frequency_hz=float(ch), detection_threshold_dBm=detection_threshold_dBm, phy_model=phy_model)
+                            Channel(
+                                frequency_hz=float(ch),
+                                detection_threshold_dBm=detection_threshold_dBm,
+                                phy_model=phy_model,
+                                environment="flora" if flora_mode else None,
+                            )
                         )
             self.multichannel = MultiChannel(ch_list, method=channel_distribution)
 
