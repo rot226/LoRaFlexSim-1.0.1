@@ -177,6 +177,12 @@ ch = AdvancedChannel(
 )
 ```
 
+L'objet `AdvancedChannel` peut également introduire des offsets de
+fréquence et de synchronisation variables au cours du temps pour se
+rapprocher du comportement observé avec OMNeT++. Les paramètres
+`freq_offset_std_hz` et `sync_offset_std_s` contrôlent l'amplitude de ces
+variations corrélées.
+
 Les autres paramètres (fréquence, bruit, etc.) sont transmis au
 constructeur de `Channel` classique et restent compatibles avec le
 tableau de bord. Les modèles ``rayleigh`` et ``rician`` utilisent

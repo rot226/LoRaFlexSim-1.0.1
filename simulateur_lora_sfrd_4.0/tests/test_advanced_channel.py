@@ -49,3 +49,18 @@ def test_variable_noise_changes_snr():
     _, snr1 = adv.compute_rssi(14.0, 100.0)
     _, snr2 = adv.compute_rssi(14.0, 100.0)
     assert snr1 != snr2
+
+
+def test_time_varying_offsets():
+    random.seed(0)
+    adv = AdvancedChannel(
+        fading="",
+        shadowing_std=0,
+        frequency_offset_hz=1000.0,
+        freq_offset_std_hz=50.0,
+        sync_offset_s=0.001,
+        sync_offset_std_s=0.0001,
+    )
+    _, snr1 = adv.compute_rssi(14.0, 100.0)
+    _, snr2 = adv.compute_rssi(14.0, 100.0)
+    assert snr1 != snr2
