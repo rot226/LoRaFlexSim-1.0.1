@@ -116,3 +116,37 @@ def test_class_c_continuous_rx():
             break
     assert node.fcnt_down == 1
 
+
+
+def test_class_b_downlink_buffer_delivery():
+    sim = _make_sim("B")
+    node = sim.nodes[0]
+    gw = sim.gateways[0]
+    sim.event_queue.clear()
+    sim.event_id_counter = 0
+    heapq.heappush(sim.event_queue, Event(0.0, EventType.RX_WINDOW, 0, node.id))
+    heapq.heappush(sim.event_queue, Event(0.0, EventType.BEACON, 1, 0))
+    sim.network_server.send_downlink(node, b"data")
+    limit = sim.ping_slot_offset + 0.1
+    while sim.step():
+        if sim.current_time > limit:
+            break
+    assert node.fcnt_down == 1
+    assert node.downlink_pending == 0
+
+
+def test_class_c_downlink_after_tx_window():
+    sim = _make_sim("C")
+    node = sim.nodes[0]
+    gw = sim.gateways[0]
+    sim.event_queue.clear()
+    sim.event_id_counter = 0
+    sim.schedule_event(node, 0.0)
+    duration = node.channel.airtime(node.sf, payload_size=sim.payload_size_bytes)
+    rx1, _ = node.schedule_receive_windows(duration)
+    sim.network_server.send_downlink(node, b"data", at_time=rx1)
+    while sim.step():
+        if sim.current_time > rx1 + 0.1:
+            break
+    assert node.fcnt_down == 1
+    assert node.downlink_pending == 0
