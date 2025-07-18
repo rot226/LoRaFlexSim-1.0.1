@@ -39,8 +39,9 @@ class NetworkServer:
         adr_command: tuple | None = None,
         request_ack: bool = False,
         at_time: float | None = None,
+        gateway=None,
         ):
-        """Queue a downlink frame for a node via the first gateway."""
+        """Queue a downlink frame for a node via ``gateway`` or the first one."""
         from .lorawan import (
             LoRaWANFrame,
             LinkADRReq,
@@ -49,7 +50,7 @@ class NetworkServer:
             JoinAccept,
         )
 
-        gw = self.gateways[0] if self.gateways else None
+        gw = gateway or (self.gateways[0] if self.gateways else None)
         if gw is None:
             return
         fctrl = 0x20 if request_ack else 0
@@ -95,7 +96,7 @@ class NetworkServer:
             gw.buffer_downlink(node_id, frame)
             frame, gw = self.scheduler.pop_ready(node_id, current_time)
 
-    def _activate(self, node):
+    def _activate(self, node, gateway=None):
         from .lorawan import JoinAccept
 
         appnonce = self.next_devaddr & 0xFFFFFF
@@ -107,7 +108,7 @@ class NetworkServer:
         frame = JoinAccept(appnonce, self.net_id, devaddr)
         node.nwkskey = nwk_skey
         node.appskey = app_skey
-        self.send_downlink(node, frame)
+        self.send_downlink(node, frame, gateway=gateway)
 
     def receive(self, event_id: int, node_id: int, gateway_id: int, rssi: float | None = None):
         """
@@ -129,8 +130,9 @@ class NetworkServer:
         logger.debug(f"NetworkServer: packet event {event_id} from node {node_id} received via gateway {gateway_id}.")
 
         node = next((n for n in self.nodes if n.id == node_id), None)
+        gw = next((g for g in self.gateways if g.id == gateway_id), None)
         if node and not getattr(node, "activated", True):
-            self._activate(node)
+            self._activate(node, gateway=gw)
 
         if node and node.last_adr_ack_req:
             # Device requested an ADR acknowledgement
