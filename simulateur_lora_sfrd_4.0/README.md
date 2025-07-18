@@ -146,6 +146,20 @@ OMNeT++ runs.
 You can also supply a reference CSV to `examples/run_flora_example.py` via
 `--flora-csv` to perform this check outside the test suite.
 
+### Generating a FLoRa comparison report
+
+The helper `tools/compare_flora_report.py` compares a CSV exported from
+FLoRa with the results produced by `VERSION_4/run.py` and creates a short
+report. It prints a table with the metrics from both sources and saves
+bar charts highlighting the differences:
+
+```bash
+python tools/compare_flora_report.py flora.csv results.csv
+```
+
+Two images named `report_metrics.png` and `report_sf.png` are written in
+the current directory.
+
 ## Versioning
 
 The current package version is defined in `pyproject.toml`.
