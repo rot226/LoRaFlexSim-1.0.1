@@ -25,12 +25,24 @@ class DownlinkScheduler:
         beacon_interval: float,
         ping_slot_interval: float,
         ping_slot_offset: float,
-    ) -> float:
+        ) -> float:
         """Schedule ``frame`` for ``node`` at its next ping slot."""
         t = node.next_ping_slot_time(
             after_time, beacon_interval, ping_slot_interval, ping_slot_offset
         )
         self.schedule(node.id, t, frame, gateway)
+        return t
+
+    def schedule_class_c(self, node_id: int, time: float, frame, gateway):
+        """Schedule a frame for a Class C node at ``time``."""
+        self.schedule(node_id, time, frame, gateway)
+
+    def schedule_beacon(self, after_time: float, frame, gateway, beacon_interval: float) -> float:
+        """Schedule a beacon frame at the next beacon time after ``after_time``."""
+        from .lorawan import next_beacon_time
+
+        t = next_beacon_time(after_time, beacon_interval)
+        self.schedule(0, t, frame, gateway)
         return t
 
     def pop_ready(self, node_id: int, current_time: float):
