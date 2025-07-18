@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -709,3 +709,37 @@ def derive_session_keys(app_key: bytes, dev_nonce: int, app_nonce: int, net_id: 
     )
     digest = hashlib.sha256(data).digest()
     return digest[:16], digest[16:32]
+
+
+@dataclass
+class JoinServer:
+    """Very small join server with minimal key verification."""
+
+    net_id: int = 0
+    devices: dict[tuple[int, int], bytes] = field(default_factory=dict)
+    last_devnonce: dict[tuple[int, int], int] = field(default_factory=dict)
+    next_devaddr: int = 1
+    app_nonce: int = 1
+
+    def register(self, join_eui: int, dev_eui: int, app_key: bytes) -> None:
+        """Register a device and its AppKey."""
+        self.devices[(join_eui, dev_eui)] = app_key
+
+    def handle_join(self, req: JoinRequest) -> tuple[JoinAccept, bytes, bytes]:
+        """Validate a join request and return join parameters and keys."""
+        key = (req.join_eui, req.dev_eui)
+        app_key = self.devices.get(key)
+        if app_key is None:
+            raise KeyError("Unknown device")
+        last = self.last_devnonce.get(key)
+        if last is not None and req.dev_nonce <= last:
+            raise ValueError("DevNonce reused")
+        self.last_devnonce[key] = req.dev_nonce
+        app_nonce = self.app_nonce & 0xFFFFFF
+        self.app_nonce += 1
+        dev_addr = self.next_devaddr
+        self.next_devaddr += 1
+        nwk_skey, app_skey = derive_session_keys(
+            app_key, req.dev_nonce, app_nonce, self.net_id
+        )
+        return JoinAccept(app_nonce, self.net_id, dev_addr), nwk_skey, app_skey

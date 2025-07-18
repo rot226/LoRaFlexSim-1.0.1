@@ -116,3 +116,27 @@ def test_next_beacon_time_recover():
     t = next_beacon_time(35.0, 10.0, last_beacon=0.0, drift=0.0, loss_limit=2.0)
     assert t == pytest.approx(40.0)
 
+
+def test_join_server_invalid_key_and_rejoin():
+    from VERSION_4.launcher.lorawan import JoinServer, JoinRequest, JoinAccept
+
+    js = JoinServer(net_id=1)
+    app_key = bytes(16)
+    js.register(1, 2, app_key)
+
+    req = JoinRequest(1, 2, 1)
+    accept, nwk, app = js.handle_join(req)
+    assert isinstance(accept, JoinAccept)
+    assert len(nwk) == 16
+    assert len(app) == 16
+
+    with pytest.raises(ValueError):
+        js.handle_join(req)
+
+    bad = JoinRequest(1, 3, 1)
+    with pytest.raises(KeyError):
+        js.handle_join(bad)
+
+    req2 = JoinRequest(1, 2, 2)
+    js.handle_join(req2)
+
