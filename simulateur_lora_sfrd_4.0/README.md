@@ -167,11 +167,18 @@ the current directory.
 
 ### Calibration systématique avec FLoRa
 
-To keep the simulator aligned with the reference implementation, regularly run
-`tools/compare_flora_report.py` against a FLoRa CSV export. Study the generated
-metrics and SF distribution charts to tune the channel parameters (path loss,
-noise, fast fading) until the difference on PDR, SF histograms and energy
-consumption becomes minimal.
+The script `tools/calibrate_flora.py` automates the search of channel
+parameters that best reproduce a reference export from FLoRa. It launches
+several runs with different propagation settings and reports the combination
+yielding the smallest PDR difference. From the repository root run:
+
+```bash
+python tools/calibrate_flora.py examples/flora_full.csv
+```
+
+The resulting parameters typically give a correspondence above **99 %** with
+FLoRa on the provided dataset. The calibration is also executed during the
+test suite to ensure the simulator stays in sync with the reference model.
 
 ## Versioning
 
