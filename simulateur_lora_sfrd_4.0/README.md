@@ -103,7 +103,7 @@ range:
 ```python
 from launcher import Simulator
 
-sim = Simulator(num_nodes=20, gateways=3, area_size=2000.0, mobility=True,
+sim = Simulator(num_nodes=20, num_gateways=3, area_size=2000.0, mobility=True,
                 mobility_speed=(1.0, 5.0))
 sim.run(1000)
 ```
