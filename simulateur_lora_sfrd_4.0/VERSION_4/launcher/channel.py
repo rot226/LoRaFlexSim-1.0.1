@@ -40,6 +40,9 @@ class Channel:
         fading_correlation: float = 0.9,
         variable_noise_std: float = 0.0,
         advanced_capture: bool = False,
+        system_loss_dB: float = 0.0,
+        rssi_offset_dB: float = 0.0,
+        snr_offset_dB: float = 0.0,
         *,
         bandwidth: float = 125e3,
         coding_rate: int = 1,
@@ -80,6 +83,10 @@ class Channel:
             fading et le bruit variable.
         :param variable_noise_std: Variation lente du bruit thermique en dB.
         :param advanced_capture: Active un mode de capture inspiré de FLoRa.
+        :param system_loss_dB: Pertes fixes supplémentaires (par ex. pertes
+            système) appliquées à la perte de parcours.
+        :param rssi_offset_dB: Décalage appliqué au RSSI calculé (dB).
+        :param snr_offset_dB: Décalage appliqué au SNR calculé (dB).
         :param environment: Chaîne optionnelle pour charger un preset
             ("urban", "suburban" ou "rural").
         :param region: Nom d'un plan de fréquences prédéfini ("EU868", "US915",
@@ -128,6 +135,9 @@ class Channel:
         self.detection_threshold_dBm = detection_threshold_dBm
         self.omnet = OmnetModel(fine_fading_std, fading_correlation, variable_noise_std)
         self.advanced_capture = advanced_capture
+        self.system_loss_dB = system_loss_dB
+        self.rssi_offset_dB = rssi_offset_dB
+        self.snr_offset_dB = snr_offset_dB
 
         # Paramètres LoRa (BW 125 kHz, CR 4/5, préambule 8, CRC activé)
         self.bandwidth = bandwidth
@@ -172,7 +182,7 @@ class Channel:
         pl_d0 = 32.45 + 20 * math.log10(freq_mhz) - 60.0
         # Perte à la distance donnée
         pl = pl_d0 + 10 * self.path_loss_exp * math.log10(max(distance, 1.0) / 1.0)
-        return pl
+        return pl + self.system_loss_dB
 
     def compute_rssi(
         self, tx_power_dBm: float, distance: float, sf: int | None = None
@@ -201,7 +211,8 @@ class Channel:
         if self.time_variation_std > 0:
             rssi += random.gauss(0, self.time_variation_std)
         rssi += self.omnet.fine_fading()
-        snr = rssi - self.noise_floor_dBm()
+        rssi += self.rssi_offset_dB
+        snr = rssi - self.noise_floor_dBm() + self.snr_offset_dB
         if sf is not None:
             snr += 10 * math.log10(2 ** sf)
         return rssi, snr

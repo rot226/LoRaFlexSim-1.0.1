@@ -142,13 +142,15 @@ ch = AdvancedChannel(
     propagation_model="okumura_hata",
     terrain="suburban",
     weather_loss_dB_per_km=1.0,
-    fading="rayleigh",
+    fading="rayleigh",  # modèle corrélé dans le temps
 )
 ```
 
 Les autres paramètres (fréquence, bruit, etc.) sont transmis au
 constructeur de `Channel` classique et restent compatibles avec le
-tableau de bord.
+tableau de bord. Les modèles ``rayleigh`` et ``rician`` utilisent
+désormais une corrélation temporelle pour reproduire le comportement de
+FLoRa et un bruit variable peut être ajouté via ``variable_noise_std``.
 
 Le tableau de bord propose désormais un bouton **Mode FLoRa complet**. Quand il
 est activé, `detection_threshold_dBm` est automatiquement fixé à `-110` dBm et

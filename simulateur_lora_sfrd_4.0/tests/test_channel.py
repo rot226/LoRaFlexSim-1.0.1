@@ -48,3 +48,17 @@ def test_antenna_gains_increase_rssi():
     r1, _ = base.compute_rssi(14.0, 50.0)
     r2, _ = gch.compute_rssi(14.0, 50.0)
     assert r2 > r1
+
+
+def test_offsets_and_system_loss():
+    base = Channel(shadowing_std=0)
+    mod = Channel(
+        shadowing_std=0,
+        system_loss_dB=2.0,
+        rssi_offset_dB=3.0,
+        snr_offset_dB=1.0,
+    )
+    r1, s1 = base.compute_rssi(14.0, 100.0, sf=7)
+    r2, s2 = mod.compute_rssi(14.0, 100.0, sf=7)
+    assert r2 == pytest.approx(r1 - 2.0 + 3.0)
+    assert s2 == pytest.approx(s1 - 2.0 + 3.0 + 1.0)

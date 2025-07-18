@@ -6,6 +6,33 @@ import math
 import random
 
 
+class _CorrelatedFading:
+    """Temporal correlation for Rayleigh/Rician fading."""
+
+    def __init__(self, kind: str, k_factor: float, correlation: float) -> None:
+        self.kind = kind
+        self.k = k_factor
+        self.corr = correlation
+        self.i = 0.0
+        self.q = 0.0
+
+    def sample_db(self) -> float:
+        if self.kind not in {"rayleigh", "rician"}:
+            return 0.0
+        std = math.sqrt(max(1.0 - self.corr ** 2, 0.0))
+        if self.kind == "rayleigh":
+            mean_i = 0.0
+            sigma = 1.0
+        else:  # rician
+            mean_i = math.sqrt(self.k / (self.k + 1.0))
+            sigma = math.sqrt(1.0 / (2.0 * (self.k + 1.0)))
+
+        self.i = self.corr * self.i + std * random.gauss(mean_i, sigma)
+        self.q = self.corr * self.q + std * random.gauss(0.0, sigma)
+        amp = math.sqrt(self.i ** 2 + self.q ** 2)
+        return 20 * math.log10(max(amp, 1e-12))
+
+
 class AdvancedChannel:
     """Optional channel with more detailed propagation models."""
 
@@ -55,6 +82,7 @@ class AdvancedChannel:
         self.propagation_model = propagation_model
         self.fading = fading
         self.rician_k = rician_k
+        self.fading_model = _CorrelatedFading(fading, rician_k, fading_correlation)
         self.terrain = terrain.lower()
         self.weather_loss_dB_per_km = weather_loss_dB_per_km
 
@@ -141,17 +169,7 @@ class AdvancedChannel:
         rssi += self.base.omnet.fine_fading()
 
         noise = self.base.noise_floor_dBm()
-
-        if self.fading == "rayleigh":
-            u = random.random()
-            rayleigh = math.sqrt(-2.0 * math.log(max(u, 1e-12)))
-            rssi += 20 * math.log10(rayleigh)
-        elif self.fading == "rician":
-            sigma = math.sqrt(1.0 / (2.0 * (self.rician_k + 1.0)))
-            in_phase = random.gauss(math.sqrt(self.rician_k / (self.rician_k + 1.0)), sigma)
-            quadrature = random.gauss(0.0, sigma)
-            amp = math.sqrt(in_phase ** 2 + quadrature ** 2)
-            rssi += 20 * math.log10(max(amp, 1e-12))
+        rssi += self.fading_model.sample_db()
 
         snr = rssi - noise
         if sf is not None:
