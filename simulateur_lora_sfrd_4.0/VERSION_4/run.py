@@ -57,27 +57,39 @@ def simulate(nodes, gateways, mode, interval, steps, channels=1):
                     send_times[node].append(t)
 
     # Simulation pas à pas
+    pending = {}
+
     for t in range(steps):
-        transmitting_nodes = [
-            node for node, times in send_times.items() if t in times
-        ]
-        # Gérer les transmissions par passerelle puis par canal
+        # Ajouter les nouvelles transmissions prêtes à l'instant t
+        for node, times in send_times.items():
+            if t in times and node not in pending:
+                pending[node] = t
+
+        # Traiter les transmissions en attente par passerelle puis par canal
         for gw in range(max(1, gateways)):
-            gw_nodes = [
-                n for n in transmitting_nodes if node_gateways[n] == gw
-            ]
+            gw_nodes = [n for n in pending.keys() if node_gateways[n] == gw]
             for ch in range(channels):
                 nodes_on_ch = [n for n in gw_nodes if node_channels[n] == ch]
                 nb_tx = len(nodes_on_ch)
                 if nb_tx > 0:
                     total_transmissions += nb_tx
+                    energy_consumed += nb_tx * 1.0
                     if nb_tx == 1:
+                        n = nodes_on_ch[0]
                         delivered += 1
-                        energy_consumed += 1.0
-                        delays.append(0)
+                        delays.append(t - pending[n])
+                        del pending[n]
                     else:
-                        collisions += nb_tx
-                        energy_consumed += nb_tx * 1.0
+                        collisions += nb_tx - 1
+                        winner = random.choice(nodes_on_ch)
+                        for n in nodes_on_ch:
+                            if n == winner:
+                                delivered += 1
+                                delays.append(t - pending[n])
+                                del pending[n]
+                            else:
+                                # reste en attente pour le prochain tour
+                                pass
 
     # Calcul des métriques finales
     pdr = (
