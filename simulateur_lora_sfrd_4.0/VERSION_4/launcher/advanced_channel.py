@@ -7,14 +7,15 @@ import random
 
 
 class _CorrelatedFading:
-    """Temporal correlation for Rayleigh/Rician fading."""
+    """Temporal correlation for Rayleigh/Rician fading with multiple taps."""
 
-    def __init__(self, kind: str, k_factor: float, correlation: float) -> None:
+    def __init__(self, kind: str, k_factor: float, correlation: float, paths: int = 1) -> None:
         self.kind = kind
         self.k = k_factor
         self.corr = correlation
-        self.i = 0.0
-        self.q = 0.0
+        self.paths = max(1, int(paths))
+        self.i = [0.0] * self.paths
+        self.q = [0.0] * self.paths
 
     def sample_db(self) -> float:
         if self.kind not in {"rayleigh", "rician"}:
@@ -27,9 +28,14 @@ class _CorrelatedFading:
             mean_i = math.sqrt(self.k / (self.k + 1.0))
             sigma = math.sqrt(1.0 / (2.0 * (self.k + 1.0)))
 
-        self.i = self.corr * self.i + std * random.gauss(mean_i, sigma)
-        self.q = self.corr * self.q + std * random.gauss(0.0, sigma)
-        amp = math.sqrt(self.i ** 2 + self.q ** 2)
+        sum_i = 0.0
+        sum_q = 0.0
+        for p in range(self.paths):
+            self.i[p] = self.corr * self.i[p] + std * random.gauss(mean_i, sigma)
+            self.q[p] = self.corr * self.q[p] + std * random.gauss(0.0, sigma)
+            sum_i += self.i[p]
+            sum_q += self.q[p]
+        amp = math.sqrt(sum_i ** 2 + sum_q ** 2) / self.paths
         return 20 * math.log10(max(amp, 1e-12))
 
 
@@ -49,6 +55,9 @@ class AdvancedChannel:
         fading_correlation: float = 0.9,
         variable_noise_std: float = 0.0,
         advanced_capture: bool = False,
+        frequency_offset_hz: float = 0.0,
+        sync_offset_s: float = 0.0,
+        multipath_paths: int = 1,
         **kwargs,
     ) -> None:
         """Initialise the advanced channel with optional propagation models.
@@ -66,6 +75,11 @@ class AdvancedChannel:
         :param fading_correlation: Facteur de corrélation temporelle.
         :param variable_noise_std: Variation lente du bruit thermique.
         :param advanced_capture: Active un mode de capture avancée.
+        :param frequency_offset_hz: Décalage fréquentiel moyen entre émetteur et
+            récepteur (Hz).
+        :param sync_offset_s: Décalage temporel moyen (s) pour le calcul des
+            collisions partielles.
+        :param multipath_paths: Nombre de trajets multipath à simuler.
         """
 
         from .channel import Channel
@@ -82,9 +96,13 @@ class AdvancedChannel:
         self.propagation_model = propagation_model
         self.fading = fading
         self.rician_k = rician_k
-        self.fading_model = _CorrelatedFading(fading, rician_k, fading_correlation)
+        self.fading_model = _CorrelatedFading(
+            fading, rician_k, fading_correlation, paths=multipath_paths
+        )
         self.terrain = terrain.lower()
         self.weather_loss_dB_per_km = weather_loss_dB_per_km
+        self.frequency_offset_hz = frequency_offset_hz
+        self.sync_offset_s = sync_offset_s
 
     # ------------------------------------------------------------------
     # Propagation models
@@ -146,9 +164,24 @@ class AdvancedChannel:
 
     # ------------------------------------------------------------------
     def compute_rssi(
-        self, tx_power_dBm: float, distance: float, sf: int | None = None
+        self,
+        tx_power_dBm: float,
+        distance: float,
+        sf: int | None = None,
+        *,
+        freq_offset_hz: float | None = None,
+        sync_offset_s: float | None = None,
     ) -> tuple[float, float]:
-        """Return RSSI and SNR for the advanced channel."""
+        """Return RSSI and SNR for the advanced channel.
+
+        Additional optional frequency and timing offsets can be supplied to
+        emulate partial collisions or de-synchronised transmissions.
+        """
+        if freq_offset_hz is None:
+            freq_offset_hz = self.frequency_offset_hz
+        if sync_offset_s is None:
+            sync_offset_s = self.sync_offset_s
+
         loss = self.path_loss(distance)
         if self.base.shadowing_std > 0:
             loss += random.gauss(0, self.base.shadowing_std)
@@ -171,7 +204,30 @@ class AdvancedChannel:
         noise = self.base.noise_floor_dBm()
         rssi += self.fading_model.sample_db()
 
+        # Additional penalty if transmissions are not perfectly aligned
+        penalty = self._interference_penalty_db(freq_offset_hz, sync_offset_s, sf)
+        noise += penalty
+
         snr = rssi - noise
         if sf is not None:
             snr += 10 * math.log10(2 ** sf)
         return rssi, snr
+
+    # ------------------------------------------------------------------
+    def _interference_penalty_db(
+        self,
+        freq_offset_hz: float,
+        sync_offset_s: float,
+        sf: int | None,
+    ) -> float:
+        """Simple penalty model for imperfect alignment."""
+        bw = self.base.bandwidth
+        freq_factor = abs(freq_offset_hz) / (bw / 2.0)
+        if sf is not None:
+            symbol_time = (2 ** sf) / bw
+        else:
+            symbol_time = 1.0 / bw
+        time_factor = abs(sync_offset_s) / symbol_time
+        if freq_factor >= 1.0 and time_factor >= 1.0:
+            return 0.0
+        return 10 * math.log10(1.0 + freq_factor ** 2 + time_factor ** 2)
