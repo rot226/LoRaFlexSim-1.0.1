@@ -41,7 +41,7 @@ def _run_sim(path_loss_exp: float, shadowing_std: float, runs: int, seed: int | 
             area_size=1000.0,
             transmission_mode="Random",
             packet_interval=100.0,
-            packets_to_send=5 * 80,
+            packets_to_send=80,
             adr_node=True,
             adr_server=True,
             mobility=False,

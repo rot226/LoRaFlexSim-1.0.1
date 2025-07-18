@@ -130,7 +130,7 @@ scénarios FLoRa. Voici la liste complète des options :
   passerelles.
 - `transmission_mode` : `Random` (émissions Poisson) ou `Periodic`.
 - `packet_interval` : moyenne ou période fixe entre transmissions (s).
-- `packets_to_send` : nombre total de paquets avant arrêt (0 = infini).
+- `packets_to_send` : nombre de paquets émis **par nœud** avant arrêt (0 = infini).
 - `adr_node` / `adr_server` : active l'ADR côté nœud ou serveur.
 - `duty_cycle` : quota d'émission appliqué à chaque nœud (`None` pour désactiver).
 - `mobility` : active la mobilité aléatoire selon `mobility_speed`.
