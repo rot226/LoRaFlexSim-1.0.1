@@ -17,6 +17,9 @@ class OmnetPHY:
             channel.fine_fading_std,
             channel.omnet.correlation,
             channel.omnet.noise_std,
+            freq_drift_std=channel.omnet.freq_drift_std,
+            clock_drift_std=channel.omnet.clock_drift_std,
+            temperature_K=channel.omnet.temperature_K,
         )
 
     # ------------------------------------------------------------------
@@ -32,7 +35,7 @@ class OmnetPHY:
     def noise_floor(self) -> float:
         """Return the noise floor (dBm) including optional variations."""
         ch = self.channel
-        thermal = ch.receiver_noise_floor_dBm + 10 * math.log10(ch.bandwidth)
+        thermal = self.model.thermal_noise_dBm(ch.bandwidth)
         noise = thermal + ch.noise_figure_dB + ch.interference_dB
         if ch.noise_floor_std > 0:
             noise += random.gauss(0.0, ch.noise_floor_std)
@@ -67,10 +70,33 @@ class OmnetPHY:
             rssi += random.gauss(0.0, ch.time_variation_std)
         rssi += self.model.fine_fading()
         rssi += ch.rssi_offset_dB
+
+        if freq_offset_hz is None:
+            freq_offset_hz = ch.frequency_offset_hz
+        if sync_offset_s is None:
+            sync_offset_s = ch.sync_offset_s
+
         snr = rssi - self.noise_floor() + ch.snr_offset_dB
+        penalty = self._alignment_penalty_db(freq_offset_hz, sync_offset_s, sf)
+        snr -= penalty
         if sf is not None:
             snr += 10 * math.log10(2 ** sf)
         return rssi, snr
+
+    def _alignment_penalty_db(
+        self, freq_offset_hz: float, sync_offset_s: float, sf: int | None
+    ) -> float:
+        """Return SNR penalty for imperfect alignment."""
+        bw = self.channel.bandwidth
+        freq_factor = abs(freq_offset_hz) / (bw / 2.0)
+        if sf is not None:
+            symbol_time = (2 ** sf) / bw
+        else:
+            symbol_time = 1.0 / bw
+        time_factor = abs(sync_offset_s) / symbol_time
+        if freq_factor >= 1.0 and time_factor >= 1.0:
+            return float("inf")
+        return 10 * math.log10(1.0 + freq_factor ** 2 + time_factor ** 2)
 
     def capture(self, rssi_list: list[float]) -> list[bool]:
         """Return list of booleans indicating which signals are captured."""
