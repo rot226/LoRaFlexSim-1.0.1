@@ -638,11 +638,38 @@ def compute_rx2(end_time: float, rx_delay: float = 1.0) -> float:
     return end_time + rx_delay + 1.0
 
 
-def next_beacon_time(after_time: float, beacon_interval: float) -> float:
-    """Return the next beacon time after ``after_time``."""
+def next_beacon_time(
+    after_time: float,
+    beacon_interval: float,
+    *,
+    last_beacon: float | None = None,
+    drift: float = 0.0,
+    loss_limit: float = 2.0,
+) -> float:
+    """Return the next beacon time after ``after_time``.
+
+    ``drift`` expresses a relative drift of the beacon interval (e.g. ``20e-6``
+    for 20 ppm). When ``last_beacon`` is provided, the function keeps applying
+    the drift to compute subsequent beacon times. If the elapsed time since the
+    last beacon exceeds ``loss_limit`` intervals, the calculation falls back to
+    the ideal schedule to simulate a resynchronisation after beacon loss.
+    """
+
     import math
 
-    return math.ceil((after_time + 1e-9) / beacon_interval) * beacon_interval
+    if last_beacon is None:
+        return math.ceil((after_time + 1e-9) / beacon_interval) * beacon_interval
+
+    interval = beacon_interval * (1.0 + drift)
+    expected = last_beacon + interval
+
+    if after_time - expected > (loss_limit - 1) * beacon_interval:
+        return math.ceil((after_time + 1e-9) / beacon_interval) * beacon_interval
+
+    if expected <= after_time:
+        steps = math.ceil((after_time - expected) / interval)
+        expected += steps * interval
+    return expected
 
 
 def next_ping_slot_time(
@@ -651,11 +678,18 @@ def next_ping_slot_time(
     periodicity: int,
     ping_slot_interval: float,
     ping_slot_offset: float,
+    *,
+    beacon_drift: float = 0.0,
 ) -> float:
-    """Return the next ping slot time after ``after_time``."""
+    """Return the next ping slot time after ``after_time``.
+
+    ``beacon_drift`` can be used to apply the same drift as returned by
+    :func:`next_beacon_time` when computing the window relative to the last
+    beacon.
+    """
     import math
 
-    first_slot = last_beacon_time + ping_slot_offset
+    first_slot = last_beacon_time + beacon_drift + ping_slot_offset
     if after_time <= first_slot:
         return first_slot
     interval = ping_slot_interval * (2 ** periodicity)

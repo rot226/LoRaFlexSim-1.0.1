@@ -8,6 +8,7 @@ from VERSION_4.launcher.node import Node  # noqa: E402
 from VERSION_4.launcher.gateway import Gateway  # noqa: E402
 from VERSION_4.launcher.channel import Channel  # noqa: E402
 from VERSION_4.launcher.server import NetworkServer  # noqa: E402
+from VERSION_4.launcher.downlink_scheduler import DownlinkScheduler  # noqa: E402
 
 
 def test_scheduled_downlink_delivery():
@@ -41,3 +42,34 @@ def test_multiple_scheduled_frames():
     payloads = sorted(f.payload for f in frames if f is not None)
     assert payloads == [b"one", b"two"]
     assert gw.pop_downlink(node.id) is None
+
+
+def test_scheduler_conflict_resolution():
+    node1 = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    node1.class_type = "B"
+    node2 = Node(2, 0.0, 0.0, 7, 14.0, channel=Channel())
+    node2.class_type = "B"
+    gw = Gateway(1, 0.0, 0.0)
+    sched = DownlinkScheduler()
+    from VERSION_4.launcher.lorawan import LoRaWANFrame
+
+    frame = LoRaWANFrame(mhdr=0x60, fctrl=0, fcnt=0, payload=b"a")
+    t1 = sched.schedule_class_b(
+        node1,
+        0.0,
+        frame,
+        gw,
+        128.0,
+        1.0,
+        2.0,
+    )
+    t2 = sched.schedule_class_b(
+        node2,
+        0.0,
+        frame,
+        gw,
+        128.0,
+        1.0,
+        2.0,
+    )
+    assert t2 > t1
