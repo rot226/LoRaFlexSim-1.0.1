@@ -585,6 +585,10 @@ class Simulator:
                             new_queue.append(evt)
                     heapq.heapify(new_queue)
                     self.event_queue = new_queue
+                    # Stop scheduling further mobility events once every node
+                    # reached the packet limit to ensure the simulation
+                    # completes when using fast forward.
+                    self.mobility_enabled = False
                     logger.debug(
                         "Packet limit reached – no more new events will be scheduled."
                     )
