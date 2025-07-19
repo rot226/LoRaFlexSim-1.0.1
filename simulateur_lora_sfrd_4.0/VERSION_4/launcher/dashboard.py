@@ -45,6 +45,7 @@ runs_metrics: list[dict] = []
 auto_fast_forward = False
 timeline_fig = go.Figure()
 last_event_index = 0
+pause_prev_disabled = False
 
 
 def average_numeric_metrics(metrics_list: list[dict]) -> dict:
@@ -784,6 +785,8 @@ def on_stop(event):
         # Les tableaux détaillés ne sont plus mis à jour ici
     export_message.object = "✅ Simulation terminée. Tu peux exporter les résultats."
     export_button.disabled = False
+    global pause_prev_disabled
+    pause_button.disabled = pause_prev_disabled
 
 
 # --- Export CSV local : Méthode universelle ---
@@ -835,6 +838,11 @@ def fast_forward(event=None):
 
         fast_forward_progress.visible = True
         fast_forward_progress.value = 0
+
+        # Disable pause during fast forward and remember previous state
+        global pause_prev_disabled
+        pause_prev_disabled = pause_button.disabled
+        pause_button.disabled = True
 
         # Disable buttons during fast forward
         fast_forward_button.disabled = True
@@ -898,6 +906,8 @@ def fast_forward(event=None):
                 sf_hist_pane.object = sf_fig
                 update_map()
                 on_stop(None)
+                global pause_prev_disabled
+                pause_button.disabled = pause_prev_disabled
 
             if session_alive():
                 doc.add_next_tick_callback(update_ui)
