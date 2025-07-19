@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from .crypto import aes_encrypt, aes_decrypt, cmac
 
 
 @dataclass
@@ -706,8 +707,6 @@ def next_ping_slot_time(
 # ---------------------------------------------------------------------------
 # LoRaWAN security helpers (AES encryption and MIC)
 # ---------------------------------------------------------------------------
-from .crypto import aes_encrypt, aes_decrypt, cmac
-
 
 def encrypt_payload(
     app_skey: bytes,
