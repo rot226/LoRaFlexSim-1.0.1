@@ -5,9 +5,9 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from VERSION_4.launcher.simulator import Simulator
-from VERSION_4.launcher.adr_standard_1 import apply as adr1
-from VERSION_4.launcher.compare_flora import compare_with_sim
+from VERSION_4.launcher.simulator import Simulator  # noqa: E402
+from VERSION_4.launcher.adr_standard_1 import apply as adr1  # noqa: E402
+from VERSION_4.launcher.compare_flora import compare_with_sim  # noqa: E402
 
 NODE_POSITIONS = [
     (450.45, 490.0),

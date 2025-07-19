@@ -7,7 +7,7 @@ sys.path.insert(0, str(ROOT))
 
 pytest.importorskip("pandas")
 
-from tools.calibrate_flora import cross_validate
+from tools.calibrate_flora import cross_validate  # noqa: E402
 
 
 def test_cross_validate_multi():

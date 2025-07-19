@@ -7,7 +7,7 @@ sys.path.insert(0, str(ROOT))
 
 pytest.importorskip("pandas")
 
-from tools.calibrate_flora import calibrate
+from tools.calibrate_flora import calibrate  # noqa: E402
 
 
 def test_calibrate_flora_quick():

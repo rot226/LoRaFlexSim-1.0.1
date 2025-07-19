@@ -1,5 +1,4 @@
 import logging
-import math
 from .downlink_scheduler import DownlinkScheduler
 
 logger = logging.getLogger(__name__)
