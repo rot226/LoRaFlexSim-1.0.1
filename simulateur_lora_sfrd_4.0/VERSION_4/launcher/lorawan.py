@@ -797,6 +797,9 @@ class JoinServer:
         last = self.last_devnonce.get(key)
         if last is not None and req.dev_nonce <= last:
             raise ValueError("DevNonce reused")
+        if req.mic:
+            if compute_join_mic(app_key, req.to_bytes()) != req.mic:
+                raise ValueError("Invalid MIC")
         self.last_devnonce[key] = req.dev_nonce
         app_nonce = self.app_nonce & 0xFFFFFF
         self.app_nonce += 1
@@ -805,4 +808,10 @@ class JoinServer:
         nwk_skey, app_skey = derive_session_keys(
             app_key, req.dev_nonce, app_nonce, self.net_id
         )
-        return JoinAccept(app_nonce, self.net_id, dev_addr), nwk_skey, app_skey
+        accept = JoinAccept(app_nonce, self.net_id, dev_addr)
+        if req.mic:
+            msg = accept.to_bytes()
+            pad = (16 - len(msg) % 16) % 16
+            accept.encrypted = aes_decrypt(app_key, msg + bytes(pad))
+            accept.mic = compute_join_mic(app_key, msg)
+        return accept, nwk_skey, app_skey
