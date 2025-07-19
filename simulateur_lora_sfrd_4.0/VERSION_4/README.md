@@ -132,7 +132,7 @@ scénarios FLoRa. Voici la liste complète des options :
 - `transmission_mode` : `Random` (émissions Poisson) ou `Periodic`.
 - `packet_interval` : moyenne ou période fixe entre transmissions (s).
 - `interval_variation` : coefficient de jitter appliqué à l'intervalle
-  exponentiel pour renforcer l'aléa (valeur entre 0 et 1, 0,1 par défaut).
+  exponentiel pour renforcer l'aléa (valeur entre 0 et 1, 1 par défaut).
 - `packets_to_send` : nombre de paquets émis **par nœud** avant arrêt (0 = infini).
 - `adr_node` / `adr_server` : active l'ADR côté nœud ou serveur.
 - `duty_cycle` : quota d'émission appliqué à chaque nœud (`None` pour désactiver).
