@@ -228,18 +228,20 @@ def _left_shift(b: bytes) -> bytes:
 def _generate_subkeys(key: bytes) -> Tuple[bytes, bytes]:
     L = aes_encrypt(key, bytes(16))
     if L[0] & 0x80:
-        K1 = bytearray(_left_shift(L))
-        K1[-1] ^= _RB
-        K1 = bytes(K1)
+        k1_buf = bytearray(_left_shift(L))
+        k1_buf[-1] ^= _RB
+        k1: bytes = bytes(k1_buf)
     else:
-        K1 = _left_shift(L)
-    if K1[0] & 0x80:
-        K2 = bytearray(_left_shift(K1))
-        K2[-1] ^= _RB
-        K2 = bytes(K2)
+        k1 = _left_shift(L)
+
+    if k1[0] & 0x80:
+        k2_buf = bytearray(_left_shift(k1))
+        k2_buf[-1] ^= _RB
+        k2: bytes = bytes(k2_buf)
     else:
-        K2 = _left_shift(K1)
-    return K1, K2
+        k2 = _left_shift(k1)
+
+    return k1, k2
 
 
 def cmac(key: bytes, msg: bytes) -> bytes:

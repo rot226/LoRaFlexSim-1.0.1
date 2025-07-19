@@ -1,5 +1,11 @@
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 from .downlink_scheduler import DownlinkScheduler
+
+if TYPE_CHECKING:  # pragma: no cover - for type checking only
+    from .lorawan import LoRaWANFrame, JoinAccept
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +39,7 @@ class NetworkServer:
     def send_downlink(
         self,
         node,
-        payload: bytes | object = b"",
+        payload: bytes | LoRaWANFrame | JoinAccept = b"",
         confirmed: bool = False,
         adr_command: tuple | None = None,
         request_ack: bool = False,
@@ -53,17 +59,21 @@ class NetworkServer:
         if gw is None:
             return
         fctrl = 0x20 if request_ack else 0
+        frame: LoRaWANFrame | JoinAccept
         if isinstance(payload, JoinAccept):
             frame = payload
+        elif isinstance(payload, LoRaWANFrame):
+            frame = payload
         else:
+            raw = payload.to_bytes() if hasattr(payload, "to_bytes") else bytes(payload)
             frame = LoRaWANFrame(
                 mhdr=0x60,
                 fctrl=fctrl,
                 fcnt=node.fcnt_down,
-                payload=payload,
+                payload=raw,
                 confirmed=confirmed,
             )
-        if adr_command:
+        if adr_command and isinstance(frame, LoRaWANFrame):
             if len(adr_command) == 2:
                 sf, power = adr_command
                 chmask = node.chmask
@@ -73,7 +83,7 @@ class NetworkServer:
             dr = SF_TO_DR.get(sf, 5)
             p_idx = DBM_TO_TX_POWER_INDEX.get(int(power), 0)
             frame.payload = LinkADRReq(dr, p_idx, chmask, nbtrans).to_bytes()
-        if node.security_enabled and not isinstance(payload, JoinAccept):
+        if node.security_enabled and isinstance(frame, LoRaWANFrame):
             from .lorawan import encrypt_payload, compute_mic
 
             enc = encrypt_payload(node.appskey, node.devaddr, node.fcnt_down, 1, frame.payload)

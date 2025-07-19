@@ -12,6 +12,7 @@ from .lorawan import LoRaWANFrame, compute_rx1, compute_rx2
 from .downlink_scheduler import DownlinkScheduler
 from .omnet_model import OmnetModel
 from .omnet_phy import OmnetPHY
+from . import adr_standard_1, adr_2, adr_3
 
 __all__ = [
     "Node",
@@ -29,6 +30,9 @@ __all__ = [
     "DownlinkScheduler",
     "OmnetModel",
     "OmnetPHY",
+    "adr_standard_1",
+    "adr_2",
+    "adr_3",
 ]
 
 for name in __all__:
