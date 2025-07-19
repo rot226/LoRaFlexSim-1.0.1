@@ -144,25 +144,36 @@ def test_next_beacon_time_recover():
 
 
 def test_join_server_invalid_key_and_rejoin():
-    from VERSION_4.launcher.lorawan import JoinServer, JoinRequest, JoinAccept
+    from VERSION_4.launcher.lorawan import (
+        JoinServer,
+        JoinRequest,
+        JoinAccept,
+        compute_join_mic,
+        aes_encrypt,
+    )
 
     js = JoinServer(net_id=1)
-    app_key = bytes(16)
+    app_key = bytes(range(16))
     js.register(1, 2, app_key)
 
     req = JoinRequest(1, 2, 1)
+    req.mic = compute_join_mic(app_key, req.to_bytes())
     accept, nwk, app = js.handle_join(req)
     assert isinstance(accept, JoinAccept)
     assert len(nwk) == 16
     assert len(app) == 16
+    assert accept.mic == compute_join_mic(app_key, accept.to_bytes())
+    assert aes_encrypt(app_key, accept.encrypted)[:10] == accept.to_bytes()
 
     with pytest.raises(ValueError):
         js.handle_join(req)
 
     bad = JoinRequest(1, 3, 1)
+    bad.mic = compute_join_mic(app_key, bad.to_bytes())
     with pytest.raises(KeyError):
         js.handle_join(bad)
 
     req2 = JoinRequest(1, 2, 2)
+    req2.mic = compute_join_mic(app_key, req2.to_bytes())
     js.handle_join(req2)
 
