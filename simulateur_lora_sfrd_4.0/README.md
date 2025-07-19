@@ -125,6 +125,9 @@ official detection threshold, interference window and a ``flora`` propagation
   metrics with an official FLoRa export using `compare_with_sim`. FLoRa stores
   its results in `.sca` and `.vec` files. You may convert them to CSV with
   external tools if needed.
+Passing `--degrade` to the script will enable a very harsh channel to quickly
+lower the PDR by raising the noise, applying Rayleigh fading and extra path
+loss.
 
 An example configuration file named `examples/flora_full.ini` reproduces the
 official positions used by FLoRa. Load it with

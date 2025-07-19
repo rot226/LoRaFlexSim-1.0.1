@@ -19,7 +19,7 @@ NODE_POSITIONS = [
 GW_POSITION = (500.0, 500.0)
 
 
-def run_simulation(runs: int, seed: int | None = None, flora_csv: str | None = None):
+def run_simulation(runs: int, seed: int | None = None, flora_csv: str | None = None, degrade: bool = False):
     metrics = []
     for i in range(runs):
         sim = Simulator(
@@ -38,7 +38,7 @@ def run_simulation(runs: int, seed: int | None = None, flora_csv: str | None = N
             seed=(seed + i) if seed is not None else None,
         )
         # apply ADR 1 settings
-        adr1(sim)
+        adr1(sim, degrade_channel=degrade)
         # override positions
         gw = sim.gateways[0]
         gw.x, gw.y = GW_POSITION
@@ -68,8 +68,9 @@ def main():
     parser.add_argument("--runs", type=int, default=5, help="Number of runs")
     parser.add_argument("--seed", type=int, help="Base random seed")
     parser.add_argument("--flora-csv", type=str, help="Path to reference FLoRa CSV")
+    parser.add_argument("--degrade", action="store_true", help="Apply harsh channel settings")
     args = parser.parse_args()
-    run_simulation(args.runs, args.seed, args.flora_csv)
+    run_simulation(args.runs, args.seed, args.flora_csv, args.degrade)
 
 
 if __name__ == "__main__":

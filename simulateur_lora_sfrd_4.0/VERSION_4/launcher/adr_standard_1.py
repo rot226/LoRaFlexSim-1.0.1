@@ -2,10 +2,21 @@ from __future__ import annotations
 
 from .simulator import Simulator
 from . import server
+from .advanced_channel import AdvancedChannel
 
 
-def apply(sim: Simulator) -> None:
-    """Configure ADR variant adr_standard_1 (LoRaWAN defaults)."""
+def apply(sim: Simulator, *, degrade_channel: bool = False) -> None:
+    """Configure ADR variant ``adr_standard_1`` (LoRaWAN defaults).
+
+    Parameters
+    ----------
+    sim : Simulator
+        Instance to modify in-place.
+    degrade_channel : bool, optional
+        When ``True`` apply harsh propagation settings to drastically
+        reduce the Packet Delivery Ratio.  Only the ADR1 preset applies
+        these changes.
+    """
     Simulator.MARGIN_DB = 15.0
     server.MARGIN_DB = Simulator.MARGIN_DB
     sim.adr_node = False
@@ -19,3 +30,15 @@ def apply(sim: Simulator) -> None:
         node.adr_ack_cnt = 0
         node.adr_ack_limit = 64
         node.adr_ack_delay = 32
+
+    if degrade_channel:
+        for ch in sim.multichannel.channels:
+            base = ch.base if isinstance(ch, AdvancedChannel) else ch
+            base.interference_dB = max(base.interference_dB, 20.0)
+            base.fast_fading_std = max(base.fast_fading_std, 8.0)
+            base.path_loss_exp = max(base.path_loss_exp, 3.5)
+            base.detection_threshold_dBm = max(base.detection_threshold_dBm, -90.0)
+            if isinstance(ch, AdvancedChannel):
+                ch.fading = "rayleigh"
+                ch.weather_loss_dB_per_km = max(ch.weather_loss_dB_per_km, 1.0)
+        sim.detection_threshold_dBm = -90.0
