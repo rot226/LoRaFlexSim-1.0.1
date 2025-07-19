@@ -153,30 +153,24 @@ class NetworkServer:
                     max_snr = max(node.snr_history)
                     required = REQUIRED_SNR.get(node.sf, -20.0)
                     margin = max_snr - required - MARGIN_DB
-                    # Round away from zero to determine the number of 3 dB steps
-                    nstep = math.floor(abs(margin) / 3.0 + 0.5)
-                    if margin < 0:
-                        nstep = -nstep
+                    nstep = round(margin / 3.0)
 
                     sf = node.sf
                     power = node.tx_power
                     p_idx = DBM_TO_TX_POWER_INDEX.get(int(power), 0)
 
-                    while nstep > 0:
+                    if nstep > 0:
                         if sf > 7:
                             sf -= 1
                         elif p_idx < max(TX_POWER_INDEX_TO_DBM.keys()):
                             p_idx += 1
                             power = TX_POWER_INDEX_TO_DBM[p_idx]
-                        nstep -= 1
-
-                    while nstep < 0:
+                    elif nstep < 0:
                         if p_idx > 0:
                             p_idx -= 1
                             power = TX_POWER_INDEX_TO_DBM[p_idx]
                         elif sf < 12:
                             sf += 1
-                        nstep += 1
 
                     if sf != node.sf or power != node.tx_power:
                         self.send_downlink(node, adr_command=(sf, power, node.chmask, node.nb_trans))
