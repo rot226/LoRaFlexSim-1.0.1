@@ -382,8 +382,8 @@ encore de maturité :
   la dérive temporelle ne sont pas simulées.
 - La mobilité s'appuie sur des trajets aléatoires sans prise en compte
   d'obstacles ou de cartes géographiques.
-- Les aspects sécurité LoRaWAN (chiffrement complet, serveurs de jointure)
-  restent minimaux.
+- La sécurité LoRaWAN (chiffrement AES/MIC) est activée par défaut mais les
+  serveurs de jointure et la validation du chiffrement restent simplifiés.
 
 Les contributions sont les bienvenues pour lever ces limitations ou proposer de
 nouvelles idées.

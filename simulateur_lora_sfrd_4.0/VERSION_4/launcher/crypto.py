@@ -150,6 +150,68 @@ def aes_encrypt(key: bytes, data: bytes) -> bytes:
     return bytes(out)
 
 
+def _inv_sub_bytes(state: List[int]) -> None:
+    for i in range(16):
+        state[i] = _INV_SBOX[state[i]]
+
+
+def _inv_shift_rows(state: List[int]) -> None:
+    row1 = [state[1], state[5], state[9], state[13]]
+    row2 = [state[2], state[6], state[10], state[14]]
+    row3 = [state[3], state[7], state[11], state[15]]
+    row1 = row1[-1:] + row1[:-1]
+    row2 = row2[-2:] + row2[:-2]
+    row3 = row3[-3:] + row3[:-3]
+    state[1], state[5], state[9], state[13] = row1
+    state[2], state[6], state[10], state[14] = row2
+    state[3], state[7], state[11], state[15] = row3
+
+
+def _inv_mix_columns(state: List[int]) -> None:
+    for c in range(4):
+        a0 = state[4 * c]
+        a1 = state[4 * c + 1]
+        a2 = state[4 * c + 2]
+        a3 = state[4 * c + 3]
+        state[4 * c] = (
+            _mul(a0, 14) ^ _mul(a1, 11) ^ _mul(a2, 13) ^ _mul(a3, 9)
+        )
+        state[4 * c + 1] = (
+            _mul(a0, 9) ^ _mul(a1, 14) ^ _mul(a2, 11) ^ _mul(a3, 13)
+        )
+        state[4 * c + 2] = (
+            _mul(a0, 13) ^ _mul(a1, 9) ^ _mul(a2, 14) ^ _mul(a3, 11)
+        )
+        state[4 * c + 3] = (
+            _mul(a0, 11) ^ _mul(a1, 13) ^ _mul(a2, 9) ^ _mul(a3, 14)
+        )
+
+
+def _aes_decrypt_block(block: bytes, round_keys: List[List[int]]) -> bytes:
+    assert len(block) == 16
+    state = list(block)
+    _add_round_key(state, round_keys[-1])
+    for rk in reversed(round_keys[1:-1]):
+        _inv_shift_rows(state)
+        _inv_sub_bytes(state)
+        _add_round_key(state, rk)
+        _inv_mix_columns(state)
+    _inv_shift_rows(state)
+    _inv_sub_bytes(state)
+    _add_round_key(state, round_keys[0])
+    return bytes(state)
+
+
+def aes_decrypt(key: bytes, data: bytes) -> bytes:
+    """Decrypt ``data`` (multiple of 16 bytes) using AES-128 ECB."""
+    assert len(data) % 16 == 0
+    round_keys = _key_schedule(key)
+    out = bytearray()
+    for i in range(0, len(data), 16):
+        out += _aes_decrypt_block(data[i : i + 16], round_keys)
+    return bytes(out)
+
+
 # ---------------------------------------------------------------------------
 # CMAC (RFC 4493)
 # ---------------------------------------------------------------------------

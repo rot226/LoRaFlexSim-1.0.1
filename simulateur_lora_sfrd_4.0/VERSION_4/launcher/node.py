@@ -53,7 +53,7 @@ class Node:
         offset_correlation: float = 0.9,
         activated: bool = True,
         appkey: bytes | None = None,
-        security: bool = False,
+        security: bool = True,
     ):
         """
         Initialise le nœud avec ses paramètres de départ.
@@ -69,6 +69,7 @@ class Node:
             (``FLORA_PROFILE`` par défaut).
         :param join_eui: Identifiant de l'application pour OTAA.
         :param dev_eui: Identifiant unique du périphérique pour OTAA.
+        :param security: Active le chiffrement AES/MIC LoRaWAN (``True`` par défaut).
         """
         # Identité et paramètres initiaux
         self.id = node_id
@@ -136,8 +137,8 @@ class Node:
         self.join_eui = join_eui
         self.dev_eui = dev_eui if dev_eui is not None else node_id
         self.devnonce = 0
-        self.nwkskey = b""
-        self.appskey = b""
+        self.nwkskey = bytes(16) if activated else b""
+        self.appskey = bytes(16) if activated else b""
         self.fcnt_up = 0
         self.fcnt_down = 0
         self.class_type = class_type
@@ -421,7 +422,7 @@ class Node:
             from .lorawan import derive_session_keys, aes_encrypt
 
             if self.security_enabled and frame.encrypted is not None:
-                msg = aes_encrypt(self.appkey, frame.encrypted)
+                msg = aes_encrypt(self.appkey, frame.encrypted)[:10]
                 if compute_join_mic(self.appkey, msg) != frame.mic:
                     return
                 decoded = JoinAccept.from_bytes(msg)

@@ -294,6 +294,7 @@ concepts:
   drift or beacon loss handling.
 - Mobility relies on random Bezier paths without obstacles or terrain
   constraints.
-- Security aspects (join server, encryption validation) are kept minimal.
+- Basic LoRaWAN security (AES encryption and MIC) is enabled by default but join
+  server handling and encryption validation are kept minimal.
 
 Contributions are welcome to improve these areas or add missing features.
