@@ -8,12 +8,48 @@ from typing import Any
 import pandas as pd
 
 
-def load_flora_metrics(csv_path: str | Path) -> dict[str, Any]:
-    """Return metrics from a FLoRa CSV export.
+def _load_sca_file(path: Path) -> dict[str, Any]:
+    """Parse a minimal OMNeT++ .sca result file."""
+    metrics: dict[str, float] = {}
+    with open(path, "r") as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) >= 4 and parts[0] == "scalar":
+                name = parts[2]
+                try:
+                    value = float(parts[3])
+                except ValueError:
+                    continue
+                metrics[name] = metrics.get(name, 0.0) + value
 
-    The file is expected to contain at least the columns ``sent`` and ``received``
-    to compute the PDR as well as ``sfX`` columns describing the spreading factor
-    distribution.  Additional optional columns may be present:
+    total_sent = int(metrics.get("sent", 0))
+    total_recv = int(metrics.get("received", 0))
+    pdr = total_recv / total_sent if total_sent else 0.0
+    sf_hist = {int(k[2:]): int(v) for k, v in metrics.items() if k.startswith("sf")}
+    collisions = int(metrics.get("collisions", 0))
+    coll_dist = {
+        int(k.split("sf")[1]): int(v)
+        for k, v in metrics.items()
+        if k.startswith("collisions_sf")
+    }
+    return {
+        "PDR": pdr,
+        "sf_distribution": sf_hist,
+        "throughput_bps": float(metrics.get("throughput_bps", 0)),
+        "energy_J": float(metrics.get("energy_J", metrics.get("energy", 0))),
+        "collision_distribution": coll_dist,
+        "collisions": collisions,
+    }
+
+
+def load_flora_metrics(path: str | Path) -> dict[str, Any]:
+    """Return metrics from a FLoRa export.
+
+    The path can point to a CSV converted from the original ``.sca``/``.vec``
+    files produced by OMNeT++. The CSV is expected to contain at least the
+    columns ``sent`` and ``received`` to compute the PDR as well as ``sfX``
+    columns describing the spreading factor distribution. Additional optional
+    columns may be present:
 
     ``throughput_bps``
         Average throughput in bits per second.
@@ -24,7 +60,11 @@ def load_flora_metrics(csv_path: str | Path) -> dict[str, Any]:
     ``collisions_sfX``
         Number of collisions that occurred with spreading factor ``X``.
     """
-    df = pd.read_csv(csv_path)
+    path = Path(path)
+    if path.suffix.lower() == ".sca":
+        return _load_sca_file(path)
+
+    df = pd.read_csv(path)
     total_sent = int(df["sent"].sum()) if "sent" in df.columns else 0
     total_recv = int(df["received"].sum()) if "received" in df.columns else 0
     pdr = total_recv / total_sent if total_sent else 0.0
@@ -77,9 +117,18 @@ def compare_with_sim(sim_metrics: dict[str, Any], flora_csv: str | Path, *, pdr_
     return pdr_match and sf_match
 
 
-def load_flora_rx_stats(csv_path: str | Path) -> dict[str, Any]:
+def load_flora_rx_stats(path: str | Path) -> dict[str, Any]:
     """Load average RSSI/SNR and collisions from a FLoRa export."""
-    df = pd.read_csv(csv_path)
+    path = Path(path)
+    if path.suffix.lower() == ".sca":
+        data = _load_sca_file(path)
+        return {
+            "rssi": data.get("rssi", 0.0),
+            "snr": data.get("snr", 0.0),
+            "collisions": data.get("collisions", 0),
+        }
+
+    df = pd.read_csv(path)
     rssi = float(df["rssi"].mean()) if "rssi" in df.columns else 0.0
     snr = float(df["snr"].mean()) if "snr" in df.columns else 0.0
     collisions = int(df["collisions"].sum()) if "collisions" in df.columns else 0

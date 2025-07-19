@@ -121,15 +121,59 @@ python examples/run_flora_example.py --runs 5 --seed 123
 The script prints the Packet Delivery Ratio and spreading factor histogram for
 each run. ``Simulator`` now accepts ``flora_mode=True`` which enables the
 official detection threshold, interference window and a ``flora`` propagation
-profile. Pass the `--flora-csv <file>` option to automatically compare these
-metrics with an official FLoRa CSV export using `compare_with_sim`.
+  profile. Pass the `--flora-csv <file>` option to automatically compare these
+  metrics with an official FLoRa export using `compare_with_sim`. FLoRa stores
+  its results in `.sca` and `.vec` files. You may convert them to CSV with
+  external tools if needed.
 
 An example configuration file named `examples/flora_full.ini` reproduces the
 official positions used by FLoRa. Load it with
 ``Simulator(config_file="examples/flora_full.ini")`` to start from the exact
-same coordinates. Several CSV exports from the OMNeT++ model are also provided
-in `examples/` (`flora_full.csv`, `flora_collisions.csv`, etc.) to help check
-your results.
+  same coordinates. Several sample exports from the OMNeT++ model are also
+  provided in `examples/` (`flora_full.csv`, `flora_collisions.csv`, etc.) to
+  help check your results.
+
+Below is an example INI scenario that can be used with the FLoRa mode. It
+defines fixed node and gateway coordinates along with the ADR settings:
+
+```ini
+[General]
+network = flora.simulations.LoRaNetworkTest
+**.maxTransmissionDuration = 4s
+**.energyDetection = -110dBm
+cmdenv-output-file = cmd_env_log.txt
+**.vector-recording = true
+
+rng-class = "cMersenneTwister"
+**.loRaGW[*].numUdpApps = 1
+**.loRaGW[*].packetForwarder.localPort = 2000
+**.loRaGW[*].packetForwarder.destPort = 1000
+**.loRaGW[*].packetForwarder.destAddresses = "networkServer"
+**.loRaGW[*].packetForwarder.indexNumber = 1
+
+**.networkServer.numApps = 1
+**.networkServer.**.evaluateADRinServer = true
+**.networkServer.app[0].typename = "NetworkServerApp"
+**.networkServer.app[0].destAddresses = "loRaGW[0]"
+**.networkServer.app[0].destPort = 2000
+**.networkServer.app[0].localPort = 1000
+**.networkServer.app[0].adrMethod = ${"avg"}
+
+**.numberOfPacketsToSend = 80
+sim-time-limit = 1d
+repeat = 5
+**.timeToFirstPacket = exponential(100s)
+**.timeToNextPacket = exponential(100s)
+**.alohaChannelModel = true
+**.mobility = false
+
+**.loRaNodes[*].**.evaluateADRinNode = true
+**.loRaNodes[*].**initialLoRaBW = 125 kHz
+**.loRaNodes[*].**initialLoRaCR = 4
+**.loRaNodes[*].**initialLoRaSF = 12
+
+output-scalar-file = ../results/nouvo5-80-gw1-s${runnumber}.ini.sca
+```
 
 Any INI file must define ``[gateways]`` and ``[nodes]`` sections listing the
 coordinates (and optionally SF and power) of each entity.  The loader also
@@ -178,20 +222,21 @@ The tests compare RSSI and airtime calculations against theoretical values and c
 
 ### Cross-check with FLoRa
 
-The module `VERSION_4/launcher/compare_flora.py` reads CSV exports from
-the FLoRa simulator and extracts several metrics: Packet Delivery Ratio,
+  The module `VERSION_4/launcher/compare_flora.py` can read exports from
+  the FLoRa simulator (typically `.sca`/`.vec` files converted to CSV) and extracts several metrics: Packet Delivery Ratio,
 spreading factor histogram, energy consumption, throughput and packet
 collisions.  The test file `tests/test_flora_comparison.py` demonstrates
 how to compare these values with those returned by
 `Simulator.get_metrics` to validate the Python implementation against
 OMNeT++ runs.
-You can also supply a reference CSV to `examples/run_flora_example.py` via
-`--flora-csv` to perform this check outside the test suite.
+  You can also supply a reference CSV (converted from `.sca`/`.vec`) to
+  `examples/run_flora_example.py` via `--flora-csv` to perform this check outside
+  the test suite.
 
 ### Generating a FLoRa comparison report
 
-The helper `tools/compare_flora_report.py` compares a CSV exported from
-FLoRa with the results produced by `VERSION_4/run.py` and creates a short
+  The helper `tools/compare_flora_report.py` compares a FLoRa export
+  (after conversion to CSV) with the results produced by `VERSION_4/run.py` and creates a short
 report. It prints a table with the metrics from both sources and saves
 bar charts highlighting the differences:
 
@@ -204,14 +249,15 @@ the current directory.
 
 ### Calibration systématique avec FLoRa
 
-The script `tools/calibrate_flora.py` automates the search of channel
-parameters that best reproduce a reference export from FLoRa. It launches
-several runs with different propagation settings and reports the combination
-yielding the smallest PDR difference. From the repository root run:
+  The script `tools/calibrate_flora.py` automates the search of channel
+  parameters that best reproduce a reference export from FLoRa. The reference
+  data should come from FLoRa `.sca`/`.vec` results converted to CSV. It launches
+  several runs with different propagation settings and reports the combination
+  yielding the smallest PDR difference. From the repository root run:
 
-```bash
-python tools/calibrate_flora.py examples/flora_full.csv
-```
+  ```bash
+  python tools/calibrate_flora.py examples/flora_full.csv
+  ```
 
 The resulting parameters typically give a correspondence above **99 %** with
 FLoRa on the provided dataset. The calibration is also executed during the
