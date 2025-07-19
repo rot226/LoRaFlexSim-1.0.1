@@ -45,7 +45,10 @@ class Simulator:
     # Constantes ADR LoRaWAN standard
     REQUIRED_SNR = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
     MARGIN_DB = 15.0            # marge d'installation en dB (typiquement 15 dB)
-    PER_THRESHOLD = 0.1         # Seuil de Packet Error Rate pour déclencher ADR
+    # Ajustement pour réagir plus vite aux liaisons dégradées
+    # Une valeur plus basse améliore en général le PDR au prix de plus
+    # de transmissions et de réglages ADR plus fréquents
+    PER_THRESHOLD = 0.05        # Seuil de Packet Error Rate pour déclencher ADR
 
     def __init__(self, num_nodes: int = 10, num_gateways: int = 1, area_size: float = 1000.0,
                  transmission_mode: str = 'Random', packet_interval: float = 60.0,
