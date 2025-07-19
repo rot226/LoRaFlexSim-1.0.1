@@ -293,7 +293,7 @@ paramètre `fast_fading_std` afin de simuler un canal multipath et utiliser
 
 To reproduce FLoRa INI scenarios:
 1. Pass `flora_mode=True` when creating the `Simulator` (or enable **Mode FLoRa complet**). This applies the official `-110 dBm` detection threshold and a `5 s` interference window.
-2. Apply the ADR1 algorithm with `from VERSION_4.launcher.adr_standard_1 import apply as adr1` then `adr1(sim)`. This preset now mirrors the ADR logic of the original FLoRa server (SNR history, margin and multi‑step adjustments).
+2. Apply the ADR1 algorithm with `from VERSION_4.launcher.adr_standard_1 import apply as adr1` then `adr1(sim)`. This preset now mirrors the ADR logic of the original FLoRa server (SNR history, margin and multi‑step adjustments). Passing `degrade_channel=True` enables a harsh propagation profile to quickly lower the PDR (higher noise, Rayleigh fading, extra path loss).
 3. Provide the INI file path to `Simulator(config_file=...)` or use **Positions manuelles** to enter the coordinates manually.
 4. Fill in **Graine** to keep the exact placement across runs.
 5. Or run `python examples/run_flora_example.py` which combines these settings.
