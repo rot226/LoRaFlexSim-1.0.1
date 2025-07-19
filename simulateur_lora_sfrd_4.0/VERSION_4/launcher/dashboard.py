@@ -631,7 +631,8 @@ def setup_simulation(seed_offset: int = 0):
     real_time_duration_input.disabled = True
     start_button.disabled = True
     stop_button.disabled = False
-    fast_forward_button.disabled = False
+    # Enable fast forward only when a finite number of packets is defined
+    fast_forward_button.disabled = sim.packets_to_send <= 0
     pause_button.disabled = False
     pause_button.name = "Pause"
     pause_button.button_type = "primary"
