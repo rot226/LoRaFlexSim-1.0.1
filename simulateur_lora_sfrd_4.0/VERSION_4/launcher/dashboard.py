@@ -883,7 +883,10 @@ def fast_forward(event=None):
                 fast_forward_progress.value = 100
                 if not session_alive():
                     _cleanup_callbacks()
-                    on_stop(None)
+                    try:
+                        on_stop(None)
+                    finally:
+                        export_button.disabled = False
                     return
                 metrics = sim.get_metrics()
                 pdr_indicator.value = metrics["PDR"]
@@ -905,7 +908,10 @@ def fast_forward(event=None):
                 )
                 sf_hist_pane.object = sf_fig
                 update_map()
-                on_stop(None)
+                try:
+                    on_stop(None)
+                finally:
+                    export_button.disabled = False
                 global pause_prev_disabled
                 pause_button.disabled = pause_prev_disabled
 
@@ -913,7 +919,10 @@ def fast_forward(event=None):
                 doc.add_next_tick_callback(update_ui)
             else:
                 _cleanup_callbacks()
-                on_stop(None)
+                try:
+                    on_stop(None)
+                finally:
+                    export_button.disabled = False
 
         threading.Thread(target=run_and_update, daemon=True).start()
 

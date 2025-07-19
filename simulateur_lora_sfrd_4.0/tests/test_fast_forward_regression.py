@@ -66,3 +66,59 @@ def test_fast_forward_triggers_on_stop(monkeypatch):
 
     assert called
     assert dash.export_button.disabled is False
+
+
+def test_fast_forward_enables_export_button_when_on_stop_fails(monkeypatch):
+    """export_button should be enabled even if on_stop errors out."""
+
+    class DummySim:
+        def __init__(self):
+            self.running = True
+            self.event_queue = [1]
+            self.packets_to_send = 1
+            self.num_nodes = 1
+            self.packets_sent = 0
+
+        def step(self):
+            self.packets_sent += 1
+            self.event_queue.pop(0)
+
+        def get_metrics(self):
+            return {
+                "PDR": 1.0,
+                "collisions": 0,
+                "energy_J": 0.0,
+                "avg_delay_s": 0.0,
+                "throughput_bps": 0.0,
+                "retransmissions": 0,
+                "sf_distribution": {7: 1},
+            }
+
+        def get_events_dataframe(self):
+            return None
+
+    dash.sim = DummySim()
+    dash.export_button.disabled = True
+
+    def failing_on_stop(ev):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(dash, "on_stop", failing_on_stop)
+    monkeypatch.setattr(dash, "session_alive", lambda: False)
+
+    class DummyThread:
+        def __init__(self, target=None, daemon=None):
+            self._target = target
+
+        def start(self):
+            if self._target:
+                try:
+                    self._target()
+                except Exception:
+                    pass
+
+    monkeypatch.setattr(threading, "Thread", DummyThread)
+
+    dash.fast_forward()
+
+    assert dash.export_button.disabled is False
