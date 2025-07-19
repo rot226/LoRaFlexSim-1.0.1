@@ -168,7 +168,8 @@ ini_file_input = pn.widgets.FileInput(name="Fichier INI FLoRa", accept=".ini")
 # --- Boutons de contrôle ---
 start_button = pn.widgets.Button(name="Lancer la simulation", button_type="success")
 stop_button = pn.widgets.Button(name="Arrêter la simulation", button_type="warning", disabled=True)
-pause_button = pn.widgets.Button(name="Pause", button_type="primary", disabled=True)
+# Icône ajoutée pour mieux distinguer l'état du bouton Pause/Reprendre
+pause_button = pn.widgets.Button(name="⏸ Pause", button_type="primary", disabled=True)
 
 # --- Nouveau bouton d'export et message d'état ---
 export_button = pn.widgets.Button(name="Exporter résultats (dossier courant)", button_type="primary", disabled=True)
@@ -633,7 +634,7 @@ def setup_simulation(seed_offset: int = 0):
     stop_button.disabled = False
     fast_forward_button.disabled = False
     pause_button.disabled = False
-    pause_button.name = "Pause"
+    pause_button.name = "⏸ Pause"
     pause_button.button_type = "primary"
     paused = False
     export_button.disabled = True
@@ -753,7 +754,7 @@ def on_stop(event):
     stop_button.disabled = True
     fast_forward_button.disabled = True
     pause_button.disabled = True
-    pause_button.name = "Pause"
+    pause_button.name = "⏸ Pause"
     pause_button.button_type = "primary"
     paused = False
 
@@ -828,6 +829,9 @@ def fast_forward(event=None):
     global start_time, max_real_time, auto_fast_forward
     doc = pn.state.curdoc
     if sim and sim.running:
+        if paused:
+            export_message.object = "⚠️ Impossible d'accélérer pendant la pause."
+            return
         auto_fast_forward = True
         if sim.packets_to_send == 0:
             export_message.object = (
@@ -939,8 +943,9 @@ def on_pause(event=None):
         if start_time is not None:
             elapsed_time = time.time() - start_time
         start_time = None  # Freeze chrono while paused
-        pause_button.name = "Reprendre"
+        pause_button.name = "▶ Reprendre"
         pause_button.button_type = "success"
+        fast_forward_button.disabled = True
         paused = True
     else:
         # Resuming the simulation
@@ -950,8 +955,9 @@ def on_pause(event=None):
             sim_callback = pn.state.add_periodic_callback(step_simulation, period=100, timeout=None)
         if chrono_callback is None:
             chrono_callback = pn.state.add_periodic_callback(periodic_chrono_update, period=100, timeout=None)
-        pause_button.name = "Pause"
+        pause_button.name = "⏸ Pause"
         pause_button.button_type = "primary"
+        fast_forward_button.disabled = False
         paused = False
 
 
