@@ -1,6 +1,7 @@
 import os
 import sys
 import math
+import subprocess
 
 import panel as pn
 import plotly.graph_objects as go
@@ -810,7 +811,12 @@ def exporter_csv(event=None):
                 f"Métriques : <b>{metrics_path}</b><br>(Ouvre-les avec Excel ou pandas)"
             )
             try:
-                os.startfile(os.getcwd())
+                folder = os.getcwd()
+                if sys.platform.startswith("win"):
+                    os.startfile(folder)
+                else:
+                    opener = "open" if sys.platform == "darwin" else "xdg-open"
+                    subprocess.Popen([opener, folder])
             except Exception:
                 pass
         except Exception as e:
@@ -914,6 +920,7 @@ def fast_forward(event=None):
                     export_button.disabled = False
                 global pause_prev_disabled
                 pause_button.disabled = pause_prev_disabled
+                export_button.disabled = False
 
             if session_alive():
                 doc.add_next_tick_callback(update_ui)
