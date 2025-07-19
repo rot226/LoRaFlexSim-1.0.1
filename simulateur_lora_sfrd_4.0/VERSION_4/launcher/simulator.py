@@ -117,6 +117,8 @@ class Simulator:
         self.area_size = area_size
         self.transmission_mode = transmission_mode
         self.packet_interval = packet_interval
+        if interval_variation < 0 or interval_variation > 1:
+            raise ValueError("interval_variation must be between 0 and 1")
         self.interval_variation = interval_variation
         self.packets_to_send = packets_to_send
         self.adr_node = adr_node
