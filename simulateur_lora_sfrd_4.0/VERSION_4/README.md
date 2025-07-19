@@ -132,7 +132,8 @@ scénarios FLoRa. Voici la liste complète des options :
 - `transmission_mode` : `Random` (émissions Poisson) ou `Periodic`.
 - `packet_interval` : moyenne ou période fixe entre transmissions (s).
 - `interval_variation` : coefficient de jitter appliqué à l'intervalle
-  exponentiel pour renforcer l'aléa (valeur entre 0 et 1, 1 par défaut).
+  exponentiel pour renforcer l'aléa (valeur positive, 1 par défaut ; une
+  valeur supérieure augmente la dispersion).
 - `packets_to_send` : nombre de paquets émis **par nœud** avant arrêt (0 = infini).
 - `adr_node` / `adr_server` : active l'ADR côté nœud ou serveur.
 - `duty_cycle` : quota d'émission appliqué à chaque nœud (`None` pour désactiver).
@@ -295,7 +296,7 @@ paramètre `fast_fading_std` afin de simuler un canal multipath et utiliser
 
 To reproduce FLoRa INI scenarios:
 1. Pass `flora_mode=True` when creating the `Simulator` (or enable **Mode FLoRa complet**). This applies the official `-110 dBm` detection threshold and a `5 s` interference window.
-2. Apply the ADR1 algorithm with `from VERSION_4.launcher.adr_standard_1 import apply as adr1` then `adr1(sim)`. This preset now mirrors the ADR logic of the original FLoRa server (SNR history, margin and multi‑step adjustments). Passing `degrade_channel=True` enables a harsh propagation profile to quickly lower the PDR (higher noise, Rayleigh fading, extra path loss).
+2. Apply the ADR1 algorithm with `from VERSION_4.launcher.adr_standard_1 import apply as adr1` then `adr1(sim)`. This preset mirrors the ADR logic of the original FLoRa server (SNR history, margin and multi‑step adjustments). Using `degrade_channel=True` now applies even stronger propagation impairments to rapidly lower the PDR.
 3. Provide the INI file path to `Simulator(config_file=...)` or use **Positions manuelles** to enter the coordinates manually.
 4. Fill in **Graine** to keep the exact placement across runs.
 5. Or run `python examples/run_flora_example.py` which combines these settings.

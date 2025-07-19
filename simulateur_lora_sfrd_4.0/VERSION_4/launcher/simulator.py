@@ -75,7 +75,8 @@ class Simulator:
         :param packet_interval: Intervalle moyen entre transmissions (si Random, moyenne en s; si Periodic, période fixe en s).
         :param interval_variation: Jitter relatif appliqué à chaque intervalle
             exponentiel. Une valeur de ``1`` applique un facteur aléatoire
-            compris entre 0 et 2 pour maximiser la variabilité.
+            compris entre 0 et 2 pour maximiser la variabilité. Des valeurs
+            supérieures accentuent encore la dispersion.
         :param packets_to_send: Nombre de paquets à émettre **par nœud** avant
             d'arrêter la simulation (0 = infini).
         :param adr_node: Activation de l'ADR côté nœud.
@@ -117,8 +118,8 @@ class Simulator:
         self.area_size = area_size
         self.transmission_mode = transmission_mode
         self.packet_interval = packet_interval
-        if interval_variation < 0 or interval_variation > 1:
-            raise ValueError("interval_variation must be between 0 and 1")
+        if interval_variation < 0 or interval_variation > 3:
+            raise ValueError("interval_variation must be between 0 and 3")
         self.interval_variation = interval_variation
         self.packets_to_send = packets_to_send
         self.adr_node = adr_node
@@ -316,9 +317,9 @@ class Simulator:
         """Retourne un délai tiré de la loi exponentielle avec jitter."""
         interval = random.expovariate(1.0 / self.packet_interval)
         if self.interval_variation > 0.0:
-            factor = random.uniform(
-                1.0 - self.interval_variation, 1.0 + self.interval_variation
-            )
+            low = max(0.0, 1.0 - self.interval_variation)
+            high = 1.0 + self.interval_variation
+            factor = random.uniform(low, high)
             interval *= factor
         return interval
 
