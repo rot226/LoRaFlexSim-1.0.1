@@ -1,0 +1,202 @@
+"""Minimal AES and CMAC algorithms in pure Python.
+
+This module provides AES-128 ECB encryption and the CMAC
+algorithm used by LoRaWAN for MIC computation. The code is
+intentionally straightforward and avoids any external
+dependencies so it can run on restricted environments.
+"""
+
+from __future__ import annotations
+
+from typing import List, Tuple
+
+# ---------------------------------------------------------------------------
+# Helper functions for operations in GF(2^8)
+# ---------------------------------------------------------------------------
+
+def _xtime(a: int) -> int:
+    a <<= 1
+    if a & 0x100:
+        a ^= 0x11B
+    return a & 0xFF
+
+
+def _mul(a: int, b: int) -> int:
+    res = 0
+    for _ in range(8):
+        if b & 1:
+            res ^= a
+        a = _xtime(a)
+        b >>= 1
+    return res & 0xFF
+
+
+def _gf_inv(a: int) -> int:
+    if a == 0:
+        return 0
+    # Compute a^(254) in GF(2^8)
+    r = 1
+    for _ in range(254):
+        r = _mul(r, a)
+    return r
+
+
+def _generate_sbox() -> Tuple[list[int], list[int]]:
+    sbox = [0] * 256
+    inv = [0] * 256
+    for i in range(256):
+        x = _gf_inv(i)
+        y = x
+        for _ in range(1, 5):
+            x = ((x << 1) | (x >> 7)) & 0xFF
+            y ^= x
+        y ^= 0x63
+        sbox[i] = y
+        inv[y] = i
+    return sbox, inv
+
+
+_SBOX, _INV_SBOX = _generate_sbox()
+
+# Round constants
+_RCON = [
+    0x00,
+    0x01,
+    0x02,
+    0x04,
+    0x08,
+    0x10,
+    0x20,
+    0x40,
+    0x80,
+    0x1B,
+    0x36,
+]
+
+# ---------------------------------------------------------------------------
+# AES key schedule and encryption
+# ---------------------------------------------------------------------------
+
+def _sub_word(word: List[int]) -> List[int]:
+    return [_SBOX[b] for b in word]
+
+
+def _rot_word(word: List[int]) -> List[int]:
+    return word[1:] + word[:1]
+
+
+def _key_schedule(key: bytes) -> List[List[int]]:
+    assert len(key) == 16
+    words = [list(key[i : i + 4]) for i in range(0, 16, 4)]
+    for i in range(4, 44):
+        temp = words[i - 1]
+        if i % 4 == 0:
+            temp = _sub_word(_rot_word(temp))
+            temp[0] ^= _RCON[i // 4]
+        words.append([a ^ b for a, b in zip(words[i - 4], temp)])
+    return [sum(words[i : i + 4], []) for i in range(0, 44, 4)]
+
+
+def _add_round_key(state: List[int], round_key: List[int]) -> None:
+    for i in range(16):
+        state[i] ^= round_key[i]
+
+
+def _sub_bytes(state: List[int]) -> None:
+    for i in range(16):
+        state[i] = _SBOX[state[i]]
+
+
+def _shift_rows(state: List[int]) -> None:
+    state[1], state[5], state[9], state[13] = state[5], state[9], state[13], state[1]
+    state[2], state[6], state[10], state[14] = state[10], state[14], state[2], state[6]
+    state[3], state[7], state[11], state[15] = state[15], state[3], state[7], state[11]
+
+
+def _mix_columns(state: List[int]) -> None:
+    for c in range(4):
+        a0 = state[4 * c]
+        a1 = state[4 * c + 1]
+        a2 = state[4 * c + 2]
+        a3 = state[4 * c + 3]
+        state[4 * c] = _mul(a0, 2) ^ _mul(a1, 3) ^ a2 ^ a3
+        state[4 * c + 1] = a0 ^ _mul(a1, 2) ^ _mul(a2, 3) ^ a3
+        state[4 * c + 2] = a0 ^ a1 ^ _mul(a2, 2) ^ _mul(a3, 3)
+        state[4 * c + 3] = _mul(a0, 3) ^ a1 ^ a2 ^ _mul(a3, 2)
+
+
+def _aes_encrypt_block(block: bytes, round_keys: List[List[int]]) -> bytes:
+    assert len(block) == 16
+    state = list(block)
+    _add_round_key(state, round_keys[0])
+    for rk in round_keys[1:-1]:
+        _sub_bytes(state)
+        _shift_rows(state)
+        _mix_columns(state)
+        _add_round_key(state, rk)
+    _sub_bytes(state)
+    _shift_rows(state)
+    _add_round_key(state, round_keys[-1])
+    return bytes(state)
+
+
+def aes_encrypt(key: bytes, data: bytes) -> bytes:
+    """Encrypt ``data`` (multiple of 16 bytes) using AES-128 ECB."""
+    assert len(data) % 16 == 0
+    round_keys = _key_schedule(key)
+    out = bytearray()
+    for i in range(0, len(data), 16):
+        out += _aes_encrypt_block(data[i : i + 16], round_keys)
+    return bytes(out)
+
+
+# ---------------------------------------------------------------------------
+# CMAC (RFC 4493)
+# ---------------------------------------------------------------------------
+
+_RB = 0x87
+
+
+def _left_shift(b: bytes) -> bytes:
+    n = int.from_bytes(b, "big") << 1
+    n &= (1 << (len(b) * 8)) - 1
+    return n.to_bytes(len(b), "big")
+
+
+def _generate_subkeys(key: bytes) -> Tuple[bytes, bytes]:
+    L = aes_encrypt(key, bytes(16))
+    if L[0] & 0x80:
+        K1 = bytearray(_left_shift(L))
+        K1[-1] ^= _RB
+        K1 = bytes(K1)
+    else:
+        K1 = _left_shift(L)
+    if K1[0] & 0x80:
+        K2 = bytearray(_left_shift(K1))
+        K2[-1] ^= _RB
+        K2 = bytes(K2)
+    else:
+        K2 = _left_shift(K1)
+    return K1, K2
+
+
+def cmac(key: bytes, msg: bytes) -> bytes:
+    K1, K2 = _generate_subkeys(key)
+    n = (len(msg) + 15) // 16
+    if n == 0:
+        n = 1
+    complete = len(msg) % 16 == 0
+    last = msg[(n - 1) * 16 :]
+    if complete:
+        last = bytes(x ^ y for x, y in zip(last, K1))
+    else:
+        padded = last + b"\x80" + bytes(15 - len(last))
+        last = bytes(x ^ y for x, y in zip(padded, K2))
+    C = bytes(16)
+    round_keys = _key_schedule(key)
+    for i in range(n - 1):
+        blk = msg[i * 16 : i * 16 + 16]
+        C = _aes_encrypt_block(bytes(x ^ y for x, y in zip(C, blk)), round_keys)
+    C = _aes_encrypt_block(bytes(x ^ y for x, y in zip(C, last)), round_keys)
+    return C
+
