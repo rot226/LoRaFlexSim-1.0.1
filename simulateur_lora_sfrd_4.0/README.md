@@ -175,7 +175,7 @@ repeat = 5
 **.loRaNodes[*].**initialLoRaCR = 4
 **.loRaNodes[*].**initialLoRaSF = 12
 
-output-scalar-file = ../results/nouvo5-80-gw1-s${runnumber}.ini.sca
+output-scalar-file = ../results/novo5-80-gw1-s${runnumber}.ini.sca
 ```
 
 Any INI file must define ``[gateways]`` and ``[nodes]`` sections listing the
