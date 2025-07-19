@@ -2,6 +2,7 @@
 import math
 
 from .energy_profiles import EnergyProfile, FLORA_PROFILE
+from .channel import Channel
 
 # Default energy profile used by all nodes (based on the FLoRa model)
 DEFAULT_ENERGY_PROFILE = FLORA_PROFILE
@@ -79,7 +80,9 @@ class Node:
         self.initial_tx_power = tx_power
         self.tx_power = tx_power
         # Canal radio attribué (peut être modifié par le simulateur)
-        self.channel = channel
+        # Utiliser un canal par défaut si aucun n'est fourni pour éviter
+        # des erreurs lors des calculs d'airtime ou de RSSI.
+        self.channel = channel or Channel()
         # Offsets de fréquence et de synchronisation (corrélés dans le temps)
         from .advanced_channel import _CorrelatedValue
         self._freq_offset = _CorrelatedValue(
