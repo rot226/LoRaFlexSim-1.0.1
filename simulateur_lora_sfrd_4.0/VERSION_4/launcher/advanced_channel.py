@@ -310,5 +310,5 @@ class AdvancedChannel:
             symbol_time = 1.0 / bw
         time_factor = abs(sync_offset_s) / symbol_time
         if freq_factor >= 1.0 and time_factor >= 1.0:
-            return 0.0
+            return float("inf")
         return 10 * math.log10(1.0 + freq_factor ** 2 + time_factor ** 2)
