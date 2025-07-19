@@ -9,6 +9,8 @@ class LoRaWANFrame:
     fcnt: int
     payload: bytes
     confirmed: bool = False
+    mic: bytes = b""
+    encrypted_payload: bytes | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -586,6 +588,7 @@ class JoinRequest:
     join_eui: int
     dev_eui: int
     dev_nonce: int
+    mic: bytes = b""
 
     def to_bytes(self) -> bytes:
         return (
@@ -611,6 +614,8 @@ class JoinAccept:
     app_nonce: int
     net_id: int
     dev_addr: int
+    mic: bytes = b""
+    encrypted: bytes | None = None
 
     def to_bytes(self) -> bytes:
         return (
@@ -698,18 +703,75 @@ def next_ping_slot_time(
     return first_slot + slots * interval
 
 
-def derive_session_keys(app_key: bytes, dev_nonce: int, app_nonce: int, net_id: int) -> tuple[bytes, bytes]:
-    """Derive session keys in a simplified manner."""
-    import hashlib
+# ---------------------------------------------------------------------------
+# LoRaWAN security helpers (AES encryption and MIC)
+# ---------------------------------------------------------------------------
+from .crypto import aes_encrypt, cmac
 
-    data = (
-        app_key
-        + dev_nonce.to_bytes(2, "little")
-        + app_nonce.to_bytes(3, "little")
-        + net_id.to_bytes(3, "little")
+
+def encrypt_payload(
+    app_skey: bytes,
+    devaddr: int,
+    fcnt: int,
+    direction: int,
+    payload: bytes,
+) -> bytes:
+    """Encrypt ``payload`` using the LoRaWAN payload encryption scheme."""
+    blocks = []
+    for i in range(1, (len(payload) + 15) // 16 + 1):
+        a = (
+            bytes([0x01, 0x00, 0x00, 0x00, 0x00])
+            + bytes([direction & 0x01])
+            + devaddr.to_bytes(4, "little")
+            + fcnt.to_bytes(4, "little")
+            + bytes([0x00, i])
+        )
+        s = aes_encrypt(app_skey, a)
+        start = (i - 1) * 16
+        block = payload[start : start + 16]
+        blocks.append(bytes(x ^ y for x, y in zip(block, s)))
+    return b"".join(blocks)[: len(payload)]
+
+
+def compute_mic(
+    nwk_skey: bytes,
+    devaddr: int,
+    fcnt: int,
+    direction: int,
+    msg: bytes,
+) -> bytes:
+    """Compute MIC of ``msg`` using ``nwk_skey``."""
+    b0 = (
+        bytes([0x49, 0x00, 0x00, 0x00, 0x00])
+        + bytes([direction & 0x01])
+        + devaddr.to_bytes(4, "little")
+        + fcnt.to_bytes(4, "little")
+        + bytes([0x00, len(msg)])
     )
-    digest = hashlib.sha256(data).digest()
-    return digest[:16], digest[16:32]
+    mac = cmac(nwk_skey, b0 + msg)
+    return mac[:4]
+
+
+def compute_join_mic(app_key: bytes, msg: bytes) -> bytes:
+    """Compute MIC for join request/accept messages."""
+    return cmac(app_key, msg)[:4]
+
+
+def derive_session_keys(app_key: bytes, dev_nonce: int, app_nonce: int, net_id: int) -> tuple[bytes, bytes]:
+    """Derive NwkSKey and AppSKey following the LoRaWAN 1.0.x specification."""
+    def _derive(k: int) -> bytes:
+        return aes_encrypt(
+            app_key,
+            bytes([k])
+            + app_nonce.to_bytes(3, "little")
+            + net_id.to_bytes(3, "little")
+            + dev_nonce.to_bytes(2, "little")
+            + bytes(7),
+        )
+
+    nwk_skey = _derive(0x01)
+    app_skey = _derive(0x02)
+    return nwk_skey, app_skey
 
 
 @dataclass

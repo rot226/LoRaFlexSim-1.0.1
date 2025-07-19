@@ -63,6 +63,12 @@ class NetworkServer:
                 payload=payload,
                 confirmed=confirmed,
             )
+        if node.security_enabled and not isinstance(payload, JoinAccept):
+            from .lorawan import encrypt_payload, compute_mic
+
+            enc = encrypt_payload(node.appskey, node.devaddr, node.fcnt_down, 1, frame.payload)
+            frame.encrypted_payload = enc
+            frame.mic = compute_mic(node.nwkskey, node.devaddr, node.fcnt_down, 1, enc)
         if adr_command:
             if len(adr_command) == 2:
                 sf, power = adr_command
@@ -105,6 +111,12 @@ class NetworkServer:
         nwk_skey, app_skey = self._derive_keys(node.appkey, devnonce, appnonce)
         # Store derived keys server-side but send only join parameters
         frame = JoinAccept(appnonce, self.net_id, devaddr)
+        if node.security_enabled:
+            from .lorawan import compute_join_mic, aes_encrypt
+
+            msg = frame.to_bytes()
+            frame.encrypted = aes_encrypt(node.appkey, msg)
+            frame.mic = compute_join_mic(node.appkey, msg)
         node.nwkskey = nwk_skey
         node.appskey = app_skey
         self.send_downlink(node, frame, gateway=gateway)

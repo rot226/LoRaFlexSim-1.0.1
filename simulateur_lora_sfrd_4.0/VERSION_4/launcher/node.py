@@ -53,6 +53,7 @@ class Node:
         offset_correlation: float = 0.9,
         activated: bool = True,
         appkey: bytes | None = None,
+        security: bool = False,
     ):
         """
         Initialise le nœud avec ses paramètres de départ.
@@ -143,6 +144,7 @@ class Node:
         self.awaiting_ack = False
         self.pending_mac_cmd = None
         self.need_downlink_ack = False
+        self.security_enabled = security
 
         # Parameters configured by MAC commands
         self.max_duty_cycle = 0
@@ -342,6 +344,11 @@ class Node:
 
         if not self.activated:
             req = JoinRequest(self.join_eui, self.dev_eui, self.devnonce)
+            if self.security_enabled:
+                from .lorawan import compute_join_mic
+
+                msg = req.to_bytes()
+                req.mic = compute_join_mic(self.appkey, msg)
             self.devnonce = (self.devnonce + 1) & 0xFFFF
             return req
 
@@ -357,8 +364,18 @@ class Node:
                 fctrl |= 0x40
         self.last_adr_ack_req = bool(fctrl & 0x40)
         frame = LoRaWANFrame(
-            mhdr=mhdr, fctrl=fctrl, fcnt=self.fcnt_up, payload=payload, confirmed=confirmed
+            mhdr=mhdr,
+            fctrl=fctrl,
+            fcnt=self.fcnt_up,
+            payload=payload,
+            confirmed=confirmed,
         )
+        if self.security_enabled:
+            from .lorawan import encrypt_payload, compute_mic
+
+            enc = encrypt_payload(self.appskey, self.devaddr, self.fcnt_up, 0, payload)
+            frame.encrypted_payload = enc
+            frame.mic = compute_mic(self.nwkskey, self.devaddr, self.fcnt_up, 0, enc)
         self.fcnt_up += 1
         if self.adr:
             self.adr_ack_cnt += 1
@@ -395,14 +412,24 @@ class Node:
             DR_TO_SF,
             TX_POWER_INDEX_TO_DBM,
             JoinAccept,
+            encrypt_payload,
+            compute_mic,
+            compute_join_mic,
         )
 
         if isinstance(frame, JoinAccept):
-            from .lorawan import derive_session_keys
+            from .lorawan import derive_session_keys, aes_encrypt
 
-            self.devaddr = frame.dev_addr
+            if self.security_enabled and frame.encrypted is not None:
+                msg = aes_encrypt(self.appkey, frame.encrypted)
+                if compute_join_mic(self.appkey, msg) != frame.mic:
+                    return
+                decoded = JoinAccept.from_bytes(msg)
+            else:
+                decoded = frame
+            self.devaddr = decoded.dev_addr
             self.nwkskey, self.appskey = derive_session_keys(
-                self.appkey, (self.devnonce - 1) & 0xFFFF, frame.app_nonce, frame.net_id
+                self.appkey, (self.devnonce - 1) & 0xFFFF, decoded.app_nonce, decoded.net_id
             )
             self.activated = True
             self.downlink_pending = max(0, self.downlink_pending - 1)
@@ -421,11 +448,22 @@ class Node:
             self.need_downlink_ack = True
 
         self.downlink_pending = max(0, self.downlink_pending - 1)
+        payload = frame.payload
+        if self.security_enabled and getattr(frame, "encrypted_payload", None) is not None:
+            if compute_mic(self.nwkskey, self.devaddr, frame.fcnt, 1, frame.encrypted_payload) != frame.mic:
+                return
+            payload = encrypt_payload(
+                self.appskey,
+                self.devaddr,
+                frame.fcnt,
+                1,
+                frame.encrypted_payload,
+            )
 
-        if isinstance(frame.payload, bytes):
-            if len(frame.payload) >= 5 and frame.payload[0] == 0x03:
+        if isinstance(payload, bytes):
+            if len(payload) >= 5 and payload[0] == 0x03:
                 try:
-                    req = LinkADRReq.from_bytes(frame.payload[:5])
+                    req = LinkADRReq.from_bytes(payload[:5])
                     self.sf = DR_TO_SF.get(req.datarate, self.sf)
                     self.tx_power = TX_POWER_INDEX_TO_DBM.get(req.tx_power, self.tx_power)
                     self.nb_trans = max(1, req.redundancy & 0x0F)
@@ -434,168 +472,168 @@ class Node:
                     self.pending_mac_cmd = LinkADRAns().to_bytes()
                 except Exception:
                     pass
-            elif frame.payload == LinkCheckReq().to_bytes():
+            elif payload == LinkCheckReq().to_bytes():
                 self.pending_mac_cmd = LinkCheckAns(margin=255, gw_cnt=1).to_bytes()
-            elif frame.payload == DeviceTimeReq().to_bytes():
+            elif payload == DeviceTimeReq().to_bytes():
                 self.pending_mac_cmd = DeviceTimeAns(int(self.fcnt_up)).to_bytes()
-            elif len(frame.payload) >= 2 and frame.payload[0] == 0x04:
+            elif len(payload) >= 2 and payload[0] == 0x04:
                 try:
                     from .lorawan import DutyCycleReq
 
-                    req = DutyCycleReq.from_bytes(frame.payload[:2])
+                    req = DutyCycleReq.from_bytes(payload[:2])
                     self.max_duty_cycle = req.max_duty_cycle
                 except Exception:
                     pass
-            elif len(frame.payload) >= 5 and frame.payload[0] == 0x05:
+            elif len(payload) >= 5 and payload[0] == 0x05:
                 try:
                     from .lorawan import RXParamSetupReq, RXParamSetupAns
 
-                    req = RXParamSetupReq.from_bytes(frame.payload[:5])
+                    req = RXParamSetupReq.from_bytes(payload[:5])
                     self.rx1_dr_offset = req.rx1_dr_offset
                     self.rx2_datarate = req.rx2_datarate
                     self.rx2_frequency = req.frequency
                     self.pending_mac_cmd = RXParamSetupAns().to_bytes()
                 except Exception:
                     pass
-            elif len(frame.payload) >= 2 and frame.payload[0] == 0x08:
+            elif len(payload) >= 2 and payload[0] == 0x08:
                 try:
                     from .lorawan import RXTimingSetupReq
 
-                    req = RXTimingSetupReq.from_bytes(frame.payload[:2])
+                    req = RXTimingSetupReq.from_bytes(payload[:2])
                     self.rx_delay = req.delay
                 except Exception:
                     pass
-            elif len(frame.payload) >= 2 and frame.payload[0] == 0x0B:
+            elif len(payload) >= 2 and payload[0] == 0x0B:
                 try:
                     from .lorawan import RekeyInd, RekeyConf
 
-                    ind = RekeyInd.from_bytes(frame.payload[:2])
+                    ind = RekeyInd.from_bytes(payload[:2])
                     self.rekey_key_type = ind.key_type
                     self.pending_mac_cmd = RekeyConf(ind.key_type).to_bytes()
                 except Exception:
                     pass
-            elif len(frame.payload) >= 2 and frame.payload[0] == 0x0C:
+            elif len(payload) >= 2 and payload[0] == 0x0C:
                 try:
                     from .lorawan import ADRParamSetupReq, ADRParamSetupAns
 
-                    req = ADRParamSetupReq.from_bytes(frame.payload[:2])
+                    req = ADRParamSetupReq.from_bytes(payload[:2])
                     self.adr_ack_limit = req.adr_ack_limit
                     self.adr_ack_delay = req.adr_ack_delay
                     self.pending_mac_cmd = ADRParamSetupAns().to_bytes()
                 except Exception:
                     pass
-            elif len(frame.payload) >= 2 and frame.payload[0] == 0x09:
+            elif len(payload) >= 2 and payload[0] == 0x09:
                 try:
                     from .lorawan import TxParamSetupReq
 
-                    req = TxParamSetupReq.from_bytes(frame.payload[:2])
+                    req = TxParamSetupReq.from_bytes(payload[:2])
                     self.eirp = req.eirp
                     self.dwell_time = req.dwell_time
                 except Exception:
                     pass
-            elif len(frame.payload) >= 3 and frame.payload[0] == 0x0E:
+            elif len(payload) >= 3 and payload[0] == 0x0E:
                 try:
                     from .lorawan import ForceRejoinReq
 
-                    req = ForceRejoinReq.from_bytes(frame.payload[:3])
+                    req = ForceRejoinReq.from_bytes(payload[:3])
                     self.force_rejoin_period = req.period
                     self.force_rejoin_type = req.rejoin_type
                 except Exception:
                     pass
-            elif len(frame.payload) >= 2 and frame.payload[0] == 0x0F:
+            elif len(payload) >= 2 and payload[0] == 0x0F:
                 try:
                     from .lorawan import RejoinParamSetupReq, RejoinParamSetupAns
 
-                    req = RejoinParamSetupReq.from_bytes(frame.payload[:2])
+                    req = RejoinParamSetupReq.from_bytes(payload[:2])
                     self.rejoin_time_n = req.max_time_n
                     self.rejoin_count_n = req.max_count_n
                     self.pending_mac_cmd = RejoinParamSetupAns().to_bytes()
                 except Exception:
                     pass
-            elif len(frame.payload) >= 5 and frame.payload[0] == 0x0A:
+            elif len(payload) >= 5 and payload[0] == 0x0A:
                 try:
                     from .lorawan import DlChannelReq, DlChannelAns
 
-                    req = DlChannelReq.from_bytes(frame.payload[:5])
+                    req = DlChannelReq.from_bytes(payload[:5])
                     self.dl_channels[req.ch_index] = req.frequency
                     self.pending_mac_cmd = DlChannelAns().to_bytes()
                 except Exception:
                     pass
-            elif frame.payload == DevStatusReq().to_bytes():
+            elif payload == DevStatusReq().to_bytes():
                 lvl = int(self.battery_level * 255)
                 margin = int(self.last_snr) if self.last_snr is not None else 0
                 self.pending_mac_cmd = DevStatusAns(battery=lvl, margin=margin).to_bytes()
-            elif len(frame.payload) >= 6 and frame.payload[0] == 0x07:
+            elif len(payload) >= 6 and payload[0] == 0x07:
                 try:
                     from .lorawan import NewChannelReq, NewChannelAns
 
-                    req = NewChannelReq.from_bytes(frame.payload[:6])
+                    req = NewChannelReq.from_bytes(payload[:6])
                     self.dl_channels[req.ch_index] = req.frequency
                     self.pending_mac_cmd = NewChannelAns().to_bytes()
                 except Exception:
                     pass
-            elif len(frame.payload) >= 5 and frame.payload[0] == 0x11:
+            elif len(payload) >= 5 and payload[0] == 0x11:
                 try:
                     from .lorawan import PingSlotChannelReq, PingSlotChannelAns
 
-                    req = PingSlotChannelReq.from_bytes(frame.payload[:5])
+                    req = PingSlotChannelReq.from_bytes(payload[:5])
                     self.ping_slot_frequency = req.frequency
                     self.ping_slot_dr = req.dr
                     self.pending_mac_cmd = PingSlotChannelAns().to_bytes()
                 except Exception:
                     pass
-            elif len(frame.payload) >= 2 and frame.payload[0] == 0x10:
+            elif len(payload) >= 2 and payload[0] == 0x10:
                 try:
                     from .lorawan import PingSlotInfoReq, PingSlotInfoAns
 
-                    req = PingSlotInfoReq.from_bytes(frame.payload[:2])
+                    req = PingSlotInfoReq.from_bytes(payload[:2])
                     self.ping_slot_periodicity = req.periodicity
                     self.pending_mac_cmd = PingSlotInfoAns().to_bytes()
                 except Exception:
                     pass
-            elif len(frame.payload) >= 4 and frame.payload[0] == 0x13:
+            elif len(payload) >= 4 and payload[0] == 0x13:
                 try:
                     from .lorawan import BeaconFreqReq, BeaconFreqAns
 
-                    req = BeaconFreqReq.from_bytes(frame.payload[:4])
+                    req = BeaconFreqReq.from_bytes(payload[:4])
                     self.beacon_frequency = req.frequency
                     self.pending_mac_cmd = BeaconFreqAns().to_bytes()
                 except Exception:
                     pass
-            elif len(frame.payload) >= 1 and frame.payload[0] == 0x12:
+            elif len(payload) >= 1 and payload[0] == 0x12:
                 try:
                     from .lorawan import BeaconTimingReq, BeaconTimingAns
 
-                    if len(frame.payload) >= 4:
-                        ans = BeaconTimingAns.from_bytes(frame.payload[:4])
+                    if len(payload) >= 4:
+                        ans = BeaconTimingAns.from_bytes(payload[:4])
                         self.beacon_delay = ans.delay
                         self.beacon_channel = ans.channel
                     else:
-                        BeaconTimingReq.from_bytes(frame.payload[:1])
+                        BeaconTimingReq.from_bytes(payload[:1])
                     self.pending_mac_cmd = BeaconTimingAns(0, 0).to_bytes()
                 except Exception:
                     pass
-            elif len(frame.payload) >= 2 and frame.payload[0] == 0x20:
+            elif len(payload) >= 2 and payload[0] == 0x20:
                 try:
                     from .lorawan import DeviceModeInd, DeviceModeConf
 
-                    req = DeviceModeInd.from_bytes(frame.payload[:2])
+                    req = DeviceModeInd.from_bytes(payload[:2])
                     self.class_type = req.class_mode
                     self.pending_mac_cmd = DeviceModeConf(req.class_mode).to_bytes()
                 except Exception:
                     pass
-            elif len(frame.payload) >= 2 and frame.payload[0] == 0x01:
+            elif len(payload) >= 2 and payload[0] == 0x01:
                 try:
                     from .lorawan import ResetConf, ResetInd
 
-                    conf = ResetConf.from_bytes(frame.payload[:2])
+                    conf = ResetConf.from_bytes(payload[:2])
                     self.lorawan_minor = conf.minor
                     self.pending_mac_cmd = ResetInd(conf.minor).to_bytes()
                 except Exception:
                     pass
-            elif frame.payload.startswith(b"ADR:"):
+            elif payload.startswith(b"ADR:"):
                 try:
-                    _, sf_str, pwr_str = frame.payload.decode().split(":")
+                    _, sf_str, pwr_str = payload.decode().split(":")
                     self.sf = int(sf_str)
                     self.tx_power = float(pwr_str)
                 except Exception:
