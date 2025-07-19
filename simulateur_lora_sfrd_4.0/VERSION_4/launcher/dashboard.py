@@ -93,7 +93,7 @@ mode_select = pn.widgets.RadioButtonGroup(
     name="Mode d'émission", options=["Aléatoire", "Périodique"], value="Aléatoire"
 )
 interval_input = pn.widgets.FloatInput(name="Intervalle moyen (s)", value=30.0, step=1.0, start=0.1)
-interval_var_input = pn.widgets.FloatInput(name="Variabilité intervalle", value=0.1, step=0.01, start=0.0)
+interval_var_input = pn.widgets.FloatInput(name="Variabilité intervalle", value=1.0, step=0.01, start=0.0)
 interval_var_input.disabled = False
 packets_input = pn.widgets.IntInput(
     name="Nombre de paquets par nœud (0=infin)", value=0, step=1, start=0

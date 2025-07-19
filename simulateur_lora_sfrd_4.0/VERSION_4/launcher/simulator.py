@@ -49,7 +49,7 @@ class Simulator:
 
     def __init__(self, num_nodes: int = 10, num_gateways: int = 1, area_size: float = 1000.0,
                  transmission_mode: str = 'Random', packet_interval: float = 60.0,
-                 interval_variation: float = 0.1,
+                 interval_variation: float = 1.0,
                  packets_to_send: int = 0, adr_node: bool = False, adr_server: bool = False,
                  duty_cycle: float | None = 0.01, mobility: bool = True,
                  channels=None, channel_distribution: str = "round-robin",
@@ -74,8 +74,8 @@ class Simulator:
         :param transmission_mode: 'Random' pour transmissions aléatoires (Poisson) ou 'Periodic' pour périodiques.
         :param packet_interval: Intervalle moyen entre transmissions (si Random, moyenne en s; si Periodic, période fixe en s).
         :param interval_variation: Jitter relatif appliqué à chaque intervalle
-            exponentiel. Une valeur de ``0.1`` applique un facteur aléatoire
-            compris entre 0.9 et 1.1 pour augmenter la variabilité.
+            exponentiel. Une valeur de ``1`` applique un facteur aléatoire
+            compris entre 0 et 2 pour maximiser la variabilité.
         :param packets_to_send: Nombre de paquets à émettre **par nœud** avant
             d'arrêter la simulation (0 = infini).
         :param adr_node: Activation de l'ADR côté nœud.
