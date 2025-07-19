@@ -56,13 +56,14 @@ class DownlinkScheduler:
         return t
 
     def schedule_class_c(self, node, time: float, frame, gateway):
-        """Schedule a frame for a Class C node at ``time``."""
+        """Schedule a frame for a Class C node at ``time`` and return it."""
         duration = node.channel.airtime(node.sf, self._payload_length(frame))
         busy = self._gateway_busy.get(gateway.id, 0.0)
         if time < busy:
             time = busy
         self.schedule(node.id, time, frame, gateway)
         self._gateway_busy[gateway.id] = time + duration
+        return time
 
     def schedule_beacon(self, after_time: float, frame, gateway, beacon_interval: float) -> float:
         """Schedule a beacon frame at the next beacon time after ``after_time``."""

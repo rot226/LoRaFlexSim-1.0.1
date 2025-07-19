@@ -73,3 +73,18 @@ def test_scheduler_conflict_resolution():
         2.0,
     )
     assert t2 > t1
+
+
+def test_schedule_class_c_returns_time():
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    node.class_type = "C"
+    gw = Gateway(1, 0.0, 0.0)
+    sched = DownlinkScheduler()
+    from VERSION_4.launcher.lorawan import LoRaWANFrame
+
+    frame = LoRaWANFrame(mhdr=0x60, fctrl=0, fcnt=0, payload=b"a")
+    t0 = sched.schedule_class_c(node, 0.0, frame, gw)
+    assert t0 == 0.0
+    # Scheduling another frame before gateway is free should defer it
+    t1 = sched.schedule_class_c(node, 0.0, frame, gw)
+    assert t1 > t0
