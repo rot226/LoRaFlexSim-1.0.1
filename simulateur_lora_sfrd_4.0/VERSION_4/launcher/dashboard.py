@@ -93,6 +93,8 @@ mode_select = pn.widgets.RadioButtonGroup(
     name="Mode d'émission", options=["Aléatoire", "Périodique"], value="Aléatoire"
 )
 interval_input = pn.widgets.FloatInput(name="Intervalle moyen (s)", value=30.0, step=1.0, start=0.1)
+interval_var_input = pn.widgets.FloatInput(name="Variabilité intervalle", value=0.1, step=0.01, start=0.0)
+interval_var_input.disabled = False
 packets_input = pn.widgets.IntInput(
     name="Nombre de paquets par nœud (0=infin)", value=0, step=1, start=0
 )
@@ -395,8 +397,10 @@ def toggle_heatmap(event=None):
 def on_mode_change(event):
     if event.new == "Aléatoire":
         interval_input.name = "Intervalle moyen (s)"
+        interval_var_input.disabled = False
     else:
         interval_input.name = "Période (s)"
+        interval_var_input.disabled = True
 
 
 mode_select.param.watch(on_mode_change, "value")
@@ -537,6 +541,7 @@ def setup_simulation(seed_offset: int = 0):
         area_size=float(area_input.value),
         transmission_mode="Random" if mode_select.value == "Aléatoire" else "Periodic",
         packet_interval=float(interval_input.value),
+        interval_variation=float(interval_var_input.value),
         packets_to_send=int(packets_input.value),
         adr_node=adr_node_checkbox.value,
         adr_server=adr_server_checkbox.value,
@@ -619,6 +624,7 @@ def setup_simulation(seed_offset: int = 0):
     area_input.disabled = True
     mode_select.disabled = True
     interval_input.disabled = True
+    interval_var_input.disabled = True
     packets_input.disabled = True
     adr_node_checkbox.disabled = True
     adr_server_checkbox.disabled = True
@@ -739,6 +745,7 @@ def on_stop(event):
     area_input.disabled = False
     mode_select.disabled = False
     interval_input.disabled = False
+    interval_var_input.disabled = False
     packets_input.disabled = False
     adr_node_checkbox.disabled = False
     adr_server_checkbox.disabled = False
@@ -1062,6 +1069,7 @@ controls = pn.WidgetBox(
     area_input,
     mode_select,
     interval_input,
+    interval_var_input,
     packets_input,
     seed_input,
     num_runs_input,
