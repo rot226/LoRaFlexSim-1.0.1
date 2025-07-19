@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from VERSION_4.launcher.advanced_channel import AdvancedChannel  # noqa: E402
-import random
+import random  # noqa: E402
 
 
 def test_cost231_path_loss_vs_log_distance():

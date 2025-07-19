@@ -35,7 +35,6 @@ def _make_sim(class_type: str) -> Simulator:
 def test_downlink_delivery_class_c():
     sim = _make_sim("C")
     node = sim.nodes[0]
-    gw = sim.gateways[0]
     sim.event_queue.clear()
     sim.event_id_counter = 0
     heapq.heappush(sim.event_queue, Event(0.0, EventType.RX_WINDOW, 0, node.id))
@@ -50,7 +49,6 @@ def test_downlink_delivery_class_c():
 def test_scheduler_programs_class_b_slot():
     sim = _make_sim("B")
     node = sim.nodes[0]
-    gw = sim.gateways[0]
     sim.event_queue.clear()
     sim.event_id_counter = 0
     heapq.heappush(sim.event_queue, Event(0.0, EventType.RX_WINDOW, 0, node.id))
@@ -62,7 +60,7 @@ def test_scheduler_programs_class_b_slot():
         node,
         0.0,
         frame,
-        gw,
+        sim.gateways[0],
         sim.beacon_interval,
         sim.ping_slot_interval,
         sim.ping_slot_offset,
@@ -79,7 +77,6 @@ def test_ping_slot_periodicity():
     sim = _make_sim("B")
     node = sim.nodes[0]
     node.ping_slot_periodicity = 1
-    gw = sim.gateways[0]
     sim.event_queue.clear()
     sim.event_id_counter = 0
     heapq.heappush(sim.event_queue, Event(0.0, EventType.RX_WINDOW, 0, node.id))
@@ -91,7 +88,7 @@ def test_ping_slot_periodicity():
         node,
         5.0,
         frame,
-        gw,
+        sim.gateways[0],
         sim.beacon_interval,
         sim.ping_slot_interval,
         sim.ping_slot_offset,
@@ -106,7 +103,6 @@ def test_ping_slot_periodicity():
 def test_class_c_continuous_rx():
     sim = _make_sim("C")
     node = sim.nodes[0]
-    gw = sim.gateways[0]
     sim.event_queue.clear()
     sim.event_id_counter = 0
     heapq.heappush(sim.event_queue, Event(0.0, EventType.RX_WINDOW, 0, node.id))
@@ -121,7 +117,6 @@ def test_class_c_continuous_rx():
 def test_class_b_downlink_buffer_delivery():
     sim = _make_sim("B")
     node = sim.nodes[0]
-    gw = sim.gateways[0]
     sim.event_queue.clear()
     sim.event_id_counter = 0
     heapq.heappush(sim.event_queue, Event(0.0, EventType.RX_WINDOW, 0, node.id))
@@ -138,7 +133,6 @@ def test_class_b_downlink_buffer_delivery():
 def test_class_c_downlink_after_tx_window():
     sim = _make_sim("C")
     node = sim.nodes[0]
-    gw = sim.gateways[0]
     sim.event_queue.clear()
     sim.event_id_counter = 0
     sim.schedule_event(node, 0.0)
