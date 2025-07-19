@@ -424,7 +424,10 @@ def select_adr(module, name: str) -> None:
     else:
         adr3_button.button_type = "primary"
     if sim is not None:
-        module.apply(sim)
+        if module is adr_standard_1:
+            module.apply(sim, degrade_channel=True)
+        else:
+            module.apply(sim)
 
 
 _update_adr_badge("ADR 1")
@@ -584,7 +587,10 @@ def setup_simulation(seed_offset: int = 0):
 
     # Appliquer le profil ADR sélectionné
     if selected_adr_module:
-        selected_adr_module.apply(sim)
+        if selected_adr_module is adr_standard_1:
+            selected_adr_module.apply(sim, degrade_channel=True)
+        else:
+            selected_adr_module.apply(sim)
 
     # La mobilité est désormais gérée directement par le simulateur
     start_time = time.time()
