@@ -172,7 +172,7 @@ pause_button = pn.widgets.Button(name="Pause", button_type="primary", disabled=T
 
 # --- Nouveau bouton d'export et message d'état ---
 export_button = pn.widgets.Button(name="Exporter résultats (dossier courant)", button_type="primary", disabled=True)
-export_message = pn.pane.HTML("Clique sur Exporter pour générer le fichier CSV après la simulation.")
+export_message = pn.pane.HTML("Cliquez sur Exporter pour générer le fichier CSV après la simulation.")
 
 # --- Indicateurs de métriques ---
 pdr_indicator = pn.indicators.Number(name="PDR", value=0, format="{value:.1%}")
@@ -637,7 +637,7 @@ def setup_simulation(seed_offset: int = 0):
     pause_button.button_type = "primary"
     paused = False
     export_button.disabled = True
-    export_message.object = "Clique sur Exporter pour générer le fichier CSV après la simulation."
+    export_message.object = "Cliquez sur Exporter pour générer le fichier CSV après la simulation."
 
     sim.running = True
     sim_callback = pn.state.add_periodic_callback(step_simulation, period=100, timeout=None)
