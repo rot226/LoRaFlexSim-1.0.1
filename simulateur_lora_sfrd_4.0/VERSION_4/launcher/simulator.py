@@ -49,6 +49,7 @@ class Simulator:
 
     def __init__(self, num_nodes: int = 10, num_gateways: int = 1, area_size: float = 1000.0,
                  transmission_mode: str = 'Random', packet_interval: float = 60.0,
+                 interval_variation: float = 0.0,
                  packets_to_send: int = 0, adr_node: bool = False, adr_server: bool = False,
                  duty_cycle: float | None = 0.01, mobility: bool = True,
                  channels=None, channel_distribution: str = "round-robin",
@@ -72,6 +73,9 @@ class Simulator:
         :param area_size: Taille de l'aire carrée (mètres) dans laquelle sont déployés nœuds et passerelles.
         :param transmission_mode: 'Random' pour transmissions aléatoires (Poisson) ou 'Periodic' pour périodiques.
         :param packet_interval: Intervalle moyen entre transmissions (si Random, moyenne en s; si Periodic, période fixe en s).
+        :param interval_variation: Jitter relatif appliqué à chaque intervalle
+            exponentiel. Une valeur de ``0.1`` applique un facteur aléatoire
+            compris entre 0.9 et 1.1 pour augmenter la variabilité.
         :param packets_to_send: Nombre de paquets à émettre **par nœud** avant
             d'arrêter la simulation (0 = infini).
         :param adr_node: Activation de l'ADR côté nœud.
@@ -113,6 +117,7 @@ class Simulator:
         self.area_size = area_size
         self.transmission_mode = transmission_mode
         self.packet_interval = packet_interval
+        self.interval_variation = interval_variation
         self.packets_to_send = packets_to_send
         self.adr_node = adr_node
         self.adr_server = adr_server
@@ -278,7 +283,7 @@ class Simulator:
         for node in self.nodes:
             if self.transmission_mode.lower() == 'random':
                 # Random: tirer un délai initial selon une distribution exponentielle
-                t0 = random.expovariate(1.0 / self.packet_interval)
+                t0 = self._sample_interval()
             else:
                 # Periodic: délai initial aléatoire uniforme dans [0, période]
                 t0 = random.random() * self.packet_interval
@@ -304,6 +309,16 @@ class Simulator:
 
         # Indicateur d'exécution de la simulation
         self.running = True
+
+    def _sample_interval(self) -> float:
+        """Retourne un délai tiré de la loi exponentielle avec jitter."""
+        interval = random.expovariate(1.0 / self.packet_interval)
+        if self.interval_variation > 0.0:
+            factor = random.uniform(
+                1.0 - self.interval_variation, 1.0 + self.interval_variation
+            )
+            interval *= factor
+        return interval
 
     def schedule_event(self, node: Node, time: float):
         """Planifie un événement de transmission pour un nœud à l'instant donné."""
@@ -564,7 +579,7 @@ class Simulator:
             else:
                 if self.packets_to_send == 0 or node.packets_sent < self.packets_to_send:
                     if self.transmission_mode.lower() == 'random':
-                        next_interval = random.expovariate(1.0 / self.packet_interval)
+                        next_interval = self._sample_interval()
                     else:
                         next_interval = self.packet_interval
                     next_time = self.current_time + next_interval
