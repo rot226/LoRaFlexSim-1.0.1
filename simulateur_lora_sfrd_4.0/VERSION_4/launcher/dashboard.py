@@ -131,7 +131,10 @@ mobility_speed_max_input = pn.widgets.FloatInput(name="Vitesse max (m/s)", value
 
 # --- Durée réelle de simulation et bouton d'accélération ---
 real_time_duration_input = pn.widgets.FloatInput(name="Durée réelle max (s)", value=0.0, step=1.0, start=0.0)
-fast_forward_button = pn.widgets.Button(name="Accélérer jusqu'à la fin", button_type="primary", disabled=True)
+fast_forward_button = pn.widgets.Button(
+    name="Accélérer jusqu'à la fin", button_type="primary", disabled=True
+)
+fast_forward_button.disabled = int(packets_input.value) <= 0
 
 # --- Paramètres radio FLoRa ---
 flora_mode_toggle = pn.widgets.Toggle(name="Mode FLoRa complet", button_type="default", value=False)
@@ -633,7 +636,7 @@ def setup_simulation(seed_offset: int = 0):
     real_time_duration_input.disabled = True
     start_button.disabled = True
     stop_button.disabled = False
-    fast_forward_button.disabled = False
+    fast_forward_button.disabled = sim.packets_to_send <= 0
     pause_button.disabled = False
     pause_button.name = "⏸ Pause"
     pause_button.button_type = "primary"
@@ -1027,6 +1030,14 @@ def on_flora_toggle(event):
         flora_mode_toggle.button_type = "default"
 
 flora_mode_toggle.param.watch(on_flora_toggle, "value")
+
+# --- Mise à jour du bouton d'accélération lorsqu'on change le nombre de paquets ---
+def on_packets_change(event):
+    """Enable fast forward only when packets are defined."""
+    fast_forward_button.disabled = int(event.new) <= 0
+
+
+packets_input.param.watch(on_packets_change, "value")
 
 # --- Boutons ADR ---
 adr1_button.on_click(lambda event: select_adr(adr_standard_1, "ADR 1"))
