@@ -875,6 +875,7 @@ def fast_forward(event=None):
                 fast_forward_progress.value = 100
                 if not session_alive():
                     _cleanup_callbacks()
+                    on_stop(None)
                     return
                 metrics = sim.get_metrics()
                 pdr_indicator.value = metrics["PDR"]
@@ -900,6 +901,9 @@ def fast_forward(event=None):
 
             if session_alive():
                 doc.add_next_tick_callback(update_ui)
+            else:
+                _cleanup_callbacks()
+                on_stop(None)
 
         threading.Thread(target=run_and_update, daemon=True).start()
 
