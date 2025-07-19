@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from .simulator import Simulator
+from . import server
 
 
 def apply(sim: Simulator) -> None:
     """Configure ADR variant adr_standard_1 (LoRaWAN defaults)."""
     Simulator.MARGIN_DB = 15.0
+    server.MARGIN_DB = Simulator.MARGIN_DB
     sim.adr_node = False
     sim.adr_server = True
     sim.network_server.adr_enabled = True

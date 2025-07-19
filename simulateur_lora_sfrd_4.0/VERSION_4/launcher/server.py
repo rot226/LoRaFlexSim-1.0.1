@@ -160,17 +160,21 @@ class NetworkServer:
                     p_idx = DBM_TO_TX_POWER_INDEX.get(int(power), 0)
 
                     if nstep > 0:
-                        if sf > 7:
-                            sf -= 1
-                        elif p_idx < max(TX_POWER_INDEX_TO_DBM.keys()):
-                            p_idx += 1
-                            power = TX_POWER_INDEX_TO_DBM[p_idx]
+                        while nstep > 0 and (sf > 7 or p_idx < max(TX_POWER_INDEX_TO_DBM.keys())):
+                            if sf > 7:
+                                sf -= 1
+                            elif p_idx < max(TX_POWER_INDEX_TO_DBM.keys()):
+                                p_idx += 1
+                                power = TX_POWER_INDEX_TO_DBM[p_idx]
+                            nstep -= 1
                     elif nstep < 0:
-                        if p_idx > 0:
-                            p_idx -= 1
-                            power = TX_POWER_INDEX_TO_DBM[p_idx]
-                        elif sf < 12:
-                            sf += 1
+                        while nstep < 0 and (p_idx > 0 or sf < 12):
+                            if p_idx > 0:
+                                p_idx -= 1
+                                power = TX_POWER_INDEX_TO_DBM[p_idx]
+                            elif sf < 12:
+                                sf += 1
+                            nstep += 1
 
                     if sf != node.sf or power != node.tx_power:
                         self.send_downlink(node, adr_command=(sf, power, node.chmask, node.nb_trans))
