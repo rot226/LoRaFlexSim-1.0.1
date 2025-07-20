@@ -71,6 +71,7 @@ class Simulator:
                  class_c_rx_interval: float = 1.0,
                  phy_model: str = "",
                  terrain_map: str | list[list[float]] | None = None,
+                 path_map: str | list[list[float]] | None = None,
                  beacon_drift: float = 0.0,
                  *,
                  clock_accuracy: float = 0.0,
@@ -123,7 +124,11 @@ class Simulator:
             downlink pour les nœuds de classe C (s).
         :param phy_model: "omnet" pour activer le modèle physique OMNeT++.
         :param terrain_map: Carte de terrain utilisée pour la mobilité
-            réaliste (chemin JSON/texte ou matrice).
+            aléatoire (chemin JSON/texte ou matrice). Les valeurs négatives
+            indiquent les obstacles et ralentissements éventuels.
+        :param path_map: Carte de type obstacle où un chemin doit être trouvé
+            entre deux positions. Lorsque défini, la mobilité suit les
+            plus courts chemins évitant les obstacles.
         :param beacon_drift: Dérive relative appliquée aux beacons (ppm).
         :param clock_accuracy: Écart-type de la dérive d'horloge des nœuds
             (ppm). Chaque nœud se voit attribuer un décalage aléatoire selon
@@ -163,7 +168,18 @@ class Simulator:
         self.phy_model = phy_model
         # Activation ou non de la mobilité des nœuds
         self.mobility_enabled = mobility
-        if terrain_map is not None:
+        if path_map is not None:
+            if isinstance(path_map, (str, Path)):
+                from .map_loader import load_map
+                path_map = load_map(path_map)
+            from .path_mobility import PathMobility
+            self.mobility_model = PathMobility(
+                area_size,
+                path_map,
+                min_speed=mobility_speed[0],
+                max_speed=mobility_speed[1],
+            )
+        elif terrain_map is not None:
             if isinstance(terrain_map, (str, Path)):
                 from .map_loader import load_map
                 terrain_map = load_map(terrain_map)
