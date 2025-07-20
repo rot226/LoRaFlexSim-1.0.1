@@ -1,6 +1,7 @@
 import math
 import random
 
+
 class RandomWaypoint:
     """Modèle de mobilité aléatoire (Random Waypoint simplifié) pour les nœuds.
 
@@ -16,8 +17,12 @@ class RandomWaypoint:
         area_size: float,
         min_speed: float = 1.0,
         max_speed: float = 3.0,
+        *,
         terrain: list[list[float]] | None = None,
-    ):
+        elevation: list[list[float]] | None = None,
+        step: float = 1.0,
+        slope_scale: float = 0.1,
+    ) -> None:
         """
         Initialise le modèle de mobilité.
         :param area_size: Taille de l'aire carrée de simulation (mètres).
@@ -27,6 +32,8 @@ class RandomWaypoint:
         self.area_size = area_size
         self.min_speed = min_speed
         self.max_speed = max_speed
+        self.step = step
+        self.slope_scale = slope_scale
         self.terrain = terrain
         if terrain:
             self.rows = len(terrain)
@@ -34,6 +41,13 @@ class RandomWaypoint:
         else:
             self.rows = 0
             self.cols = 0
+        self.elevation = elevation
+        if elevation:
+            self.e_rows = len(elevation)
+            self.e_cols = len(elevation[0]) if self.e_rows else 0
+        else:
+            self.e_rows = 0
+            self.e_cols = 0
 
     # ------------------------------------------------------------------
     def _terrain_factor(self, x: float, y: float) -> float | None:
@@ -48,6 +62,16 @@ class RandomWaypoint:
         if val < 0:
             return None
         return val if val > 0 else 1.0
+
+    def _elevation(self, x: float, y: float) -> float:
+        """Return the elevation value at coordinates (meters)."""
+        if not self.elevation or self.e_rows == 0 or self.e_cols == 0:
+            return 0.0
+        cx = int(x / self.area_size * self.e_cols)
+        cy = int(y / self.area_size * self.e_rows)
+        cx = min(max(cx, 0), self.e_cols - 1)
+        cy = min(max(cy, 0), self.e_rows - 1)
+        return float(self.elevation[cy][cx])
 
     def assign(self, node):
         """
@@ -76,34 +100,51 @@ class RandomWaypoint:
         dt = current_time - node.last_move_time
         if dt <= 0:
             return  # Pas de temps écoulé (ou appel redondant)
-        # Ajuster le déplacement selon le relief/la carte
+        # Ajuster le déplacement selon la carte de vitesse
         factor = self._terrain_factor(node.x, node.y)
         if factor is None:
             factor = 1.0
-        node.x += node.vx * dt * factor
-        node.y += node.vy * dt * factor
+        movement_factor = factor
+        # Prendre en compte l'elevation si disponible
+        if self.elevation:
+            next_x = node.x + node.vx * dt * movement_factor
+            next_y = node.y + node.vy * dt * movement_factor
+            alt0 = self._elevation(node.x, node.y)
+            alt1 = self._elevation(next_x, next_y)
+            dist = math.hypot(next_x - node.x, next_y - node.y)
+            if dist > 0:
+                slope = (alt1 - alt0) / dist
+                if slope > 0:
+                    sf = 1.0 / (1.0 + slope * self.slope_scale)
+                else:
+                    sf = 1.0 + (-slope) * self.slope_scale * 0.5
+                sf = max(0.1, min(2.0, sf))
+                movement_factor *= sf
+        node.x += node.vx * dt * movement_factor
+        node.y += node.vy * dt * movement_factor
         # Rebondir sur un obstacle infranchissable
         if self._terrain_factor(node.x, node.y) is None:
-            node.x -= node.vx * dt * factor
-            node.y -= node.vy * dt * factor
+            node.x -= node.vx * dt * movement_factor
+            node.y -= node.vy * dt * movement_factor
             node.vx = -node.vx
             node.vy = -node.vy
         # Gérer les rebonds sur les frontières de la zone [0, area_size]
         # Axe X
         if node.x < 0.0:
-            node.x = -node.x               # symétrie par rapport au bord
-            node.vx = -node.vx             # inversion de la direction X
+            node.x = -node.x  # symétrie par rapport au bord
+            node.vx = -node.vx  # inversion de la direction X
         if node.x > self.area_size:
             node.x = 2 * self.area_size - node.x
             node.vx = -node.vx
         # Axe Y
         if node.y < 0.0:
-            node.y = -node.y               # rebond sur le bord inférieur
-            node.vy = -node.vy             # inversion de la direction Y
+            node.y = -node.y  # rebond sur le bord inférieur
+            node.vy = -node.vy  # inversion de la direction Y
         if node.y > self.area_size:
             node.y = 2 * self.area_size - node.y
             node.vy = -node.vy
-        # Mettre à jour la direction (angle) en cas de changement de vecteur vitesse
+        # Mettre à jour la direction (angle) et la vitesse réelle
         node.direction = math.atan2(node.vy, node.vx)
+        node.speed = math.hypot(node.vx, node.vy) * movement_factor
         # Mettre à jour le temps du dernier déplacement du nœud
         node.last_move_time = current_time
