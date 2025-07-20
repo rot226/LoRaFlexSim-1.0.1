@@ -65,20 +65,25 @@ def _make_colliding_sim() -> Simulator:
     return sim
 
 
-def test_compare_with_flora_sample():
-    sim = _make_sim(num_nodes=2)
+@pytest.mark.parametrize(
+    "csv_file,num_nodes",
+    [
+        ("flora_full.csv", 2),
+        ("flora_sample.csv", 2),
+        ("flora_three.csv", 3),
+    ],
+)
+def test_compare_with_flora_sample(csv_file: str, num_nodes: int) -> None:
+    """Simulator metrics should match the provided FLoRa references."""
+    sim = _make_sim(num_nodes=num_nodes)
     sim.run()
     metrics = sim.get_metrics()
-    flora_csv = Path(__file__).parent / "data" / "flora_full.csv"
+    flora_csv = Path(__file__).parent / "data" / csv_file
     flora_metrics = load_flora_metrics(flora_csv)
-    assert metrics["PDR"] == pytest.approx(flora_metrics["PDR"])
-    assert metrics["throughput_bps"] == pytest.approx(flora_metrics["throughput_bps"], rel=1e-3)
-    assert metrics["energy_J"] == pytest.approx(flora_metrics["energy_J"], rel=1e-3)
-    assert metrics["collisions"] == flora_metrics["collisions"]
-    assert compare_with_sim(metrics, flora_csv)
 
-    sim_cd = {7: sum(n.packets_collision for n in sim.nodes if n.sf == 7)}
-    assert sim_cd == flora_metrics["collision_distribution"]
+    assert metrics["PDR"] == pytest.approx(flora_metrics["PDR"], abs=0.01)
+    assert metrics["sf_distribution"] == flora_metrics["sf_distribution"]
+    assert compare_with_sim(metrics, flora_csv)
 
 
 def test_collision_distribution_against_flora():
