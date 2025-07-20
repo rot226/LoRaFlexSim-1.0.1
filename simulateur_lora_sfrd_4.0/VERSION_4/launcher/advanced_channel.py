@@ -152,6 +152,7 @@ class AdvancedChannel:
         self._sync_offset = _CorrelatedValue(
             sync_offset_s, sync_offset_std_s, fading_correlation
         )
+        self._tx_power_var = _CorrelatedValue(0.0, self.base.tx_power_std, fading_correlation)
         if obstacle_map is None and obstacle_map_file:
             from .map_loader import load_map
             obstacle_map = load_map(obstacle_map_file)
@@ -307,8 +308,12 @@ class AdvancedChannel:
         """
         if freq_offset_hz is None:
             freq_offset_hz = self._freq_offset.sample()
+        # Include time-varying frequency drift
+        freq_offset_hz += self.base.omnet.frequency_drift()
         if sync_offset_s is None:
             sync_offset_s = self._sync_offset.sample()
+        # Include short-term clock jitter
+        sync_offset_s += self.base.omnet.clock_drift()
 
         loss = self.path_loss(distance)
         if tx_pos is not None and rx_pos is not None:
@@ -327,7 +332,7 @@ class AdvancedChannel:
             - self.base.cable_loss_dB
         )
         if self.base.tx_power_std > 0:
-            rssi += random.gauss(0, self.base.tx_power_std)
+            rssi += self._tx_power_var.sample()
         if self.base.fast_fading_std > 0:
             rssi += random.gauss(0, self.base.fast_fading_std)
         if self.base.time_variation_std > 0:
