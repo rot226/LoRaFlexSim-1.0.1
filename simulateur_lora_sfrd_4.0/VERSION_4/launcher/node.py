@@ -133,6 +133,8 @@ class Node:
         self.path = None
         self.path_progress = 0.0
         self.path_duration = 0.0
+        # Index du prochain point sur le chemin (pour PathMobility)
+        self.path_index = 0
 
         # LoRaWAN specific parameters
         self.activated = activated
