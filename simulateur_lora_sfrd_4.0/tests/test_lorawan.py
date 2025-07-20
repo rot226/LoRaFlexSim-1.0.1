@@ -90,6 +90,23 @@ def test_next_ping_slot_time_from_last_beacon():
     assert t2 == pytest.approx(104.5)
 
 
+def test_next_ping_slot_time_drift():
+    from VERSION_4.launcher.node import Node
+    from VERSION_4.launcher.channel import Channel
+
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel(), beacon_drift=0.001)
+    node.class_type = "B"
+    node.last_beacon_time = 0.0
+
+    t = node.next_ping_slot_time(
+        current_time=0.0,
+        beacon_interval=10.0,
+        ping_slot_interval=1.0,
+        ping_slot_offset=0.5,
+    )
+    assert t == pytest.approx(0.501)
+
+
 def test_adr_param_setup_req_roundtrip():
     req = ADRParamSetupReq(3, 5)
     data = req.to_bytes()

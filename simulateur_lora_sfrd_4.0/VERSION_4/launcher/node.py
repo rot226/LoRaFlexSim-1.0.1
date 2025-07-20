@@ -54,6 +54,8 @@ class Node:
         activated: bool = True,
         appkey: bytes | None = None,
         security: bool = True,
+        beacon_loss_prob: float = 0.0,
+        beacon_drift: float = 0.0,
     ):
         """
         Initialise le nœud avec ses paramètres de départ.
@@ -70,6 +72,8 @@ class Node:
         :param join_eui: Identifiant de l'application pour OTAA.
         :param dev_eui: Identifiant unique du périphérique pour OTAA.
         :param security: Active le chiffrement AES/MIC LoRaWAN (``True`` par défaut).
+        :param beacon_loss_prob: Probabilité de manquer un beacon (classe B).
+        :param beacon_drift: Dérive relative appliquée aux fenêtres classe B.
         """
         # Identité et paramètres initiaux
         self.id = node_id
@@ -146,6 +150,8 @@ class Node:
         self.pending_mac_cmd = None
         self.need_downlink_ack = False
         self.security_enabled = security
+        self.beacon_loss_prob = beacon_loss_prob
+        self.beacon_drift = beacon_drift
 
         # Parameters configured by MAC commands
         self.max_duty_cycle = 0
@@ -262,7 +268,9 @@ class Node:
             'packets_success': self.packets_success,
             'packets_collision': self.packets_collision,
             'downlink_pending': self.downlink_pending,
-            'acks_received': self.acks_received
+            'acks_received': self.acks_received,
+            'beacon_loss_prob': self.beacon_loss_prob,
+            'beacon_drift': self.beacon_drift
         }
 
     def increment_sent(self):
@@ -674,9 +682,12 @@ class Node:
         from .lorawan import next_ping_slot_time, next_beacon_time
 
         last_beacon = self.last_beacon_time
-        # If the last beacon is too old, resynchronise to the nominal schedule
         if current_time - last_beacon > beacon_interval * 2:
-            last_beacon = next_beacon_time(current_time, beacon_interval)
+            last_beacon = next_beacon_time(
+                current_time,
+                beacon_interval,
+                drift=self.beacon_drift,
+            )
 
         return next_ping_slot_time(
             last_beacon,
@@ -684,4 +695,5 @@ class Node:
             self.ping_slot_periodicity or 0,
             ping_slot_interval,
             ping_slot_offset,
+            beacon_drift=self.beacon_drift,
         )
