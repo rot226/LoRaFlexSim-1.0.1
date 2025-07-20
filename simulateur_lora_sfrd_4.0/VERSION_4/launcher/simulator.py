@@ -71,6 +71,7 @@ class Simulator:
                  class_c_rx_interval: float = 1.0,
                  phy_model: str = "",
                  terrain_map: str | list[list[float]] | None = None,
+                 path_map: str | list[list[float]] | None = None,
                  beacon_drift: float = 0.0):
         """
         Initialise la simulation LoRa avec les entités et paramètres donnés.
@@ -119,6 +120,8 @@ class Simulator:
         :param phy_model: "omnet" pour activer le modèle physique OMNeT++.
         :param terrain_map: Carte de terrain utilisée pour la mobilité
             réaliste (chemin JSON/texte ou matrice).
+        :param path_map: Carte de rues/obstacles pour la mobilité par chemins
+            (chemin JSON/texte ou matrice).
         :param beacon_drift: Dérive relative appliquée aux beacons (ppm).
         """
         # Paramètres de simulation
@@ -160,6 +163,17 @@ class Simulator:
                 min_speed=mobility_speed[0],
                 max_speed=mobility_speed[1],
                 terrain=terrain_map,
+            )
+        elif path_map is not None:
+            if isinstance(path_map, (str, Path)):
+                from .map_loader import load_map
+                path_map = load_map(path_map)
+            from .path_mobility import PathMapMobility
+            self.mobility_model = PathMapMobility(
+                path_map,
+                area_size,
+                min_speed=mobility_speed[0],
+                max_speed=mobility_speed[1],
             )
         else:
             self.mobility_model = SmoothMobility(
