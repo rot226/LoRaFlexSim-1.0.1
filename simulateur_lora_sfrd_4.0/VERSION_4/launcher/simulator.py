@@ -70,7 +70,8 @@ class Simulator:
                  seed: int | None = None,
                  class_c_rx_interval: float = 1.0,
                  phy_model: str = "",
-                 terrain_map: str | list[list[float]] | None = None):
+                 terrain_map: str | list[list[float]] | None = None,
+                 beacon_drift: float = 0.0):
         """
         Initialise la simulation LoRa avec les entités et paramètres donnés.
         :param num_nodes: Nombre de nœuds à simuler.
@@ -118,6 +119,7 @@ class Simulator:
         :param phy_model: "omnet" pour activer le modèle physique OMNeT++.
         :param terrain_map: Carte de terrain utilisée pour la mobilité
             réaliste (chemin JSON/texte ou matrice).
+        :param beacon_drift: Dérive relative appliquée aux beacons (ppm).
         """
         # Paramètres de simulation
         self.num_nodes = num_nodes
@@ -169,6 +171,7 @@ class Simulator:
         self.ping_slot_interval = 1.0
         self.ping_slot_offset = 2.0
         self.class_c_rx_interval = class_c_rx_interval
+        self.beacon_drift = beacon_drift
 
         # Gestion du duty cycle (activé par défaut à 1 %)
         self.duty_cycle_manager = DutyCycleManager(duty_cycle) if duty_cycle else None
@@ -205,6 +208,8 @@ class Simulator:
         # Compatibilité : premier canal par défaut
         self.channel = self.multichannel.channels[0]
         self.network_server = NetworkServer()
+        self.network_server.beacon_interval = self.beacon_interval
+        self.network_server.beacon_drift = self.beacon_drift
 
         # Graine aléatoire facultative pour reproduire les résultats
         self.seed = seed
@@ -330,6 +335,8 @@ class Simulator:
             self.event_queue,
             Event(0.0, EventType.BEACON, eid, 0),
         )
+        self.last_beacon_time = 0.0
+        self.network_server.last_beacon_time = 0.0
 
         # Indicateur d'exécution de la simulation
         self.running = True
@@ -694,31 +701,37 @@ class Simulator:
             return True
 
         elif priority == EventType.BEACON:
-            nxt = math.ceil((time + 1e-9) / self.beacon_interval) * self.beacon_interval
-            if nxt == time:
-                nxt += self.beacon_interval
+            nxt = self.network_server.next_beacon_time(time)
             eid = self.event_id_counter
             self.event_id_counter += 1
             heapq.heappush(
                 self.event_queue,
                 Event(nxt, EventType.BEACON, eid, 0),
             )
+            self.last_beacon_time = time
+            self.network_server.notify_beacon(time)
             end_of_cycle = nxt
             for n in self.nodes:
                 if n.class_type.upper() == "B":
-                    if random.random() >= getattr(n, "beacon_loss_prob", 0.0):
+                    received = random.random() >= getattr(n, "beacon_loss_prob", 0.0)
+                    if received:
                         n.last_beacon_time = time
-                        periodicity = 2 ** (getattr(n, "ping_slot_periodicity", 0) or 0)
-                        interval = self.ping_slot_interval * periodicity
-                        slot = time + getattr(n, "beacon_drift", 0.0) + self.ping_slot_offset
-                        while slot < end_of_cycle:
-                            eid = self.event_id_counter
-                            self.event_id_counter += 1
-                            heapq.heappush(
-                                self.event_queue,
-                                Event(slot, EventType.PING_SLOT, eid, n.id),
-                            )
-                            slot += interval
+                    periodicity = 2 ** (getattr(n, "ping_slot_periodicity", 0) or 0)
+                    interval = self.ping_slot_interval * periodicity
+                    slot = n.next_ping_slot_time(
+                        time,
+                        self.beacon_interval,
+                        self.ping_slot_interval,
+                        self.ping_slot_offset,
+                    )
+                    while slot < end_of_cycle:
+                        eid = self.event_id_counter
+                        self.event_id_counter += 1
+                        heapq.heappush(
+                            self.event_queue,
+                            Event(slot, EventType.PING_SLOT, eid, n.id),
+                        )
+                        slot += interval
             return True
 
         elif priority == EventType.PING_SLOT:
