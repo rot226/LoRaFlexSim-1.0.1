@@ -133,7 +133,14 @@ class NetworkServer:
         node.appskey = app_skey
         self.send_downlink(node, frame, gateway=gateway)
 
-    def receive(self, event_id: int, node_id: int, gateway_id: int, rssi: float | None = None):
+    def receive(
+        self,
+        event_id: int,
+        node_id: int,
+        gateway_id: int,
+        rssi: float | None = None,
+        frame=None,
+    ):
         """
         Traite la réception d'un paquet par le serveur.
         Évite de compter deux fois le même paquet s'il arrive via plusieurs passerelles.
@@ -141,6 +148,8 @@ class NetworkServer:
         :param node_id: Identifiant du nœud source.
         :param gateway_id: Identifiant de la passerelle ayant reçu le paquet.
         :param rssi: RSSI mesuré par la passerelle pour ce paquet (optionnel).
+        :param frame: Trame LoRaWAN associée pour vérification de sécurité
+            (optionnelle).
         """
         if event_id in self.received_events:
             # Doublon (déjà reçu via une autre passerelle)
@@ -154,6 +163,26 @@ class NetworkServer:
 
         node = next((n for n in self.nodes if n.id == node_id), None)
         gw = next((g for g in self.gateways if g.id == gateway_id), None)
+        if node and frame is not None and node.security_enabled:
+            from .lorawan import encrypt_payload, compute_mic, LoRaWANFrame
+
+            if isinstance(frame, LoRaWANFrame) and frame.encrypted_payload is not None:
+                if compute_mic(
+                    node.nwkskey,
+                    node.devaddr,
+                    frame.fcnt,
+                    0,
+                    frame.encrypted_payload,
+                ) != frame.mic:
+                    return
+                frame.payload = encrypt_payload(
+                    node.appskey,
+                    node.devaddr,
+                    frame.fcnt,
+                    0,
+                    frame.encrypted_payload,
+                )
+
         if node and not getattr(node, "activated", True):
             self._activate(node, gateway=gw)
 

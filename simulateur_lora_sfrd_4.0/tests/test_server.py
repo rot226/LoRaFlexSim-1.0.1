@@ -37,10 +37,32 @@ def test_receive_triggers_otaa_activation():
     ns.nodes = [node]
     ns.channel = Channel(shadowing_std=0)
 
-    ns.receive(event_id=1, node_id=node.id, gateway_id=gw.id, rssi=-120)
+    ns.receive(event_id=1, node_id=node.id, gateway_id=gw.id, rssi=-120, frame=None)
     frame = gw.pop_downlink(node.id)
     assert isinstance(frame, JoinAccept)
     assert len(node.nwkskey) == 16
     assert len(node.appskey) == 16
     assert ns.next_devaddr == 2
     assert node.fcnt_down == 1
+
+
+def test_receive_decrypts_uplink():
+    node = Node(3, 0.0, 0.0, 7, 14.0, channel=Channel(shadowing_std=0))
+    gw = Gateway(3, 0.0, 0.0)
+    ns = NetworkServer()
+    ns.gateways = [gw]
+    ns.nodes = [node]
+
+    frame = node.prepare_uplink(b"hello")
+    rx = LoRaWANFrame(
+        mhdr=frame.mhdr,
+        fctrl=frame.fctrl,
+        fcnt=frame.fcnt,
+        payload=b"",
+        confirmed=frame.confirmed,
+        mic=frame.mic,
+        encrypted_payload=frame.encrypted_payload,
+    )
+
+    ns.receive(event_id=2, node_id=node.id, gateway_id=gw.id, rssi=-120, frame=rx)
+    assert rx.payload == b"hello"
