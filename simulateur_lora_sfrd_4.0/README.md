@@ -126,9 +126,10 @@ official detection threshold, interference window and a ``flora`` propagation
   its results in `.sca` and `.vec` files. You may convert them to CSV with
   external tools if needed.
 Passing `--degrade` to the script enables a harsh propagation profile that
-further decreases the PDR. In this mode additional interference, stronger
-fast fading and a higher path loss exponent are applied.  A slow varying noise
-term is also introduced so repeated runs yield more diverse results.
+significantly lowers the Packet Delivery Ratio.  Additional interference,
+stronger fast fading and a higher path loss exponent are applied together with a
+slow varying noise term.  The resulting PDR usually settles around **35–40 %**,
+providing a challenging baseline for protocol comparisons.
 
 An example configuration file named `examples/flora_full.ini` reproduces the
 official positions used by FLoRa. Load it with
