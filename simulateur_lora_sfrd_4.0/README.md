@@ -4,11 +4,13 @@ This repository contains a lightweight LoRa network simulator implemented in Pyt
 
 ## Features
 - Duty cycle enforcement to mimic real LoRa constraints
-- Optional node mobility with Bezier interpolation
+- Optional node mobility with Bezier interpolation or terrain-aware random
+  waypoint movement
 - Multi-channel radio support
 - Advanced channel model with loss and noise parameters
 - Optional multipath fading with synchronised paths and external interference modeling
-- Correlated fading and 3D obstacle maps with automatic calibration
+- Correlated fading and 3D obstacle maps with automatic calibration. Obstacle
+  or height maps can be loaded from JSON or plain text matrices
 - Antenna gains and cable losses for accurate link budgets
 - Optional LoRa spreading gain applied to SNR
 - Additional COST231 path loss, Okumura‑Hata model and 3D propagation via
@@ -310,8 +312,8 @@ concepts:
 
 - The physical layer is greatly simplified and does not reproduce hardware
   imperfections found in real devices.
-- Mobility relies on random Bezier paths without obstacles or terrain
-  constraints.
+- By default mobility relies on Bezier paths; an optional RandomWaypoint model
+  can use terrain maps to handle obstacles.
 - Basic LoRaWAN security (AES encryption and MIC) is enabled by default but join
   server handling and encryption validation are kept minimal.
 
