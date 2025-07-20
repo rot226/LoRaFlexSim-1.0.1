@@ -73,8 +73,12 @@ class OmnetPHY:
 
         if freq_offset_hz is None:
             freq_offset_hz = ch.frequency_offset_hz
+        # Include time-varying frequency drift
+        freq_offset_hz += self.model.frequency_drift()
         if sync_offset_s is None:
             sync_offset_s = ch.sync_offset_s
+        # Include short-term clock jitter
+        sync_offset_s += self.model.clock_drift()
 
         snr = rssi - self.noise_floor() + ch.snr_offset_dB
         penalty = self._alignment_penalty_db(freq_offset_hz, sync_offset_s, sf)
