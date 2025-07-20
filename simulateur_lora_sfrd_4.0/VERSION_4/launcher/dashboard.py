@@ -171,6 +171,9 @@ position_textarea = pn.widgets.TextAreaInput(
 # Chargement d'un fichier .ini issu de FLoRa
 ini_file_input = pn.widgets.FileInput(name="Fichier INI FLoRa", accept=".ini")
 
+# Map for path-based mobility
+path_map_input = pn.widgets.FileInput(name="Carte de parcours", accept=".json")
+
 # --- Boutons de contrôle ---
 start_button = pn.widgets.Button(name="Lancer la simulation", button_type="success")
 stop_button = pn.widgets.Button(name="Arrêter la simulation", button_type="warning", disabled=True)
@@ -535,6 +538,15 @@ def setup_simulation(seed_offset: int = 0):
         tmp.flush()
         config_path = tmp.name
 
+    path_map = None
+    if path_map_input.value:
+        import tempfile
+
+        tmp_map = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+        tmp_map.write(path_map_input.value.encode())
+        tmp_map.flush()
+        path_map = tmp_map.name
+
     sim = Simulator(
         num_nodes=int(num_nodes_input.value),
         num_gateways=int(num_gateways_input.value),
@@ -557,6 +569,7 @@ def setup_simulation(seed_offset: int = 0):
         detection_threshold_dBm=float(detection_threshold_input.value),
         min_interference_time=float(min_interference_input.value),
         config_file=config_path,
+        path_map=path_map,
         seed=seed,
     )
 
@@ -1074,6 +1087,7 @@ controls = pn.WidgetBox(
     seed_input,
     num_runs_input,
     ini_file_input,
+    path_map_input,
     adr_node_checkbox,
     adr_server_checkbox,
     pn.Row(adr1_button, adr2_button, adr3_button, adr_active_badge),
