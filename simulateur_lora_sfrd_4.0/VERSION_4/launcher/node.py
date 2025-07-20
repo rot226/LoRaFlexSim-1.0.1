@@ -671,10 +671,15 @@ class Node:
         ping_slot_offset: float,
     ) -> float:
         """Return the next ping slot time after ``current_time``."""
-        from .lorawan import next_ping_slot_time
+        from .lorawan import next_ping_slot_time, next_beacon_time
+
+        last_beacon = self.last_beacon_time
+        # If the last beacon is too old, resynchronise to the nominal schedule
+        if current_time - last_beacon > beacon_interval * 2:
+            last_beacon = next_beacon_time(current_time, beacon_interval)
 
         return next_ping_slot_time(
-            self.last_beacon_time,
+            last_beacon,
             current_time,
             self.ping_slot_periodicity or 0,
             ping_slot_interval,
