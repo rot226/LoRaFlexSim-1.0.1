@@ -2,8 +2,30 @@
 
 from __future__ import annotations
 
+import json
 import math
 import random
+from pathlib import Path
+
+
+def load_obstacle_map(path: str | Path) -> list[list[float]]:
+    """Load an obstacle or terrain map from a JSON or text matrix file."""
+
+    p = Path(path)
+    if p.suffix.lower() == ".json":
+        data = json.loads(p.read_text())
+        if not isinstance(data, list):
+            raise ValueError("JSON map must be a 2D list")
+        return [[float(v) for v in row] for row in data]
+
+    rows: list[list[float]] = []
+    for line in p.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = [x.strip() for x in line.replace(",", " ").split()]
+        rows.append([float(val) for val in parts])
+    return rows
 
 
 class _CorrelatedFading:

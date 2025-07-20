@@ -101,6 +101,20 @@ donc continus et sans téléportation.
 Deux champs « Vitesse min » et « Vitesse max » sont disponibles dans le
 `dashboard` pour définir cette plage avant de lancer la simulation.
 
+Il est également possible de charger une carte d'obstacles ou de relief pour
+influencer la mobilité et la propagation radio. Utilisez la fonction
+`load_obstacle_map()` pour lire un fichier JSON ou une matrice texte et
+passez la liste obtenue à `RandomWaypoint` ainsi qu'à `AdvancedChannel` :
+
+```python
+from launcher import Simulator, load_obstacle_map, AdvancedChannel
+
+terrain = load_obstacle_map("map.json")
+channel = AdvancedChannel(obstacle_map=terrain, map_area_size=500.0)
+sim = Simulator(area_size=500.0, mobility=True, mobility_terrain=terrain,
+                channel=channel)
+```
+
 ## Multi-canaux
 
 Le simulateur permet d'utiliser plusieurs canaux radio. Passez une instance
@@ -382,9 +396,9 @@ encore de maturité :
 - La couche physique est simplifiée et n'imite pas parfaitement les comportements
   réels des modems LoRa.
 - Les classes B et C sont gérées de manière basique : les pertes de beacon ou
-  la dérive temporelle ne sont pas simulées.
-- La mobilité s'appuie sur des trajets aléatoires sans prise en compte
-  d'obstacles ou de cartes géographiques.
+- La mobilité s'appuie sur des trajets aléatoires. Des cartes d'obstacles
+  peuvent toutefois être chargées pour moduler les déplacements et la
+  propagation radio.
 - La sécurité LoRaWAN (chiffrement AES/MIC) est activée par défaut mais les
   serveurs de jointure et la validation du chiffrement restent simplifiés.
 

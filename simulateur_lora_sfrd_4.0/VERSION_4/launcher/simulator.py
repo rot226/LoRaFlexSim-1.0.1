@@ -57,6 +57,7 @@ class Simulator:
                  duty_cycle: float | None = 0.01, mobility: bool = True,
                  channels=None, channel_distribution: str = "round-robin",
                  mobility_speed: tuple[float, float] = (2.0, 10.0),
+                 mobility_terrain: list[list[float]] | None = None,
                  fixed_sf: int | None = None,
                  fixed_tx_power: float | None = None,
                  battery_capacity_j: float | None = None,
@@ -90,6 +91,7 @@ class Simulator:
             à True.
         :param mobility_speed: Couple (min, max) définissant la plage de
             vitesses de déplacement des nœuds en m/s lorsqu'ils sont mobiles.
+        :param mobility_terrain: Carte d'obstacles influençant la mobilité.
         :param channels: ``MultiChannel`` ou liste de fréquences/``Channel`` pour
             gérer plusieurs canaux.
         :param channel_distribution: Méthode d'affectation des canaux aux nœuds
@@ -144,7 +146,18 @@ class Simulator:
         self.phy_model = phy_model
         # Activation ou non de la mobilité des nœuds
         self.mobility_enabled = mobility
-        self.mobility_model = SmoothMobility(area_size, mobility_speed[0], mobility_speed[1])
+        if mobility_terrain is not None:
+            from .mobility import RandomWaypoint
+            self.mobility_model = RandomWaypoint(
+                area_size,
+                mobility_speed[0],
+                mobility_speed[1],
+                terrain=mobility_terrain,
+            )
+        else:
+            self.mobility_model = SmoothMobility(
+                area_size, mobility_speed[0], mobility_speed[1]
+            )
 
         # Class B/C settings
         self.beacon_interval = 128.0

@@ -4,8 +4,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from VERSION_4.launcher.advanced_channel import AdvancedChannel  # noqa: E402
+from VERSION_4.launcher.advanced_channel import AdvancedChannel, load_obstacle_map  # noqa: E402
 import random  # noqa: E402
+import json  # noqa: E402
 
 
 def test_cost231_path_loss_vs_log_distance():
@@ -85,3 +86,19 @@ def test_obstacle_map_extra_loss():
         rx_pos=(90.0, 90.0),
     )
     assert r_obst < r_clear
+
+
+def test_load_obstacle_map_json(tmp_path):
+    data = [[0, 0], [1, -1]]
+    path = tmp_path / "map.json"
+    path.write_text(json.dumps(data))
+    loaded = load_obstacle_map(path)
+    assert loaded == [[0.0, 0.0], [1.0, -1.0]]
+
+
+def test_load_obstacle_map_matrix(tmp_path):
+    txt = "0 0\n0 5\n"
+    path = tmp_path / "map.txt"
+    path.write_text(txt)
+    loaded = load_obstacle_map(path)
+    assert loaded == [[0.0, 0.0], [0.0, 5.0]]

@@ -2,7 +2,7 @@
 from .node import Node
 from .gateway import Gateway
 from .channel import Channel
-from .advanced_channel import AdvancedChannel
+from .advanced_channel import AdvancedChannel, load_obstacle_map
 from .multichannel import MultiChannel
 from .server import NetworkServer
 from .simulator import Simulator
@@ -33,6 +33,7 @@ __all__ = [
     "adr_standard_1",
     "adr_2",
     "adr_3",
+    "load_obstacle_map",
 ]
 
 for name in __all__:

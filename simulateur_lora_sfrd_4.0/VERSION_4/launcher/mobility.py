@@ -17,17 +17,21 @@ class RandomWaypoint:
         min_speed: float = 1.0,
         max_speed: float = 3.0,
         terrain: list[list[float]] | None = None,
+        step: float = 1.0,
     ):
         """
         Initialise le modèle de mobilité.
         :param area_size: Taille de l'aire carrée de simulation (mètres).
         :param min_speed: Vitesse minimale des nœuds (m/s).
         :param max_speed: Vitesse maximale des nœuds (m/s).
+        :param terrain: Carte influençant la vitesse ou bloquant les déplacements.
+        :param step: Pas de temps entre deux mises à jour de position (s).
         """
         self.area_size = area_size
         self.min_speed = min_speed
         self.max_speed = max_speed
         self.terrain = terrain
+        self.step = step
         if terrain:
             self.rows = len(terrain)
             self.cols = len(terrain[0]) if self.rows else 0
