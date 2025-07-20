@@ -78,6 +78,8 @@ class AdvancedChannel:
         obstacle_map: list[list[float]] | None = None,
         map_area_size: float | None = None,
         obstacle_height_map: list[list[float]] | None = None,
+        obstacle_map_file: str | None = None,
+        obstacle_height_map_file: str | None = None,
         default_obstacle_dB: float = 0.0,
         multipath_paths: int = 1,
         **kwargs,
@@ -114,6 +116,9 @@ class AdvancedChannel:
             de visée. Si la trajectoire passe sous une hauteur positive, la
             pénalité ``default_obstacle_dB`` ou la valeur de ``obstacle_map`` est
             appliquée.
+        :param obstacle_map_file: Fichier JSON ou texte décrivant ``obstacle_map``.
+        :param obstacle_height_map_file: Fichier JSON ou texte décrivant
+            ``obstacle_height_map``.
         :param default_obstacle_dB: Pénalité par défaut en dB lorsqu'un obstacle
             est rencontré sans valeur explicite dans ``obstacle_map``.
         """
@@ -147,6 +152,13 @@ class AdvancedChannel:
         self._sync_offset = _CorrelatedValue(
             sync_offset_s, sync_offset_std_s, fading_correlation
         )
+        if obstacle_map is None and obstacle_map_file:
+            from .map_loader import load_map
+            obstacle_map = load_map(obstacle_map_file)
+        if obstacle_height_map is None and obstacle_height_map_file:
+            from .map_loader import load_map
+            obstacle_height_map = load_map(obstacle_height_map_file)
+
         self.obstacle_map = obstacle_map
         self.obstacle_height_map = obstacle_height_map
         self.default_obstacle_dB = float(default_obstacle_dB)

@@ -2,6 +2,7 @@ import heapq
 import logging
 import random
 import math
+from pathlib import Path
 from dataclasses import dataclass
 from enum import IntEnum
 
@@ -68,7 +69,8 @@ class Simulator:
                  config_file: str | None = None,
                  seed: int | None = None,
                  class_c_rx_interval: float = 1.0,
-                 phy_model: str = ""):
+                 phy_model: str = "",
+                 terrain_map: str | list[list[float]] | None = None):
         """
         Initialise la simulation LoRa avec les entités et paramètres donnés.
         :param num_nodes: Nombre de nœuds à simuler.
@@ -114,6 +116,8 @@ class Simulator:
         :param class_c_rx_interval: Période entre deux vérifications de
             downlink pour les nœuds de classe C (s).
         :param phy_model: "omnet" pour activer le modèle physique OMNeT++.
+        :param terrain_map: Carte de terrain utilisée pour la mobilité
+            réaliste (chemin JSON/texte ou matrice).
         """
         # Paramètres de simulation
         self.num_nodes = num_nodes
@@ -144,7 +148,21 @@ class Simulator:
         self.phy_model = phy_model
         # Activation ou non de la mobilité des nœuds
         self.mobility_enabled = mobility
-        self.mobility_model = SmoothMobility(area_size, mobility_speed[0], mobility_speed[1])
+        if terrain_map is not None:
+            if isinstance(terrain_map, (str, Path)):
+                from .map_loader import load_map
+                terrain_map = load_map(terrain_map)
+            from .mobility import RandomWaypoint
+            self.mobility_model = RandomWaypoint(
+                area_size,
+                min_speed=mobility_speed[0],
+                max_speed=mobility_speed[1],
+                terrain=terrain_map,
+            )
+        else:
+            self.mobility_model = SmoothMobility(
+                area_size, mobility_speed[0], mobility_speed[1]
+            )
 
         # Class B/C settings
         self.beacon_interval = 128.0
