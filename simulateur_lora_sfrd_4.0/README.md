@@ -128,8 +128,8 @@ each run. ``Simulator`` now accepts ``flora_mode=True`` which enables the
 official detection threshold, interference window and a ``flora`` propagation
   profile. Pass the `--flora-csv <file>` option to automatically compare these
   metrics with an official FLoRa export using `compare_with_sim`. FLoRa stores
-  its results in `.sca` and `.vec` files. You may convert them to CSV with
-  external tools if needed.
+  its results in `.sca` and `.vec` files. Use `tools/convert_flora_results.py`
+  to turn these into CSV files if needed.
 Passing `--degrade` to the script enables a harsh propagation profile that
 significantly lowers the Packet Delivery Ratio.  Additional interference,
 stronger fast fading and a higher path loss exponent are applied together with a
@@ -233,13 +233,14 @@ The tests compare RSSI and airtime calculations against theoretical values and c
 ### Cross-check with FLoRa
 
   The module `VERSION_4/launcher/compare_flora.py` can read exports from
-  the FLoRa simulator (typically `.sca`/`.vec` files converted to CSV) and extracts several metrics: Packet Delivery Ratio,
+  the FLoRa simulator. It accepts raw `.sca` result files or CSV files produced
+  with `tools/convert_flora_results.py` and extracts several metrics: Packet Delivery Ratio,
 spreading factor histogram, energy consumption, throughput and packet
 collisions.  The test file `tests/test_flora_comparison.py` demonstrates
 how to compare these values with those returned by
 `Simulator.get_metrics` to validate the Python implementation against
 OMNeT++ runs.
-  You can also supply a reference CSV (converted from `.sca`/`.vec`) to
+  You can also supply a reference CSV or a directory containing `.sca` files to
   `examples/run_flora_example.py` via `--flora-csv` to perform this check outside
   the test suite.
 
@@ -261,7 +262,8 @@ the current directory.
 
   The script `tools/calibrate_flora.py` automates the search of channel
   parameters that best reproduce a reference export from FLoRa. The reference
-  data should come from FLoRa `.sca`/`.vec` results converted to CSV. It launches
+  data should come from FLoRa results converted to CSV with
+  `tools/convert_flora_results.py`. It launches
   several runs with different propagation settings and reports the combination
   yielding the smallest PDR difference. From the repository root run:
 
