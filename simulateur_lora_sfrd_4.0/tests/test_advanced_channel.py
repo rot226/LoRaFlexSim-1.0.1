@@ -109,3 +109,36 @@ def test_obstacle_height_blocks_link():
         rx_pos=(90.0, 90.0, 0.0),
     )
     assert r == -float("inf")
+
+
+def test_device_specific_offset():
+    random.seed(0)
+    adv = AdvancedChannel(
+        fading="",
+        shadowing_std=0,
+        dev_frequency_offset_hz=500.0,
+        dev_freq_offset_std_hz=50.0,
+    )
+    _, snr1 = adv.compute_rssi(14.0, 100.0)
+    _, snr2 = adv.compute_rssi(14.0, 100.0)
+    assert snr1 != snr2
+
+
+def test_temperature_dependent_noise():
+    random.seed(0)
+    adv = AdvancedChannel(fading="", shadowing_std=0, temperature_std_K=30.0)
+    _, snr1 = adv.compute_rssi(14.0, 100.0)
+    _, snr2 = adv.compute_rssi(14.0, 100.0)
+    assert snr1 != snr2
+
+
+def test_pa_non_linearity():
+    random.seed(0)
+    adv = AdvancedChannel(
+        fading="",
+        shadowing_std=0,
+        pa_non_linearity_std_dB=1.0,
+    )
+    r1, _ = adv.compute_rssi(14.0, 100.0)
+    r2, _ = adv.compute_rssi(14.0, 100.0)
+    assert r1 != r2

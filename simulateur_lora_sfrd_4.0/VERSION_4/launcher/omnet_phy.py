@@ -8,10 +8,35 @@ import random
 from .omnet_model import OmnetModel
 
 
+class _CorrelatedValue:
+    """Simple correlated random walk."""
+
+    def __init__(self, mean: float, std: float, correlation: float) -> None:
+        self.mean = mean
+        self.std = std
+        self.corr = correlation
+        self.value = mean
+
+    def sample(self) -> float:
+        self.value = self.corr * self.value + (1.0 - self.corr) * self.mean
+        if self.std > 0.0:
+            self.value += random.gauss(0.0, self.std)
+        return self.value
+
+
 class OmnetPHY:
     """Replicate OMNeT++ FLoRa PHY calculations."""
 
-    def __init__(self, channel) -> None:
+    def __init__(
+        self,
+        channel,
+        *,
+        dev_frequency_offset_hz: float = 0.0,
+        dev_freq_offset_std_hz: float = 0.0,
+        temperature_std_K: float = 0.0,
+        pa_non_linearity_dB: float = 0.0,
+        pa_non_linearity_std_dB: float = 0.0,
+    ) -> None:
         self.channel = channel
         self.model = OmnetModel(
             channel.fine_fading_std,
@@ -20,6 +45,22 @@ class OmnetPHY:
             freq_drift_std=channel.omnet.freq_drift_std,
             clock_drift_std=channel.omnet.clock_drift_std,
             temperature_K=channel.omnet.temperature_K,
+        )
+        corr = channel.omnet.correlation
+        self._dev_freq = _CorrelatedValue(
+            dev_frequency_offset_hz,
+            dev_freq_offset_std_hz,
+            corr,
+        )
+        self._temperature = _CorrelatedValue(
+            channel.omnet.temperature_K,
+            temperature_std_K,
+            corr,
+        )
+        self._pa_nl = _CorrelatedValue(
+            pa_non_linearity_dB,
+            pa_non_linearity_std_dB,
+            corr,
         )
 
     # ------------------------------------------------------------------
@@ -35,7 +76,14 @@ class OmnetPHY:
     def noise_floor(self) -> float:
         """Return the noise floor (dBm) including optional variations."""
         ch = self.channel
-        thermal = self.model.thermal_noise_dBm(ch.bandwidth)
+        if self._temperature.std > 0.0:
+            temp = self._temperature.sample()
+            original = self.model.temperature_K
+            self.model.temperature_K = temp
+            thermal = self.model.thermal_noise_dBm(ch.bandwidth)
+            self.model.temperature_K = original
+        else:
+            thermal = self.model.thermal_noise_dBm(ch.bandwidth)
         noise = thermal + ch.noise_figure_dB + ch.interference_dB
         if ch.noise_floor_std > 0:
             noise += random.gauss(0.0, ch.noise_floor_std)
@@ -55,6 +103,18 @@ class OmnetPHY:
         loss = self.path_loss(distance)
         if ch.shadowing_std > 0:
             loss += random.gauss(0.0, ch.shadowing_std)
+
+        if freq_offset_hz is None:
+            freq_offset_hz = ch.frequency_offset_hz
+        # Include time-varying frequency drift
+        freq_offset_hz += self.model.frequency_drift()
+        freq_offset_hz += self._dev_freq.sample()
+        if sync_offset_s is None:
+            sync_offset_s = ch.sync_offset_s
+        # Include short-term clock jitter
+        sync_offset_s += self.model.clock_drift()
+
+        tx_power_dBm += self._pa_nl.sample()
         rssi = (
             tx_power_dBm
             + ch.tx_antenna_gain_dB
@@ -70,15 +130,6 @@ class OmnetPHY:
             rssi += random.gauss(0.0, ch.time_variation_std)
         rssi += self.model.fine_fading()
         rssi += ch.rssi_offset_dB
-
-        if freq_offset_hz is None:
-            freq_offset_hz = ch.frequency_offset_hz
-        # Include time-varying frequency drift
-        freq_offset_hz += self.model.frequency_drift()
-        if sync_offset_s is None:
-            sync_offset_s = ch.sync_offset_s
-        # Include short-term clock jitter
-        sync_offset_s += self.model.clock_drift()
 
         snr = rssi - self.noise_floor() + ch.snr_offset_dB
         penalty = self._alignment_penalty_db(freq_offset_hz, sync_offset_s, sf)

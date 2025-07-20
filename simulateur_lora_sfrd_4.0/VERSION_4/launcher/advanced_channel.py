@@ -75,6 +75,11 @@ class AdvancedChannel:
         freq_offset_std_hz: float = 0.0,
         sync_offset_s: float = 0.0,
         sync_offset_std_s: float = 0.0,
+        dev_frequency_offset_hz: float = 0.0,
+        dev_freq_offset_std_hz: float = 0.0,
+        temperature_std_K: float = 0.0,
+        pa_non_linearity_dB: float = 0.0,
+        pa_non_linearity_std_dB: float = 0.0,
         obstacle_map: list[list[float]] | None = None,
         map_area_size: float | None = None,
         obstacle_height_map: list[list[float]] | None = None,
@@ -107,6 +112,16 @@ class AdvancedChannel:
             collisions partielles.
         :param sync_offset_std_s: Variation temporelle (écart-type en s) du
             décalage temporel.
+        :param dev_frequency_offset_hz: Décalage fréquentiel propre à
+            l'appareil émetteur (Hz).
+        :param dev_freq_offset_std_hz: Variation temporelle du décallage
+            fréquentiel propre à l'appareil.
+        :param temperature_std_K: Variation de température (K) pour moduler le
+            bruit thermique.
+        :param pa_non_linearity_dB: Décalage moyen (dB) dû à la non‑linéarité
+            de l'amplificateur de puissance.
+        :param pa_non_linearity_std_dB: Variation temporelle (dB) de la
+            non‑linéarité PA.
         :param multipath_paths: Nombre de trajets multipath à simuler.
         :param obstacle_map: Maillage décrivant les pertes additionnelles (dB)
             sur le trajet. Une valeur négative bloque totalement la liaison.
@@ -153,6 +168,21 @@ class AdvancedChannel:
             sync_offset_s, sync_offset_std_s, fading_correlation
         )
         self._tx_power_var = _CorrelatedValue(0.0, self.base.tx_power_std, fading_correlation)
+        self._dev_freq_offset = _CorrelatedValue(
+            dev_frequency_offset_hz,
+            dev_freq_offset_std_hz,
+            fading_correlation,
+        )
+        self._temperature = _CorrelatedValue(
+            self.base.omnet.temperature_K,
+            temperature_std_K,
+            fading_correlation,
+        )
+        self._pa_nl = _CorrelatedValue(
+            pa_non_linearity_dB,
+            pa_non_linearity_std_dB,
+            fading_correlation,
+        )
         if obstacle_map is None and obstacle_map_file:
             from .map_loader import load_map
             obstacle_map = load_map(obstacle_map_file)
@@ -310,6 +340,7 @@ class AdvancedChannel:
             freq_offset_hz = self._freq_offset.sample()
         # Include time-varying frequency drift
         freq_offset_hz += self.base.omnet.frequency_drift()
+        freq_offset_hz += self._dev_freq_offset.sample()
         if sync_offset_s is None:
             sync_offset_s = self._sync_offset.sample()
         # Include short-term clock jitter
@@ -324,6 +355,7 @@ class AdvancedChannel:
         if self.base.shadowing_std > 0:
             loss += random.gauss(0, self.base.shadowing_std)
 
+        tx_power_dBm += self._pa_nl.sample()
         rssi = (
             tx_power_dBm
             + self.base.tx_antenna_gain_dB
@@ -339,7 +371,12 @@ class AdvancedChannel:
             rssi += random.gauss(0, self.base.time_variation_std)
         rssi += self.base.omnet.fine_fading()
 
+        temperature = self._temperature.sample()
+        model = self.base.omnet_phy.model if getattr(self.base, "omnet_phy", None) else self.base.omnet
+        original_temp = model.temperature_K
+        model.temperature_K = temperature
         noise = self.base.noise_floor_dBm()
+        model.temperature_K = original_temp
         rssi += self.fading_model.sample_db()
 
         # Additional penalty if transmissions are not perfectly aligned
