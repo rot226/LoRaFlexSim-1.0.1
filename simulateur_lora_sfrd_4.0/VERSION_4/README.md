@@ -25,9 +25,9 @@ ou `gw,id=1,x=10,y=80`. Cela permet notamment de reprendre les positions
 fournies dans l'INI de FLoRa.
 4. **Exécutez des simulations en ligne de commande :**
    ```bash
-   python run.py --nodes 30 --gateways 1 --mode Random --interval 10 --steps 100 --output résultats.csv
-   python run.py --nodes 20 --mode Random --interval 15
-   python run.py --nodes 5 --mode Periodic --interval 10
+   python VERSION_4/run.py --nodes 30 --gateways 1 --mode Random --interval 10 --steps 100 --output résultats.csv
+   python VERSION_4/run.py --nodes 20 --mode Random --interval 15
+   python VERSION_4/run.py --nodes 5 --mode Periodic --interval 10
    ```
     Ajoutez l'option `--seed` pour reproduire exactement le placement des nœuds
     et passerelles.
@@ -40,11 +40,11 @@ Quelques commandes pour tester des scénarios plus complexes :
 
 ```bash
 # Simulation multi-canaux avec mobilité
-python run.py --nodes 50 --gateways 2 --channels 3 \
+python VERSION_4/run.py --nodes 50 --gateways 2 --channels 3 \
   --mobility --steps 500 --output advanced.csv
 
 # Démonstration LoRaWAN avec downlinks
-python run.py --lorawan-demo --steps 100 --output lorawan.csv
+python VERSION_4/run.py --lorawan-demo --steps 100 --output lorawan.csv
 ```
 
 ### Exemples classes B et C
@@ -262,7 +262,7 @@ adaptée ici sous une forme plus légère sans OMNeT++.
 Lancer l'exemple minimal :
 
 ```bash
-python run.py --lorawan-demo
+python VERSION_4/run.py --lorawan-demo
 ```
 
 Le tableau de bord inclut désormais un sélecteur **Classe LoRaWAN** permettant de choisir entre les modes A, B ou C pour l'ensemble des nœuds, ainsi qu'un champ **Taille payload (o)** afin de définir la longueur utilisée pour calculer l'airtime. Ces réglages facilitent la reproduction fidèle des scénarios FLoRa.
