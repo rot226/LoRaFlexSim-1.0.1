@@ -309,8 +309,7 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## Current limitations
 
--This simulator aims to remain lightweight and therefore omits several advanced
-concepts:
+- This simulator aims to remain lightweight and therefore omits several advanced concepts:
 
 - The physical layer is greatly simplified and does not reproduce hardware
   imperfections found in real devices.
