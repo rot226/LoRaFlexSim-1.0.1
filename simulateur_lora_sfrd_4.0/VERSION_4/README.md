@@ -226,6 +226,8 @@ constructeur de `Channel` classique et restent compatibles avec le
 tableau de bord. Les modèles ``rayleigh`` et ``rician`` utilisent
 désormais une corrélation temporelle pour reproduire le comportement de
 FLoRa et un bruit variable peut être ajouté via ``variable_noise_std``.
+Une carte ``obstacle_height_map`` peut bloquer complètement un lien en
+fonction de l'altitude parcourue.
 
 Le tableau de bord propose désormais un bouton **Mode FLoRa complet**. Quand il
 est activé, `detection_threshold_dBm` est automatiquement fixé à `-110` dBm et

@@ -85,3 +85,27 @@ def test_obstacle_map_extra_loss():
         rx_pos=(90.0, 90.0),
     )
     assert r_obst < r_clear
+
+
+def test_obstacle_height_blocks_link():
+    obstacle_h = [
+        [0.0, 0.0],
+        [5.0, 0.0],
+    ]
+    obstacle = [
+        [0.0, 0.0],
+        [-1.0, 0.0],
+    ]
+    adv = AdvancedChannel(
+        obstacle_height_map=obstacle_h,
+        obstacle_map=obstacle,
+        map_area_size=100.0,
+        fading="",
+    )
+    r, s = adv.compute_rssi(
+        14.0,
+        80.0,
+        tx_pos=(10.0, 90.0, 0.0),
+        rx_pos=(90.0, 90.0, 0.0),
+    )
+    assert r == -float("inf")

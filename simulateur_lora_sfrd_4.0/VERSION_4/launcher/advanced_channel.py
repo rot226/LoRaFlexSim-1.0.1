@@ -77,6 +77,8 @@ class AdvancedChannel:
         sync_offset_std_s: float = 0.0,
         obstacle_map: list[list[float]] | None = None,
         map_area_size: float | None = None,
+        obstacle_height_map: list[list[float]] | None = None,
+        default_obstacle_dB: float = 0.0,
         multipath_paths: int = 1,
         **kwargs,
     ) -> None:
@@ -108,6 +110,12 @@ class AdvancedChannel:
             sur le trajet. Une valeur négative bloque totalement la liaison.
         :param map_area_size: Taille (mètres) correspondant au maillage pour
             le calcul des obstacles.
+        :param obstacle_height_map: Carte des hauteurs (m) obstruant la ligne
+            de visée. Si la trajectoire passe sous une hauteur positive, la
+            pénalité ``default_obstacle_dB`` ou la valeur de ``obstacle_map`` est
+            appliquée.
+        :param default_obstacle_dB: Pénalité par défaut en dB lorsqu'un obstacle
+            est rencontré sans valeur explicite dans ``obstacle_map``.
         """
 
         from .channel import Channel
@@ -140,10 +148,12 @@ class AdvancedChannel:
             sync_offset_s, sync_offset_std_s, fading_correlation
         )
         self.obstacle_map = obstacle_map
+        self.obstacle_height_map = obstacle_height_map
+        self.default_obstacle_dB = float(default_obstacle_dB)
         self.map_area_size = map_area_size
-        if obstacle_map:
-            self._rows = len(obstacle_map)
-            self._cols = len(obstacle_map[0]) if self._rows else 0
+        if obstacle_map or obstacle_height_map:
+            self._rows = len(obstacle_map or obstacle_height_map)
+            self._cols = len((obstacle_map or obstacle_height_map)[0]) if self._rows else 0
         else:
             self._rows = self._cols = 0
 
@@ -169,10 +179,17 @@ class AdvancedChannel:
 
     # ------------------------------------------------------------------
     def _obstacle_loss(
-        self, tx_pos: tuple[float, float], rx_pos: tuple[float, float]
+        self,
+        tx_pos: tuple[float, float, float] | tuple[float, float],
+        rx_pos: tuple[float, float, float] | tuple[float, float],
     ) -> float:
         """Compute additional loss due to obstacles between two points."""
-        if not self.obstacle_map or not self.map_area_size or self._rows == 0:
+        if (
+            not self.obstacle_map
+            and not self.obstacle_height_map
+            or not self.map_area_size
+            or self._rows == 0
+        ):
             return 0.0
         visited: set[tuple[int, int]] = set()
         steps = max(self._cols, self._rows)
@@ -181,6 +198,10 @@ class AdvancedChannel:
             t = i / steps
             x = tx_pos[0] + (rx_pos[0] - tx_pos[0]) * t
             y = tx_pos[1] + (rx_pos[1] - tx_pos[1]) * t
+            if len(tx_pos) >= 3 and len(rx_pos) >= 3:
+                z = tx_pos[2] + (rx_pos[2] - tx_pos[2]) * t
+            else:
+                z = 0.0
             cx = int(x / self.map_area_size * self._cols)
             cy = int(y / self.map_area_size * self._rows)
             cx = min(max(cx, 0), self._cols - 1)
@@ -189,11 +210,28 @@ class AdvancedChannel:
             if cell in visited:
                 continue
             visited.add(cell)
-            val = float(self.obstacle_map[cy][cx])
-            if val < 0:
-                return float("inf")
-            if val > 0:
-                loss += val
+            obstacle_val = None
+            if self.obstacle_map:
+                obstacle_val = float(self.obstacle_map[cy][cx])
+            height = None
+            if self.obstacle_height_map:
+                height = float(self.obstacle_height_map[cy][cx])
+            if height is not None and height > 0.0 and z <= height:
+                val = (
+                    obstacle_val
+                    if obstacle_val is not None
+                    else self.default_obstacle_dB
+                )
+                if val < 0:
+                    return float("inf")
+                if val > 0:
+                    loss += val
+                continue
+            if obstacle_val is not None:
+                if obstacle_val < 0:
+                    return float("inf")
+                if obstacle_val > 0:
+                    loss += obstacle_val
         return loss
 
     def _cost231_loss(self, distance: float) -> float:
@@ -241,8 +279,8 @@ class AdvancedChannel:
         distance: float,
         sf: int | None = None,
         *,
-        tx_pos: tuple[float, float] | None = None,
-        rx_pos: tuple[float, float] | None = None,
+        tx_pos: tuple[float, float] | tuple[float, float, float] | None = None,
+        rx_pos: tuple[float, float] | tuple[float, float, float] | None = None,
         freq_offset_hz: float | None = None,
         sync_offset_s: float | None = None,
     ) -> tuple[float, float]:
@@ -252,6 +290,8 @@ class AdvancedChannel:
         emulate partial collisions or de-synchronised transmissions. When not
         specified, time‑varying offsets are drawn from correlated distributions
         configured at construction.
+        ``tx_pos`` and ``rx_pos`` may include an optional altitude as third
+        coordinate to interact with ``obstacle_height_map``.
         """
         if freq_offset_hz is None:
             freq_offset_hz = self._freq_offset.sample()
