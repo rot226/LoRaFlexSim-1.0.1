@@ -71,7 +71,12 @@ class Simulator:
                  class_c_rx_interval: float = 1.0,
                  phy_model: str = "",
                  terrain_map: str | list[list[float]] | None = None,
-                 beacon_drift: float = 0.0):
+                 beacon_drift: float = 0.0,
+                 *,
+                 clock_accuracy: float = 0.0,
+                 beacon_loss_prob: float = 0.0,
+                 ping_slot_interval: float = 1.0,
+                 ping_slot_offset: float = 2.0):
         """
         Initialise la simulation LoRa avec les entités et paramètres donnés.
         :param num_nodes: Nombre de nœuds à simuler.
@@ -120,6 +125,14 @@ class Simulator:
         :param terrain_map: Carte de terrain utilisée pour la mobilité
             réaliste (chemin JSON/texte ou matrice).
         :param beacon_drift: Dérive relative appliquée aux beacons (ppm).
+        :param clock_accuracy: Écart-type de la dérive d'horloge des nœuds
+            (ppm). Chaque nœud se voit attribuer un décalage aléatoire selon
+            cette précision.
+        :param beacon_loss_prob: Probabilité pour un nœud de manquer un beacon.
+        :param ping_slot_interval: Intervalle de base entre deux ping slots
+            (s).
+        :param ping_slot_offset: Décalage initial entre le beacon et le premier
+            ping slot (s).
         """
         # Paramètres de simulation
         self.num_nodes = num_nodes
@@ -168,10 +181,12 @@ class Simulator:
 
         # Class B/C settings
         self.beacon_interval = 128.0
-        self.ping_slot_interval = 1.0
-        self.ping_slot_offset = 2.0
+        self.ping_slot_interval = ping_slot_interval
+        self.ping_slot_offset = ping_slot_offset
         self.class_c_rx_interval = class_c_rx_interval
         self.beacon_drift = beacon_drift
+        self.clock_accuracy = clock_accuracy
+        self.beacon_loss_prob = beacon_loss_prob
 
         # Gestion du duty cycle (activé par défaut à 1 %)
         self.duty_cycle_manager = DutyCycleManager(duty_cycle) if duty_cycle else None
@@ -267,6 +282,10 @@ class Simulator:
                 channel=channel,
                 class_type=self.node_class,
                 battery_capacity_j=self.battery_capacity_j,
+                beacon_loss_prob=self.beacon_loss_prob,
+                beacon_drift=random.gauss(0.0, self.clock_accuracy)
+                if self.clock_accuracy > 0.0
+                else 0.0,
             )
             # Enregistrer les états initiaux du nœud pour rapport ultérieur
             node.initial_x = x

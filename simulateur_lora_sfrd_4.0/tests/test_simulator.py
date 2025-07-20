@@ -619,3 +619,72 @@ def test_quasi_continuous_ping_slots():
     ping_slots = [e for e in sim.event_queue if e.type == EventType.PING_SLOT]
     assert len(ping_slots) > 5
     assert ping_slots[1].time - ping_slots[0].time == pytest.approx(sim.ping_slot_interval)
+
+
+def test_clock_accuracy_assigns_drift():
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=3,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=1,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+        clock_accuracy=0.001,
+    )
+    assert any(n.beacon_drift != 0.0 for n in sim.nodes)
+
+
+def test_beacon_loss_prob_parameter():
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=1,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+        beacon_loss_prob=0.5,
+    )
+    assert sim.nodes[0].beacon_loss_prob == pytest.approx(0.5)
+
+
+def test_custom_ping_slot_timing():
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=1,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+        ping_slot_interval=2.0,
+        ping_slot_offset=3.0,
+    )
+    node = sim.nodes[0]
+    node.class_type = "B"
+    node.ping_slot_periodicity = 1
+    sim.step()
+    ping_slots = sorted(
+        [e for e in sim.event_queue if e.type == EventType.PING_SLOT],
+        key=lambda e: e.time,
+    )
+    assert ping_slots[0].time == pytest.approx(sim.ping_slot_offset)
+    assert ping_slots[1].time == pytest.approx(
+        sim.ping_slot_offset + 2 * sim.ping_slot_interval
+    )
