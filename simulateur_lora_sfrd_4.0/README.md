@@ -1,6 +1,6 @@
 # LoRa Network Simulator 4.0
 
-This repository contains a lightweight LoRa network simulator implemented in Python. The latest code resides in the `VERSION_4` directory and is based on a simplified version of the FLoRa model so it can run without OMNeT++. This approach omits the detailed OMNeT++ physical layer, which may reduce accuracy compared to full-stack simulators.
+This repository contains a lightweight LoRa network simulator implemented in Python. The latest code resides in the `VERSION_4` directory and now integrates a simplified OMNeT++ physical layer for frequency and clock drifts as well as thermal noise. It remains independent from the full simulator stack.
 
 ## Features
 - Duty cycle enforcement to mimic real LoRa constraints
@@ -8,6 +8,7 @@ This repository contains a lightweight LoRa network simulator implemented in Pyt
 - Multi-channel radio support
 - Advanced channel model with loss and noise parameters
 - Optional multipath fading with synchronised paths and external interference modeling
+- Correlated fading and 3D obstacle maps with automatic calibration
 - Antenna gains and cable losses for accurate link budgets
 - Optional LoRa spreading gain applied to SNR
 - Additional COST231 path loss, Okumura‑Hata model and 3D propagation via
@@ -267,6 +268,9 @@ the current directory.
 The resulting parameters typically give a correspondence above **99 %** with
 FLoRa on the provided dataset. The calibration is also executed during the
 test suite to ensure the simulator stays in sync with the reference model.
+
+Pass ``--advanced`` to also optimise the correlated fading coefficient and
+the obstacle attenuation when using ``AdvancedChannel``.
 
 To check several FLoRa exports at once and average the error over all of them
 use:

@@ -42,7 +42,7 @@ class Channel:
         fading_correlation: float = 0.9,
         variable_noise_std: float = 0.0,
         advanced_capture: bool = False,
-        phy_model: str = "",
+        phy_model: str = "omnet",
         system_loss_dB: float = 0.0,
         rssi_offset_dB: float = 0.0,
         snr_offset_dB: float = 0.0,
@@ -91,7 +91,7 @@ class Channel:
             fading et le bruit variable.
         :param variable_noise_std: Variation lente du bruit thermique en dB.
         :param advanced_capture: Active un mode de capture inspiré de FLoRa.
-        :param phy_model: "omnet" pour utiliser le module OMNeT++.
+        :param phy_model: "omnet" (par défaut) pour utiliser le module OMNeT++.
         :param system_loss_dB: Pertes fixes supplémentaires (par ex. pertes
             système) appliquées à la perte de parcours.
         :param rssi_offset_dB: Décalage appliqué au RSSI calculé (dB).
@@ -163,6 +163,9 @@ class Channel:
             clock_drift_std=clock_drift_std_s,
             temperature_K=temperature_K,
         )
+        self.fine_fading_std = fine_fading_std
+        self.fading_correlation = fading_correlation
+        self.variable_noise_std = variable_noise_std
         self.advanced_capture = advanced_capture
         self.phy_model = phy_model
         self.system_loss_dB = system_loss_dB
