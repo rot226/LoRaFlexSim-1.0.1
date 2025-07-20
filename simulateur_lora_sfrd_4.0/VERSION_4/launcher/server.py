@@ -33,6 +33,24 @@ class NetworkServer:
         self.next_devaddr = 1
         self.scheduler = DownlinkScheduler()
         self.join_server = join_server
+        self.beacon_interval = 128.0
+        self.beacon_drift = 0.0
+        self.last_beacon_time: float | None = None
+
+    def next_beacon_time(self, after_time: float) -> float:
+        """Return the next beacon time after ``after_time``."""
+        from .lorawan import next_beacon_time
+
+        return next_beacon_time(
+            after_time,
+            self.beacon_interval,
+            last_beacon=self.last_beacon_time,
+            drift=self.beacon_drift,
+        )
+
+    def notify_beacon(self, time: float) -> None:
+        """Record that a beacon was emitted at ``time``."""
+        self.last_beacon_time = time
 
     # ------------------------------------------------------------------
     # Downlink management

@@ -463,7 +463,7 @@ def test_beacon_schedules_multiple_ping_slots():
     assert len(ping_slots) > 1
 
 
-def test_beacon_loss_prevents_ping_slot():
+def test_beacon_loss_does_not_stop_ping_slot():
     ch = Channel(shadowing_std=0)
     sim = Simulator(
         num_nodes=1,
@@ -482,7 +482,7 @@ def test_beacon_loss_prevents_ping_slot():
     node.class_type = "B"
     node.beacon_loss_prob = 1.0
     sim.step()  # process beacon
-    assert all(evt.type != EventType.PING_SLOT for evt in sim.event_queue)
+    assert any(evt.type == EventType.PING_SLOT for evt in sim.event_queue)
 
 
 def test_class_c_rx_interval_setting():
@@ -595,3 +595,27 @@ def test_downlink_delivered_in_ping_slot():
             break
     assert node.fcnt_down == 1
     assert node.downlink_pending == 0
+
+
+def test_quasi_continuous_ping_slots():
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=1,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    node = sim.nodes[0]
+    node.class_type = "B"
+    node.ping_slot_periodicity = 0
+    sim.step()  # process beacon
+    ping_slots = [e for e in sim.event_queue if e.type == EventType.PING_SLOT]
+    assert len(ping_slots) > 5
+    assert ping_slots[1].time - ping_slots[0].time == pytest.approx(sim.ping_slot_interval)
