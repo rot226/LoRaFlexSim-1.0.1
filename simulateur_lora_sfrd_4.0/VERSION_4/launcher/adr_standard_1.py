@@ -34,17 +34,17 @@ def apply(sim: Simulator, *, degrade_channel: bool = False) -> None:
     if degrade_channel:
         for ch in sim.multichannel.channels:
             base = ch.base if isinstance(ch, AdvancedChannel) else ch
-            # Keep some additional interference but reduce the level
-            base.interference_dB = max(base.interference_dB, 6.0)
-            # Lower the fast fading deviation
-            base.fast_fading_std = max(base.fast_fading_std, 4.0)
+            # Apply a moderate amount of additional interference
+            base.interference_dB = max(base.interference_dB, 8.0)
+            # Increase the fast fading deviation a bit
+            base.fast_fading_std = max(base.fast_fading_std, 5.0)
             # Slightly raise the path loss exponent
-            base.path_loss_exp = max(base.path_loss_exp, 3.1)
-            # Detection threshold still above normal but less severe
-            base.detection_threshold_dBm = max(base.detection_threshold_dBm, -94.0)
-            # Add a small amount of slow noise variation
-            base.noise_floor_std = max(base.noise_floor_std, 0.7)
+            base.path_loss_exp = max(base.path_loss_exp, 3.2)
+            # Detection threshold above nominal sensitivity
+            base.detection_threshold_dBm = max(base.detection_threshold_dBm, -92.0)
+            # Allow some slow noise variation
+            base.noise_floor_std = max(base.noise_floor_std, 1.0)
             if isinstance(ch, AdvancedChannel):
                 ch.fading = "rayleigh"
-                ch.weather_loss_dB_per_km = max(ch.weather_loss_dB_per_km, 0.5)
-        sim.detection_threshold_dBm = -94.0
+                ch.weather_loss_dB_per_km = max(ch.weather_loss_dB_per_km, 0.8)
+        sim.detection_threshold_dBm = -92.0
