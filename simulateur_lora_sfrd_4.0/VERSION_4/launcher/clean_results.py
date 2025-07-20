@@ -1,7 +1,10 @@
 import argparse
 import os
 
-import pandas as pd
+try:
+    import pandas as pd  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    pd = None
 
 
 def clean_csv(input_path: str, output_path: str | None = None) -> str:
@@ -20,6 +23,9 @@ def clean_csv(input_path: str, output_path: str | None = None) -> str:
     str
         Path to the cleaned CSV file on disk.
     """
+    if pd is None:
+        raise RuntimeError("pandas is required to clean CSV files")
+
     df = pd.read_csv(input_path)
 
     # Drop exact duplicate rows
