@@ -285,6 +285,18 @@ In this cross-validation mode the script evaluates the Packet Delivery Ratio
 and spreading factor histograms across all inputs to pick the most consistent
 propagation parameters.
 
+### Comparer plusieurs références FLoRa
+
+The helper `tools/compare_flora_multi.py` prints a summary of the metric
+difference between a simulation CSV and several FLoRa exports:
+
+```bash
+python tools/compare_flora_multi.py results.csv examples/flora_full.csv \
+    examples/flora_interference.csv
+```
+
+Add `--output diff.csv` to save the table for later analysis.
+
 ## Versioning
 
 The current package version is defined in `pyproject.toml`.
