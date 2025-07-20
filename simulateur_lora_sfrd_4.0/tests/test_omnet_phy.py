@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT))
 
 from VERSION_4.launcher.channel import Channel  # noqa: E402
 from VERSION_4.launcher.simulator import Simulator  # noqa: E402
+from VERSION_4.launcher.omnet_phy import OmnetPHY  # noqa: E402
 from VERSION_4.launcher.compare_flora import load_flora_rx_stats  # noqa: E402
 
 
@@ -59,3 +60,18 @@ def test_omnet_phy_matches_flora():
     assert rssi == pytest.approx(flora["rssi"], abs=1e-3)
     assert snr == pytest.approx(flora["snr"], abs=1e-3)
     assert sim.packets_lost_collision == flora["collisions"]
+
+
+def test_device_specific_features_in_phy():
+    random.seed(0)
+    ch = Channel(shadowing_std=0, phy_model="omnet")
+    ch.omnet_phy = OmnetPHY(
+        ch,
+        dev_frequency_offset_hz=500.0,
+        dev_freq_offset_std_hz=100.0,
+        temperature_std_K=20.0,
+        pa_non_linearity_std_dB=1.0,
+    )
+    r1, _ = ch.omnet_phy.compute_rssi(14.0, 100.0)
+    r2, _ = ch.omnet_phy.compute_rssi(14.0, 100.0)
+    assert r1 != r2
