@@ -53,7 +53,7 @@ class Simulator:
 
     def __init__(self, num_nodes: int = 10, num_gateways: int = 1, area_size: float = 1000.0,
                  transmission_mode: str = 'Random', packet_interval: float = 60.0,
-                 interval_variation: float = 1.0,
+                 interval_variation: float = 0.0,
                  packets_to_send: int = 0, adr_node: bool = False, adr_server: bool = False,
                  duty_cycle: float | None = 0.01, mobility: bool = True,
                  channels=None, channel_distribution: str = "round-robin",
@@ -86,9 +86,8 @@ class Simulator:
         :param transmission_mode: 'Random' pour transmissions aléatoires (Poisson) ou 'Periodic' pour périodiques.
         :param packet_interval: Intervalle moyen entre transmissions (si Random, moyenne en s; si Periodic, période fixe en s).
         :param interval_variation: Jitter relatif appliqué à chaque intervalle
-            exponentiel. Une valeur de ``1`` applique un facteur aléatoire
-            compris entre 0 et 2 pour maximiser la variabilité. Des valeurs
-            supérieures accentuent encore la dispersion.
+            exponentiel. La valeur par défaut ``0`` reproduit fidèlement le
+            modèle aléatoire de FLoRa (aucune dispersion supplémentaire).
         :param packets_to_send: Nombre de paquets à émettre **par nœud** avant
             d'arrêter la simulation (0 = infini).
         :param adr_node: Activation de l'ADR côté nœud.
@@ -242,10 +241,9 @@ class Simulator:
         self.network_server.beacon_interval = self.beacon_interval
         self.network_server.beacon_drift = self.beacon_drift
 
-        # Graine aléatoire facultative pour reproduire les résultats
+        # Graine utilisée uniquement pour le placement initial des entités
         self.seed = seed
-        if self.seed is not None:
-            random.seed(self.seed)
+        self.pos_rng = random.Random(self.seed)
 
         # Générer les passerelles
         self.gateways = []
@@ -269,8 +267,8 @@ class Simulator:
                 gw_x = area_size / 2.0
                 gw_y = area_size / 2.0
             else:
-                gw_x = random.random() * area_size
-                gw_y = random.random() * area_size
+                gw_x = self.pos_rng.random() * area_size
+                gw_y = self.pos_rng.random() * area_size
             self.gateways.append(Gateway(gw_id, gw_x, gw_y))
 
         # Générer les nœuds aléatoirement dans l'aire et assigner un SF/power initiaux
@@ -284,8 +282,8 @@ class Simulator:
                 sf = ncfg.get("sf", self.fixed_sf if self.fixed_sf is not None else random.randint(7, 12))
                 tx_power = ncfg.get("tx_power", self.fixed_tx_power if self.fixed_tx_power is not None else 14.0)
             else:
-                x = random.random() * area_size
-                y = random.random() * area_size
+                x = self.pos_rng.random() * area_size
+                y = self.pos_rng.random() * area_size
                 sf = self.fixed_sf if self.fixed_sf is not None else random.randint(7, 12)
                 tx_power = self.fixed_tx_power if self.fixed_tx_power is not None else 14.0
             channel = self.multichannel.select_mask(0xFFFF)

@@ -132,8 +132,7 @@ scénarios FLoRa. Voici la liste complète des options :
 - `transmission_mode` : `Random` (émissions Poisson) ou `Periodic`.
 - `packet_interval` : moyenne ou période fixe entre transmissions (s).
 - `interval_variation` : coefficient de jitter appliqué à l'intervalle
-  exponentiel pour renforcer l'aléa (valeur positive, 1 par défaut ; une
-  valeur supérieure augmente la dispersion).
+  exponentiel (0 par défaut pour coller au comportement FLoRa).
 - `packets_to_send` : nombre de paquets émis **par nœud** avant arrêt (0 = infini).
 - `adr_node` / `adr_server` : active l'ADR côté nœud ou serveur.
 - `duty_cycle` : quota d'émission appliqué à chaque nœud (`None` pour désactiver).
@@ -152,7 +151,7 @@ scénarios FLoRa. Voici la liste complète des options :
   collision (s).
 - `config_file` : chemin d'un fichier INI ou JSON décrivant
   positions, SF et puissance.
-- `seed` : graine aléatoire pour reproduire le placement.
+- `seed` : graine aléatoire utilisée uniquement pour reproduire le placement des nœuds et passerelles.
 - `class_c_rx_interval` : période de vérification des downlinks en classe C.
 - `beacon_interval` : durée séparant deux beacons pour la classe B (s).
 - `ping_slot_interval` : intervalle de base entre ping slots successifs (s).
