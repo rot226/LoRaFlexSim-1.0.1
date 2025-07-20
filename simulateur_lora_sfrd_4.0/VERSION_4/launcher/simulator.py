@@ -688,18 +688,19 @@ class Simulator:
             end_of_cycle = nxt
             for n in self.nodes:
                 if n.class_type.upper() == "B":
-                    n.last_beacon_time = time
-                    periodicity = 2 ** (getattr(n, "ping_slot_periodicity", 0) or 0)
-                    interval = self.ping_slot_interval * periodicity
-                    slot = time + self.ping_slot_offset
-                    while slot < end_of_cycle:
-                        eid = self.event_id_counter
-                        self.event_id_counter += 1
-                        heapq.heappush(
-                            self.event_queue,
-                            Event(slot, EventType.PING_SLOT, eid, n.id),
-                        )
-                        slot += interval
+                    if random.random() >= getattr(n, "beacon_loss_prob", 0.0):
+                        n.last_beacon_time = time
+                        periodicity = 2 ** (getattr(n, "ping_slot_periodicity", 0) or 0)
+                        interval = self.ping_slot_interval * periodicity
+                        slot = time + getattr(n, "beacon_drift", 0.0) + self.ping_slot_offset
+                        while slot < end_of_cycle:
+                            eid = self.event_id_counter
+                            self.event_id_counter += 1
+                            heapq.heappush(
+                                self.event_queue,
+                                Event(slot, EventType.PING_SLOT, eid, n.id),
+                            )
+                            slot += interval
             return True
 
         elif priority == EventType.PING_SLOT:

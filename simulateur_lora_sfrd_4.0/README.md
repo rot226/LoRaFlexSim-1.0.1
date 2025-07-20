@@ -25,6 +25,8 @@ This repository contains a lightweight LoRa network simulator implemented in Pyt
   (FLoRa energy profile)
 - Regional channel plans for EU868, US915, AU915 and Asian bands
 - Customizable energy profiles with a simple registry
+- Beacon loss and clock drift simulation for Class B nodes
+- Energy-aware quasi-continuous listening for Class C nodes
 
 ## Quick start
 
@@ -287,13 +289,11 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## Current limitations
 
-This simulator aims to remain lightweight and therefore omits several advanced
+-This simulator aims to remain lightweight and therefore omits several advanced
 concepts:
 
 - The physical layer is greatly simplified and does not reproduce hardware
   imperfections found in real devices.
-- Support for LoRaWAN classes B and C is functional but lacks extensive timing
-  drift or beacon loss handling.
 - Mobility relies on random Bezier paths without obstacles or terrain
   constraints.
 - Basic LoRaWAN security (AES encryption and MIC) is enabled by default but join

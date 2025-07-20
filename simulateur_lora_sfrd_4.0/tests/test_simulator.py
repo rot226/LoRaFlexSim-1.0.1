@@ -463,6 +463,28 @@ def test_beacon_schedules_multiple_ping_slots():
     assert len(ping_slots) > 1
 
 
+def test_beacon_loss_prevents_ping_slot():
+    ch = Channel(shadowing_std=0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=10.0,
+        packets_to_send=1,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    node = sim.nodes[0]
+    node.class_type = "B"
+    node.beacon_loss_prob = 1.0
+    sim.step()  # process beacon
+    assert all(evt.type != EventType.PING_SLOT for evt in sim.event_queue)
+
+
 def test_class_c_rx_interval_setting():
     ch = Channel(shadowing_std=0)
     sim = Simulator(
