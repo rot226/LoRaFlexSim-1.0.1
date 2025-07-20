@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+
+from .join_server import JoinServer
 from typing import TYPE_CHECKING
 from .downlink_scheduler import DownlinkScheduler
 
@@ -15,55 +16,6 @@ REQUIRED_SNR = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
 MARGIN_DB = 15.0
 
 
-@dataclass
-class JoinServer:
-    """Simple join server verifying AppKey and DevNonce."""
-
-    net_id: int = 0
-    devices: dict[tuple[int, int], bytes] = field(default_factory=dict)
-    last_devnonce: dict[tuple[int, int], int] = field(default_factory=dict)
-    next_devaddr: int = 1
-    app_nonce: int = 1
-
-    def register(self, join_eui: int, dev_eui: int, app_key: bytes) -> None:
-        """Register a device and its associated key."""
-        if len(app_key) != 16:
-            raise ValueError("Invalid AppKey")
-        self.devices[(join_eui, dev_eui)] = app_key
-
-    def handle_join(self, req: "JoinRequest") -> tuple["JoinAccept", bytes, bytes]:
-        """Validate ``req`` and return a join-accept with derived keys."""
-        from .lorawan import (
-            compute_join_mic,
-            derive_session_keys,
-            aes_decrypt,
-            JoinAccept,
-        )
-
-        key = (req.join_eui, req.dev_eui)
-        app_key = self.devices.get(key)
-        if app_key is None:
-            raise KeyError("Unknown device")
-        if compute_join_mic(app_key, req.to_bytes()) != req.mic:
-            raise ValueError("Invalid MIC")
-        last = self.last_devnonce.get(key)
-        if last is not None and req.dev_nonce <= last:
-            raise ValueError("DevNonce reused")
-        self.last_devnonce[key] = req.dev_nonce
-
-        app_nonce = self.app_nonce & 0xFFFFFF
-        self.app_nonce += 1
-        dev_addr = self.next_devaddr
-        self.next_devaddr += 1
-        nwk_skey, app_skey = derive_session_keys(
-            app_key, req.dev_nonce, app_nonce, self.net_id
-        )
-        accept = JoinAccept(app_nonce, self.net_id, dev_addr)
-        msg = accept.to_bytes()
-        pad = (16 - len(msg) % 16) % 16
-        accept.encrypted = aes_decrypt(app_key, msg + bytes(pad))
-        accept.mic = compute_join_mic(app_key, msg)
-        return accept, nwk_skey, app_skey
 
 class NetworkServer:
     """Représente le serveur de réseau LoRa (collecte des paquets reçus)."""
