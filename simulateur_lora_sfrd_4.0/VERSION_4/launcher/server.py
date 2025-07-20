@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from .downlink_scheduler import DownlinkScheduler
 
 if TYPE_CHECKING:  # pragma: no cover - for type checking only
-    from .lorawan import LoRaWANFrame, JoinAccept
+    from .lorawan import LoRaWANFrame, JoinAccept, JoinRequest
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ MARGIN_DB = 15.0
 
 class NetworkServer:
     """Représente le serveur de réseau LoRa (collecte des paquets reçus)."""
-    def __init__(self):
+    def __init__(self, join_server=None):
         """Initialise le serveur réseau."""
         # Ensemble des identifiants d'événements déjà reçus (pour éviter les doublons)
         self.received_events = set()
@@ -32,6 +32,7 @@ class NetworkServer:
         self.net_id = 0
         self.next_devaddr = 1
         self.scheduler = DownlinkScheduler()
+        self.join_server = join_server
 
     # ------------------------------------------------------------------
     # Downlink management
@@ -163,6 +164,20 @@ class NetworkServer:
 
         node = next((n for n in self.nodes if n.id == node_id), None)
         gw = next((g for g in self.gateways if g.id == gateway_id), None)
+        from .lorawan import JoinRequest
+
+        if node and isinstance(frame, JoinRequest) and self.join_server:
+            try:
+                accept, nwk_skey, app_skey = self.join_server.handle_join(frame)
+            except Exception:
+                return
+            node.nwkskey = nwk_skey
+            node.appskey = app_skey
+            node.devaddr = accept.dev_addr
+            node.activated = True
+            self.send_downlink(node, accept, gateway=gw)
+            return
+
         if node and frame is not None and node.security_enabled:
             from .lorawan import encrypt_payload, compute_mic, LoRaWANFrame
 
