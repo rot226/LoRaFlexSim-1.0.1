@@ -1,5 +1,5 @@
-from dataclasses import dataclass, field
-from .crypto import aes_encrypt, aes_decrypt, cmac
+from dataclasses import dataclass
+from .crypto import aes_encrypt, aes_decrypt, cmac  # noqa: F401
 
 
 @dataclass
@@ -773,44 +773,33 @@ def derive_session_keys(app_key: bytes, dev_nonce: int, app_nonce: int, net_id: 
     return nwk_skey, app_skey
 
 
-@dataclass
-class JoinServer:
-    """Very small join server with minimal key verification."""
-
-    net_id: int = 0
-    devices: dict[tuple[int, int], bytes] = field(default_factory=dict)
-    last_devnonce: dict[tuple[int, int], int] = field(default_factory=dict)
-    next_devaddr: int = 1
-    app_nonce: int = 1
-
-    def register(self, join_eui: int, dev_eui: int, app_key: bytes) -> None:
-        """Register a device and its AppKey."""
-        self.devices[(join_eui, dev_eui)] = app_key
-
-    def handle_join(self, req: JoinRequest) -> tuple[JoinAccept, bytes, bytes]:
-        """Validate a join request and return join parameters and keys."""
-        key = (req.join_eui, req.dev_eui)
-        app_key = self.devices.get(key)
-        if app_key is None:
-            raise KeyError("Unknown device")
-        last = self.last_devnonce.get(key)
-        if last is not None and req.dev_nonce <= last:
-            raise ValueError("DevNonce reused")
-        if req.mic:
-            if compute_join_mic(app_key, req.to_bytes()) != req.mic:
-                raise ValueError("Invalid MIC")
-        self.last_devnonce[key] = req.dev_nonce
-        app_nonce = self.app_nonce & 0xFFFFFF
-        self.app_nonce += 1
-        dev_addr = self.next_devaddr
-        self.next_devaddr += 1
-        nwk_skey, app_skey = derive_session_keys(
-            app_key, req.dev_nonce, app_nonce, self.net_id
+def validate_frame(
+    frame: LoRaWANFrame,
+    nwk_skey: bytes,
+    app_skey: bytes,
+    devaddr: int,
+    direction: int,
+) -> bool:
+    """Check MIC and decrypt payload in ``frame``."""
+    if frame.encrypted_payload is not None:
+        if (
+            compute_mic(nwk_skey, devaddr, frame.fcnt, direction, frame.encrypted_payload)
+            != frame.mic
+        ):
+            return False
+        frame.payload = encrypt_payload(
+            app_skey, devaddr, frame.fcnt, direction, frame.encrypted_payload
         )
-        accept = JoinAccept(app_nonce, self.net_id, dev_addr)
-        if req.mic:
-            msg = accept.to_bytes()
-            pad = (16 - len(msg) % 16) % 16
-            accept.encrypted = aes_decrypt(app_key, msg + bytes(pad))
-            accept.mic = compute_join_mic(app_key, msg)
-        return accept, nwk_skey, app_skey
+        return True
+    return (
+        compute_mic(nwk_skey, devaddr, frame.fcnt, direction, frame.payload)
+        == frame.mic
+    )
+
+
+def validate_join_request(req: JoinRequest, app_key: bytes) -> bool:
+    """Return ``True`` if ``req`` has a valid MIC."""
+    return compute_join_mic(app_key, req.to_bytes()) == req.mic
+
+
+from .server import JoinServer  # noqa: F401,E402 - re-export for backward compatibility

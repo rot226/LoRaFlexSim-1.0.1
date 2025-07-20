@@ -162,12 +162,12 @@ def test_next_beacon_time_recover():
 
 def test_join_server_invalid_key_and_rejoin():
     from VERSION_4.launcher.lorawan import (
-        JoinServer,
         JoinRequest,
         JoinAccept,
         compute_join_mic,
         aes_encrypt,
     )
+    from VERSION_4.launcher.server import JoinServer
 
     js = JoinServer(net_id=1)
     app_key = bytes(range(16))
