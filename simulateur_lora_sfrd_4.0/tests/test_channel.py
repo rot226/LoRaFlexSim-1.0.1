@@ -87,3 +87,15 @@ def test_phase_noise_channel():
     _, snr1 = ch.compute_rssi(14.0, 100.0)
     _, snr2 = ch.compute_rssi(14.0, 100.0)
     assert snr1 != snr2
+
+
+def test_band_interference_degrades_snr():
+    random.seed(0)
+    base = Channel(shadowing_std=0)
+    jam = Channel(
+        shadowing_std=0,
+        band_interference=[(base.frequency_hz, base.bandwidth, 10.0)],
+    )
+    _, snr_base = base.compute_rssi(14.0, 100.0)
+    _, snr_jam = jam.compute_rssi(14.0, 100.0)
+    assert snr_jam < snr_base

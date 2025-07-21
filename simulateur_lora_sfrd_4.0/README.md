@@ -17,6 +17,7 @@ This repository contains a lightweight LoRa network simulator implemented in Pyt
   `AdvancedChannel`
 - Terrain and weather based attenuation parameters
 - Time‑varying frequency and synchronisation offsets for realistic collisions
+- Optional frequency‑selective interference bands for jamming scenarios
 - Configurable bandwidth and coding rate per channel
 - Preset propagation environments (urban/suburban/rural) for quick channel setup
 - Capture effect and a minimum interference time to ignore very short overlaps
