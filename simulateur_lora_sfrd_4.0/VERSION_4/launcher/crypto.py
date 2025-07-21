@@ -264,3 +264,38 @@ def cmac(key: bytes, msg: bytes) -> bytes:
     C = _aes_encrypt_block(bytes(x ^ y for x, y in zip(C, last)), round_keys)
     return C
 
+
+def encrypt_payload(
+    app_skey: bytes,
+    devaddr: int,
+    fcnt: int,
+    direction: int,
+    payload: bytes,
+) -> bytes:
+    """Encrypt ``payload`` using the LoRaWAN payload encryption scheme."""
+    blocks = []
+    for i in range(1, (len(payload) + 15) // 16 + 1):
+        a = (
+            bytes([0x01, 0x00, 0x00, 0x00, 0x00])
+            + bytes([direction & 0x01])
+            + devaddr.to_bytes(4, "little")
+            + fcnt.to_bytes(4, "little")
+            + bytes([0x00, i])
+        )
+        s = aes_encrypt(app_skey, a)
+        start = (i - 1) * 16
+        block = payload[start : start + 16]
+        blocks.append(bytes(x ^ y for x, y in zip(block, s)))
+    return b"".join(blocks)[: len(payload)]
+
+
+def decrypt_payload(
+    app_skey: bytes,
+    devaddr: int,
+    fcnt: int,
+    direction: int,
+    payload: bytes,
+) -> bytes:
+    """Decrypt ``payload`` using the LoRaWAN payload encryption scheme."""
+    return encrypt_payload(app_skey, devaddr, fcnt, direction, payload)
+

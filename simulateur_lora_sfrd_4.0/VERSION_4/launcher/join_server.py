@@ -10,6 +10,9 @@ class JoinServer:
     net_id: int = 0
     devices: dict[tuple[int, int], bytes] = field(default_factory=dict)
     last_devnonce: dict[tuple[int, int], int] = field(default_factory=dict)
+    session_keys: dict[tuple[int, int], tuple[bytes, bytes]] = field(
+        default_factory=dict
+    )
     next_devaddr: int = 1
     app_nonce: int = 1
 
@@ -18,6 +21,10 @@ class JoinServer:
         if len(app_key) != 16:
             raise ValueError("Invalid AppKey")
         self.devices[(join_eui, dev_eui)] = app_key
+
+    def get_session_keys(self, join_eui: int, dev_eui: int) -> tuple[bytes, bytes] | None:
+        """Return stored (NwkSKey, AppSKey) for a device if known."""
+        return self.session_keys.get((join_eui, dev_eui))
 
     def handle_join(self, req: "JoinRequest") -> tuple["JoinAccept", bytes, bytes]:
         """Validate ``req`` and return a join-accept frame with session keys."""
@@ -55,4 +62,5 @@ class JoinServer:
         pad = (16 - len(msg) % 16) % 16
         accept.encrypted = aes_decrypt(app_key, msg + bytes(pad))
         accept.mic = compute_join_mic(app_key, msg)
+        self.session_keys[key] = (nwk_skey, app_skey)
         return accept, nwk_skey, app_skey
