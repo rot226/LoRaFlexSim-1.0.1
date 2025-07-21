@@ -23,6 +23,7 @@ def load_run_metrics(csv_path: str | Path) -> dict[str, float]:
         "throughput_bps",
         "energy_J",
         "energy",
+        "avg_delay",
     ]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -40,6 +41,11 @@ def load_run_metrics(csv_path: str | Path) -> dict[str, float]:
         metrics["energy_J"] = df["energy_J"].mean()
     elif "energy" in df.columns:
         metrics["energy_J"] = df["energy"].mean()
+    if "avg_delay" in df.columns:
+        metrics["avg_delay_s"] = df["avg_delay"].mean()
+    for col in df.columns:
+        if col.startswith("energy_class_"):
+            metrics[col] = df[col].mean()
 
     return metrics
 
@@ -50,7 +56,9 @@ def generate_report(
     flora = load_flora_metrics(flora_csv)
     sim = load_run_metrics(sim_csv)
 
-    metrics = ["PDR", "collisions", "throughput_bps", "energy_J"]
+    metrics = ["PDR", "collisions", "throughput_bps", "avg_delay_s", "energy_J"]
+    class_metrics = [k for k in sorted(set(flora) | set(sim)) if k.startswith("energy_class_")]
+    metrics.extend(class_metrics)
     rows = []
     for m in metrics:
         flora_val = flora.get(m, 0)

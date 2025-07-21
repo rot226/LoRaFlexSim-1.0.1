@@ -897,6 +897,11 @@ class Simulator:
             delivered_cls = sum(n.packets_success for n in nodes_cls)
             pdr_by_class[ct] = delivered_cls / sent_cls if sent_cls > 0 else 0.0
 
+        energy_by_class = {
+            ct: sum(n.energy_consumed for n in self.nodes if n.class_type == ct)
+            for ct in class_types
+        }
+
         return {
             'PDR': pdr,
             'collisions': self.packets_lost_collision,
@@ -909,6 +914,7 @@ class Simulator:
             'pdr_by_sf': pdr_by_sf,
             'pdr_by_gateway': pdr_by_gateway,
             'pdr_by_class': pdr_by_class,
+            **{f"energy_class_{ct}_J": energy_by_class[ct] for ct in energy_by_class},
             'retransmissions': self.retransmissions,
         }
 

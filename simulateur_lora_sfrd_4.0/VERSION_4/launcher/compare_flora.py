@@ -30,12 +30,14 @@ def _parse_sca_file(path: Path) -> dict[str, Any]:
     for key, val in metrics.items():
         if key in {"sent", "received", "collisions"}:
             row[key] = int(val)
-        elif key in {"throughput_bps", "energy_J", "energy", "rssi", "snr"}:
+        elif key in {"throughput_bps", "energy_J", "energy", "rssi", "snr", "avg_delay_s"}:
             row[key] = float(val)
         elif key.startswith("sf") and key[2:].isdigit():
             row[key] = int(val)
         elif key.startswith("collisions_sf"):
             row[key] = int(val)
+        elif key.startswith("energy_class_"):
+            row[key] = float(val)
 
     return row
 
@@ -56,6 +58,7 @@ def _aggregate_df(df: pd.DataFrame) -> dict[str, Any]:
     throughput = (
         float(df["throughput_bps"].mean()) if "throughput_bps" in df.columns else 0.0
     )
+    avg_delay = float(df["avg_delay_s"].mean()) if "avg_delay_s" in df.columns else 0.0
     if "energy_J" in df.columns:
         energy = float(df["energy_J"].mean())
     elif "energy" in df.columns:
@@ -67,11 +70,19 @@ def _aggregate_df(df: pd.DataFrame) -> dict[str, Any]:
     collision_cols = [c for c in df.columns if c.startswith("collisions_sf")]
     collision_dist = {int(c.split("sf")[1]): int(df[c].sum()) for c in collision_cols}
 
+    energy_class = {
+        col.split("_")[2]: float(df[col].mean())
+        for col in df.columns
+        if col.startswith("energy_class_")
+    }
+
     return {
         "PDR": pdr,
         "sf_distribution": sf_hist,
         "throughput_bps": throughput,
         "energy_J": energy,
+        "avg_delay_s": avg_delay,
+        **{f"energy_class_{cls}_J": val for cls, val in energy_class.items()},
         "collision_distribution": collision_dist,
         "collisions": collisions,
     }
@@ -136,12 +147,19 @@ def load_flora_metrics(path: str | Path) -> dict[str, Any]:
 
     collision_cols = [c for c in df.columns if c.startswith("collisions_sf")]
     collision_dist = {int(c.split("sf")[1]): int(df[c].sum()) for c in collision_cols}
+    energy_class = {
+        col.split("_")[2]: float(df[col].mean())
+        for col in df.columns
+        if col.startswith("energy_class_")
+    }
 
     return {
         "PDR": pdr,
         "sf_distribution": sf_hist,
         "throughput_bps": throughput,
         "energy_J": energy,
+        "avg_delay_s": avg_delay,
+        **{f"energy_class_{cls}_J": val for cls, val in energy_class.items()},
         "collision_distribution": collision_dist,
         "collisions": collisions,
     }
