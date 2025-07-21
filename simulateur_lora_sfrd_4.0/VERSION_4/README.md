@@ -172,6 +172,8 @@ réception :
 - `pa_non_linearity_dB` / `pa_non_linearity_std_dB` : modélisent la
   non‑linéarité de l'amplificateur de puissance.
 - `phase_noise_std_dB` : bruit de phase ajouté au SNR.
+- `band_interference` : liste de brouilleurs sélectifs sous la forme
+  `(freq, bw, dB)` appliqués au calcul du bruit.
 - `environment` : preset rapide pour le modèle de propagation
   (`urban`, `suburban` ou `rural` ou `flora`).
 

@@ -87,6 +87,10 @@ class OmnetPHY:
         else:
             thermal = self.model.thermal_noise_dBm(ch.bandwidth)
         noise = thermal + ch.noise_figure_dB + ch.interference_dB
+        for f, bw, power in ch.band_interference:
+            half = (bw + ch.bandwidth) / 2.0
+            if abs(ch.frequency_hz - f) <= half:
+                noise += power
         if ch.noise_floor_std > 0:
             noise += random.gauss(0.0, ch.noise_floor_std)
         noise += self.model.noise_variation()

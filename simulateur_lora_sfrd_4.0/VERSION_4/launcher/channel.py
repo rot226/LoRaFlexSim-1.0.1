@@ -78,6 +78,7 @@ class Channel:
         tx_power_std: float = 0.0,
         interference_dB: float = 0.0,
         detection_threshold_dBm: float = -float("inf"),
+        band_interference: list[tuple[float, float, float]] | None = None,
         environment: str | None = None,
         region: str | None = None,
         channel_index: int = 0,
@@ -106,6 +107,10 @@ class Channel:
         :param interference_dB: Bruit supplémentaire moyen dû aux interférences.
         :param detection_threshold_dBm: RSSI minimal détectable (dBm). Les
             signaux plus faibles sont ignorés.
+        :param band_interference: Liste optionnelle de tuples ``(freq, bw, dB)``
+            décrivant des brouilleurs sélectifs. ``freq`` est la fréquence
+            centrale en Hz, ``bw`` la largeur de bande et ``dB`` la puissance
+            ajoutée au bruit lorsque le canal chevauche la bande.
         :param fine_fading_std: Écart-type du fading temporel fin.
         :param fading_correlation: Facteur de corrélation temporelle pour le
             fading et le bruit variable.
@@ -175,6 +180,7 @@ class Channel:
         self.noise_floor_std = noise_floor_std
         self.tx_power_std = tx_power_std
         self.interference_dB = interference_dB
+        self.band_interference = list(band_interference or [])
         self.detection_threshold_dBm = detection_threshold_dBm
         self.frequency_offset_hz = frequency_offset_hz
         self.sync_offset_s = sync_offset_s
@@ -255,6 +261,10 @@ class Channel:
         thermal = self.omnet.thermal_noise_dBm(self.bandwidth)
         self.omnet.temperature_K = original
         noise = thermal + self.noise_figure_dB + self.interference_dB
+        for f, bw, power in self.band_interference:
+            half = (bw + self.bandwidth) / 2.0
+            if abs(self.frequency_hz - f) <= half:
+                noise += power
         if self.noise_floor_std > 0:
             noise += random.gauss(0, self.noise_floor_std)
         noise += self.omnet.noise_variation()
