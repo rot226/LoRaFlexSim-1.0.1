@@ -380,8 +380,8 @@ Les points suivants ont été intégrés au simulateur :
 Le simulateur reste volontairement léger et certaines fonctionnalités manquent
 encore de maturité :
 
-- La couche physique est simplifiée et n'imite pas parfaitement les comportements
-  réels des modems LoRa.
+ - La couche physique propose désormais un brouillage sélectif et un bruit de
+   phase optionnels pour mieux reproduire les imperfections des modems LoRa.
 - Les classes B et C sont gérées de manière basique : les pertes de beacon ou
   la dérive temporelle ne sont pas simulées.
 - La mobilité par défaut s'appuie sur des trajets de Bézier. Un modèle RandomWaypoint peut exploiter une carte de terrain pour éviter les obstacles. Un module de navigation peut désormais planifier des chemins à partir d'une carte d'obstacles.

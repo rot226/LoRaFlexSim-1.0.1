@@ -71,6 +71,8 @@ class AdvancedChannel:
         fading_correlation: float = 0.9,
         variable_noise_std: float = 0.0,
         advanced_capture: bool = False,
+        jamming_dB: float = 0.0,
+        jamming_prob: float = 0.0,
         frequency_offset_hz: float = 0.0,
         freq_offset_std_hz: float = 0.0,
         sync_offset_s: float = 0.0,
@@ -87,6 +89,7 @@ class AdvancedChannel:
         obstacle_height_map_file: str | None = None,
         default_obstacle_dB: float = 0.0,
         multipath_paths: int = 1,
+        phase_noise_std_deg: float = 0.0,
         **kwargs,
     ) -> None:
         """Initialise the advanced channel with optional propagation models.
@@ -104,6 +107,8 @@ class AdvancedChannel:
         :param fading_correlation: Facteur de corrélation temporelle.
         :param variable_noise_std: Variation lente du bruit thermique.
         :param advanced_capture: Active un mode de capture avancée.
+        :param jamming_dB: Puissance de brouillage ajoutée aléatoirement.
+        :param jamming_prob: Probabilité d'activation du brouillage.
         :param frequency_offset_hz: Décalage fréquentiel moyen entre émetteur et
             récepteur (Hz).
         :param freq_offset_std_hz: Variation temporelle (écart-type en Hz) du
@@ -123,6 +128,7 @@ class AdvancedChannel:
         :param pa_non_linearity_std_dB: Variation temporelle (dB) de la
             non‑linéarité PA.
         :param multipath_paths: Nombre de trajets multipath à simuler.
+        :param phase_noise_std_deg: Écart-type du bruit de phase (degrés).
         :param obstacle_map: Maillage décrivant les pertes additionnelles (dB)
             sur le trajet. Une valeur négative bloque totalement la liaison.
         :param map_area_size: Taille (mètres) correspondant au maillage pour
@@ -145,6 +151,9 @@ class AdvancedChannel:
             fading_correlation=fading_correlation,
             variable_noise_std=variable_noise_std,
             advanced_capture=advanced_capture,
+            jamming_dB=jamming_dB,
+            jamming_prob=jamming_prob,
+            phase_noise_std_deg=phase_noise_std_deg,
             **kwargs,
         )
         self.base_station_height = base_station_height
@@ -194,6 +203,9 @@ class AdvancedChannel:
         self.obstacle_height_map = obstacle_height_map
         self.default_obstacle_dB = float(default_obstacle_dB)
         self.map_area_size = map_area_size
+        self.jamming_dB = jamming_dB
+        self.jamming_prob = jamming_prob
+        self.phase_noise_std_deg = phase_noise_std_deg
         if obstacle_map or obstacle_height_map:
             self._rows = len(obstacle_map or obstacle_height_map)
             self._cols = len((obstacle_map or obstacle_height_map)[0]) if self._rows else 0
@@ -382,6 +394,9 @@ class AdvancedChannel:
         # Additional penalty if transmissions are not perfectly aligned
         penalty = self._interference_penalty_db(freq_offset_hz, sync_offset_s, sf)
         noise += penalty
+        if self.phase_noise_std_deg > 0.0:
+            phase_offset = abs(random.gauss(0.0, self.phase_noise_std_deg))
+            noise += phase_offset / 10.0
 
         snr = rssi - noise
         if sf is not None:

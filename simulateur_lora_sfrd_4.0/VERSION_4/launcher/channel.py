@@ -57,7 +57,10 @@ class Channel:
         capture_threshold_dB: float = 6.0,
         tx_power_std: float = 0.0,
         interference_dB: float = 0.0,
+        jamming_dB: float = 0.0,
+        jamming_prob: float = 0.0,
         detection_threshold_dBm: float = -float("inf"),
+        phase_noise_std_deg: float = 0.0,
         environment: str | None = None,
         region: str | None = None,
         channel_index: int = 0,
@@ -84,8 +87,11 @@ class Channel:
         :param capture_threshold_dB: Seuil de capture pour le décodage simultané.
         :param tx_power_std: Écart-type de la variation aléatoire de puissance TX.
         :param interference_dB: Bruit supplémentaire moyen dû aux interférences.
+        :param jamming_dB: Niveau de brouillage sélectif appliqué aléatoirement.
+        :param jamming_prob: Probabilité qu'un brouillage soit actif.
         :param detection_threshold_dBm: RSSI minimal détectable (dBm). Les
             signaux plus faibles sont ignorés.
+        :param phase_noise_std_deg: Écart-type du bruit de phase (degrés).
         :param fine_fading_std: Écart-type du fading temporel fin.
         :param fading_correlation: Facteur de corrélation temporelle pour le
             fading et le bruit variable.
@@ -149,7 +155,10 @@ class Channel:
         self.noise_floor_std = noise_floor_std
         self.tx_power_std = tx_power_std
         self.interference_dB = interference_dB
+        self.jamming_dB = jamming_dB
+        self.jamming_prob = jamming_prob
         self.detection_threshold_dBm = detection_threshold_dBm
+        self.phase_noise_std_deg = phase_noise_std_deg
         self.frequency_offset_hz = frequency_offset_hz
         self.sync_offset_s = sync_offset_s
         self.freq_drift_std_hz = freq_drift_std_hz
@@ -211,6 +220,8 @@ class Channel:
         if self.noise_floor_std > 0:
             noise += random.gauss(0, self.noise_floor_std)
         noise += self.omnet.noise_variation()
+        if self.jamming_dB > 0 and random.random() < self.jamming_prob:
+            noise += self.jamming_dB
         return noise
 
     def path_loss(self, distance: float) -> float:
@@ -273,6 +284,9 @@ class Channel:
         snr = rssi - self.noise_floor_dBm() + self.snr_offset_dB
         penalty = self._alignment_penalty_db(freq_offset_hz, sync_offset_s, sf)
         snr -= penalty
+        if self.phase_noise_std_deg > 0.0:
+            phase_offset = abs(random.gauss(0.0, self.phase_noise_std_deg))
+            snr -= phase_offset / 10.0
         if sf is not None:
             snr += 10 * math.log10(2 ** sf)
         return rssi, snr
