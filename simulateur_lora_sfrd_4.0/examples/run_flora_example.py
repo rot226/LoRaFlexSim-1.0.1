@@ -51,7 +51,11 @@ def run_simulation(runs: int, seed: int | None = None, flora_csv: str | None = N
         print(f"Run {i+1}/{runs} PDR: {m['PDR']:.2%}")
         print("SF distribution:", m['sf_distribution'])
         if flora_csv:
-            match = compare_with_sim(m, flora_csv)
+            try:
+                match = compare_with_sim(m, flora_csv)
+            except RuntimeError as exc:
+                print(f"Cannot compare with FLoRa data: {exc}")
+                match = False
             status = "matches" if match else "differs from"
             print(f"-> Metrics {status} FLoRa reference")
     # compute averages
