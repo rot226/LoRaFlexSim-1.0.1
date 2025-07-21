@@ -39,6 +39,8 @@ class NetworkServer:
         self.join_server = join_server
         self.beacon_interval = 128.0
         self.beacon_drift = 0.0
+        self.ping_slot_interval = 1.0
+        self.ping_slot_offset = 2.0
         self.last_beacon_time: float | None = None
 
     def next_beacon_time(self, after_time: float) -> float:
@@ -129,6 +131,12 @@ class NetworkServer:
 
     def deliver_scheduled(self, node_id: int, current_time: float) -> None:
         """Move ready scheduled frames to the gateway buffer."""
+        tolerance = 0.1
+        nxt = self.scheduler.next_time(node_id)
+        if nxt is not None and nxt < current_time - tolerance:
+            frame, gw = self.scheduler.pop_ready(node_id, nxt)
+            if frame and gw:
+                gw.buffer_downlink(node_id, frame)
         frame, gw = self.scheduler.pop_ready(node_id, current_time)
         while frame and gw:
             gw.buffer_downlink(node_id, frame)

@@ -42,11 +42,17 @@ class DownlinkScheduler:
         beacon_interval: float,
         ping_slot_interval: float,
         ping_slot_offset: float,
+        *,
+        last_beacon_time: float | None = None,
     ) -> float:
         """Schedule ``frame`` for ``node`` at its next ping slot."""
         duration = node.channel.airtime(node.sf, self._payload_length(frame))
         t = node.next_ping_slot_time(
-            after_time, beacon_interval, ping_slot_interval, ping_slot_offset
+            after_time,
+            beacon_interval,
+            ping_slot_interval,
+            ping_slot_offset,
+            last_beacon_time=last_beacon_time,
         )
         busy = self._gateway_busy.get(gateway.id, 0.0)
         if t < busy:

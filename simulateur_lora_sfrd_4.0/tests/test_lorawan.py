@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import pytest  # noqa: E402
+import heapq
 
 from VERSION_4.launcher.lorawan import (  # noqa: E402
     NewChannelReq,
@@ -193,4 +194,48 @@ def test_join_server_invalid_key_and_rejoin():
     req2 = JoinRequest(1, 2, 2)
     req2.mic = compute_join_mic(app_key, req2.to_bytes())
     js.handle_join(req2)
+
+
+def test_missed_beacon_reschedule():
+    from VERSION_4.launcher.node import Node
+    from VERSION_4.launcher.gateway import Gateway
+    from VERSION_4.launcher.channel import Channel
+    from VERSION_4.launcher.server import NetworkServer
+    from VERSION_4.launcher.lorawan import LoRaWANFrame
+
+    ch = Channel(shadowing_std=0)
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=ch)
+    node.class_type = "B"
+    gw = Gateway(1, 0.0, 0.0)
+    ns = NetworkServer()
+    ns.gateways = [gw]
+    ns.nodes = [node]
+    ns.channel = ch
+    ns.last_beacon_time = 0.0
+    frame = LoRaWANFrame(mhdr=0x60, fctrl=0, fcnt=0, payload=b"x")
+    ns.scheduler.schedule_class_b(
+        node,
+        0.0,
+        frame,
+        gw,
+        ns.beacon_interval,
+        ns.ping_slot_interval,
+        ns.ping_slot_offset,
+        last_beacon_time=ns.last_beacon_time,
+    )
+    ns.scheduler.queue[node.id][0] = (0.5, 0, frame, gw)
+    ns.deliver_scheduled(node.id, 1.0)
+    assert gw.pop_downlink(node.id) is not None
+
+
+def test_rx_window_precision():
+    from VERSION_4.launcher.node import Node
+    from VERSION_4.launcher.channel import Channel
+
+    node = Node(3, 0.0, 0.0, 7, 14.0, channel=Channel())
+    end = 5.432
+    node.rx_delay = 2.0
+    rx1, rx2 = node.schedule_receive_windows(end)
+    assert rx1 == pytest.approx(end + 2.0)
+    assert rx2 == pytest.approx(end + 3.0)
 

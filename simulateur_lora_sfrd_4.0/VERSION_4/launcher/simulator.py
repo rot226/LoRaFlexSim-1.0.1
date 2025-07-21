@@ -240,6 +240,8 @@ class Simulator:
         self.network_server = NetworkServer()
         self.network_server.beacon_interval = self.beacon_interval
         self.network_server.beacon_drift = self.beacon_drift
+        self.network_server.ping_slot_interval = self.ping_slot_interval
+        self.network_server.ping_slot_offset = self.ping_slot_offset
 
         # Graine utilisée uniquement pour le placement initial des entités
         self.seed = seed
@@ -749,6 +751,9 @@ class Simulator:
                     received = random.random() >= getattr(n, "beacon_loss_prob", 0.0)
                     if received:
                         n.last_beacon_time = time
+                        n.clock_offset = 0.0
+                    else:
+                        n.miss_beacon(self.beacon_interval)
                     periodicity = 2 ** (getattr(n, "ping_slot_periodicity", 0) or 0)
                     interval = self.ping_slot_interval * periodicity
                     slot = n.next_ping_slot_time(
