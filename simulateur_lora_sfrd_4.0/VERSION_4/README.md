@@ -168,6 +168,10 @@ réception :
 - `noise_figure` : facteur de bruit du récepteur en dB.
 - `noise_floor_std` : écart-type de la variation aléatoire du bruit (dB).
 - `fast_fading_std` : amplitude du fading multipath en dB.
+- `temperature_std_K` : variation de température pour le calcul du bruit.
+- `pa_non_linearity_dB` / `pa_non_linearity_std_dB` : modélisent la
+  non‑linéarité de l'amplificateur de puissance.
+- `phase_noise_std_dB` : bruit de phase ajouté au SNR.
 - `environment` : preset rapide pour le modèle de propagation
   (`urban`, `suburban` ou `rural` ou `flora`).
 

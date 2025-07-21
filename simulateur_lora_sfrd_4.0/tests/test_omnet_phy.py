@@ -71,6 +71,7 @@ def test_device_specific_features_in_phy():
         dev_freq_offset_std_hz=100.0,
         temperature_std_K=20.0,
         pa_non_linearity_std_dB=1.0,
+        phase_noise_std_dB=2.0,
     )
     r1, _ = ch.omnet_phy.compute_rssi(14.0, 100.0)
     r2, _ = ch.omnet_phy.compute_rssi(14.0, 100.0)

@@ -142,3 +142,11 @@ def test_pa_non_linearity():
     r1, _ = adv.compute_rssi(14.0, 100.0)
     r2, _ = adv.compute_rssi(14.0, 100.0)
     assert r1 != r2
+
+
+def test_phase_noise_penalizes_snr():
+    random.seed(0)
+    adv = AdvancedChannel(fading="", shadowing_std=0, phase_noise_std_dB=2.0)
+    _, snr1 = adv.compute_rssi(14.0, 100.0)
+    _, snr2 = adv.compute_rssi(14.0, 100.0)
+    assert snr1 != snr2
