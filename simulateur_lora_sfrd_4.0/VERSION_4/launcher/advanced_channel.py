@@ -80,6 +80,7 @@ class AdvancedChannel:
         temperature_std_K: float = 0.0,
         pa_non_linearity_dB: float = 0.0,
         pa_non_linearity_std_dB: float = 0.0,
+        phase_noise_std_dB: float = 0.0,
         obstacle_map: list[list[float]] | None = None,
         map_area_size: float | None = None,
         obstacle_height_map: list[list[float]] | None = None,
@@ -122,6 +123,8 @@ class AdvancedChannel:
             de l'amplificateur de puissance.
         :param pa_non_linearity_std_dB: Variation temporelle (dB) de la
             non‑linéarité PA.
+        :param phase_noise_std_dB: Bruit de phase appliqué au SNR (écart-type en
+            dB).
         :param multipath_paths: Nombre de trajets multipath à simuler.
         :param obstacle_map: Maillage décrivant les pertes additionnelles (dB)
             sur le trajet. Une valeur négative bloque totalement la liaison.
@@ -183,6 +186,7 @@ class AdvancedChannel:
             pa_non_linearity_std_dB,
             fading_correlation,
         )
+        self._phase_noise = _CorrelatedValue(0.0, phase_noise_std_dB, fading_correlation)
         if obstacle_map is None and obstacle_map_file:
             from .map_loader import load_map
             obstacle_map = load_map(obstacle_map_file)
@@ -372,18 +376,26 @@ class AdvancedChannel:
         rssi += self.base.omnet.fine_fading()
 
         temperature = self._temperature.sample()
-        model = self.base.omnet_phy.model if getattr(self.base, "omnet_phy", None) else self.base.omnet
+        model = (
+            self.base.omnet_phy.model
+            if getattr(self.base, "omnet_phy", None)
+            else self.base.omnet
+        )
         original_temp = model.temperature_K
         model.temperature_K = temperature
-        noise = self.base.noise_floor_dBm()
+        thermal = model.thermal_noise_dBm(self.base.bandwidth)
         model.temperature_K = original_temp
+        noise = thermal + self.base.noise_figure_dB + self.base.interference_dB
+        if self.base.noise_floor_std > 0:
+            noise += random.gauss(0, self.base.noise_floor_std)
+        noise += model.noise_variation()
         rssi += self.fading_model.sample_db()
 
         # Additional penalty if transmissions are not perfectly aligned
         penalty = self._interference_penalty_db(freq_offset_hz, sync_offset_s, sf)
         noise += penalty
 
-        snr = rssi - noise
+        snr = rssi - noise - abs(self._phase_noise.sample())
         if sf is not None:
             snr += 10 * math.log10(2 ** sf)
         return rssi, snr

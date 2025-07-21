@@ -36,6 +36,7 @@ class OmnetPHY:
         temperature_std_K: float = 0.0,
         pa_non_linearity_dB: float = 0.0,
         pa_non_linearity_std_dB: float = 0.0,
+        phase_noise_std_dB: float = 0.0,
     ) -> None:
         self.channel = channel
         self.model = OmnetModel(
@@ -62,6 +63,7 @@ class OmnetPHY:
             pa_non_linearity_std_dB,
             corr,
         )
+        self._phase_noise = _CorrelatedValue(0.0, phase_noise_std_dB, corr)
 
     # ------------------------------------------------------------------
     def path_loss(self, distance: float) -> float:
@@ -134,6 +136,7 @@ class OmnetPHY:
         snr = rssi - self.noise_floor() + ch.snr_offset_dB
         penalty = self._alignment_penalty_db(freq_offset_hz, sync_offset_s, sf)
         snr -= penalty
+        snr -= abs(self._phase_noise.sample())
         if sf is not None:
             snr += 10 * math.log10(2 ** sf)
         return rssi, snr

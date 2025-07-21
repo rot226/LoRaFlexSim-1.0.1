@@ -2,6 +2,22 @@ import math
 import random
 from .omnet_model import OmnetModel
 
+
+class _CorrelatedValue:
+    """Correlated random walk used for optional impairments."""
+
+    def __init__(self, mean: float, std: float, correlation: float) -> None:
+        self.mean = mean
+        self.std = std
+        self.corr = correlation
+        self.value = mean
+
+    def sample(self) -> float:
+        self.value = self.corr * self.value + (1.0 - self.corr) * self.mean
+        if self.std > 0.0:
+            self.value += random.gauss(0.0, self.std)
+        return self.value
+
 class Channel:
     """Représente le canal de propagation radio pour LoRa."""
 
@@ -51,6 +67,10 @@ class Channel:
         freq_drift_std_hz: float = 0.0,
         clock_drift_std_s: float = 0.0,
         temperature_K: float = 290.0,
+        temperature_std_K: float = 0.0,
+        phase_noise_std_dB: float = 0.0,
+        pa_non_linearity_dB: float = 0.0,
+        pa_non_linearity_std_dB: float = 0.0,
         *,
         bandwidth: float = 125e3,
         coding_rate: int = 1,
@@ -104,6 +124,12 @@ class Channel:
         :param clock_drift_std_s: Écart-type de la dérive d'horloge simulée.
         :param temperature_K: Température utilisée pour le calcul du bruit
             thermique.
+        :param temperature_std_K: Variation de température pour moduler le
+            bruit thermique.
+        :param phase_noise_std_dB: Écart-type du bruit de phase appliqué au SNR.
+        :param pa_non_linearity_dB: Décalage moyen dû à la non‑linéarité PA.
+        :param pa_non_linearity_std_dB: Variation temporelle de cette
+            non‑linéarité.
         :param environment: Chaîne optionnelle pour charger un preset
             ("urban", "suburban" ou "rural").
         :param region: Nom d'un plan de fréquences prédéfini ("EU868", "US915",
@@ -155,6 +181,10 @@ class Channel:
         self.freq_drift_std_hz = freq_drift_std_hz
         self.clock_drift_std_s = clock_drift_std_s
         self.temperature_K = temperature_K
+        self.temperature_std_K = temperature_std_K
+        self.phase_noise_std_dB = phase_noise_std_dB
+        self.pa_non_linearity_dB = pa_non_linearity_dB
+        self.pa_non_linearity_std_dB = pa_non_linearity_std_dB
         self.omnet = OmnetModel(
             fine_fading_std,
             fading_correlation,
@@ -162,6 +192,13 @@ class Channel:
             freq_drift_std=freq_drift_std_hz,
             clock_drift_std=clock_drift_std_s,
             temperature_K=temperature_K,
+        )
+        self._temperature = _CorrelatedValue(
+            temperature_K, temperature_std_K, fading_correlation
+        )
+        self._phase_noise = _CorrelatedValue(0.0, phase_noise_std_dB, fading_correlation)
+        self._pa_nl = _CorrelatedValue(
+            pa_non_linearity_dB, pa_non_linearity_std_dB, fading_correlation
         )
         self.fine_fading_std = fine_fading_std
         self.fading_correlation = fading_correlation
@@ -193,7 +230,13 @@ class Channel:
 
         if self.phy_model == "omnet":
             from .omnet_phy import OmnetPHY
-            self.omnet_phy = OmnetPHY(self)
+            self.omnet_phy = OmnetPHY(
+                self,
+                temperature_std_K=temperature_std_K,
+                pa_non_linearity_dB=pa_non_linearity_dB,
+                pa_non_linearity_std_dB=pa_non_linearity_std_dB,
+                phase_noise_std_dB=phase_noise_std_dB,
+            )
             self.advanced_capture = True
         else:
             self.omnet_phy = None
@@ -206,7 +249,11 @@ class Channel:
         """
         if self.omnet_phy:
             return self.omnet_phy.noise_floor()
+        temp = self._temperature.sample()
+        original = self.omnet.temperature_K
+        self.omnet.temperature_K = temp
         thermal = self.omnet.thermal_noise_dBm(self.bandwidth)
+        self.omnet.temperature_K = original
         noise = thermal + self.noise_figure_dB + self.interference_dB
         if self.noise_floor_std > 0:
             noise += random.gauss(0, self.noise_floor_std)
@@ -249,6 +296,8 @@ class Channel:
         loss = self.path_loss(distance)
         if self.shadowing_std > 0:
             loss += random.gauss(0, self.shadowing_std)
+
+        tx_power_dBm += self._pa_nl.sample()
         # RSSI = P_tx + gains antennes - pertes - pertes câble
         rssi = (
             tx_power_dBm
@@ -273,6 +322,7 @@ class Channel:
         snr = rssi - self.noise_floor_dBm() + self.snr_offset_dB
         penalty = self._alignment_penalty_db(freq_offset_hz, sync_offset_s, sf)
         snr -= penalty
+        snr -= abs(self._phase_noise.sample())
         if sf is not None:
             snr += 10 * math.log10(2 ** sf)
         return rssi, snr

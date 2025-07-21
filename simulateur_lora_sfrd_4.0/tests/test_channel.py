@@ -6,6 +6,7 @@ sys.path.insert(0, str(ROOT))
 
 from VERSION_4.launcher.channel import Channel  # noqa: E402
 import pytest  # noqa: E402
+import random
 
 
 def test_environment_preset_values():
@@ -62,3 +63,27 @@ def test_offsets_and_system_loss():
     r2, s2 = mod.compute_rssi(14.0, 100.0, sf=7)
     assert r2 == pytest.approx(r1 - 2.0 + 3.0)
     assert s2 == pytest.approx(s1 - 2.0 + 3.0 + 1.0)
+
+
+def test_temperature_variation_changes_snr():
+    random.seed(0)
+    ch = Channel(shadowing_std=0, temperature_std_K=20.0)
+    _, snr1 = ch.compute_rssi(14.0, 100.0)
+    _, snr2 = ch.compute_rssi(14.0, 100.0)
+    assert snr1 != snr2
+
+
+def test_pa_non_linearity_channel():
+    random.seed(0)
+    ch = Channel(shadowing_std=0, pa_non_linearity_std_dB=1.0)
+    r1, _ = ch.compute_rssi(14.0, 100.0)
+    r2, _ = ch.compute_rssi(14.0, 100.0)
+    assert r1 != r2
+
+
+def test_phase_noise_channel():
+    random.seed(0)
+    ch = Channel(shadowing_std=0, phase_noise_std_dB=2.0)
+    _, snr1 = ch.compute_rssi(14.0, 100.0)
+    _, snr2 = ch.compute_rssi(14.0, 100.0)
+    assert snr1 != snr2
