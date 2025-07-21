@@ -179,6 +179,8 @@ class Node:
         self.lorawan_minor: int = 0
         # Last beacon time for Class B scheduling
         self.last_beacon_time: float = 0.0
+        # Cumulative clock offset when beacons are lost (seconds)
+        self.clock_offset: float = 0.0
 
         # ADR state (LoRaWAN specification)
         self.adr = True
@@ -235,6 +237,10 @@ class Node:
         """Sample correlated frequency and timing offsets."""
         self.current_freq_offset = self._freq_offset.sample()
         self.current_sync_offset = self._sync_offset.sample()
+
+    def miss_beacon(self, interval: float) -> None:
+        """Update internal clock when a beacon is missed."""
+        self.clock_offset += interval * self.beacon_drift
 
     def __repr__(self):
         """
@@ -679,11 +685,15 @@ class Node:
         beacon_interval: float,
         ping_slot_interval: float,
         ping_slot_offset: float,
+        *,
+        last_beacon_time: float | None = None,
     ) -> float:
         """Return the next ping slot time after ``current_time``."""
         from .lorawan import next_ping_slot_time, next_beacon_time
 
-        last_beacon = self.last_beacon_time
+        last_beacon = self.last_beacon_time if last_beacon_time is None else last_beacon_time
+        if last_beacon_time is None:
+            last_beacon += self.clock_offset
         if current_time - last_beacon > beacon_interval * 2:
             last_beacon = next_beacon_time(
                 current_time,
