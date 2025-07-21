@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
+try:  # pandas is optional when simply parsing raw simulator metrics
+    import pandas as pd
+except Exception:  # pragma: no cover - pandas may not be installed
+    pd = None
 
 
 def _parse_sca_file(path: Path) -> dict[str, Any]:
@@ -42,8 +45,10 @@ def _parse_sca_file(path: Path) -> dict[str, Any]:
     return row
 
 
-def _aggregate_df(df: pd.DataFrame) -> dict[str, Any]:
+def _aggregate_df(df: 'pd.DataFrame') -> dict[str, Any]:
     """Compute aggregated metrics from a DataFrame of raw values."""
+    if pd is None:
+        raise RuntimeError("pandas is required for this function")
     total_sent = int(df["sent"].sum()) if "sent" in df.columns else 0
     total_recv = int(df["received"].sum()) if "received" in df.columns else 0
     pdr = total_recv / total_sent if total_sent else 0.0
@@ -90,6 +95,8 @@ def _aggregate_df(df: pd.DataFrame) -> dict[str, Any]:
 
 def _load_sca_file(path: Path) -> dict[str, Any]:
     """Parse a single ``.sca`` file and compute aggregated metrics."""
+    if pd is None:
+        raise RuntimeError("pandas is required for this function")
     row = _parse_sca_file(path)
     df = pd.DataFrame([row])
     return _aggregate_df(df)
@@ -113,6 +120,8 @@ def load_flora_metrics(path: str | Path) -> dict[str, Any]:
     ``collisions_sfX``
         Number of collisions that occurred with spreading factor ``X``.
     """
+    if pd is None:
+        raise RuntimeError("pandas is required for this function")
     path = Path(path)
     if path.is_dir():
         rows = [_parse_sca_file(p) for p in sorted(path.glob("*.sca"))]
@@ -192,6 +201,8 @@ def compare_with_sim(
 
 def load_flora_rx_stats(path: str | Path) -> dict[str, Any]:
     """Load average RSSI/SNR and collisions from a FLoRa export."""
+    if pd is None:
+        raise RuntimeError("pandas is required for this function")
     path = Path(path)
     if path.is_dir():
         rows = [_parse_sca_file(p) for p in sorted(path.glob("*.sca"))]
