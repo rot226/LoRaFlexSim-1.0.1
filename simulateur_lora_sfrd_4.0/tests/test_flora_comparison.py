@@ -83,6 +83,11 @@ def test_compare_with_flora_sample(csv_file: str, num_nodes: int) -> None:
 
     assert metrics["PDR"] == pytest.approx(flora_metrics["PDR"], abs=0.01)
     assert metrics["sf_distribution"] == flora_metrics["sf_distribution"]
+    if "avg_delay_s" in flora_metrics:
+        assert metrics["avg_delay_s"] == pytest.approx(flora_metrics["avg_delay_s"], abs=1e-3)
+    for key in flora_metrics:
+        if key.startswith("energy_class_"):
+            assert metrics[key] == pytest.approx(flora_metrics[key], abs=1e-4)
     assert compare_with_sim(metrics, flora_csv)
 
 
@@ -90,9 +95,15 @@ def test_collision_distribution_against_flora():
     sim = _make_colliding_sim()
     while sim.step():
         pass
+    metrics = sim.get_metrics()
     flora_csv = Path(__file__).parent / "data" / "flora_collisions.csv"
     flora_metrics = load_flora_metrics(flora_csv)
     sim_cd = {7: sum(n.packets_collision for n in sim.nodes if n.sf == 7)}
     assert sim.packets_lost_collision == flora_metrics["collisions"]
     assert sim.packets_lost_collision == sum(flora_metrics["collision_distribution"].values())
     assert sim_cd == flora_metrics["collision_distribution"]
+    if "avg_delay_s" in flora_metrics:
+        assert metrics["avg_delay_s"] == pytest.approx(flora_metrics["avg_delay_s"], abs=1e-3)
+    for key in flora_metrics:
+        if key.startswith("energy_class_"):
+            assert metrics[key] == pytest.approx(flora_metrics[key], abs=1e-4)
