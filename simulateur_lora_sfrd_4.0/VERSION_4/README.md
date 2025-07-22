@@ -178,6 +178,8 @@ réception :
   peut être définie via `humidity_std_percent`.
 - `pa_non_linearity_dB` / `pa_non_linearity_std_dB` : modélisent la
   non‑linéarité de l'amplificateur de puissance.
+- `pa_non_linearity_curve` : triplet de coefficients polynomiaux pour
+  définir une non‑linéarité personnalisée.
 - `phase_noise_std_dB` : bruit de phase ajouté au SNR.
 - `oscillator_leakage_dB` / `oscillator_leakage_std_dB` : fuite
   d'oscillateur ajoutée au bruit.
@@ -185,7 +187,7 @@ réception :
 - `band_interference` : liste de brouilleurs sélectifs sous la forme
   `(freq, bw, dB)` appliqués au calcul du bruit.
 - `environment` : preset rapide pour le modèle de propagation
-  (`urban`, `suburban` ou `rural` ou `flora`).
+  (`urban`, `urban_dense`, `suburban`, `rural`, `indoor` ou `flora`).
 
 ```python
 from launcher.channel import Channel
@@ -212,13 +214,16 @@ Un module optionnel `advanced_channel.py` introduit des modèles de
 propagation supplémentaires inspirés de la couche physique OMNeT++. Le
 mode `cost231` applique la formule Hata COST‑231 avec les hauteurs de
 stations paramétrables. Un mode `okumura_hata` reprend la variante
-d'origine (urbain, suburbain ou zone ouverte). Le mode `3d` calcule la
+d'origine (urbain, suburbain ou zone ouverte). Un mode `itu_indoor` permet
+de simuler des environnements intérieurs. Le mode `3d` calcule la
 distance réelle en 3D entre l'émetteur et le récepteur. Il est également
 possible de simuler un fading `rayleigh` ou `rician` pour représenter des
 multi-trajets plus réalistes. Des gains d'antenne et pertes de câble
 peuvent être précisés, ainsi qu'une variation temporelle du bruit grâce
 à `noise_floor_std`. Des pertes liées aux conditions météo peuvent être
-ajoutées via `weather_loss_dB_per_km`. Un bruit supplémentaire dépendant
+ajoutées via `weather_loss_dB_per_km`. Cette perte peut varier au cours
+du temps en utilisant `weather_loss_std_dB_per_km` et
+`weather_correlation`. Un bruit supplémentaire dépendant
 de l'humidité peut également être activé grâce aux paramètres
 `humidity_percent` et `humidity_noise_coeff_dB`.
 
@@ -228,6 +233,7 @@ ch = AdvancedChannel(
     propagation_model="okumura_hata",
     terrain="suburban",
     weather_loss_dB_per_km=1.0,
+    weather_loss_std_dB_per_km=0.5,
     fading="rayleigh",  # modèle corrélé dans le temps
 )
 ```

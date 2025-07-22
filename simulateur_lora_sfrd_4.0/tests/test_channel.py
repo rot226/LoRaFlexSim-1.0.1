@@ -20,6 +20,13 @@ def test_invalid_environment():
         Channel(environment="unknown")
 
 
+def test_new_environment_presets():
+    dense = Channel(environment="urban_dense")
+    indoor = Channel(environment="indoor")
+    assert dense.path_loss_exp >= Channel.ENV_PRESETS["urban_dense"][0]
+    assert indoor.path_loss_exp >= Channel.ENV_PRESETS["indoor"][0]
+
+
 def test_region_preset_single_channel():
     ch = Channel(region="EU868", channel_index=1)
     assert ch.region == "EU868"
