@@ -132,6 +132,19 @@ def test_temperature_dependent_noise():
     assert snr1 != snr2
 
 
+def test_humidity_dependent_noise():
+    random.seed(0)
+    adv = AdvancedChannel(
+        fading="",
+        shadowing_std=0,
+        humidity_std_percent=10.0,
+        humidity_noise_coeff_dB=1.0,
+    )
+    _, snr1 = adv.compute_rssi(14.0, 100.0)
+    _, snr2 = adv.compute_rssi(14.0, 100.0)
+    assert snr1 != snr2
+
+
 def test_pa_non_linearity():
     random.seed(0)
     adv = AdvancedChannel(

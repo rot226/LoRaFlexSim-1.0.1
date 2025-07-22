@@ -169,6 +169,9 @@ réception :
 - `noise_floor_std` : écart-type de la variation aléatoire du bruit (dB).
 - `fast_fading_std` : amplitude du fading multipath en dB.
 - `temperature_std_K` : variation de température pour le calcul du bruit.
+- `humidity_percent` et `humidity_noise_coeff_dB` : ajoutent un bruit
+  supplémentaire proportionnel à l'humidité relative. La variation temporelle
+  peut être définie via `humidity_std_percent`.
 - `pa_non_linearity_dB` / `pa_non_linearity_std_dB` : modélisent la
   non‑linéarité de l'amplificateur de puissance.
 - `phase_noise_std_dB` : bruit de phase ajouté au SNR.
@@ -208,7 +211,9 @@ possible de simuler un fading `rayleigh` ou `rician` pour représenter des
 multi-trajets plus réalistes. Des gains d'antenne et pertes de câble
 peuvent être précisés, ainsi qu'une variation temporelle du bruit grâce
 à `noise_floor_std`. Des pertes liées aux conditions météo peuvent être
-ajoutées via `weather_loss_dB_per_km`.
+ajoutées via `weather_loss_dB_per_km`. Un bruit supplémentaire dépendant
+de l'humidité peut également être activé grâce aux paramètres
+`humidity_percent` et `humidity_noise_coeff_dB`.
 
 ```python
 from launcher.advanced_channel import AdvancedChannel

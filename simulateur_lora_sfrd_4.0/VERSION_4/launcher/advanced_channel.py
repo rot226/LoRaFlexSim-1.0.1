@@ -80,6 +80,9 @@ class AdvancedChannel:
         temperature_std_K: float = 0.0,
         pa_non_linearity_dB: float = 0.0,
         pa_non_linearity_std_dB: float = 0.0,
+        humidity_percent: float = 50.0,
+        humidity_std_percent: float = 0.0,
+        humidity_noise_coeff_dB: float = 0.0,
         phase_noise_std_dB: float = 0.0,
         obstacle_map: list[list[float]] | None = None,
         map_area_size: float | None = None,
@@ -123,6 +126,11 @@ class AdvancedChannel:
             de l'amplificateur de puissance.
         :param pa_non_linearity_std_dB: Variation temporelle (dB) de la
             non‑linéarité PA.
+        :param humidity_percent: Humidité relative moyenne (0‑100 %).
+        :param humidity_std_percent: Variation temporelle de l'humidité
+            relative.
+        :param humidity_noise_coeff_dB: Coefficient appliqué au pourcentage
+            d'humidité pour moduler le bruit (dB).
         :param phase_noise_std_dB: Bruit de phase appliqué au SNR (écart-type en
             dB).
         :param multipath_paths: Nombre de trajets multipath à simuler.
@@ -148,6 +156,9 @@ class AdvancedChannel:
             fading_correlation=fading_correlation,
             variable_noise_std=variable_noise_std,
             advanced_capture=advanced_capture,
+            humidity_percent=humidity_percent,
+            humidity_std_percent=humidity_std_percent,
+            humidity_noise_coeff_dB=humidity_noise_coeff_dB,
             **kwargs,
         )
         self.base_station_height = base_station_height
@@ -184,6 +195,11 @@ class AdvancedChannel:
         self._pa_nl = _CorrelatedValue(
             pa_non_linearity_dB,
             pa_non_linearity_std_dB,
+            fading_correlation,
+        )
+        self._humidity = _CorrelatedValue(
+            humidity_percent,
+            humidity_std_percent,
             fading_correlation,
         )
         self._phase_noise = _CorrelatedValue(0.0, phase_noise_std_dB, fading_correlation)
@@ -386,6 +402,7 @@ class AdvancedChannel:
         thermal = model.thermal_noise_dBm(self.base.bandwidth)
         model.temperature_K = original_temp
         noise = thermal + self.base.noise_figure_dB + self.base.interference_dB
+        noise += self.base.humidity_noise_coeff_dB * (self._humidity.sample() / 100.0)
         if self.base.noise_floor_std > 0:
             noise += random.gauss(0, self.base.noise_floor_std)
         noise += model.noise_variation()

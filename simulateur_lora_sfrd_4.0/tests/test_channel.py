@@ -73,6 +73,18 @@ def test_temperature_variation_changes_snr():
     assert snr1 != snr2
 
 
+def test_humidity_variation_changes_snr():
+    random.seed(0)
+    ch = Channel(
+        shadowing_std=0,
+        humidity_std_percent=10.0,
+        humidity_noise_coeff_dB=1.0,
+    )
+    _, snr1 = ch.compute_rssi(14.0, 100.0)
+    _, snr2 = ch.compute_rssi(14.0, 100.0)
+    assert snr1 != snr2
+
+
 def test_pa_non_linearity_channel():
     random.seed(0)
     ch = Channel(shadowing_std=0, pa_non_linearity_std_dB=1.0)
