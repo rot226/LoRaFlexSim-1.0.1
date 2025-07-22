@@ -17,7 +17,9 @@ from VERSION_4.launcher.lorawan import (
 
 
 def test_otaa_join_procedure():
-    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel(), activated=False, appkey=bytes(16))
+    node = Node(
+        1, 0.0, 0.0, 7, 14.0, channel=Channel(), activated=False, appkey=bytes(16)
+    )
     gw = Gateway(1, 0.0, 0.0)
     js = JoinServer(net_id=0)
     js.register(node.join_eui, node.dev_eui, node.appkey)
@@ -33,7 +35,8 @@ def test_otaa_join_procedure():
     frame = gw.pop_downlink(node.id)
     assert isinstance(frame, JoinAccept)
     assert compute_join_mic(node.appkey, frame.to_bytes()) == frame.mic
-    assert aes_encrypt(node.appkey, frame.encrypted)[:10] == frame.to_bytes()
+    plain = aes_encrypt(node.appkey, frame.encrypted)[:14]
+    assert plain == frame.to_bytes() + frame.mic
 
     node.handle_downlink(frame)
     assert node.activated

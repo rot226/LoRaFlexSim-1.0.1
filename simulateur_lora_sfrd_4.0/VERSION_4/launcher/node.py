@@ -7,6 +7,7 @@ from .channel import Channel
 # Default energy profile used by all nodes (based on the FLoRa model)
 DEFAULT_ENERGY_PROFILE = FLORA_PROFILE
 
+
 class Node:
     """
     Représente un nœud IoT (LoRa) dans la simulation, avec suivi complet des métriques de performance.
@@ -42,7 +43,7 @@ class Node:
         devaddr: int | None = None,
         join_eui: int = 0,
         dev_eui: int | None = None,
-        class_type: str = 'A',
+        class_type: str = "A",
         battery_capacity_j: float | None = None,
         energy_profile: EnergyProfile | str | None = None,
         *,
@@ -92,6 +93,7 @@ class Node:
         self.channel = channel or Channel()
         # Offsets de fréquence et de synchronisation (corrélés dans le temps)
         from .advanced_channel import _CorrelatedValue
+
         self._freq_offset = _CorrelatedValue(
             frequency_offset_hz, freq_offset_std_hz, offset_correlation
         )
@@ -104,6 +106,7 @@ class Node:
         # Profil énergétique utilisé pour calculer la consommation
         if isinstance(energy_profile, str):
             from .energy_profiles import get_profile
+
             self.profile = get_profile(energy_profile)
         else:
             self.profile = energy_profile or DEFAULT_ENERGY_PROFILE
@@ -126,10 +129,10 @@ class Node:
         self.alive = self.battery_remaining_j > 0
 
         # Paramètres de mobilité (initialement immobile)
-        self.speed = 0.0       # Vitesse en m/s
-        self.direction = 0.0   # Direction en radians
-        self.vx = 0.0          # Vitesse en X (m/s)
-        self.vy = 0.0          # Vitesse en Y (m/s)
+        self.speed = 0.0  # Vitesse en m/s
+        self.direction = 0.0  # Direction en radians
+        self.vx = 0.0  # Vitesse en X (m/s)
+        self.vy = 0.0  # Vitesse en Y (m/s)
         self.last_move_time = 0.0  # Temps du dernier déplacement (s)
         self.path = None
         self.path_progress = 0.0
@@ -139,7 +142,9 @@ class Node:
 
         # LoRaWAN specific parameters
         self.activated = activated
-        self.devaddr = devaddr if devaddr is not None else (node_id if activated else None)
+        self.devaddr = (
+            devaddr if devaddr is not None else (node_id if activated else None)
+        )
         self.appkey = appkey or bytes(16)
         self.join_eui = join_eui
         self.dev_eui = dev_eui if dev_eui is not None else node_id
@@ -208,14 +213,14 @@ class Node:
 
         # Energy accounting state
         self.last_state_time = 0.0
-        self.state = 'sleep'
-        if self.class_type.upper() == 'C':
-            self.state = 'rx'
+        self.state = "sleep"
+        if self.class_type.upper() == "C":
+            self.state = "rx"
 
     @property
     def battery_level(self) -> float:
         """Return the remaining battery level as a ratio between 0 and 1."""
-        if self.battery_capacity_j == float('inf'):
+        if self.battery_capacity_j == float("inf"):
             return 1.0
         if self.battery_capacity_j == 0:
             return 0.0
@@ -247,8 +252,10 @@ class Node:
         """
         Représentation en chaîne pour débogage, affichant l'ID, la position et le SF actuel.
         """
-        return (f"Node(id={self.id}, pos=({self.x:.1f},{self.y:.1f}), "
-                f"SF={self.sf}, TxPower={self.tx_power:.1f} dBm)")
+        return (
+            f"Node(id={self.id}, pos=({self.x:.1f},{self.y:.1f}), "
+            f"SF={self.sf}, TxPower={self.tx_power:.1f} dBm)"
+        )
 
     def to_dict(self) -> dict:
         """
@@ -257,29 +264,29 @@ class Node:
         Les positions finales et valeurs finales de SF/TxPower sont les valeurs courantes.
         """
         return {
-            'node_id': self.id,
-            'initial_x': self.initial_x,
-            'initial_y': self.initial_y,
-            'final_x': self.x,
-            'final_y': self.y,
-            'initial_sf': self.initial_sf,
-            'final_sf': self.sf,
-            'initial_tx_power': self.initial_tx_power,
-            'final_tx_power': self.tx_power,
-            'energy_tx_J': self.energy_tx,
-            'energy_rx_J': self.energy_rx,
-            'energy_sleep_J': self.energy_sleep,
-            'energy_processing_J': self.energy_processing,
-            'energy_consumed_J': self.energy_consumed,
-            'battery_capacity_J': self.battery_capacity_j,
-            'battery_remaining_J': self.battery_remaining_j,
-            'packets_sent': self.packets_sent,
-            'packets_success': self.packets_success,
-            'packets_collision': self.packets_collision,
-            'downlink_pending': self.downlink_pending,
-            'acks_received': self.acks_received,
-            'beacon_loss_prob': self.beacon_loss_prob,
-            'beacon_drift': self.beacon_drift
+            "node_id": self.id,
+            "initial_x": self.initial_x,
+            "initial_y": self.initial_y,
+            "final_x": self.x,
+            "final_y": self.y,
+            "initial_sf": self.initial_sf,
+            "final_sf": self.sf,
+            "initial_tx_power": self.initial_tx_power,
+            "final_tx_power": self.tx_power,
+            "energy_tx_J": self.energy_tx,
+            "energy_rx_J": self.energy_rx,
+            "energy_sleep_J": self.energy_sleep,
+            "energy_processing_J": self.energy_processing,
+            "energy_consumed_J": self.energy_consumed,
+            "battery_capacity_J": self.battery_capacity_j,
+            "battery_remaining_J": self.battery_remaining_j,
+            "packets_sent": self.packets_sent,
+            "packets_success": self.packets_success,
+            "packets_collision": self.packets_collision,
+            "downlink_pending": self.downlink_pending,
+            "acks_received": self.acks_received,
+            "beacon_loss_prob": self.beacon_loss_prob,
+            "beacon_drift": self.beacon_drift,
         }
 
     def increment_sent(self):
@@ -301,7 +308,9 @@ class Node:
     @property
     def pdr(self) -> float:
         """Retourne le PDR global de ce nœud."""
-        return self.packets_success / self.packets_sent if self.packets_sent > 0 else 0.0
+        return (
+            self.packets_success / self.packets_sent if self.packets_sent > 0 else 0.0
+        )
 
     @property
     def recent_pdr(self) -> float:
@@ -309,7 +318,7 @@ class Node:
         total = len(self.history)
         if total == 0:
             return 0.0
-        success = sum(1 for e in self.history if e.get('delivered'))
+        success = sum(1 for e in self.history if e.get("delivered"))
         return success / total
 
     def add_energy(self, energy_joules: float, state: str = "tx"):
@@ -324,7 +333,7 @@ class Node:
         elif state == "processing":
             self.energy_processing += energy_joules
 
-        if self.battery_remaining_j != float('inf'):
+        if self.battery_remaining_j != float("inf"):
             self.battery_remaining_j -= energy_joules
             if self.battery_remaining_j <= 0:
                 self.battery_remaining_j = 0.0
@@ -430,24 +439,23 @@ class Node:
             DR_TO_SF,
             TX_POWER_INDEX_TO_DBM,
             JoinAccept,
-            encrypt_payload,
-            compute_mic,
-            compute_join_mic,
         )
 
         if isinstance(frame, JoinAccept):
-            from .lorawan import derive_session_keys, aes_encrypt
+            from .lorawan import derive_session_keys, decrypt_join_accept
 
             if self.security_enabled and frame.encrypted is not None:
-                msg = aes_encrypt(self.appkey, frame.encrypted)[:10]
-                if compute_join_mic(self.appkey, msg) != frame.mic:
+                decoded, mic = decrypt_join_accept(self.appkey, frame.encrypted, 10)
+                if mic != frame.mic:
                     return
-                decoded = JoinAccept.from_bytes(msg)
             else:
                 decoded = frame
             self.devaddr = decoded.dev_addr
             self.nwkskey, self.appskey = derive_session_keys(
-                self.appkey, (self.devnonce - 1) & 0xFFFF, decoded.app_nonce, decoded.net_id
+                self.appkey,
+                (self.devnonce - 1) & 0xFFFF,
+                decoded.app_nonce,
+                decoded.net_id,
             )
             self.activated = True
             self.downlink_pending = max(0, self.downlink_pending - 1)
@@ -467,7 +475,10 @@ class Node:
 
         self.downlink_pending = max(0, self.downlink_pending - 1)
         payload = frame.payload
-        if self.security_enabled and getattr(frame, "encrypted_payload", None) is not None:
+        if (
+            self.security_enabled
+            and getattr(frame, "encrypted_payload", None) is not None
+        ):
             from .lorawan import validate_frame
 
             if not validate_frame(frame, self.nwkskey, self.appskey, self.devaddr, 1):
@@ -479,7 +490,9 @@ class Node:
                 try:
                     req = LinkADRReq.from_bytes(payload[:5])
                     self.sf = DR_TO_SF.get(req.datarate, self.sf)
-                    self.tx_power = TX_POWER_INDEX_TO_DBM.get(req.tx_power, self.tx_power)
+                    self.tx_power = TX_POWER_INDEX_TO_DBM.get(
+                        req.tx_power, self.tx_power
+                    )
                     self.nb_trans = max(1, req.redundancy & 0x0F)
                     self.chmask = req.chmask
                     self.adr_ack_cnt = 0
@@ -576,7 +589,9 @@ class Node:
             elif payload == DevStatusReq().to_bytes():
                 lvl = int(self.battery_level * 255)
                 margin = int(self.last_snr) if self.last_snr is not None else 0
-                self.pending_mac_cmd = DevStatusAns(battery=lvl, margin=margin).to_bytes()
+                self.pending_mac_cmd = DevStatusAns(
+                    battery=lvl, margin=margin
+                ).to_bytes()
             elif len(payload) >= 6 and payload[0] == 0x07:
                 try:
                     from .lorawan import NewChannelReq, NewChannelAns
@@ -661,7 +676,7 @@ class Node:
             if self.sf < 12:
                 self.sf += 1
             else:
-                # LoRaWAN augmente normalement la puissance 
+                # LoRaWAN augmente normalement la puissance
                 # par paliers lorsque SF=12 et qu'aucun downlink
                 # n'est reçu. Ici nous passons directement à la
                 # puissance maximale pour simplifier.
@@ -688,7 +703,9 @@ class Node:
         """Return the next ping slot time after ``current_time``."""
         from .lorawan import next_ping_slot_time, next_beacon_time
 
-        last_beacon = self.last_beacon_time if last_beacon_time is None else last_beacon_time
+        last_beacon = (
+            self.last_beacon_time if last_beacon_time is None else last_beacon_time
+        )
         if last_beacon_time is None:
             last_beacon += self.clock_offset
         if current_time - last_beacon > beacon_interval * 2:

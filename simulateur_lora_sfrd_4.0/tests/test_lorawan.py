@@ -5,7 +5,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import pytest  # noqa: E402
-import heapq
 
 from VERSION_4.launcher.lorawan import (  # noqa: E402
     NewChannelReq,
@@ -181,7 +180,8 @@ def test_join_server_invalid_key_and_rejoin():
     assert len(nwk) == 16
     assert len(app) == 16
     assert accept.mic == compute_join_mic(app_key, accept.to_bytes())
-    assert aes_encrypt(app_key, accept.encrypted)[:10] == accept.to_bytes()
+    plain = aes_encrypt(app_key, accept.encrypted)[:14]
+    assert plain == accept.to_bytes() + accept.mic
 
     with pytest.raises(ValueError):
         js.handle_join(req)
@@ -219,7 +219,8 @@ def test_rejoin_request_roundtrip_and_server():
     assert isinstance(accept, JoinAccept)
     assert len(nwk) == 16 and len(app) == 16
     assert accept.mic == compute_rejoin_mic(key, accept.to_bytes())
-    assert aes_encrypt(key, accept.encrypted)[:10] == accept.to_bytes()
+    plain = aes_encrypt(key, accept.encrypted)[:14]
+    assert plain == accept.to_bytes() + accept.mic
 
     with pytest.raises(ValueError):
         js.handle_rejoin(req)
@@ -267,4 +268,3 @@ def test_rx_window_precision():
     rx1, rx2 = node.schedule_receive_windows(end)
     assert rx1 == pytest.approx(end + 2.0)
     assert rx2 == pytest.approx(end + 3.0)
-
