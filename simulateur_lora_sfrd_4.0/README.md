@@ -52,6 +52,8 @@ The dashboard now exposes a **Seed** input. Set the same value on
 subsequent runs to keep the node placement identical.
 Enable **Manual positions** to override node or gateway coordinates. Each line
 should follow `node,id=3,x=120,y=40` or `gw,id=1,x=10,y=80`.
+Load a reference export in **CSV FLoRa** to display live comparisons between
+FLoRa and the running simulation.
 
 # Run a simulation
 ```bash
