@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - used for type hints only
+    from .lorawan import JoinAccept, JoinRequest, RejoinRequest
 
 
 @dataclass
