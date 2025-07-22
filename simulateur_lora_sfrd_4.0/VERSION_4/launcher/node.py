@@ -227,15 +227,12 @@ class Node:
         return max(0.0, self.battery_remaining_j / self.battery_capacity_j)
 
     def distance_to(self, other) -> float:
-        """
-        Calcule la distance euclidienne (mètres) entre ce nœud et un autre objet possédant
-        des attributs x et y (par exemple une passerelle).
-
-        :param other: Objet avec attributs x et y.
-        :return: Distance euclidienne (mètres).
-        """
+        """Calcule la distance 2D ou 3D jusqu'à ``other`` si possible."""
         dx = self.x - other.x
         dy = self.y - other.y
+        if hasattr(other, "altitude"):
+            dz = getattr(self, "altitude", 0.0) - getattr(other, "altitude", 0.0)
+            return math.sqrt(dx * dx + dy * dy + dz * dz)
         return math.hypot(dx, dy)
 
     # ------------------------------------------------------------------

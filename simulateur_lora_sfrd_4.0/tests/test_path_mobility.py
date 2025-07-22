@@ -33,3 +33,14 @@ def test_simulator_uses_path_mobility(tmp_path):
                     path_map=str(path_file))
     assert isinstance(sim.mobility_model, PathMobility)
 
+
+def test_path_mobility_sets_altitude():
+    grid = [[0.0, 0.0], [0.0, 0.0]]
+    elevation = [[0.0, 2.0], [4.0, 6.0]]
+    mob = PathMobility(area_size=100.0, path_map=grid, elevation=elevation)
+    node = Node(1, 60.0, 60.0, 7, 14.0, channel=Channel())
+    mob.assign(node)
+    start_alt = node.altitude
+    mob.move(node, 20.0)
+    assert node.altitude != start_alt
+

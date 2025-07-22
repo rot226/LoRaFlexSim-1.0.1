@@ -479,8 +479,8 @@ class Simulator:
                     "sync_offset_s": getattr(node, "current_sync_offset", 0.0),
                 }
                 if hasattr(node.channel, "_obstacle_loss"):
-                    kwargs["tx_pos"] = (node.x, node.y)
-                    kwargs["rx_pos"] = (gw.x, gw.y)
+                    kwargs["tx_pos"] = (node.x, node.y, getattr(node, "altitude", 0.0))
+                    kwargs["rx_pos"] = (gw.x, gw.y, getattr(gw, "altitude", 0.0))
                 rssi, snr = node.channel.compute_rssi(
                     tx_power,
                     distance,
@@ -699,8 +699,8 @@ class Simulator:
                 distance = node.distance_to(gw)
                 kwargs = {"freq_offset_hz": 0.0, "sync_offset_s": 0.0}
                 if hasattr(node.channel, "_obstacle_loss"):
-                    kwargs["tx_pos"] = (gw.x, gw.y)
-                    kwargs["rx_pos"] = (node.x, node.y)
+                    kwargs["tx_pos"] = (gw.x, gw.y, getattr(gw, "altitude", 0.0))
+                    kwargs["rx_pos"] = (node.x, node.y, getattr(node, "altitude", 0.0))
                 rssi, snr = node.channel.compute_rssi(
                     node.tx_power,
                     distance,
@@ -797,8 +797,8 @@ class Simulator:
                     sf = DR_TO_SF.get(node.ping_slot_dr, node.sf)
                 kwargs = {"freq_offset_hz": 0.0, "sync_offset_s": 0.0}
                 if hasattr(node.channel, "_obstacle_loss"):
-                    kwargs["tx_pos"] = (gw.x, gw.y)
-                    kwargs["rx_pos"] = (node.x, node.y)
+                    kwargs["tx_pos"] = (gw.x, gw.y, getattr(gw, "altitude", 0.0))
+                    kwargs["rx_pos"] = (node.x, node.y, getattr(node, "altitude", 0.0))
                 rssi, snr = node.channel.compute_rssi(
                     node.tx_power,
                     distance,
