@@ -89,3 +89,24 @@ class GPSTraceMobility:
         node.y = y0 + (y1 - y0) * ratio
         node.altitude = z0 + (z1 - z0) * ratio
         node.last_move_time = current_time
+
+
+class MultiGPSTraceMobility:
+    """Assign a separate GPS trace to each node from a directory."""
+
+    def __init__(self, directory: str | Path, loop: bool = True) -> None:
+        path = Path(directory)
+        files = [p for p in path.iterdir() if p.suffix.lower() in (".csv", ".gpx")]
+        if not files:
+            raise ValueError("No trace files found")
+        files.sort()
+        self.traces = [GPSTraceMobility(f, loop=loop) for f in files]
+
+    def assign(self, node) -> None:
+        idx = (node.id - 1) % len(self.traces)
+        node._trace_model = self.traces[idx]
+        node._trace_model.assign(node)
+
+    def move(self, node, current_time: float) -> None:
+        if hasattr(node, "_trace_model"):
+            node._trace_model.move(node, current_time)

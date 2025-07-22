@@ -56,3 +56,16 @@ def test_random_waypoint_elevation_speed_up():
     node.last_move_time = 0.0
     mob.move(node, 1.0)
     assert node.x == pytest.approx(55.0)
+
+
+def test_random_waypoint_dynamic_obstacle():
+    obs = [{"x": 50.0, "y": 50.0, "radius": 5.0}]
+    mob = RandomWaypoint(area_size=100.0, min_speed=10.0, max_speed=10.0,
+                         dynamic_obstacles=obs)
+    node = Node(1, 45.0, 50.0, 7, 14.0, channel=Channel())
+    node.vx = 10.0
+    node.vy = 0.0
+    node.last_move_time = 0.0
+    mob.move(node, 1.0)
+    assert node.x < 50.0
+    assert node.vx < 0

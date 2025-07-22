@@ -94,6 +94,17 @@ sim = Simulator(num_nodes=20, num_gateways=3, area_size=2000.0, mobility=True,
 sim.run(1000)
 ```
 
+#### Chargement de traces GPS
+
+```python
+from launcher import Simulator, MultiGPSTraceMobility
+
+mob = MultiGPSTraceMobility("traces/")
+sim = Simulator(num_nodes=2, num_gateways=1, area_size=100.0, mobility=True)
+sim.mobility_model = mob
+sim.run(100)
+```
+
 ### Exemple de scénario FLoRa
 
 ```bash

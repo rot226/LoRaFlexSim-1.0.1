@@ -8,8 +8,9 @@ class RandomWaypoint:
     Le modèle peut être couplé à un maillage représentant des obstacles ou un
     relief. Chaque cellule du maillage peut contenir un multiplicateur de
     vitesse (``1.0`` par défaut). Une valeur négative indique un obstacle
-    infranchissable. Les déplacements sont alors ralentis ou déviés en fonction
-    de cette carte.
+    infranchissable. Des obstacles dynamiques optionnels peuvent également être
+    fournis. Les déplacements sont alors ralentis ou déviés en fonction de cette
+    carte et de la topographie.
     """
 
     def __init__(
@@ -24,6 +25,7 @@ class RandomWaypoint:
         max_height: float = 0.0,
         step: float = 1.0,
         slope_scale: float = 0.1,
+        dynamic_obstacles: list[dict[str, float]] | None = None,
     ) -> None:
         """
         Initialise le modèle de mobilité.
@@ -58,6 +60,8 @@ class RandomWaypoint:
         else:
             self.e_rows = 0
             self.e_cols = 0
+        self.dynamic_obstacles = [dict(o) for o in (dynamic_obstacles or [])]
+        self._last_obs_update = 0.0
 
     # ------------------------------------------------------------------
     def _terrain_factor(self, x: float, y: float) -> float | None:
@@ -92,6 +96,24 @@ class RandomWaypoint:
         cy = min(max(cy, 0), self.h_rows - 1)
         return float(self.obstacle_height_map[cy][cx])
 
+    def _update_dynamic_obstacles(self, dt: float) -> None:
+        for obs in self.dynamic_obstacles:
+            obs["x"] = float(obs.get("x", 0.0) + obs.get("vx", 0.0) * dt)
+            obs["y"] = float(obs.get("y", 0.0) + obs.get("vy", 0.0) * dt)
+            if obs["x"] < 0.0 or obs["x"] > self.area_size:
+                obs["vx"] = -obs.get("vx", 0.0)
+                obs["x"] = min(max(obs["x"], 0.0), self.area_size)
+            if obs["y"] < 0.0 or obs["y"] > self.area_size:
+                obs["vy"] = -obs.get("vy", 0.0)
+                obs["y"] = min(max(obs["y"], 0.0), self.area_size)
+
+    def _dynamic_blocked(self, x: float, y: float) -> bool:
+        for obs in self.dynamic_obstacles:
+            radius = float(obs.get("radius", 0.0))
+            if math.hypot(x - obs.get("x", 0.0), y - obs.get("y", 0.0)) <= radius:
+                return True
+        return False
+
     def assign(self, node):
         """
         Assigne une direction et une vitesse aléatoires à un nœud.
@@ -119,6 +141,9 @@ class RandomWaypoint:
         dt = current_time - node.last_move_time
         if dt <= 0:
             return  # Pas de temps écoulé (ou appel redondant)
+        if self.dynamic_obstacles:
+            self._update_dynamic_obstacles(current_time - self._last_obs_update)
+            self._last_obs_update = current_time
         # Ajuster le déplacement selon la carte de vitesse
         factor = self._terrain_factor(node.x, node.y)
         if factor is None:
@@ -144,6 +169,8 @@ class RandomWaypoint:
         node.y += node.vy * dt * movement_factor
         # Rebondir sur un obstacle infranchissable
         blocked = self._terrain_factor(node.x, node.y) is None
+        if not blocked and self.dynamic_obstacles:
+            blocked = self._dynamic_blocked(node.x, node.y)
         if not blocked and self.obstacle_height_map:
             if self._height(node.x, node.y) > self.max_height:
                 blocked = True
