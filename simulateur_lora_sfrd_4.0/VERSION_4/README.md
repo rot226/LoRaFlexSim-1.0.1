@@ -98,6 +98,10 @@ des trajectoires lissées par interpolation de Bézier. La vitesse des nœuds es
 tirée aléatoirement dans la plage spécifiée (par défaut 2 à 10 m/s) et peut être
 modifiée via le paramètre `mobility_speed` du `Simulator`. Les mouvements sont
 donc continus et sans téléportation.
+Un modèle `PathMobility` permet également de suivre des chemins définis sur une
+grille en évitant les obstacles et peut prendre en compte un relief ainsi que
+des hauteurs de bâtiments. L'altitude du nœud est alors mise à jour à chaque
+déplacement pour un calcul radio plus réaliste.
 Deux champs « Vitesse min » et « Vitesse max » sont disponibles dans le
 `dashboard` pour définir cette plage avant de lancer la simulation.
 

@@ -111,6 +111,13 @@ def test_obstacle_height_blocks_link():
     assert r == -float("inf")
 
 
+def test_3d_compute_rssi_uses_altitude():
+    adv = AdvancedChannel(propagation_model="3d", fading="", shadowing_std=0)
+    r1, _ = adv.compute_rssi(14.0, 100.0, tx_pos=(0.0, 0.0, 0.0), rx_pos=(0.0, 100.0, 0.0))
+    r2, _ = adv.compute_rssi(14.0, 100.0, tx_pos=(0.0, 0.0, 10.0), rx_pos=(0.0, 100.0, 0.0))
+    assert r2 < r1
+
+
 def test_device_specific_offset():
     random.seed(0)
     adv = AdvancedChannel(

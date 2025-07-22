@@ -246,11 +246,13 @@ class AdvancedChannel:
     # ------------------------------------------------------------------
     # Propagation models
     # ------------------------------------------------------------------
-    def path_loss(self, distance: float) -> float:
+    def path_loss(self, distance: float, height_diff: float | None = None) -> float:
         """Return path loss in dB for the selected model."""
         d = distance
         if self.propagation_model == "3d":
-            d = math.sqrt(distance ** 2 + (self.base_station_height - self.mobile_height) ** 2)
+            if height_diff is None:
+                height_diff = self.base_station_height - self.mobile_height
+            d = math.sqrt(distance ** 2 + height_diff ** 2)
             loss = self.base.path_loss(d)
         elif self.propagation_model == "cost231":
             loss = self._cost231_loss(distance)
@@ -401,7 +403,11 @@ class AdvancedChannel:
         # Include short-term clock jitter
         sync_offset_s += self.base.omnet.clock_drift()
 
-        loss = self.path_loss(distance)
+        height_diff = None
+        if tx_pos is not None and rx_pos is not None and self.propagation_model == "3d":
+            if len(tx_pos) >= 3 and len(rx_pos) >= 3:
+                height_diff = tx_pos[2] - rx_pos[2]
+        loss = self.path_loss(distance, height_diff)
         if tx_pos is not None and rx_pos is not None:
             extra = self._obstacle_loss(tx_pos, rx_pos)
             if extra == float("inf"):

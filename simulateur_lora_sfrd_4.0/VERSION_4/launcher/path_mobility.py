@@ -13,6 +13,10 @@ class PathMobility:
         path_map: List[List[float]],
         min_speed: float = 1.0,
         max_speed: float = 3.0,
+        *,
+        elevation: List[List[float]] | None = None,
+        obstacle_height_map: List[List[float]] | None = None,
+        max_height: float = 0.0,
         step: float = 1.0,
     ) -> None:
         self.area_size = float(area_size)
@@ -22,6 +26,38 @@ class PathMobility:
         self.step = float(step)
         self.rows = len(path_map)
         self.cols = len(path_map[0]) if self.rows else 0
+        self.elevation = elevation
+        if elevation:
+            self.e_rows = len(elevation)
+            self.e_cols = len(elevation[0]) if self.e_rows else 0
+        else:
+            self.e_rows = self.e_cols = 0
+        self.obstacle_height_map = obstacle_height_map
+        self.max_height = max_height
+        if obstacle_height_map:
+            self.h_rows = len(obstacle_height_map)
+            self.h_cols = len(obstacle_height_map[0]) if self.h_rows else 0
+        else:
+            self.h_rows = self.h_cols = 0
+
+    # ------------------------------------------------------------------
+    def _height_cell(self, cx: int, cy: int) -> float:
+        if not self.obstacle_height_map or self.h_rows == 0 or self.h_cols == 0:
+            return 0.0
+        hx = int(cx / self.cols * self.h_cols)
+        hy = int(cy / self.rows * self.h_rows)
+        hx = min(max(hx, 0), self.h_cols - 1)
+        hy = min(max(hy, 0), self.h_rows - 1)
+        return float(self.obstacle_height_map[hy][hx])
+
+    def _elevation(self, x: float, y: float) -> float:
+        if not self.elevation or self.e_rows == 0 or self.e_cols == 0:
+            return 0.0
+        cx = int(x / self.area_size * self.e_cols)
+        cy = int(y / self.area_size * self.e_rows)
+        cx = min(max(cx, 0), self.e_cols - 1)
+        cy = min(max(cy, 0), self.e_rows - 1)
+        return float(self.elevation[cy][cx])
 
     # ------------------------------------------------------------------
     def _coord_to_cell(self, x: float, y: float) -> Tuple[int, int]:
@@ -45,7 +81,8 @@ class PathMobility:
             nx, ny = x + dx, y + dy
             if 0 <= nx < self.cols and 0 <= ny < self.rows:
                 if self.path_map[ny][nx] >= 0:
-                    yield nx, ny
+                    if self._height_cell(nx, ny) <= self.max_height:
+                        yield nx, ny
 
     def _find_path(
         self, start: Tuple[int, int], goal: Tuple[int, int]
@@ -77,7 +114,7 @@ class PathMobility:
         while True:
             cx = random.randrange(self.cols)
             cy = random.randrange(self.rows)
-            if self.path_map[cy][cx] >= 0:
+            if self.path_map[cy][cx] >= 0 and self._height_cell(cx, cy) <= self.max_height:
                 return cx, cy
 
     def _new_path(self, x: float, y: float) -> List[Tuple[float, float]]:
@@ -95,6 +132,7 @@ class PathMobility:
         node.path = self._new_path(node.x, node.y)
         node.path_index = 0
         node.last_move_time = 0.0
+        node.altitude = self._elevation(node.x, node.y)
 
     def move(self, node, current_time: float) -> None:
         dt = current_time - node.last_move_time
@@ -119,4 +157,5 @@ class PathMobility:
         if node.path_index >= len(node.path) - 1:
             node.path = self._new_path(node.x, node.y)
             node.path_index = 0
+        node.altitude = self._elevation(node.x, node.y)
         node.last_move_time = current_time
