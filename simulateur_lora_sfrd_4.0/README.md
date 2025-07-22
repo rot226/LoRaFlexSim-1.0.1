@@ -109,6 +109,8 @@ Un fichier `examples/flora_full.ini` reproduit les positions de référence.
 Chargez‑le via `Simulator(config_file="examples/flora_full.ini")`. D'autres
 exports (par exemple `flora_full.csv` ou `flora_collisions.csv`) sont disponibles
 pour vérification.
+Un guide détaillé est proposé dans `examples/flora_reference.md` pour
+reproduire exactement ces scénarios FLoRa et comparer les résultats.
 
 Ci‑dessous un extrait de fichier INI utilisable avec le mode FLoRa :
 
