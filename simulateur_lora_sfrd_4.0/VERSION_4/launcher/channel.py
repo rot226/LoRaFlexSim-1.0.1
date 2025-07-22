@@ -77,6 +77,8 @@ class Channel:
         humidity_percent: float = 50.0,
         humidity_std_percent: float = 0.0,
         humidity_noise_coeff_dB: float = 0.0,
+        frontend_filter_order: int = 0,
+        frontend_filter_bw: float | None = None,
         *,
         bandwidth: float = 125e3,
         coding_rate: int = 1,
@@ -146,6 +148,10 @@ class Channel:
             relative.
         :param humidity_noise_coeff_dB: Coefficient appliqué au pourcentage
             d'humidité pour moduler le bruit (dB).
+        :param frontend_filter_order: Ordre du filtre passe‑bande modélisant
+            la sélectivité de la chaîne RF. ``0`` pour désactiver.
+        :param frontend_filter_bw: Largeur de bande du filtre (Hz). Par défaut,
+            la même valeur que ``bandwidth``.
         :param environment: Chaîne optionnelle pour charger un preset
             ("urban", "suburban" ou "rural").
         :param region: Nom d'un plan de fréquences prédéfini ("EU868", "US915",
@@ -205,6 +211,8 @@ class Channel:
         self.humidity_percent = humidity_percent
         self.humidity_std_percent = humidity_std_percent
         self.humidity_noise_coeff_dB = humidity_noise_coeff_dB
+        self.frontend_filter_order = int(frontend_filter_order)
+        self.frontend_filter_bw = float(frontend_filter_bw) if frontend_filter_bw is not None else bandwidth
         self.omnet = OmnetModel(
             fine_fading_std,
             fading_correlation,
@@ -348,6 +356,8 @@ class Channel:
             sync_offset_s = self.sync_offset_s
         sync_offset_s += self.omnet.clock_drift()
 
+        rssi -= self._filter_attenuation_db(freq_offset_hz)
+
         snr = rssi - self.noise_floor_dBm() + self.snr_offset_dB
         penalty = self._alignment_penalty_db(freq_offset_hz, sync_offset_s, sf)
         snr -= penalty
@@ -355,6 +365,18 @@ class Channel:
         if sf is not None:
             snr += 10 * math.log10(2 ** sf)
         return rssi, snr
+
+    def _filter_attenuation_db(self, freq_offset_hz: float) -> float:
+        """Return attenuation due to the front-end filter."""
+        if self.frontend_filter_order <= 0 or self.frontend_filter_bw <= 0:
+            return 0.0
+        fc = self.frontend_filter_bw / 2.0
+        if fc <= 0.0:
+            return 0.0
+        ratio = abs(freq_offset_hz) / fc
+        if ratio <= 0.0:
+            return 0.0
+        return 10 * self.frontend_filter_order * math.log10(1.0 + ratio ** 2)
 
     def _alignment_penalty_db(
         self, freq_offset_hz: float, sync_offset_s: float, sf: int | None

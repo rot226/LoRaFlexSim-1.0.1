@@ -134,3 +134,16 @@ def test_variable_noise_changes_rssi():
     _, s1 = ch.compute_rssi(14.0, 100.0)
     _, s2 = ch.compute_rssi(14.0, 100.0)
     assert s1 != s2
+
+
+def test_frontend_filter_reduces_rssi():
+    base = Channel(shadowing_std=0)
+    filt = Channel(
+        shadowing_std=0,
+        frontend_filter_order=2,
+        frontend_filter_bw=100e3,
+        frequency_offset_hz=40e3,
+    )
+    r_base, _ = base.compute_rssi(14.0, 100.0)
+    r_filt, _ = filt.compute_rssi(14.0, 100.0)
+    assert r_filt < r_base

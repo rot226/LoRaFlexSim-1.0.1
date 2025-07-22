@@ -251,6 +251,10 @@ désormais une corrélation temporelle pour reproduire le comportement de
 FLoRa et un bruit variable peut être ajouté via ``variable_noise_std``.
 Une carte ``obstacle_height_map`` peut bloquer complètement un lien en
 fonction de l'altitude parcourue.
+Il est désormais possible de modéliser la sélectivité du filtre RF grâce aux
+paramètres ``frontend_filter_order`` et ``frontend_filter_bw``. Une valeur non
+nulle applique une atténuation dépendante du décalage fréquentiel, permettant de
+reproduire les effets observés dans OMNeT++.
 
 Le tableau de bord propose désormais un bouton **Mode FLoRa complet**. Quand il
 est activé, `detection_threshold_dBm` est automatiquement fixé à `-110` dBm et

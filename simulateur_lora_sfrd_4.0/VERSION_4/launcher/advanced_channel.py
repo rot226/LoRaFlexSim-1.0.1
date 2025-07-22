@@ -87,6 +87,8 @@ class AdvancedChannel:
         humidity_std_percent: float = 0.0,
         humidity_noise_coeff_dB: float = 0.0,
         phase_noise_std_dB: float = 0.0,
+        frontend_filter_order: int = 0,
+        frontend_filter_bw: float | None = None,
         obstacle_map: list[list[float]] | None = None,
         map_area_size: float | None = None,
         obstacle_height_map: list[list[float]] | None = None,
@@ -144,6 +146,8 @@ class AdvancedChannel:
             d'humidité pour moduler le bruit (dB).
         :param phase_noise_std_dB: Bruit de phase appliqué au SNR (écart-type en
             dB).
+        :param frontend_filter_order: Ordre du filtre passe-bande simulé.
+        :param frontend_filter_bw: Largeur de bande du filtre (Hz).
         :param multipath_paths: Nombre de trajets multipath à simuler.
         :param indoor_n_floors: Nombre d'étages à traverser pour le modèle
             ``itu_indoor``.
@@ -174,6 +178,8 @@ class AdvancedChannel:
             humidity_percent=humidity_percent,
             humidity_std_percent=humidity_std_percent,
             humidity_noise_coeff_dB=humidity_noise_coeff_dB,
+            frontend_filter_order=frontend_filter_order,
+            frontend_filter_bw=frontend_filter_bw,
             **kwargs,
         )
         self.base_station_height = base_station_height

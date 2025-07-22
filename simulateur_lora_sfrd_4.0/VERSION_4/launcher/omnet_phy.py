@@ -149,6 +149,7 @@ class OmnetPHY:
             rssi += random.gauss(0.0, ch.time_variation_std)
         rssi += self.model.fine_fading()
         rssi += ch.rssi_offset_dB
+        rssi -= ch._filter_attenuation_db(freq_offset_hz)
 
         snr = rssi - self.noise_floor() + ch.snr_offset_dB
         penalty = self._alignment_penalty_db(freq_offset_hz, sync_offset_s, sf)
