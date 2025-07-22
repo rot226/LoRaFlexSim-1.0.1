@@ -81,6 +81,7 @@ class Node:
         self.initial_y = y
         self.x = x
         self.y = y
+        self.altitude = 0.0
         self.initial_sf = sf
         self.sf = sf
         self.initial_tx_power = tx_power
