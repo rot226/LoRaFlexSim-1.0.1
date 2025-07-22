@@ -28,6 +28,12 @@ from VERSION_4.launcher.lorawan import (  # noqa: E402
     ForceRejoinReq,
     DeviceModeInd,
     DeviceModeConf,
+    FragSessionSetupReq,
+    FragSessionSetupAns,
+    FragSessionDeleteReq,
+    FragSessionDeleteAns,
+    FragStatusReq,
+    FragStatusAns,
 )
 
 
@@ -131,4 +137,32 @@ def test_handle_device_mode_ind():
     node.handle_downlink(frame)
     assert node.class_type == "C"
     assert node.pending_mac_cmd == DeviceModeConf("C").to_bytes()
+
+
+def test_handle_frag_session_setup_req():
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    req = FragSessionSetupReq(1, 5, 20)
+    frame = LoRaWANFrame(0, 0, 0, req.to_bytes())
+    node.handle_downlink(frame)
+    assert node.frag_sessions[1]["nb"] == 5
+    assert node.frag_sessions[1]["size"] == 20
+    assert node.pending_mac_cmd == FragSessionSetupAns(1).to_bytes()
+
+
+def test_handle_frag_session_delete_req():
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    node.frag_sessions[1] = {"nb": 2, "size": 10}
+    req = FragSessionDeleteReq(1)
+    frame = LoRaWANFrame(0, 0, 0, req.to_bytes())
+    node.handle_downlink(frame)
+    assert 1 not in node.frag_sessions
+    assert node.pending_mac_cmd == FragSessionDeleteAns().to_bytes()
+
+
+def test_handle_frag_status_req():
+    node = Node(1, 0.0, 0.0, 7, 14.0, channel=Channel())
+    req = FragStatusReq(0)
+    frame = LoRaWANFrame(0, 0, 0, req.to_bytes())
+    node.handle_downlink(frame)
+    assert node.pending_mac_cmd == FragStatusAns(0, 0).to_bytes()
 

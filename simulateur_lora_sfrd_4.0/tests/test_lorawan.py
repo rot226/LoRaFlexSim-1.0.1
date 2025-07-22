@@ -15,6 +15,12 @@ from VERSION_4.launcher.lorawan import (  # noqa: E402
     ADRParamSetupReq,
     RejoinParamSetupReq,
     DeviceModeInd,
+    FragSessionSetupReq,
+    FragSessionSetupAns,
+    FragSessionDeleteReq,
+    FragSessionDeleteAns,
+    FragStatusReq,
+    FragStatusAns,
 )
 
 
@@ -126,6 +132,35 @@ def test_device_mode_ind_roundtrip():
     data = ind.to_bytes()
     parsed = DeviceModeInd.from_bytes(data)
     assert parsed == ind
+
+
+def test_frag_session_setup_roundtrip():
+    req = FragSessionSetupReq(1, 10, 50)
+    data = req.to_bytes()
+    parsed = FragSessionSetupReq.from_bytes(data)
+    assert parsed == req
+    ans = FragSessionSetupAns(1).to_bytes()
+    assert FragSessionSetupAns.from_bytes(ans) == FragSessionSetupAns(1)
+
+
+def test_frag_session_delete_roundtrip():
+    req = FragSessionDeleteReq(2)
+    data = req.to_bytes()
+    parsed = FragSessionDeleteReq.from_bytes(data)
+    assert parsed == req
+    ans = FragSessionDeleteAns().to_bytes()
+    assert FragSessionDeleteAns.from_bytes(ans) == FragSessionDeleteAns(0)
+
+
+def test_frag_status_roundtrip():
+    req = FragStatusReq(1)
+    data = req.to_bytes()
+    parsed = FragStatusReq.from_bytes(data)
+    assert parsed == req
+    ans = FragStatusAns(1, 0)
+    data2 = ans.to_bytes()
+    parsed2 = FragStatusAns.from_bytes(data2)
+    assert parsed2 == ans
 
 
 def test_ping_slot_channel_ans_roundtrip():
