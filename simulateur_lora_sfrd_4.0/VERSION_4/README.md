@@ -320,6 +320,12 @@ mais simplifie volontairement certains aspects.
 **Fonctionnalités absentes**
 - interface graphique OMNeT++ et couche physique détaillée
 
+### Écarts connus avec FLoRa
+- le canal radio reste moins détaillé (propagation et capture simplifiées)
+- absence de modélisation fine du moteur d'événements OMNeT++
+- certaines temporisations ou files d'attente du serveur diffèrent
+- la sensibilité et le bruit thermiques sont approchés de manière empirique
+
 Le simulateur gère désormais l'ensemble des commandes MAC de LoRaWAN : réglage
 des paramètres ADR, réinitialisation de clés, rejoins et changement de classe.
 

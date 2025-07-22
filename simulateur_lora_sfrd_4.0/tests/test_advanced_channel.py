@@ -195,3 +195,10 @@ def test_pa_nonlinearity_curve():
     r1, _ = adv1.compute_rssi(20.0, 50.0)
     r2, _ = adv2.compute_rssi(20.0, 50.0)
     assert r1 != r2
+
+def test_interference_penalty_inf():
+    adv = AdvancedChannel(fading="", shadowing_std=0)
+    freq_offset = adv.base.bandwidth / 2
+    symbol_time = (2 ** 7) / adv.base.bandwidth
+    penalty = adv._interference_penalty_db(freq_offset, symbol_time, 7)
+    assert penalty == float("inf")
