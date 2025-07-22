@@ -21,6 +21,7 @@ if ROOT_DIR not in sys.path:
 
 from launcher.simulator import Simulator  # noqa: E402
 from launcher import adr_standard_1, adr_2, adr_3  # noqa: E402
+from launcher.compare_flora import load_flora_metrics  # noqa: E402
 
 # --- Initialisation Panel ---
 pn.extension("plotly", raw_css=[
@@ -47,6 +48,7 @@ auto_fast_forward = False
 timeline_fig = go.Figure()
 last_event_index = 0
 pause_prev_disabled = False
+flora_metrics = None
 
 
 def average_numeric_metrics(metrics_list: list[dict]) -> dict:
@@ -171,6 +173,7 @@ ini_file_input = pn.widgets.FileInput(name="Fichier INI FLoRa", accept=".ini")
 
 # Map for path-based mobility
 path_map_input = pn.widgets.FileInput(name="Carte de parcours", accept=".json")
+flora_csv_input = pn.widgets.FileInput(name="CSV FLoRa", accept=".csv")
 
 # --- Boutons de contrôle ---
 start_button = pn.widgets.Button(name="Lancer la simulation", button_type="success")
@@ -202,6 +205,13 @@ fast_forward_progress = pn.indicators.Progress(name="Avancement", value=0, width
 pdr_table = pn.pane.DataFrame(
     pd.DataFrame(columns=["Node", "PDR", "Recent PDR"]),
     height=200,
+    width=220,
+)
+
+# Tableau de comparaison avec FLoRa
+flora_compare_table = pn.pane.DataFrame(
+    pd.DataFrame(columns=["Metric", "FLoRa", "SFRD", "Diff"]),
+    height=180,
     width=220,
 )
 
@@ -475,6 +485,19 @@ def step_simulation():
     pdr_table.object = table_df
     # Les PDR détaillés par SF, passerelle et classe sont calculés mais non
     # affichés. Ils seront exportés dans le fichier de résultats.
+    if flora_metrics:
+        metrics_keys = ["PDR", "collisions", "throughput_bps", "energy_J"]
+        rows = []
+        for key in metrics_keys:
+            flora_val = flora_metrics.get(key, 0)
+            sim_val = metrics.get(key, 0)
+            rows.append({
+                "Metric": key,
+                "FLoRa": flora_val,
+                "SFRD": sim_val,
+                "Diff": sim_val - flora_val,
+            })
+        flora_compare_table.object = pd.DataFrame(rows)
     sf_dist = metrics["sf_distribution"]
     sf_fig = go.Figure(
         data=[go.Bar(x=[f"SF{sf}" for sf in sf_dist.keys()], y=list(sf_dist.values()))]
@@ -542,6 +565,20 @@ def setup_simulation(seed_offset: int = 0):
         tmp_map.write(path_map_input.value.encode())
         tmp_map.flush()
         path_map = tmp_map.name
+
+    global flora_metrics
+    flora_metrics = None
+    if flora_csv_input.value:
+        import tempfile
+
+        try:
+            tmp_csv = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+            tmp_csv.write(flora_csv_input.value.encode())
+            tmp_csv.flush()
+            flora_metrics = load_flora_metrics(tmp_csv.name)
+        except Exception as exc:
+            flora_metrics = None
+            export_message.object = f"⚠️ Erreur CSV FLoRa : {exc}"
 
     sim = Simulator(
         num_nodes=int(num_nodes_input.value),
@@ -1080,6 +1117,7 @@ controls = pn.WidgetBox(
     num_runs_input,
     ini_file_input,
     path_map_input,
+    flora_csv_input,
     adr_node_checkbox,
     adr_server_checkbox,
     pn.Row(adr1_button, adr2_button, adr3_button, adr_active_badge),
@@ -1116,6 +1154,7 @@ metrics_col = pn.Column(
     throughput_indicator,
     retrans_indicator,
     pdr_table,
+    flora_compare_table,
 )
 metrics_col.width = 220
 
