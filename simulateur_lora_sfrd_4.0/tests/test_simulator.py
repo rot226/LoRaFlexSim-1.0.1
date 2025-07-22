@@ -688,3 +688,45 @@ def test_custom_ping_slot_timing():
     assert ping_slots[1].time == pytest.approx(
         sim.ping_slot_offset + 2 * sim.ping_slot_interval
     )
+
+
+def test_variable_noise_impacts_pdr():
+    random.seed(0)
+    ch_no_noise = Channel(shadowing_std=0, variable_noise_std=0.0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=1.0,
+        packets_to_send=10,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch_no_noise],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    while sim.step():
+        pass
+    pdr_no_noise = sim.get_metrics()["PDR"]
+
+    random.seed(0)
+    ch_noise = Channel(shadowing_std=0, variable_noise_std=6.0)
+    sim2 = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=10.0,
+        transmission_mode="Periodic",
+        packet_interval=1.0,
+        packets_to_send=10,
+        mobility=False,
+        duty_cycle=None,
+        channels=[ch_noise],
+        fixed_sf=7,
+        fixed_tx_power=14.0,
+    )
+    while sim2.step():
+        pass
+    pdr_noise = sim2.get_metrics()["PDR"]
+
+    assert pdr_noise <= pdr_no_noise

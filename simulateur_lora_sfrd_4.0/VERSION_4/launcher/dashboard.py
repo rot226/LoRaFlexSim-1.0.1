@@ -20,6 +20,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from launcher.simulator import Simulator  # noqa: E402
+from launcher.channel import Channel  # noqa: E402
 from launcher import adr_standard_1, adr_2, adr_3  # noqa: E402
 from launcher.compare_flora import load_flora_metrics  # noqa: E402
 
@@ -122,6 +123,14 @@ tx_power_input = pn.widgets.FloatSlider(name="Puissance Tx (dBm)", start=2, end=
 num_channels_input = pn.widgets.IntInput(name="Nb sous-canaux", value=1, step=1, start=1)
 channel_dist_select = pn.widgets.RadioButtonGroup(
     name="Répartition canaux", options=["Round-robin", "Aléatoire"], value="Round-robin"
+)
+
+# -- Options de couche physique --
+fine_fading_input = pn.widgets.FloatInput(
+    name="Fine fading std (dB)", value=0.0, step=0.1, start=0.0
+)
+noise_std_input = pn.widgets.FloatInput(
+    name="Bruit thermique variable (dB)", value=0.0, step=0.1, start=0.0
 )
 
 # --- Widget pour activer/désactiver la mobilité des nœuds ---
@@ -591,7 +600,14 @@ def setup_simulation(seed_offset: int = 0):
         adr_server=adr_server_checkbox.value,
         mobility=mobility_checkbox.value,
         mobility_speed=(float(mobility_speed_min_input.value), float(mobility_speed_max_input.value)),
-        channels=[868e6 + i * 200e3 for i in range(num_channels_input.value)],
+        channels=[
+            Channel(
+                frequency_hz=868e6 + i * 200e3,
+                fine_fading_std=float(fine_fading_input.value),
+                variable_noise_std=float(noise_std_input.value),
+            )
+            for i in range(num_channels_input.value)
+        ],
         channel_distribution="random" if channel_dist_select.value == "Aléatoire" else "round-robin",
         fixed_sf=int(sf_value_input.value) if fixed_sf_checkbox.value else None,
         fixed_tx_power=float(tx_power_input.value) if fixed_power_checkbox.value else None,
@@ -683,6 +699,8 @@ def setup_simulation(seed_offset: int = 0):
     mobility_speed_max_input.disabled = True
     flora_mode_toggle.disabled = True
     detection_threshold_input.disabled = True
+    fine_fading_input.disabled = True
+    noise_std_input.disabled = True
     min_interference_input.disabled = True
     battery_capacity_input.disabled = True
     payload_size_input.disabled = True
@@ -803,6 +821,8 @@ def on_stop(event):
     mobility_speed_max_input.disabled = False
     flora_mode_toggle.disabled = False
     detection_threshold_input.disabled = False
+    fine_fading_input.disabled = False
+    noise_std_input.disabled = False
     min_interference_input.disabled = False
     battery_capacity_input.disabled = False
     payload_size_input.disabled = False
@@ -1132,6 +1152,8 @@ controls = pn.WidgetBox(
     mobility_speed_max_input,
     flora_mode_toggle,
     detection_threshold_input,
+    fine_fading_input,
+    noise_std_input,
     min_interference_input,
     battery_capacity_input,
     payload_size_input,
