@@ -79,9 +79,17 @@ def simulate(nodes, gateways, mode, interval, steps, channels=1,
                     energy_consumed += nb_tx * 1.0
                     if nb_tx == 1:
                         n = nodes_on_ch[0]
-                        delivered += 1
-                        delays.append(t - pending[n])
-                        del pending[n]
+                        success = True
+                        if fine_fading_std > 0.0 and random.gauss(0.0, fine_fading_std) < -3.0:
+                            success = False
+                        if noise_std > 0.0 and random.gauss(0.0, noise_std) > 3.0:
+                            success = False
+                        if success:
+                            delivered += 1
+                            delays.append(t - pending[n])
+                            del pending[n]
+                        else:
+                            collisions += 1
                     else:
                         collisions += nb_tx - 1
                         winner = random.choice(nodes_on_ch)
