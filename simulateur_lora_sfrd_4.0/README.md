@@ -214,8 +214,7 @@ pour le détail des évolutions. Ce projet est distribué sous licence
   matériel réel.
 - La mobilité s'appuie par défaut sur des trajectoires de Bézier ; un modèle
   RandomWaypoint peut utiliser des cartes de terrain pour éviter les obstacles.
-- La sécurité LoRaWAN est basique : un serveur de jointure dérive les clés mais
-  le chiffrement reste simplifié.
+- La sécurité LoRaWAN repose désormais sur un chiffrement AES-128 complet avec calcul du MIC. Un serveur de jointure gère l'intégralité de la procédure OTAA.
 
 Les contributions sont bienvenues pour améliorer ces points ou ajouter de
 nouvelles fonctionnalités.

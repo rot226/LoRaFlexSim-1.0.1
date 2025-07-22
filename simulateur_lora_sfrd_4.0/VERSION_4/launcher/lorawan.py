@@ -5,6 +5,7 @@ from .crypto import aes_encrypt, aes_decrypt, cmac  # noqa: F401
 @dataclass
 class LoRaWANFrame:
     """Minimal representation of a LoRaWAN MAC frame."""
+
     mhdr: int
     fctrl: int
     fcnt: int
@@ -42,9 +43,11 @@ class LinkADRReq:
 
     def to_bytes(self) -> bytes:
         dr_tx = ((self.datarate & 0x0F) << 4) | (self.tx_power & 0x0F)
-        return bytes([0x03, dr_tx]) + self.chmask.to_bytes(2, "little") + bytes([
-            self.redundancy
-        ])
+        return (
+            bytes([0x03, dr_tx])
+            + self.chmask.to_bytes(2, "little")
+            + bytes([self.redundancy])
+        )
 
     @staticmethod
     def from_bytes(data: bytes) -> "LinkADRReq":
@@ -405,7 +408,11 @@ class BeaconTimingAns:
     channel: int
 
     def to_bytes(self) -> bytes:
-        return bytes([0x12]) + self.delay.to_bytes(2, "little") + bytes([self.channel & 0xFF])
+        return (
+            bytes([0x12])
+            + self.delay.to_bytes(2, "little")
+            + bytes([self.channel & 0xFF])
+        )
 
     @staticmethod
     def from_bytes(data: bytes) -> "BeaconTimingAns":
@@ -430,7 +437,11 @@ class DeviceTimeAns:
     fractional: int = 0
 
     def to_bytes(self) -> bytes:
-        return bytes([0x0D]) + self.seconds.to_bytes(4, "little") + bytes([self.fractional & 0xFF])
+        return (
+            bytes([0x0D])
+            + self.seconds.to_bytes(4, "little")
+            + bytes([self.fractional & 0xFF])
+        )
 
     @staticmethod
     def from_bytes(data: bytes) -> "DeviceTimeAns":
@@ -664,6 +675,26 @@ class JoinAccept:
         return JoinAccept(app_nonce, net_id, dev_addr)
 
 
+def encrypt_join_accept(app_key: bytes, accept: "JoinAccept") -> tuple[bytes, bytes]:
+    """Return encrypted join-accept payload and MIC."""
+    msg = accept.to_bytes()
+    mic = compute_join_mic(app_key, msg)
+    padded = msg + mic
+    pad_len = (16 - len(padded) % 16) % 16
+    encrypted = aes_decrypt(app_key, padded + bytes(pad_len))
+    return encrypted, mic
+
+
+def decrypt_join_accept(
+    app_key: bytes, encrypted: bytes, length: int
+) -> tuple["JoinAccept", bytes]:
+    """Decrypt ``encrypted`` payload and return ``JoinAccept`` and MIC."""
+    plain = aes_encrypt(app_key, encrypted)[: length + 4]
+    msg = plain[:length]
+    mic = plain[length:]
+    return JoinAccept.from_bytes(msg), mic
+
+
 def compute_rx1(end_time: float, rx_delay: float = 1.0) -> float:
     """Return the opening time of RX1 window after an uplink."""
     return end_time + rx_delay
@@ -728,7 +759,7 @@ def next_ping_slot_time(
     first_slot = last_beacon_time + beacon_drift + ping_slot_offset
     if after_time <= first_slot:
         return first_slot
-    interval = ping_slot_interval * (2 ** periodicity)
+    interval = ping_slot_interval * (2**periodicity)
     slots = math.ceil((after_time - first_slot) / interval)
     return first_slot + slots * interval
 
@@ -736,6 +767,7 @@ def next_ping_slot_time(
 # ---------------------------------------------------------------------------
 # LoRaWAN security helpers (AES encryption and MIC)
 # ---------------------------------------------------------------------------
+
 
 def encrypt_payload(
     app_skey: bytes,
@@ -790,8 +822,11 @@ def compute_rejoin_mic(app_key: bytes, msg: bytes) -> bytes:
     return cmac(app_key, msg)[:4]
 
 
-def derive_session_keys(app_key: bytes, dev_nonce: int, app_nonce: int, net_id: int) -> tuple[bytes, bytes]:
+def derive_session_keys(
+    app_key: bytes, dev_nonce: int, app_nonce: int, net_id: int
+) -> tuple[bytes, bytes]:
     """Derive NwkSKey and AppSKey following the LoRaWAN 1.0.x specification."""
+
     def _derive(k: int) -> bytes:
         return aes_encrypt(
             app_key,
@@ -817,7 +852,9 @@ def validate_frame(
     """Check MIC and decrypt payload in ``frame``."""
     if frame.encrypted_payload is not None:
         if (
-            compute_mic(nwk_skey, devaddr, frame.fcnt, direction, frame.encrypted_payload)
+            compute_mic(
+                nwk_skey, devaddr, frame.fcnt, direction, frame.encrypted_payload
+            )
             != frame.mic
         ):
             return False
@@ -839,6 +876,3 @@ def validate_join_request(req: JoinRequest, app_key: bytes) -> bool:
 def validate_rejoin_request(req: RejoinRequest, app_key: bytes) -> bool:
     """Return ``True`` if ``req`` has a valid MIC (type 0)."""
     return compute_rejoin_mic(app_key, req.to_bytes()) == req.mic
-
-
-from .server import JoinServer  # noqa: F401,E402 - re-export for backward compatibility

@@ -296,6 +296,7 @@ mais simplifie volontairement certains aspects.
 - profils d'énergie personnalisables
 - commandes ADR (`LinkADRReq/Ans`, `ADRACKReq`, masque de canaux, `NbTrans`)
 - procédure OTAA et file de downlinks programmés
+- chiffrement AES-128 avec MIC pour tous les messages
 - gestion complète des classes LoRaWAN B et C avec perte de beacon et dérive d'horloge optionnelles
 
 **Fonctionnalités absentes**
@@ -401,8 +402,7 @@ encore de maturité :
 - La couche physique est simplifiée et n'imite pas parfaitement les comportements
   réels des modems LoRa.
 - La mobilité par défaut s'appuie sur des trajets de Bézier. Un modèle RandomWaypoint peut exploiter une carte de terrain pour éviter les obstacles. Un module de navigation peut désormais planifier des chemins à partir d'une carte d'obstacles.
-- La sécurité LoRaWAN (chiffrement AES/MIC) est activée par défaut mais les
-  serveurs de jointure et la validation du chiffrement restent simplifiés.
+- La sécurité LoRaWAN s'appuie désormais sur un chiffrement AES-128 complet et la validation du MIC. Le serveur de jointure gère l'ensemble de la procédure OTAA.
 
 Les contributions sont les bienvenues pour lever ces limitations ou proposer de
 nouvelles idées.

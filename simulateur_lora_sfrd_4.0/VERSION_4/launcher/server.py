@@ -3,19 +3,18 @@ from __future__ import annotations
 import logging
 import heapq
 
-from .join_server import JoinServer
 from typing import TYPE_CHECKING
 from .downlink_scheduler import DownlinkScheduler
+from .join_server import JoinServer  # re-export
 
 if TYPE_CHECKING:  # pragma: no cover - for type checking only
-    from .lorawan import LoRaWANFrame, JoinAccept, JoinRequest
+    from .lorawan import LoRaWANFrame, JoinAccept
 
 logger = logging.getLogger(__name__)
 
 # Paramètres ADR (valeurs issues de la spécification LoRaWAN)
 REQUIRED_SNR = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
 MARGIN_DB = 15.0
-
 
 
 class NetworkServer:
@@ -78,7 +77,7 @@ class NetworkServer:
         request_ack: bool = False,
         at_time: float | None = None,
         gateway=None,
-        ):
+    ):
         """Queue a downlink frame for a node via ``gateway`` or the first one."""
         from .lorawan import (
             LoRaWANFrame,
@@ -119,7 +118,9 @@ class NetworkServer:
         if node.security_enabled and isinstance(frame, LoRaWANFrame):
             from .lorawan import encrypt_payload, compute_mic
 
-            enc = encrypt_payload(node.appskey, node.devaddr, node.fcnt_down, 1, frame.payload)
+            enc = encrypt_payload(
+                node.appskey, node.devaddr, node.fcnt_down, 1, frame.payload
+            )
             frame.encrypted_payload = enc
             frame.mic = compute_mic(node.nwkskey, node.devaddr, node.fcnt_down, 1, enc)
         node.fcnt_down += 1
@@ -170,7 +171,9 @@ class NetworkServer:
         except AttributeError:
             pass
 
-    def _derive_keys(self, appkey: bytes, devnonce: int, appnonce: int) -> tuple[bytes, bytes]:
+    def _derive_keys(
+        self, appkey: bytes, devnonce: int, appnonce: int
+    ) -> tuple[bytes, bytes]:
         from .lorawan import derive_session_keys
 
         return derive_session_keys(appkey, devnonce, appnonce, self.net_id)
@@ -189,7 +192,7 @@ class NetworkServer:
             frame, gw = self.scheduler.pop_ready(node_id, current_time)
 
     def _activate(self, node, gateway=None):
-        from .lorawan import JoinAccept
+        from .lorawan import JoinAccept, encrypt_join_accept
 
         appnonce = self.next_devaddr & 0xFFFFFF
         devaddr = self.next_devaddr
@@ -199,13 +202,9 @@ class NetworkServer:
         # Store derived keys server-side but send only join parameters
         frame = JoinAccept(appnonce, self.net_id, devaddr)
         if node.security_enabled:
-            from .lorawan import compute_join_mic, aes_decrypt
-
-            msg = frame.to_bytes()
-            pad = (16 - len(msg) % 16) % 16
-            padded = msg + bytes(pad)
-            frame.encrypted = aes_decrypt(node.appkey, padded)
-            frame.mic = compute_join_mic(node.appkey, msg)
+            enc, mic = encrypt_join_accept(node.appkey, frame)
+            frame.encrypted = enc
+            frame.mic = mic
         node.nwkskey = nwk_skey
         node.appskey = app_skey
         self.send_downlink(node, frame, gateway=gateway)
@@ -230,13 +229,17 @@ class NetworkServer:
         """
         if event_id in self.received_events:
             # Doublon (déjà reçu via une autre passerelle)
-            logger.debug(f"NetworkServer: duplicate packet event {event_id} from node {node_id} (ignored).")
+            logger.debug(
+                f"NetworkServer: duplicate packet event {event_id} from node {node_id} (ignored)."
+            )
             return
         # Nouveau paquet reçu
         self.received_events.add(event_id)
         self.event_gateway[event_id] = gateway_id
         self.packets_received += 1
-        logger.debug(f"NetworkServer: packet event {event_id} from node {node_id} received via gateway {gateway_id}.")
+        logger.debug(
+            f"NetworkServer: packet event {event_id} from node {node_id} received via gateway {gateway_id}."
+        )
 
         node = next((n for n in self.nodes if n.id == node_id), None)
         gw = next((g for g in self.gateways if g.id == gateway_id), None)
@@ -295,7 +298,9 @@ class NetworkServer:
                     p_idx = DBM_TO_TX_POWER_INDEX.get(int(power), 0)
 
                     if nstep > 0:
-                        while nstep > 0 and (sf > 7 or p_idx < max(TX_POWER_INDEX_TO_DBM.keys())):
+                        while nstep > 0 and (
+                            sf > 7 or p_idx < max(TX_POWER_INDEX_TO_DBM.keys())
+                        ):
                             if sf > 7:
                                 sf -= 1
                             elif p_idx < max(TX_POWER_INDEX_TO_DBM.keys()):
@@ -312,5 +317,7 @@ class NetworkServer:
                             nstep += 1
 
                     if sf != node.sf or power != node.tx_power:
-                        self.send_downlink(node, adr_command=(sf, power, node.chmask, node.nb_trans))
+                        self.send_downlink(
+                            node, adr_command=(sf, power, node.chmask, node.nb_trans)
+                        )
                         node.snr_history.clear()

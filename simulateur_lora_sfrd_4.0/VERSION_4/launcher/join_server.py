@@ -23,7 +23,9 @@ class JoinServer:
             raise ValueError("Invalid AppKey")
         self.devices[(join_eui, dev_eui)] = app_key
 
-    def get_session_keys(self, join_eui: int, dev_eui: int) -> tuple[bytes, bytes] | None:
+    def get_session_keys(
+        self, join_eui: int, dev_eui: int
+    ) -> tuple[bytes, bytes] | None:
         """Return stored (NwkSKey, AppSKey) for a device if known."""
         return self.session_keys.get((join_eui, dev_eui))
 
@@ -32,7 +34,7 @@ class JoinServer:
         from .lorawan import (
             compute_join_mic,
             derive_session_keys,
-            aes_decrypt,
+            encrypt_join_accept,
             JoinAccept,
         )
 
@@ -59,10 +61,9 @@ class JoinServer:
         )
 
         accept = JoinAccept(app_nonce, self.net_id, dev_addr)
-        msg = accept.to_bytes()
-        pad = (16 - len(msg) % 16) % 16
-        accept.encrypted = aes_decrypt(app_key, msg + bytes(pad))
-        accept.mic = compute_join_mic(app_key, msg)
+        enc, mic = encrypt_join_accept(app_key, accept)
+        accept.encrypted = enc
+        accept.mic = mic
         self.session_keys[key] = (nwk_skey, app_skey)
         return accept, nwk_skey, app_skey
 
@@ -71,7 +72,7 @@ class JoinServer:
         from .lorawan import (
             compute_rejoin_mic,
             derive_session_keys,
-            aes_decrypt,
+            encrypt_join_accept,
             JoinAccept,
         )
 
@@ -101,9 +102,8 @@ class JoinServer:
         )
 
         accept = JoinAccept(app_nonce, self.net_id, dev_addr)
-        msg = accept.to_bytes()
-        pad = (16 - len(msg) % 16) % 16
-        accept.encrypted = aes_decrypt(app_key, msg + bytes(pad))
-        accept.mic = compute_rejoin_mic(app_key, msg)
+        enc, mic = encrypt_join_accept(app_key, accept)
+        accept.encrypted = enc
+        accept.mic = mic
         self.session_keys[key] = (nwk_skey, app_skey)
         return accept, nwk_skey, app_skey
