@@ -181,6 +181,7 @@ class Node:
         self.rejoin_count_n: int | None = None
         self.force_rejoin_period: int | None = None
         self.force_rejoin_type: int | None = None
+        self.frag_sessions: dict[int, dict] = {}
         # LoRaWAN minor version (ResetInd/Conf). Default 0 as per spec
         self.lorawan_minor: int = 0
         # Last beacon time for Class B scheduling
@@ -637,6 +638,42 @@ class Node:
                     else:
                         BeaconTimingReq.from_bytes(payload[:1])
                     self.pending_mac_cmd = BeaconTimingAns(0, 0).to_bytes()
+                except Exception:
+                    pass
+            elif len(payload) >= 4 and payload[0] == 0x21:
+                try:
+                    from .lorawan import (
+                        FragSessionSetupReq,
+                        FragSessionSetupAns,
+                    )
+
+                    req = FragSessionSetupReq.from_bytes(payload[:4])
+                    self.frag_sessions[req.index] = {
+                        "nb": req.nb_frag,
+                        "size": req.frag_size,
+                    }
+                    self.pending_mac_cmd = FragSessionSetupAns(req.index).to_bytes()
+                except Exception:
+                    pass
+            elif len(payload) >= 2 and payload[0] == 0x22:
+                try:
+                    from .lorawan import (
+                        FragSessionDeleteReq,
+                        FragSessionDeleteAns,
+                    )
+
+                    req = FragSessionDeleteReq.from_bytes(payload[:2])
+                    self.frag_sessions.pop(req.index, None)
+                    self.pending_mac_cmd = FragSessionDeleteAns().to_bytes()
+                except Exception:
+                    pass
+            elif len(payload) >= 2 and payload[0] == 0x23:
+                try:
+                    from .lorawan import FragStatusReq, FragStatusAns
+
+                    req = FragStatusReq.from_bytes(payload[:2])
+                    pending = 0
+                    self.pending_mac_cmd = FragStatusAns(req.index, pending).to_bytes()
                 except Exception:
                     pass
             elif len(payload) >= 2 and payload[0] == 0x20:

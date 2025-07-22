@@ -594,6 +594,99 @@ class DeviceModeConf:
 
 
 @dataclass
+class FragSessionSetupReq:
+    index: int
+    nb_frag: int
+    frag_size: int
+
+    def to_bytes(self) -> bytes:
+        return bytes([
+            0x21,
+            self.index & 0xFF,
+            self.nb_frag & 0xFF,
+            self.frag_size & 0xFF,
+        ])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "FragSessionSetupReq":
+        if len(data) < 4 or data[0] != 0x21:
+            raise ValueError("Invalid FragSessionSetupReq")
+        return FragSessionSetupReq(data[1], data[2], data[3])
+
+
+@dataclass
+class FragSessionSetupAns:
+    index: int
+    status: int = 0
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x21, self.index & 0xFF, self.status & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "FragSessionSetupAns":
+        if len(data) < 3 or data[0] != 0x21:
+            raise ValueError("Invalid FragSessionSetupAns")
+        return FragSessionSetupAns(data[1], data[2])
+
+
+@dataclass
+class FragSessionDeleteReq:
+    index: int
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x22, self.index & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "FragSessionDeleteReq":
+        if len(data) < 2 or data[0] != 0x22:
+            raise ValueError("Invalid FragSessionDeleteReq")
+        return FragSessionDeleteReq(data[1])
+
+
+@dataclass
+class FragSessionDeleteAns:
+    status: int = 0
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x22, self.status & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "FragSessionDeleteAns":
+        if len(data) < 2 or data[0] != 0x22:
+            raise ValueError("Invalid FragSessionDeleteAns")
+        return FragSessionDeleteAns(data[1])
+
+
+@dataclass
+class FragStatusReq:
+    index: int
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x23, self.index & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "FragStatusReq":
+        if len(data) < 2 or data[0] != 0x23:
+            raise ValueError("Invalid FragStatusReq")
+        return FragStatusReq(data[1])
+
+
+@dataclass
+class FragStatusAns:
+    index: int
+    pending: int
+
+    def to_bytes(self) -> bytes:
+        return bytes([0x23, self.index & 0xFF, self.pending & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "FragStatusAns":
+        if len(data) < 3 or data[0] != 0x23:
+            raise ValueError("Invalid FragStatusAns")
+        return FragStatusAns(data[1], data[2])
+
+
+@dataclass
 class JoinRequest:
     """Simplified OTAA join request frame."""
 
@@ -810,6 +903,20 @@ def compute_mic(
     )
     mac = cmac(nwk_skey, b0 + msg)
     return mac[:4]
+
+
+def encrypt_multicast_payload(
+    mc_app_skey: bytes, mc_addr: int, fcnt: int, payload: bytes
+) -> bytes:
+    """Encrypt multicast ``payload`` (downlink direction)."""
+    return encrypt_payload(mc_app_skey, mc_addr, fcnt, 1, payload)
+
+
+def compute_multicast_mic(
+    mc_nwk_skey: bytes, mc_addr: int, fcnt: int, msg: bytes
+) -> bytes:
+    """Compute MIC for multicast messages (downlink direction)."""
+    return compute_mic(mc_nwk_skey, mc_addr, fcnt, 1, msg)
 
 
 def compute_join_mic(app_key: bytes, msg: bytes) -> bytes:
