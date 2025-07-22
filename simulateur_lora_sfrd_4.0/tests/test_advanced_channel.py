@@ -202,3 +202,27 @@ def test_interference_penalty_inf():
     symbol_time = (2 ** 7) / adv.base.bandwidth
     penalty = adv._interference_penalty_db(freq_offset, symbol_time, 7)
     assert penalty == float("inf")
+
+
+def test_clock_jitter_variation():
+    random.seed(0)
+    adv = AdvancedChannel(
+        fading="",
+        shadowing_std=0,
+        clock_jitter_std_s=0.0005,
+    )
+    _, snr1 = adv.compute_rssi(14.0, 100.0)
+    _, snr2 = adv.compute_rssi(14.0, 100.0)
+    assert snr1 != snr2
+
+
+def test_pa_distortion_affects_rssi():
+    random.seed(0)
+    adv = AdvancedChannel(
+        fading="",
+        shadowing_std=0,
+        pa_distortion_std_dB=1.0,
+    )
+    r1, _ = adv.compute_rssi(14.0, 100.0)
+    r2, _ = adv.compute_rssi(14.0, 100.0)
+    assert r1 != r2

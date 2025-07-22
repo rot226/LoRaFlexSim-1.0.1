@@ -83,10 +83,12 @@ class AdvancedChannel:
         pa_non_linearity_dB: float = 0.0,
         pa_non_linearity_std_dB: float = 0.0,
         pa_non_linearity_curve: tuple[float, float, float] | None = None,
+        pa_distortion_std_dB: float = 0.0,
         humidity_percent: float = 50.0,
         humidity_std_percent: float = 0.0,
         humidity_noise_coeff_dB: float = 0.0,
         phase_noise_std_dB: float = 0.0,
+        clock_jitter_std_s: float = 0.0,
         frontend_filter_order: int = 0,
         frontend_filter_bw: float | None = None,
         obstacle_map: list[list[float]] | None = None,
@@ -139,6 +141,8 @@ class AdvancedChannel:
             non‑linéarité PA.
         :param pa_non_linearity_curve: Courbe polynomiale ``(a, b, c)`` appliquée
             à la puissance TX pour modéliser une non‑linéarité plus complexe.
+        :param pa_distortion_std_dB: Variation aléatoire (dB) due aux
+            imperfections de l'amplificateur de puissance.
         :param humidity_percent: Humidité relative moyenne (0‑100 %).
         :param humidity_std_percent: Variation temporelle de l'humidité
             relative.
@@ -146,6 +150,8 @@ class AdvancedChannel:
             d'humidité pour moduler le bruit (dB).
         :param phase_noise_std_dB: Bruit de phase appliqué au SNR (écart-type en
             dB).
+        :param clock_jitter_std_s: Gigue d'horloge (s) appliquée au décalage
+            temporel à chaque calcul.
         :param frontend_filter_order: Ordre du filtre passe-bande simulé.
         :param frontend_filter_bw: Largeur de bande du filtre (Hz).
         :param multipath_paths: Nombre de trajets multipath à simuler.
@@ -201,6 +207,7 @@ class AdvancedChannel:
         self.freq_offset_std_hz = freq_offset_std_hz
         self.sync_offset_s = sync_offset_s
         self.sync_offset_std_s = sync_offset_std_s
+        self.clock_jitter_std_s = clock_jitter_std_s
         self._freq_offset = _CorrelatedValue(
             frequency_offset_hz, freq_offset_std_hz, fading_correlation
         )
@@ -225,6 +232,7 @@ class AdvancedChannel:
             pa_non_linearity_std_dB,
             fading_correlation,
         )
+        self._pa_distortion = _CorrelatedValue(0.0, pa_distortion_std_dB, fading_correlation)
         self.pa_non_linearity_curve = pa_non_linearity_curve
         self._humidity = _CorrelatedValue(
             humidity_percent,
@@ -408,6 +416,8 @@ class AdvancedChannel:
             sync_offset_s = self._sync_offset.sample()
         # Include short-term clock jitter
         sync_offset_s += self.base.omnet.clock_drift()
+        if self.clock_jitter_std_s > 0.0:
+            sync_offset_s += random.gauss(0.0, self.clock_jitter_std_s)
 
         height_diff = None
         if tx_pos is not None and rx_pos is not None and self.propagation_model == "3d":
@@ -423,6 +433,7 @@ class AdvancedChannel:
             loss += random.gauss(0, self.base.shadowing_std)
 
         tx_power_dBm += self._pa_nl.sample()
+        tx_power_dBm += self._pa_distortion.sample()
         if self.pa_non_linearity_curve:
             a, b, c = self.pa_non_linearity_curve
             tx_power_dBm += a * tx_power_dBm ** 2 + b * tx_power_dBm + c

@@ -176,6 +176,7 @@ réception :
 - `variable_noise_std` : bruit thermique lentement variable (dB).
 - `freq_drift_std_hz` et `clock_drift_std_s` : dérives de fréquence et
   d'horloge corrélées utilisées pour le calcul du SNR.
+- `clock_jitter_std_s` : gigue d'horloge ajoutée à chaque calcul.
 - `temperature_std_K` : variation de température pour le calcul du bruit.
 - `humidity_percent` et `humidity_noise_coeff_dB` : ajoutent un bruit
   supplémentaire proportionnel à l'humidité relative. La variation temporelle
@@ -184,6 +185,7 @@ réception :
   non‑linéarité de l'amplificateur de puissance.
 - `pa_non_linearity_curve` : triplet de coefficients polynomiaux pour
   définir une non‑linéarité personnalisée.
+- `pa_distortion_std_dB` : variation aléatoire due aux imperfections du PA.
 - `phase_noise_std_dB` : bruit de phase ajouté au SNR.
 - `oscillator_leakage_dB` / `oscillator_leakage_std_dB` : fuite
   d'oscillateur ajoutée au bruit.
