@@ -175,6 +175,9 @@ réception :
 - `pa_non_linearity_dB` / `pa_non_linearity_std_dB` : modélisent la
   non‑linéarité de l'amplificateur de puissance.
 - `phase_noise_std_dB` : bruit de phase ajouté au SNR.
+- `oscillator_leakage_dB` / `oscillator_leakage_std_dB` : fuite
+  d'oscillateur ajoutée au bruit.
+- `rx_fault_std_dB` : défauts de réception aléatoires pénalisant le SNR.
 - `band_interference` : liste de brouilleurs sélectifs sous la forme
   `(freq, bw, dB)` appliqués au calcul du bruit.
 - `environment` : preset rapide pour le modèle de propagation
