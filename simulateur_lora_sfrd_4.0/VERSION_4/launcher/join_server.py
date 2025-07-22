@@ -10,6 +10,7 @@ class JoinServer:
     net_id: int = 0
     devices: dict[tuple[int, int], bytes] = field(default_factory=dict)
     last_devnonce: dict[tuple[int, int], int] = field(default_factory=dict)
+    last_rjcount0: dict[tuple[int, int], int] = field(default_factory=dict)
     session_keys: dict[tuple[int, int], tuple[bytes, bytes]] = field(
         default_factory=dict
     )
@@ -62,5 +63,47 @@ class JoinServer:
         pad = (16 - len(msg) % 16) % 16
         accept.encrypted = aes_decrypt(app_key, msg + bytes(pad))
         accept.mic = compute_join_mic(app_key, msg)
+        self.session_keys[key] = (nwk_skey, app_skey)
+        return accept, nwk_skey, app_skey
+
+    def handle_rejoin(self, req: "RejoinRequest") -> tuple["JoinAccept", bytes, bytes]:
+        """Process a RejoinRequest type 0 and return a join-accept."""
+        from .lorawan import (
+            compute_rejoin_mic,
+            derive_session_keys,
+            aes_decrypt,
+            JoinAccept,
+        )
+
+        if req.rejoin_type != 0:
+            raise NotImplementedError("Only RejoinRequest type 0 supported")
+
+        key = (req.join_eui, req.dev_eui)
+        app_key = self.devices.get(key)
+        if app_key is None:
+            raise KeyError("Unknown device")
+
+        if compute_rejoin_mic(app_key, req.to_bytes()) != req.mic:
+            raise ValueError("Invalid MIC")
+
+        last = self.last_rjcount0.get(key)
+        if last is not None and req.rjcount <= last:
+            raise ValueError("RJcount reused")
+        self.last_rjcount0[key] = req.rjcount
+
+        app_nonce = self.app_nonce & 0xFFFFFF
+        self.app_nonce += 1
+        dev_addr = self.next_devaddr
+        self.next_devaddr += 1
+
+        nwk_skey, app_skey = derive_session_keys(
+            app_key, req.rjcount, app_nonce, self.net_id
+        )
+
+        accept = JoinAccept(app_nonce, self.net_id, dev_addr)
+        msg = accept.to_bytes()
+        pad = (16 - len(msg) % 16) % 16
+        accept.encrypted = aes_decrypt(app_key, msg + bytes(pad))
+        accept.mic = compute_rejoin_mic(app_key, msg)
         self.session_keys[key] = (nwk_skey, app_skey)
         return accept, nwk_skey, app_skey

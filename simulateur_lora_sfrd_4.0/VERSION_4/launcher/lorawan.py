@@ -609,6 +609,35 @@ class JoinRequest:
 
 
 @dataclass
+class RejoinRequest:
+    """Simplified Rejoin-Request (type 0) frame for re-authentication."""
+
+    rejoin_type: int
+    join_eui: int
+    dev_eui: int
+    rjcount: int
+    mic: bytes = b""
+
+    def to_bytes(self) -> bytes:
+        return (
+            bytes([self.rejoin_type & 0xFF])
+            + self.join_eui.to_bytes(8, "little")
+            + self.dev_eui.to_bytes(8, "little")
+            + self.rjcount.to_bytes(2, "little")
+        )
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "RejoinRequest":
+        if len(data) < 19:
+            raise ValueError("Invalid RejoinRequest")
+        rtype = data[0]
+        join_eui = int.from_bytes(data[1:9], "little")
+        dev_eui = int.from_bytes(data[9:17], "little")
+        rjcount = int.from_bytes(data[17:19], "little")
+        return RejoinRequest(rtype, join_eui, dev_eui, rjcount)
+
+
+@dataclass
 class JoinAccept:
     """Simplified OTAA join accept frame carrying join parameters."""
 
@@ -756,6 +785,11 @@ def compute_join_mic(app_key: bytes, msg: bytes) -> bytes:
     return cmac(app_key, msg)[:4]
 
 
+def compute_rejoin_mic(app_key: bytes, msg: bytes) -> bytes:
+    """Compute MIC for rejoin-request messages (type 0 only)."""
+    return cmac(app_key, msg)[:4]
+
+
 def derive_session_keys(app_key: bytes, dev_nonce: int, app_nonce: int, net_id: int) -> tuple[bytes, bytes]:
     """Derive NwkSKey and AppSKey following the LoRaWAN 1.0.x specification."""
     def _derive(k: int) -> bytes:
@@ -800,6 +834,11 @@ def validate_frame(
 def validate_join_request(req: JoinRequest, app_key: bytes) -> bool:
     """Return ``True`` if ``req`` has a valid MIC."""
     return compute_join_mic(app_key, req.to_bytes()) == req.mic
+
+
+def validate_rejoin_request(req: RejoinRequest, app_key: bytes) -> bool:
+    """Return ``True`` if ``req`` has a valid MIC (type 0)."""
+    return compute_rejoin_mic(app_key, req.to_bytes()) == req.mic
 
 
 from .server import JoinServer  # noqa: F401,E402 - re-export for backward compatibility

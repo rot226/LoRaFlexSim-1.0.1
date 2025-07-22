@@ -196,6 +196,35 @@ def test_join_server_invalid_key_and_rejoin():
     js.handle_join(req2)
 
 
+def test_rejoin_request_roundtrip_and_server():
+    from VERSION_4.launcher.lorawan import (
+        RejoinRequest,
+        JoinAccept,
+        compute_rejoin_mic,
+        aes_encrypt,
+    )
+    from VERSION_4.launcher.server import JoinServer
+
+    js = JoinServer(net_id=1)
+    key = bytes(range(16))
+    js.register(1, 2, key)
+
+    req = RejoinRequest(0, 1, 2, 1)
+    data = req.to_bytes()
+    parsed = RejoinRequest.from_bytes(data)
+    assert parsed == req
+    req.mic = compute_rejoin_mic(key, data)
+
+    accept, nwk, app = js.handle_rejoin(req)
+    assert isinstance(accept, JoinAccept)
+    assert len(nwk) == 16 and len(app) == 16
+    assert accept.mic == compute_rejoin_mic(key, accept.to_bytes())
+    assert aes_encrypt(key, accept.encrypted)[:10] == accept.to_bytes()
+
+    with pytest.raises(ValueError):
+        js.handle_rejoin(req)
+
+
 def test_missed_beacon_reschedule():
     from VERSION_4.launcher.node import Node
     from VERSION_4.launcher.gateway import Gateway
