@@ -6,8 +6,8 @@ This repository contains a lightweight LoRa network simulator implemented in Pyt
 - Duty cycle enforcement to mimic real LoRa constraints
 - Optional node mobility with Bezier interpolation or terrain-aware random
   waypoint movement, plus path-based navigation avoiding obstacles. Additional
-  models include Gauss–Markov, GPS trace playback and terrain following with
-  3D obstacle maps.
+  models include Gauss–Markov, GPS trace playback (CSV or GPX) and terrain
+  following with 3D obstacle maps.
 - Multi-channel radio support
 - Advanced channel model with loss and noise parameters
 - Optional multipath fading with synchronised paths and external interference modeling
