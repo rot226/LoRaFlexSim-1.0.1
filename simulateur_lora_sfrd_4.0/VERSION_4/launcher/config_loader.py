@@ -61,3 +61,32 @@ def load_config(path: str | Path) -> tuple[list[dict], list[dict]]:
             nodes.append(node)
 
     return nodes, gateways
+
+
+def write_flora_ini(
+    nodes: list[dict], gateways: list[dict], path: str | Path
+) -> None:
+    """Write ``nodes`` and ``gateways`` positions to a FLoRa compatible INI.
+
+    Parameters
+    ----------
+    nodes : list of dict
+        Each dictionary must contain ``x`` and ``y`` coordinates and may
+        optionally define ``sf`` and ``tx_power``.
+    gateways : list of dict
+        Each dictionary must contain ``x`` and ``y`` coordinates.
+    path : str or Path
+        Destination file.
+    """
+
+    cp = configparser.ConfigParser()
+    cp.optionxform = str  # keep case for section keys
+    cp["gateways"] = {
+        f"gw{i}": f"{gw['x']},{gw['y']}" for i, gw in enumerate(gateways)
+    }
+    cp["nodes"] = {
+        f"n{i}": f"{nd['x']},{nd['y']},{nd.get('sf', 7)},{nd.get('tx_power', 14.0)}"
+        for i, nd in enumerate(nodes)
+    }
+    with open(path, "w") as f:
+        cp.write(f)

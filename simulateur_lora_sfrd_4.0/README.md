@@ -103,7 +103,9 @@ Le script affiche le taux de livraison et l'histogramme des SF pour chaque run.
 Le paramètre `flora_mode=True` applique automatiquement le seuil officiel de
 -110 dBm et une fenêtre d'interférence de 5 s. L'option `--flora-csv <fichier>`
 permet de comparer directement avec un export FLoRa. Les utilitaires du dossier
-`tools` facilitent la conversion entre CSV et fichiers `.sca`/`.vec`.
+`tools` facilitent la conversion entre CSV et fichiers `.sca`/`.vec` et offrent
+désormais `convert_flora_scenario.py` pour transformer un scénario FLoRa `.ini`
+en JSON (et inversement).
 
 Un fichier `examples/flora_full.ini` reproduit les positions de référence.
 Chargez‑le via `Simulator(config_file="examples/flora_full.ini")`. D'autres
