@@ -209,24 +209,16 @@ class NetworkServer:
             return
 
         if node and frame is not None and node.security_enabled:
-            from .lorawan import encrypt_payload, compute_mic, LoRaWANFrame
+            from .lorawan import validate_frame, LoRaWANFrame
 
-            if isinstance(frame, LoRaWANFrame) and frame.encrypted_payload is not None:
-                if compute_mic(
-                    node.nwkskey,
-                    node.devaddr,
-                    frame.fcnt,
-                    0,
-                    frame.encrypted_payload,
-                ) != frame.mic:
-                    return
-                frame.payload = encrypt_payload(
-                    node.appskey,
-                    node.devaddr,
-                    frame.fcnt,
-                    0,
-                    frame.encrypted_payload,
-                )
+            if isinstance(frame, LoRaWANFrame) and not validate_frame(
+                frame,
+                node.nwkskey,
+                node.appskey,
+                node.devaddr,
+                0,
+            ):
+                return
 
         if node and not getattr(node, "activated", True):
             self._activate(node, gateway=gw)
