@@ -125,6 +125,8 @@ exports (par exemple `flora_full.csv` ou `flora_collisions.csv`) sont disponible
 pour vérification.
 Un guide détaillé est proposé dans `examples/flora_reference.md` pour
 reproduire exactement ces scénarios FLoRa et comparer les résultats.
+Des études de cas plus poussées tirées des articles FLoRa sont présentées dans
+`examples/flora_case_studies.md`.
 
 Ci‑dessous un extrait de fichier INI utilisable avec le mode FLoRa :
 
