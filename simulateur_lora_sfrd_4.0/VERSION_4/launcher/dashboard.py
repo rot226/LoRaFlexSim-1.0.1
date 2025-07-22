@@ -181,10 +181,13 @@ position_textarea = pn.widgets.TextAreaInput(
 
 # Chargement d'un fichier .ini issu de FLoRa
 ini_file_input = pn.widgets.FileInput(name="Fichier INI FLoRa", accept=".ini")
+ini_file_label = pn.pane.Str("", width=200)
 
 # Map for path-based mobility
 path_map_input = pn.widgets.FileInput(name="Carte de parcours", accept=".json")
+path_map_label = pn.pane.Str("", width=200)
 flora_csv_input = pn.widgets.FileInput(name="CSV FLoRa", accept=".csv")
+flora_csv_label = pn.pane.Str("", width=200)
 
 # --- Boutons de contrôle ---
 start_button = pn.widgets.Button(name="Lancer la simulation", button_type="success")
@@ -1152,6 +1155,23 @@ heatmap_res_slider.param.watch(update_heatmap, "value")
 hist_metric_select.param.watch(lambda event: update_histogram(), "value")
 show_paths_checkbox.param.watch(lambda event: update_map(), "value")
 
+# --- Affichage des noms de fichiers chargés ---
+def on_ini_filename(event):
+    ini_file_label.object = event.new or ""
+
+
+def on_map_filename(event):
+    path_map_label.object = event.new or ""
+
+
+def on_csv_filename(event):
+    flora_csv_label.object = event.new or ""
+
+
+ini_file_input.param.watch(on_ini_filename, "filename")
+path_map_input.param.watch(on_map_filename, "filename")
+flora_csv_input.param.watch(on_csv_filename, "filename")
+
 # --- Boutons ADR ---
 adr1_button.on_click(lambda event: select_adr(adr_standard_1, "ADR 1"))
 adr2_button.on_click(lambda event: select_adr(adr_2, "ADR 2"))
@@ -1172,9 +1192,9 @@ controls = pn.WidgetBox(
     packets_input,
     seed_input,
     num_runs_input,
-    ini_file_input,
-    path_map_input,
-    flora_csv_input,
+    pn.Row(ini_file_input, ini_file_label),
+    pn.Row(path_map_input, path_map_label),
+    pn.Row(flora_csv_input, flora_csv_label),
     adr_node_checkbox,
     adr_server_checkbox,
     pn.Row(adr1_button, adr2_button, adr3_button, adr_active_badge),
