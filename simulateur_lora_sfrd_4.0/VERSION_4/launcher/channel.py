@@ -71,6 +71,9 @@ class Channel:
         phase_noise_std_dB: float = 0.0,
         pa_non_linearity_dB: float = 0.0,
         pa_non_linearity_std_dB: float = 0.0,
+        humidity_percent: float = 50.0,
+        humidity_std_percent: float = 0.0,
+        humidity_noise_coeff_dB: float = 0.0,
         *,
         bandwidth: float = 125e3,
         coding_rate: int = 1,
@@ -135,6 +138,11 @@ class Channel:
         :param pa_non_linearity_dB: Décalage moyen dû à la non‑linéarité PA.
         :param pa_non_linearity_std_dB: Variation temporelle de cette
             non‑linéarité.
+        :param humidity_percent: Humidité relative moyenne (0‑100 %).
+        :param humidity_std_percent: Variation temporelle de l'humidité
+            relative.
+        :param humidity_noise_coeff_dB: Coefficient appliqué au pourcentage
+            d'humidité pour moduler le bruit (dB).
         :param environment: Chaîne optionnelle pour charger un preset
             ("urban", "suburban" ou "rural").
         :param region: Nom d'un plan de fréquences prédéfini ("EU868", "US915",
@@ -191,6 +199,9 @@ class Channel:
         self.phase_noise_std_dB = phase_noise_std_dB
         self.pa_non_linearity_dB = pa_non_linearity_dB
         self.pa_non_linearity_std_dB = pa_non_linearity_std_dB
+        self.humidity_percent = humidity_percent
+        self.humidity_std_percent = humidity_std_percent
+        self.humidity_noise_coeff_dB = humidity_noise_coeff_dB
         self.omnet = OmnetModel(
             fine_fading_std,
             fading_correlation,
@@ -205,6 +216,9 @@ class Channel:
         self._phase_noise = _CorrelatedValue(0.0, phase_noise_std_dB, fading_correlation)
         self._pa_nl = _CorrelatedValue(
             pa_non_linearity_dB, pa_non_linearity_std_dB, fading_correlation
+        )
+        self._humidity = _CorrelatedValue(
+            humidity_percent, humidity_std_percent, fading_correlation
         )
         self.fine_fading_std = fine_fading_std
         self.fading_correlation = fading_correlation
@@ -261,6 +275,7 @@ class Channel:
         thermal = self.omnet.thermal_noise_dBm(self.bandwidth)
         self.omnet.temperature_K = original
         noise = thermal + self.noise_figure_dB + self.interference_dB
+        noise += self.humidity_noise_coeff_dB * (self._humidity.sample() / 100.0)
         for f, bw, power in self.band_interference:
             half = (bw + self.bandwidth) / 2.0
             if abs(self.frequency_hz - f) <= half:
