@@ -10,7 +10,8 @@ PAYLOAD_SIZE = 20  # octets simulés par paquet
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
-def simulate(nodes, gateways, mode, interval, steps, channels=1):
+def simulate(nodes, gateways, mode, interval, steps, channels=1,
+             *, fine_fading_std=0.0, noise_std=0.0):
     """Exécute une simulation LoRa simplifiée et retourne les métriques.
 
     Les transmissions peuvent se faire sur plusieurs canaux et plusieurs
@@ -163,6 +164,18 @@ def main(argv=None):
         type=int,
         help="Graine aléatoire pour reproduire les résultats",
     )
+    parser.add_argument(
+        "--fine-fading",
+        type=float,
+        default=0.0,
+        help="Écart-type du fading fin (dB)",
+    )
+    parser.add_argument(
+        "--noise-std",
+        type=float,
+        default=0.0,
+        help="Écart-type du bruit thermique variable (dB)",
+    )
     args = parser.parse_args(argv)
 
     if args.runs < 1:
@@ -203,6 +216,8 @@ def main(argv=None):
             args.interval,
             args.steps,
             args.channels,
+            fine_fading_std=args.fine_fading,
+            noise_std=args.noise_std,
         )
         results.append(
             (delivered, collisions, pdr, energy, avg_delay, throughput)

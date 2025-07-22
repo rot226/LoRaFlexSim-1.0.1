@@ -111,3 +111,19 @@ def test_band_interference_degrades_snr():
     _, snr_base = base.compute_rssi(14.0, 100.0)
     _, snr_jam = jam.compute_rssi(14.0, 100.0)
     assert snr_jam < snr_base
+
+
+def test_fine_fading_variability():
+    random.seed(0)
+    ch = Channel(shadowing_std=0, fine_fading_std=1.0)
+    r1, _ = ch.compute_rssi(14.0, 100.0)
+    r2, _ = ch.compute_rssi(14.0, 100.0)
+    assert r1 != r2
+
+
+def test_variable_noise_changes_rssi():
+    random.seed(0)
+    ch = Channel(shadowing_std=0, variable_noise_std=2.0)
+    _, s1 = ch.compute_rssi(14.0, 100.0)
+    _, s2 = ch.compute_rssi(14.0, 100.0)
+    assert s1 != s2

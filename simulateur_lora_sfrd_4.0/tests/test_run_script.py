@@ -95,3 +95,16 @@ def test_avg_delay_not_zero_with_collisions():
     assert collisions > 0
     # Average delay should reflect the waiting time due to collisions
     assert avg_delay > 0
+
+
+def test_main_accepts_new_options(monkeypatch):
+    captured = {}
+
+    def fake_sim(*args, **kwargs):
+        captured.update(kwargs)
+        return (0, 0, 0, 0, 0, 0)
+
+    monkeypatch.setattr(run, "simulate", fake_sim)
+    run.main(["--fine-fading", "1.0", "--noise-std", "2.0"])
+    assert captured["fine_fading_std"] == 1.0
+    assert captured["noise_std"] == 2.0

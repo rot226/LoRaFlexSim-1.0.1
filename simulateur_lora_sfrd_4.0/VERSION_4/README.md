@@ -168,6 +168,10 @@ réception :
 - `noise_figure` : facteur de bruit du récepteur en dB.
 - `noise_floor_std` : écart-type de la variation aléatoire du bruit (dB).
 - `fast_fading_std` : amplitude du fading multipath en dB.
+- `fine_fading_std` : écart-type du fading fin corrélé.
+- `variable_noise_std` : bruit thermique lentement variable (dB).
+- `freq_drift_std_hz` et `clock_drift_std_s` : dérives de fréquence et
+  d'horloge corrélées utilisées pour le calcul du SNR.
 - `temperature_std_K` : variation de température pour le calcul du bruit.
 - `humidity_percent` et `humidity_noise_coeff_dB` : ajoutent un bruit
   supplémentaire proportionnel à l'humidité relative. La variation temporelle

@@ -272,7 +272,7 @@ class Channel:
         temp = self._temperature.sample()
         original = self.omnet.temperature_K
         self.omnet.temperature_K = temp
-        thermal = self.omnet.thermal_noise_dBm(self.bandwidth)
+        thermal = self.omnet.variable_thermal_noise_dBm(self.bandwidth)
         self.omnet.temperature_K = original
         noise = thermal + self.noise_figure_dB + self.interference_dB
         noise += self.humidity_noise_coeff_dB * (self._humidity.sample() / 100.0)
@@ -282,7 +282,6 @@ class Channel:
                 noise += power
         if self.noise_floor_std > 0:
             noise += random.gauss(0, self.noise_floor_std)
-        noise += self.omnet.noise_variation()
         return noise
 
     def path_loss(self, distance: float) -> float:
@@ -341,8 +340,10 @@ class Channel:
         rssi += self.rssi_offset_dB
         if freq_offset_hz is None:
             freq_offset_hz = self.frequency_offset_hz
+        freq_offset_hz += self.omnet.frequency_drift()
         if sync_offset_s is None:
             sync_offset_s = self.sync_offset_s
+        sync_offset_s += self.omnet.clock_drift()
 
         snr = rssi - self.noise_floor_dBm() + self.snr_offset_dB
         penalty = self._alignment_penalty_db(freq_offset_hz, sync_offset_s, sf)

@@ -68,3 +68,8 @@ class OmnetModel:
         noise_w = k * self.temperature_K * bandwidth
         return 10 * math.log10(noise_w) + 30
 
+    def variable_thermal_noise_dBm(self, bandwidth: float) -> float:
+        """Return the thermal noise including slow variations."""
+        base = self.thermal_noise_dBm(bandwidth)
+        return base + self.noise_variation()
+
