@@ -237,7 +237,7 @@ class Simulator:
 
         # Compatibilité : premier canal par défaut
         self.channel = self.multichannel.channels[0]
-        self.network_server = NetworkServer()
+        self.network_server = NetworkServer(simulator=self)
         self.network_server.beacon_interval = self.beacon_interval
         self.network_server.beacon_drift = self.beacon_drift
         self.network_server.ping_slot_interval = self.ping_slot_interval

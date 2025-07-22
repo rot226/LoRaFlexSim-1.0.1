@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import heapq
 
 from .join_server import JoinServer
 from typing import TYPE_CHECKING
@@ -19,8 +20,14 @@ MARGIN_DB = 15.0
 
 class NetworkServer:
     """Représente le serveur de réseau LoRa (collecte des paquets reçus)."""
-    def __init__(self, join_server=None):
-        """Initialise le serveur réseau."""
+
+    def __init__(self, join_server=None, *, simulator=None):
+        """Initialise le serveur réseau.
+
+        :param join_server: Instance facultative de serveur d'activation OTAA.
+        :param simulator: Référence au :class:`Simulator` pour planifier
+            éventuellement certains événements (classe C).
+        """
         # Ensemble des identifiants d'événements déjà reçus (pour éviter les doublons)
         self.received_events = set()
         # Stockage optionnel d'infos sur les réceptions (par ex : via quelle passerelle)
@@ -37,6 +44,7 @@ class NetworkServer:
         self.next_devaddr = 1
         self.scheduler = DownlinkScheduler()
         self.join_server = join_server
+        self.simulator = simulator
         self.beacon_interval = 128.0
         self.beacon_drift = 0.0
         self.ping_slot_interval = 1.0
@@ -116,9 +124,47 @@ class NetworkServer:
             frame.mic = compute_mic(node.nwkskey, node.devaddr, node.fcnt_down, 1, enc)
         node.fcnt_down += 1
         if at_time is None:
-            gw.buffer_downlink(node.id, frame)
+            if node.class_type.upper() == "B":
+                after = self.simulator.current_time if self.simulator else 0.0
+                self.scheduler.schedule_class_b(
+                    node,
+                    after,
+                    frame,
+                    gw,
+                    self.beacon_interval,
+                    self.ping_slot_interval,
+                    self.ping_slot_offset,
+                    last_beacon_time=getattr(node, "last_beacon_time", None),
+                )
+            elif node.class_type.upper() == "C":
+                gw.buffer_downlink(node.id, frame)
+            else:
+                gw.buffer_downlink(node.id, frame)
         else:
-            self.scheduler.schedule(node.id, at_time, frame, gw)
+            if node.class_type.upper() == "B":
+                self.scheduler.schedule_class_b(
+                    node,
+                    at_time,
+                    frame,
+                    gw,
+                    self.beacon_interval,
+                    self.ping_slot_interval,
+                    self.ping_slot_offset,
+                    last_beacon_time=getattr(node, "last_beacon_time", None),
+                )
+            elif node.class_type.upper() == "C":
+                self.scheduler.schedule_class_c(node, at_time, frame, gw)
+                if self.simulator is not None:
+                    from .simulator import Event, EventType
+
+                    eid = self.simulator.event_id_counter
+                    self.simulator.event_id_counter += 1
+                    heapq.heappush(
+                        self.simulator.event_queue,
+                        Event(at_time, EventType.RX_WINDOW, eid, node.id),
+                    )
+            else:
+                self.scheduler.schedule(node.id, at_time, frame, gw)
         try:
             node.downlink_pending += 1
         except AttributeError:

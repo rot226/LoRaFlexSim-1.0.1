@@ -29,8 +29,8 @@ This repository contains a lightweight LoRa network simulator implemented in Pyt
   (FLoRa energy profile)
 - Regional channel plans for EU868, US915, AU915 and Asian bands
 - Customizable energy profiles with a simple registry
-- Beacon loss and clock drift simulation for Class B nodes
-- Energy-aware quasi-continuous listening for Class C nodes
+- Beacon loss probability and clock drift simulation for Class B nodes
+- Realistic continuous listening for Class C nodes with precise downlink timing
 
 ## Quick start
 
