@@ -20,6 +20,8 @@ class RandomWaypoint:
         *,
         terrain: list[list[float]] | None = None,
         elevation: list[list[float]] | None = None,
+        obstacle_height_map: list[list[float]] | None = None,
+        max_height: float = 0.0,
         step: float = 1.0,
         slope_scale: float = 0.1,
     ) -> None:
@@ -41,6 +43,14 @@ class RandomWaypoint:
         else:
             self.rows = 0
             self.cols = 0
+        self.obstacle_height_map = obstacle_height_map
+        self.max_height = max_height
+        if obstacle_height_map:
+            self.h_rows = len(obstacle_height_map)
+            self.h_cols = len(obstacle_height_map[0]) if self.h_rows else 0
+        else:
+            self.h_rows = 0
+            self.h_cols = 0
         self.elevation = elevation
         if elevation:
             self.e_rows = len(elevation)
@@ -72,6 +82,15 @@ class RandomWaypoint:
         cx = min(max(cx, 0), self.e_cols - 1)
         cy = min(max(cy, 0), self.e_rows - 1)
         return float(self.elevation[cy][cx])
+
+    def _height(self, x: float, y: float) -> float:
+        if not self.obstacle_height_map or self.h_rows == 0 or self.h_cols == 0:
+            return 0.0
+        cx = int(x / self.area_size * self.h_cols)
+        cy = int(y / self.area_size * self.h_rows)
+        cx = min(max(cx, 0), self.h_cols - 1)
+        cy = min(max(cy, 0), self.h_rows - 1)
+        return float(self.obstacle_height_map[cy][cx])
 
     def assign(self, node):
         """
@@ -120,10 +139,15 @@ class RandomWaypoint:
                     sf = 1.0 + (-slope) * self.slope_scale * 0.5
                 sf = max(0.1, min(2.0, sf))
                 movement_factor *= sf
+            node.altitude = alt0
         node.x += node.vx * dt * movement_factor
         node.y += node.vy * dt * movement_factor
         # Rebondir sur un obstacle infranchissable
-        if self._terrain_factor(node.x, node.y) is None:
+        blocked = self._terrain_factor(node.x, node.y) is None
+        if not blocked and self.obstacle_height_map:
+            if self._height(node.x, node.y) > self.max_height:
+                blocked = True
+        if blocked:
             node.x -= node.vx * dt * movement_factor
             node.y -= node.vy * dt * movement_factor
             node.vx = -node.vx
@@ -146,5 +170,8 @@ class RandomWaypoint:
         # Mettre à jour la direction (angle) et la vitesse réelle
         node.direction = math.atan2(node.vy, node.vx)
         node.speed = math.hypot(node.vx, node.vy) * movement_factor
+        # Mettre à jour l'altitude si une carte d'elevation est fournie
+        if self.elevation:
+            node.altitude = self._elevation(node.x, node.y)
         # Mettre à jour le temps du dernier déplacement du nœud
         node.last_move_time = current_time

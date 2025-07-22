@@ -10,6 +10,8 @@ from .duty_cycle import DutyCycleManager
 from .smooth_mobility import SmoothMobility
 from .mobility import RandomWaypoint
 from .path_mobility import PathMobility
+from .gauss_markov import GaussMarkov
+from .gps_mobility import GPSTraceMobility
 from .map_loader import load_map
 from .lorawan import LoRaWANFrame, compute_rx1, compute_rx2
 from .downlink_scheduler import DownlinkScheduler
@@ -29,6 +31,8 @@ __all__ = [
     "SmoothMobility",
     "RandomWaypoint",
     "PathMobility",
+    "GaussMarkov",
+    "GPSTraceMobility",
     "load_map",
     "LoRaWANFrame",
     "compute_rx1",
