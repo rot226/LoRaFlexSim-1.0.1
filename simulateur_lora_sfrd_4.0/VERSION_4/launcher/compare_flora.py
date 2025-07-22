@@ -145,6 +145,7 @@ def load_flora_metrics(path: str | Path) -> dict[str, Any]:
     throughput = (
         float(df["throughput_bps"].mean()) if "throughput_bps" in df.columns else 0.0
     )
+    avg_delay = float(df["avg_delay_s"].mean()) if "avg_delay_s" in df.columns else 0.0
     if "energy_J" in df.columns:
         energy = float(df["energy_J"].mean())
     elif "energy" in df.columns:

@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 from .downlink_scheduler import DownlinkScheduler
 from .join_server import JoinServer  # re-export
 
+__all__ = ["NetworkServer", "JoinServer"]
+
 if TYPE_CHECKING:  # pragma: no cover - for type checking only
     from .lorawan import LoRaWANFrame, JoinAccept
 
