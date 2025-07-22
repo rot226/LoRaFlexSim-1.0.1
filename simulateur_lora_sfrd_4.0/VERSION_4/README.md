@@ -282,39 +282,43 @@ python VERSION_4/run.py --lorawan-demo
 
 Le tableau de bord inclut désormais un sélecteur **Classe LoRaWAN** permettant de choisir entre les modes A, B ou C pour l'ensemble des nœuds, ainsi qu'un champ **Taille payload (o)** afin de définir la longueur utilisée pour calculer l'airtime. Ces réglages facilitent la reproduction fidèle des scénarios FLoRa.
 
-## Differences from FLoRa
+## Différences par rapport à FLoRa
 
-This Python rewrite preserves most concepts of the OMNeT++ model but intentionally simplifies others.
+Cette réécriture en Python reprend la majorité des concepts du modèle OMNeT++
+mais simplifie volontairement certains aspects.
 
-**Fully supported**
-- duty cycle enforcement and capture effect
-- multi-channel transmissions and channel distribution
-- node mobility with smooth trajectories
-- battery consumption using the FLoRa energy profile
-- predefined regional channel plans (EU868, US915, AU915, AS923, IN865, KR920)
-- customizable energy profiles
-- ADR commands (`LinkADRReq/Ans`, `ADRACKReq`, channel mask, `NbTrans`)
-- OTAA join procedure and scheduled downlink queue
-- complete management of LoRaWAN classes B and C with optional beacon loss
-  probability and clock drift
+**Fonctionnalités entièrement prises en charge**
+- respect du duty cycle et effet capture
+- transmissions multi-canaux et distribution configurable
+- mobilité des nœuds avec trajectoires lissées
+- consommation d'énergie basée sur le profil FLoRa
+- plans de fréquences régionaux prédéfinis (EU868, US915, AU915, AS923, IN865, KR920)
+- profils d'énergie personnalisables
+- commandes ADR (`LinkADRReq/Ans`, `ADRACKReq`, masque de canaux, `NbTrans`)
+- procédure OTAA et file de downlinks programmés
+- gestion complète des classes LoRaWAN B et C avec perte de beacon et dérive d'horloge optionnelles
 
+**Fonctionnalités absentes**
+- interface graphique OMNeT++ et couche physique détaillée
 
-**Omitted**
-- OMNeT++ GUI and detailed physical layer simulation
+Le simulateur gère désormais l'ensemble des commandes MAC de LoRaWAN : réglage
+des paramètres ADR, réinitialisation de clés, rejoins et changement de classe.
 
-The simulator now handles the full LoRaWAN MAC command set, including ADR parameter setup,
-rekeying, rejoin management and device mode changes.
+Pour des résultats plus proches du terrain, activez `fast_fading_std` pour
+simuler un canal multipath et utilisez `interference_dB` pour introduire un
+bruit extérieur constant ou variable.
 
-Pour obtenir des résultats plus proches du terrain, vous pouvez activer le
-paramètre `fast_fading_std` afin de simuler un canal multipath et utiliser
-`interference_dB` pour représenter un bruit extérieur constant ou variable.
-
-To reproduce FLoRa INI scenarios:
-1. Pass `flora_mode=True` when creating the `Simulator` (or enable **Mode FLoRa complet**). This applies the official `-110 dBm` detection threshold and a `5 s` interference window.
-2. Apply the ADR1 algorithm with `from VERSION_4.launcher.adr_standard_1 import apply as adr1` then `adr1(sim)`. This preset mirrors the ADR logic of the original FLoRa server (SNR history, margin and multi‑step adjustments). Using `degrade_channel=True` now applies stronger propagation impairments to further lower the PDR.
-3. Provide the INI file path to `Simulator(config_file=...)` or use **Positions manuelles** to enter the coordinates manually.
-4. Fill in **Graine** to keep the exact placement across runs.
-5. Or run `python examples/run_flora_example.py` which combines these settings.
+Pour reproduire un scénario FLoRa :
+1. Passez `flora_mode=True` lors de la création du `Simulator` (ou activez
+   **Mode FLoRa complet**). Cela applique un seuil de détection à -110 dBm et une
+   fenêtre d'interférence de 5 s.
+2. Appliquez l'algorithme ADR1 via `from VERSION_4.launcher.adr_standard_1 import apply as adr1` puis `adr1(sim)`.
+   Cette fonction reprend la logique du serveur FLoRa original.
+3. Fournissez le chemin du fichier INI à `Simulator(config_file=...)` ou
+   saisissez les coordonnées manuellement via **Positions manuelles**.
+4. Renseignez **Graine** pour conserver exactement le même placement d'une
+   exécution à l'autre.
+5. Ou lancez `python examples/run_flora_example.py` qui combine ces réglages.
 ## Format du fichier CSV
 
 L'option `--output` de `run.py` permet d'enregistrer les métriques de la

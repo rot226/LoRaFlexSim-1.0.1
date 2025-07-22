@@ -1,114 +1,89 @@
-# LoRa Network Simulator 4.0
+# Simulateur de réseau LoRa 4.0
 
-This repository contains a lightweight LoRa network simulator implemented in Python. The latest code resides in the `VERSION_4` directory and now integrates a simplified OMNeT++ physical layer for frequency and clock drifts as well as thermal noise. It remains independent from the full simulator stack.
+Ce dépôt contient un simulateur LoRa léger entièrement écrit en Python. Le code
+source principal se trouve dans le dossier `VERSION_4`. Il intègre une couche
+physique simplifiée inspirée d'OMNeT++ pour modéliser le bruit thermique ainsi
+que les dérives de fréquence et d'horloge, tout en restant indépendant de la
+pile complète OMNeT++.
 
-## Features
-- Duty cycle enforcement to mimic real LoRa constraints
-- Optional node mobility with Bezier interpolation or terrain-aware random
-  waypoint movement, plus path-based navigation avoiding obstacles. Additional
-  models include Gauss–Markov, GPS trace playback (CSV or GPX) and terrain
-  following with 3D obstacle maps.
-- Multi-channel radio support
-- Advanced channel model with loss and noise parameters
-- Optional multipath fading with synchronised paths and external interference modeling
-- Correlated fading and 3D obstacle maps with automatic calibration. Obstacle
-  or height maps can be loaded from JSON or plain text matrices
-- Antenna gains and cable losses for accurate link budgets
-- Optional LoRa spreading gain applied to SNR
-- Additional COST231 path loss, Okumura‑Hata model and 3D propagation via
-  `AdvancedChannel`
-- Terrain and weather based attenuation parameters
-- Time‑varying frequency and synchronisation offsets for realistic collisions
-- Optional frequency‑selective interference bands for jamming scenarios
-- Configurable bandwidth and coding rate per channel
-- Preset propagation environments (urban/suburban/rural) for quick channel setup
-- Capture effect and a minimum interference time to ignore very short overlaps
-- Initial spreading factor and power selection
-- Full LoRaWAN ADR layer following the official specification (LinkADRReq/Ans,
-  ADRACKReq, channel mask, NbTrans, ADR_ACK_DELAY fallback) and derived from the
-  FLoRa model
-- Optional battery model to track remaining energy per node
-  (FLoRa energy profile)
-- Regional channel plans for EU868, US915, AU915 and Asian bands
-- Customizable energy profiles with a simple registry
-- Beacon loss probability and clock drift simulation for Class B nodes
-- Realistic continuous listening for Class C nodes with precise downlink timing
+## Fonctionnalités clés
 
-## Quick start
+- Application du duty cycle pour reproduire les contraintes LoRa réelles
+- Mobilité optionnelle des nœuds : trajectoires de Bézier, RandomWaypoint avec
+  carte de terrain, suivi de traces GPS ou navigation évitant les obstacles
+- Prise en charge multi‑canal avec répartition configurable
+- Modèles de propagation avancés (pertes, bruit, fading, interférences)
+- Gestion des gains d'antenne et des pertes de câbles dans le bilan de liaison
+- Modèles de path loss COST231 ou Okumura‑Hata et calculs 3D
+- Bandes d'interférence sélectives et bruit dépendant de la météo
+- Effet capture et durée minimale de chevauchement pour ignorer certains conflits
+- Modules LoRaWAN complets : ADR, classes B et C, plans de canaux régionaux
+- Modèle de batterie inspiré de FLoRa pour suivre l'énergie restante
+
+## Démarrage rapide
 
 ```bash
-# Install dependencies
+# Installation
 cd VERSION_4
 python3 -m venv env
-source env/bin/activate  # On Windows use env\Scripts\activate
+source env/bin/activate    # Sous Windows : env\Scripts\activate
 pip install -r requirements.txt
 
-# Launch the dashboard
+# Lancement du tableau de bord
 panel serve launcher/dashboard.py --show
-
-# From the repository root use
+# Depuis la racine du dépôt
 panel serve VERSION_4/launcher/dashboard.py --show
 ```
 
-The dashboard now exposes a **Seed** input. Set the same value on
-subsequent runs to keep the node placement identical.
-Enable **Manual positions** to override node or gateway coordinates. Each line
-should follow `node,id=3,x=120,y=40` or `gw,id=1,x=10,y=80`.
-Load a reference export in **CSV FLoRa** to display live comparisons between
-FLoRa and the running simulation.
+L'interface web propose un champ **Graine** afin de reproduire exactement le
+placement des nœuds entre deux exécutions. Activez **Positions manuelles** pour
+saisir vous‑même les coordonnées des nœuds ou passerelles sous la forme
+`node,id=3,x=120,y=40` ou `gw,id=1,x=10,y=80`. Le champ **CSV FLoRa** permet de
+charger un export de référence et d'afficher la comparaison en direct.
 
-# Run a simulation
+### Lancer une simulation
+
 ```bash
 python run.py --nodes 20 --steps 100
 ```
 
-Add `--seed <n>` to obtain the same node placement on each run.
-Use `--runs <n>` to repeat the simulation several times and average the metrics.
-
-You can also execute the simulator directly from the repository root:
+Ajoutez `--seed <n>` pour conserver le même placement à chaque lancement et
+`--runs <n>` pour répéter la simulation plusieurs fois et moyenner les
+métriques. Le simulateur peut aussi être exécuté depuis la racine :
 
 ```bash
 python VERSION_4/run.py --nodes 20 --steps 100
 ```
 
-For a detailed description of all options, see `VERSION_4/README.md`.
+Toutes les options sont détaillées dans `VERSION_4/README.md`.
 
-## Advanced usage
-
-Here are some commands to explore more simulator features:
+## Utilisation avancée
 
 ```bash
-# Multi-channel simulation with node mobility
+# Simulation multi‑canaux avec mobilité
 python VERSION_4/run.py --nodes 50 --gateways 2 --channels 3 \
   --mobility --steps 500 --output advanced.csv
 
-# LoRaWAN demo with downlinks
+# Démonstration LoRaWAN avec downlinks
 python VERSION_4/run.py --lorawan-demo --steps 100 --output lorawan.csv
 ```
 
-### LoRaWAN class B/C examples
-
-The Python API exposes additional parameters to experiment with class B or
-class C behaviours. Below are minimal code snippets:
+### Exemples de classes B et C
 
 ```python
 from launcher import Simulator
 
-# Class B nodes with periodic ping slots
+# Nœuds en classe B avec slots périodiques
 sim_b = Simulator(num_nodes=10, node_class="B", beacon_interval=128,
                   ping_slot_interval=1.0)
 sim_b.run(1000)
 
-# Class C nodes listening almost continuously
+# Nœuds en classe C à écoute quasi continue
 sim_c = Simulator(num_nodes=5, node_class="C", class_c_rx_interval=0.5)
 sim_c.run(500)
-
 ```
 
-### Realistic mobility scenario
-
-You can model smoother movements by enabling mobility and adjusting the speed
-range:
+### Mobilité réaliste
 
 ```python
 from launcher import Simulator
@@ -118,40 +93,24 @@ sim = Simulator(num_nodes=20, num_gateways=3, area_size=2000.0, mobility=True,
 sim.run(1000)
 ```
 
-### FLoRa INI scenario example
-
-To reproduce a typical FLoRa configuration and check the SF distribution per
-node, run the helper script below. It applies the "Mode FLoRa complet" settings
-with ADR variant 1 and fixed node positions:
+### Exemple de scénario FLoRa
 
 ```bash
 python examples/run_flora_example.py --runs 5 --seed 123
 ```
 
-The script prints the Packet Delivery Ratio and spreading factor histogram for
-each run. ``Simulator`` now accepts ``flora_mode=True`` which enables the
-official detection threshold, interference window and a ``flora`` propagation
-  profile. Pass the `--flora-csv <file>` option to automatically compare these
-  metrics with an official FLoRa export using `compare_with_sim`. FLoRa stores
-  its results in `.sca` and `.vec` files. Use `tools/convert_flora_results.py`
-  to turn these into CSV files if needed. The reverse operation is also
-  supported: `tools/convert_results_to_sca.py` writes `.sca` files from the
-  CSV exports generated by `run.py`, making it easier to reuse OMNeT++ tools.
-Passing `--degrade` to the script enables a harsh propagation profile that
-significantly lowers the Packet Delivery Ratio.  Additional interference,
-stronger fast fading and a higher path loss exponent are applied together with a
-slow varying noise term.  The resulting PDR usually settles around **35–40 %**,
-providing a challenging baseline for protocol comparisons.
+Le script affiche le taux de livraison et l'histogramme des SF pour chaque run.
+Le paramètre `flora_mode=True` applique automatiquement le seuil officiel de
+-110 dBm et une fenêtre d'interférence de 5 s. L'option `--flora-csv <fichier>`
+permet de comparer directement avec un export FLoRa. Les utilitaires du dossier
+`tools` facilitent la conversion entre CSV et fichiers `.sca`/`.vec`.
 
-An example configuration file named `examples/flora_full.ini` reproduces the
-official positions used by FLoRa. Load it with
-``Simulator(config_file="examples/flora_full.ini")`` to start from the exact
-  same coordinates. Several sample exports from the OMNeT++ model are also
-  provided in `examples/` (`flora_full.csv`, `flora_collisions.csv`, etc.) to
-  help check your results.
+Un fichier `examples/flora_full.ini` reproduit les positions de référence.
+Chargez‑le via `Simulator(config_file="examples/flora_full.ini")`. D'autres
+exports (par exemple `flora_full.csv` ou `flora_collisions.csv`) sont disponibles
+pour vérification.
 
-Below is an example INI scenario that can be used with the FLoRa mode. It
-defines fixed node and gateway coordinates along with the ADR settings:
+Ci‑dessous un extrait de fichier INI utilisable avec le mode FLoRa :
 
 ```ini
 [General]
@@ -192,139 +151,71 @@ repeat = 5
 output-scalar-file = ../results/novo5-80-gw1-s${runnumber}.ini.sca
 ```
 
-Any INI file must define ``[gateways]`` and ``[nodes]`` sections listing the
-coordinates (and optionally SF and power) of each entity.  The loader also
-accepts a JSON document containing ``gateways`` and ``nodes`` lists to
-describe more complex scenarios.
+Tout fichier INI doit au minimum définir les sections `[gateways]` et `[nodes]`
+avec les coordonnées de chaque entité. Un fichier JSON contenant les listes
+`gateways` et `nodes` est également accepté pour décrire des scénarios plus
+complexes.
 
-Use a preset propagation environment from Python:
+Utilisation d'un environnement de propagation prédéfini :
 
 ```python
 from VERSION_4.launcher.channel import Channel
 suburban = Channel(environment="suburban")
 ```
 
-You can analyze the resulting CSV file with:
+Analyse d'un CSV obtenu après simulation :
 
 ```bash
 python examples/analyse_resultats.py advanced.csv
 ```
 
-If you collected several runs into one CSV via the dashboard or
-`python VERSION_4/run.py --runs <n> --output results.csv`, use
-`analyse_runs.py` to compute the average metrics for each run:
+Si plusieurs runs sont regroupés dans un même fichier via le tableau de bord ou
+`python VERSION_4/run.py --runs <n> --output results.csv`, utilisez
+`analyse_runs.py` pour calculer la moyenne des métriques :
 
 ```bash
 python examples/analyse_runs.py results.csv
 ```
 
-## Cleaning results
-
-Remove duplicated rows and `NaN` values from a CSV file using
-`clean_results.py`. The cleaned file is saved as `<file>_clean.csv`:
+## Nettoyage et validation des résultats
 
 ```bash
 python VERSION_4/launcher/clean_results.py results.csv
-```
-
-## Validating results
-
-Run the test suite to ensure everything works as expected:
-
-```bash
 pytest -q
 ```
 
-The tests compare RSSI and airtime calculations against theoretical values and check collision handling.
+Les tests vérifient notamment le calcul du RSSI, de l'airtime et la gestion des
+collisions.
 
-### Cross-check with FLoRa
+### Comparaison avec FLoRa
 
-  The module `VERSION_4/launcher/compare_flora.py` can read exports from
-  the FLoRa simulator. It accepts raw `.sca` result files or CSV files produced
-  with `tools/convert_flora_results.py` and extracts several metrics: Packet Delivery Ratio,
-spreading factor histogram, energy consumption, throughput and packet
-collisions.  The test file `tests/test_flora_comparison.py` demonstrates
-how to compare these values with those returned by
-`Simulator.get_metrics` to validate the Python implementation against
-OMNeT++ runs.
-  You can also supply a reference CSV or a directory containing `.sca` files to
-  `examples/run_flora_example.py` via `--flora-csv` to perform this check outside
-  the test suite. If you need to convert a simulator CSV back to `.sca`, run
-  `python tools/convert_results_to_sca.py <csv> <out_dir>`.
+L'outil `VERSION_4/launcher/compare_flora.py` lit les exports du simulateur
+FLoRa (fichiers `.sca` ou CSV convertis) et extrait plusieurs métriques : PDR,
+histogramme de SF, énergie consommée, débit et collisions. Les scripts
+`compare_flora_report.py` et `compare_flora_multi.py` génèrent des rapports pour
+visualiser les différences entre plusieurs références et un résultat Python.
 
-### Generating a FLoRa comparison report
-
-  The helper `tools/compare_flora_report.py` compares a FLoRa export
-  (after conversion to CSV) with the results produced by `VERSION_4/run.py` and creates a short
-report. It prints a table with the metrics from both sources and saves
-bar charts highlighting the differences:
+La commande suivante calibre automatiquement le canal pour se rapprocher au
+mieux d'un export FLoRa :
 
 ```bash
-python tools/compare_flora_report.py flora.csv results.csv
+python tools/calibrate_flora.py examples/flora_full.csv
 ```
-
-Two images named `report_metrics.png` and `report_sf.png` are written in
-the current directory.
-
-### Calibration systématique avec FLoRa
-
-  The script `tools/calibrate_flora.py` automates the search of channel
-  parameters that best reproduce a reference export from FLoRa. The reference
-  data should come from FLoRa results converted to CSV with
-  `tools/convert_flora_results.py`. It launches
-  several runs with different propagation settings and reports the combination
-  yielding the smallest PDR difference. From the repository root run:
-
-  ```bash
-  python tools/calibrate_flora.py examples/flora_full.csv
-  ```
-
-The resulting parameters typically give a correspondence above **99 %** with
-FLoRa on the provided dataset. The calibration is also executed during the
-test suite to ensure the simulator stays in sync with the reference model.
-
-Pass ``--advanced`` to also optimise the correlated fading coefficient and
-the obstacle attenuation when using ``AdvancedChannel``.
-
-To check several FLoRa exports at once and average the error over all of them
-use:
-
-```bash
-python tools/calibrate_flora.py examples/flora_full.csv examples/flora_interference.csv
-```
-
-In this cross-validation mode the script evaluates the Packet Delivery Ratio
-and spreading factor histograms across all inputs to pick the most consistent
-propagation parameters.
-
-### Comparer plusieurs références FLoRa
-
-The helper `tools/compare_flora_multi.py` prints a summary of the metric
-difference between a simulation CSV and several FLoRa exports:
-
-```bash
-python tools/compare_flora_multi.py results.csv examples/flora_full.csv \
-    examples/flora_interference.csv
-```
-
-Add `--output diff.csv` to save the table for later analysis.
 
 ## Versioning
 
-The current package version is defined in `pyproject.toml`.
-See `CHANGELOG.md` for a summary of releases.
-This project is licensed under the [MIT License](LICENSE).
+La version courante se trouve dans `pyproject.toml`. Consultez `CHANGELOG.md`
+pour le détail des évolutions. Ce projet est distribué sous licence
+[MIT](LICENSE).
 
-## Current limitations
+## Limites actuelles
 
-- This simulator aims to remain lightweight and therefore omits several advanced concepts:
+- La couche physique reste simplifiée et n'imite pas toutes les imperfections du
+  matériel réel.
+- La mobilité s'appuie par défaut sur des trajectoires de Bézier ; un modèle
+  RandomWaypoint peut utiliser des cartes de terrain pour éviter les obstacles.
+- La sécurité LoRaWAN est basique : un serveur de jointure dérive les clés mais
+  le chiffrement reste simplifié.
 
-- The physical layer is greatly simplified and does not reproduce hardware
-  imperfections found in real devices.
-- By default mobility relies on Bezier paths; an optional RandomWaypoint model
-  can use terrain maps to handle obstacles.
-- Basic LoRaWAN security is enabled. A dedicated join server validates
-  JoinRequests and derives session keys, and all LoRaWAN frames are checked for
-  a valid MIC before decryption.
-
-Contributions are welcome to improve these areas or add missing features.
+Les contributions sont bienvenues pour améliorer ces points ou ajouter de
+nouvelles fonctionnalités.
