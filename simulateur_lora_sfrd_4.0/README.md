@@ -201,11 +201,18 @@ histogramme de SF, énergie consommée, débit et collisions. Les scripts
 visualiser les différences entre plusieurs références et un résultat Python.
 
 La commande suivante calibre automatiquement le canal pour se rapprocher au
-mieux d'un export FLoRa :
+mieux d'un export FLoRa. Elle compare désormais le **PDR**, la distribution de
+SF et l'énergie consommée pour ajuster précisément la perte de parcours,
+l'ombrage et les effets de fading :
 
 ```bash
-python tools/calibrate_flora.py examples/flora_full.csv
+python tools/calibrate_flora.py examples/flora_full.csv --energy-weight 1.0
 ```
+
+Les options `--pdr-weight`, `--sf-weight` et `--energy-weight` permettent de
+pondérer chaque critère lors de la recherche des meilleurs paramètres. Le script
+affiche ensuite les écarts résiduels pour faciliter le réglage du capture effect
+ou de l'interférence.
 
 ## Versioning
 
