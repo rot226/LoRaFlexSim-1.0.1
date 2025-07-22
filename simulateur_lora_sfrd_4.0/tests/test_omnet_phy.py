@@ -72,7 +72,21 @@ def test_device_specific_features_in_phy():
         temperature_std_K=20.0,
         pa_non_linearity_std_dB=1.0,
         phase_noise_std_dB=2.0,
+        oscillator_leakage_dB=1.0,
+        oscillator_leakage_std_dB=0.5,
+        rx_fault_std_dB=1.0,
     )
     r1, _ = ch.omnet_phy.compute_rssi(14.0, 100.0)
     r2, _ = ch.omnet_phy.compute_rssi(14.0, 100.0)
     assert r1 != r2
+
+
+def test_oscillator_leakage_affects_noise():
+    ch = Channel(shadowing_std=0, phy_model="omnet")
+    base_noise = ch.omnet_phy.noise_floor()
+    ch.omnet_phy = OmnetPHY(
+        ch,
+        oscillator_leakage_dB=5.0,
+    )
+    leak_noise = ch.omnet_phy.noise_floor()
+    assert leak_noise > base_noise

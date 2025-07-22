@@ -25,7 +25,7 @@ class _CorrelatedValue:
 
 
 class OmnetPHY:
-    """Replicate OMNeT++ FLoRa PHY calculations."""
+    """Replicate OMNeT++ FLoRa PHY calculations with extra impairments."""
 
     def __init__(
         self,
@@ -37,7 +37,11 @@ class OmnetPHY:
         pa_non_linearity_dB: float = 0.0,
         pa_non_linearity_std_dB: float = 0.0,
         phase_noise_std_dB: float = 0.0,
+        oscillator_leakage_dB: float = 0.0,
+        oscillator_leakage_std_dB: float = 0.0,
+        rx_fault_std_dB: float = 0.0,
     ) -> None:
+        """Initialise helper with optional hardware impairments."""
         self.channel = channel
         self.model = OmnetModel(
             channel.fine_fading_std,
@@ -64,6 +68,12 @@ class OmnetPHY:
             corr,
         )
         self._phase_noise = _CorrelatedValue(0.0, phase_noise_std_dB, corr)
+        self._osc_leak = _CorrelatedValue(
+            oscillator_leakage_dB,
+            oscillator_leakage_std_dB,
+            corr,
+        )
+        self._rx_fault = _CorrelatedValue(0.0, rx_fault_std_dB, corr)
 
     # ------------------------------------------------------------------
     def path_loss(self, distance: float) -> float:
@@ -96,6 +106,7 @@ class OmnetPHY:
         if ch.noise_floor_std > 0:
             noise += random.gauss(0.0, ch.noise_floor_std)
         noise += self.model.noise_variation()
+        noise += self._osc_leak.sample()
         return noise
 
     def compute_rssi(
@@ -143,6 +154,7 @@ class OmnetPHY:
         penalty = self._alignment_penalty_db(freq_offset_hz, sync_offset_s, sf)
         snr -= penalty
         snr -= abs(self._phase_noise.sample())
+        snr -= abs(self._rx_fault.sample())
         if sf is not None:
             snr += 10 * math.log10(2 ** sf)
         return rssi, snr

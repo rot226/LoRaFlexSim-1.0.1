@@ -16,3 +16,18 @@ def test_cross_validate_multi():
     params, err = cross_validate([csv1, csv2], runs=1, path_loss_values=(2.7,), shadowing_values=(6.0,), seed=0)
     assert params is not None
     assert err >= 0.0
+
+
+def test_cross_validate_multi_advanced():
+    csv1 = Path(__file__).parent / "data" / "flora_sample.csv"
+    csv2 = Path(__file__).parent / "data" / "flora_full.csv"
+    params, err = cross_validate(
+        [csv1, csv2],
+        runs=1,
+        path_loss_values=(2.7,),
+        shadowing_values=(6.0,),
+        seed=0,
+        advanced=True,
+    )
+    assert params is not None
+    assert err >= 0.0
