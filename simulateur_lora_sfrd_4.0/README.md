@@ -19,6 +19,7 @@ pile complète OMNeT++.
 - Effet capture et durée minimale de chevauchement pour ignorer certains conflits
 - Modules LoRaWAN complets : ADR, classes B et C, plans de canaux régionaux
 - Modèle de batterie inspiré de FLoRa pour suivre l'énergie restante
+- Visualisation avancée en temps réel : trajectoires animées, heatmap dynamique et histogrammes interactifs
 
 ## Démarrage rapide
 

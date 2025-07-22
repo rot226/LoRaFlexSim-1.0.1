@@ -50,6 +50,7 @@ timeline_fig = go.Figure()
 last_event_index = 0
 pause_prev_disabled = False
 flora_metrics = None
+node_paths: dict[int, list[tuple[float, float]]] = {}
 
 
 def average_numeric_metrics(metrics_list: list[dict]) -> dict:
@@ -139,6 +140,7 @@ mobility_checkbox = pn.widgets.Checkbox(name="Activer la mobilité des nœuds", 
 # Widgets pour régler la vitesse minimale et maximale des nœuds mobiles
 mobility_speed_min_input = pn.widgets.FloatInput(name="Vitesse min (m/s)", value=2.0, step=0.5, start=0.1)
 mobility_speed_max_input = pn.widgets.FloatInput(name="Vitesse max (m/s)", value=10.0, step=0.5, start=0.1)
+show_paths_checkbox = pn.widgets.Checkbox(name="Afficher trajectoires", value=False)
 
 # --- Durée réelle de simulation et bouton d'accélération ---
 real_time_duration_input = pn.widgets.FloatInput(name="Durée réelle max (s)", value=0.0, step=1.0, start=0.0)
@@ -234,6 +236,7 @@ map_pane = pn.pane.Plotly(height=600, sizing_mode="stretch_width")
 
 # --- Pane pour l'histogramme SF ---
 sf_hist_pane = pn.pane.Plotly(height=250, sizing_mode="stretch_width")
+hist_metric_select = pn.widgets.Select(name="Histogramme", options=["SF", "D\u00e9lais"], value="SF")
 
 # --- Timeline des paquets ---
 timeline_pane = pn.pane.Plotly(height=250, sizing_mode="stretch_width")
@@ -241,6 +244,7 @@ timeline_pane = pn.pane.Plotly(height=250, sizing_mode="stretch_width")
 # --- Heatmap de couverture ---
 heatmap_button = pn.widgets.Button(name="Afficher la heatmap", button_type="primary")
 heatmap_pane = pn.pane.Plotly(height=600, sizing_mode="stretch_width", visible=False)
+heatmap_res_slider = pn.widgets.IntSlider(name="Résolution heatmap", start=10, end=100, step=10, value=30)
 
 
 # --- Mise à jour de la carte ---
@@ -256,6 +260,10 @@ def update_map():
     pixel_to_unit = display_area_y / 600
     node_offset = 16 * pixel_to_unit
     gw_offset = 14 * pixel_to_unit
+    for node in sim.nodes:
+        node_paths.setdefault(node.id, []).append((node.x, node.y))
+        if len(node_paths[node.id]) > 50:
+            node_paths[node.id] = node_paths[node.id][-50:]
     x_nodes = [node.x for node in sim.nodes]
     y_nodes = [node.y for node in sim.nodes]
     node_ids = [str(node.id) for node in sim.nodes]
@@ -282,6 +290,12 @@ def update_map():
         marker=dict(symbol="star", color="red", size=28, line=dict(width=1, color="black")),
         textfont=dict(color="white", size=14),
     )
+
+    if show_paths_checkbox.value:
+        for path in node_paths.values():
+            if len(path) > 1:
+                xs_p, ys_p = zip(*path)
+                fig.add_scatter(x=xs_p, y=ys_p, mode="lines", line=dict(color="lightblue", width=1), showlegend=False)
 
     # Dessiner les transmissions récentes
     for ev in sim.events_log[-20:]:
@@ -368,16 +382,43 @@ def update_timeline():
     timeline_pane.object = timeline_fig
 
 
-def toggle_heatmap(event=None):
-    """Afficher ou masquer la heatmap de couverture."""
-    if heatmap_pane.visible:
-        heatmap_pane.visible = False
-        heatmap_button.name = "Afficher la heatmap"
+def update_histogram(metrics: dict | None = None) -> None:
+    """Mettre à jour l'histogramme interactif selon l'option sélectionnée."""
+    if sim is None:
+        sf_hist_pane.object = go.Figure()
         return
+    if metrics is None:
+        metrics = sim.get_metrics()
+    if hist_metric_select.value == "SF":
+        sf_dist = metrics["sf_distribution"]
+        fig = go.Figure(data=[go.Bar(x=[f"SF{sf}" for sf in sf_dist.keys()], y=list(sf_dist.values()))])
+        fig.update_layout(
+            title="Répartition des SF par nœud",
+            xaxis_title="SF",
+            yaxis_title="Nombre de nœuds",
+            yaxis_range=[0, sim.num_nodes],
+        )
+    else:
+        delays = [ev["end_time"] - ev["start_time"] for ev in sim.events_log if ev.get("result")]
+        if not delays:
+            fig = go.Figure()
+        else:
+            hist, edges = np.histogram(delays, bins=20)
+            centers = 0.5 * (edges[:-1] + edges[1:])
+            fig = go.Figure(data=[go.Bar(x=centers, y=hist, width=np.diff(edges))])
+            fig.update_layout(
+                title="Distribution des délais",
+                xaxis_title="Délai (s)",
+                yaxis_title="Occurrences",
+            )
+    sf_hist_pane.object = fig
+
+def update_heatmap(event=None):
+    """Mettre à jour la heatmap de couverture."""
     if sim is None:
         return
     area = sim.area_size
-    res = 30
+    res = int(heatmap_res_slider.value)
     xs = np.linspace(0, area, res)
     ys = np.linspace(0, area, res)
     z = np.zeros((res, res))
@@ -409,6 +450,17 @@ def toggle_heatmap(event=None):
         margin=dict(l=20, r=20, t=40, b=20),
     )
     heatmap_pane.object = fig
+
+
+def toggle_heatmap(event=None):
+    """Afficher ou masquer la heatmap de couverture."""
+    if heatmap_pane.visible:
+        heatmap_pane.visible = False
+        heatmap_button.name = "Afficher la heatmap"
+        return
+    update_heatmap()
+    heatmap_pane.visible = True
+    heatmap_button.name = "Masquer la heatmap"
     heatmap_pane.visible = True
     heatmap_button.name = "Masquer la heatmap"
 
@@ -507,17 +559,7 @@ def step_simulation():
                 "Diff": sim_val - flora_val,
             })
         flora_compare_table.object = pd.DataFrame(rows)
-    sf_dist = metrics["sf_distribution"]
-    sf_fig = go.Figure(
-        data=[go.Bar(x=[f"SF{sf}" for sf in sf_dist.keys()], y=list(sf_dist.values()))]
-    )
-    sf_fig.update_layout(
-        title="Répartition des SF par nœud",
-        xaxis_title="SF",
-        yaxis_title="Nombre de nœuds",
-        yaxis_range=[0, sim.num_nodes],
-    )
-    sf_hist_pane.object = sf_fig
+    update_histogram(metrics)
     update_map()
     update_timeline()
     if not cont:
@@ -669,17 +711,9 @@ def setup_simulation(seed_offset: int = 0):
     energy_indicator.value = 0
     delay_indicator.value = 0
     chrono_indicator.value = 0
-    sf_counts = {sf: sum(1 for node in sim.nodes if node.sf == sf) for sf in range(7, 13)}
-    sf_fig = go.Figure(
-        data=[go.Bar(x=[f"SF{sf}" for sf in sf_counts.keys()], y=list(sf_counts.values()))]
-    )
-    sf_fig.update_layout(
-        title="Répartition des SF par nœud",
-        xaxis_title="SF",
-        yaxis_title="Nombre de nœuds",
-        yaxis_range=[0, sim.num_nodes],
-    )
-    sf_hist_pane.object = sf_fig
+    global node_paths
+    node_paths = {n.id: [(n.x, n.y)] for n in sim.nodes}
+    update_histogram(sim.get_metrics())
     num_nodes_input.disabled = True
     num_gateways_input.disabled = True
     area_input.disabled = True
@@ -1114,6 +1148,9 @@ def on_packets_change(event):
 
 
 packets_input.param.watch(on_packets_change, "value")
+heatmap_res_slider.param.watch(update_heatmap, "value")
+hist_metric_select.param.watch(lambda event: update_histogram(), "value")
+show_paths_checkbox.param.watch(lambda event: update_map(), "value")
 
 # --- Boutons ADR ---
 adr1_button.on_click(lambda event: select_adr(adr_standard_1, "ADR 1"))
@@ -1182,8 +1219,9 @@ metrics_col.width = 220
 
 center_col = pn.Column(
     map_pane,
-    heatmap_button,
+    pn.Row(show_paths_checkbox, heatmap_button, heatmap_res_slider),
     heatmap_pane,
+    hist_metric_select,
     sf_hist_pane,
     pn.Row(
         pn.Column(manual_pos_toggle, position_textarea, width=650),
