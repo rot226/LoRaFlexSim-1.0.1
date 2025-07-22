@@ -467,15 +467,11 @@ class Node:
         self.downlink_pending = max(0, self.downlink_pending - 1)
         payload = frame.payload
         if self.security_enabled and getattr(frame, "encrypted_payload", None) is not None:
-            if compute_mic(self.nwkskey, self.devaddr, frame.fcnt, 1, frame.encrypted_payload) != frame.mic:
+            from .lorawan import validate_frame
+
+            if not validate_frame(frame, self.nwkskey, self.appskey, self.devaddr, 1):
                 return
-            payload = encrypt_payload(
-                self.appskey,
-                self.devaddr,
-                frame.fcnt,
-                1,
-                frame.encrypted_payload,
-            )
+            payload = frame.payload
 
         if isinstance(payload, bytes):
             if len(payload) >= 5 and payload[0] == 0x03:

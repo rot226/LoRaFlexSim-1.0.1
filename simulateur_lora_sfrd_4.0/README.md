@@ -316,7 +316,8 @@ This project is licensed under the [MIT License](LICENSE).
   imperfections found in real devices.
 - By default mobility relies on Bezier paths; an optional RandomWaypoint model
   can use terrain maps to handle obstacles.
-- Basic LoRaWAN security (AES encryption and MIC) is enabled by default but join
-  server handling and encryption validation are kept minimal.
+- Basic LoRaWAN security is enabled. A dedicated join server validates
+  JoinRequests and derives session keys, and all LoRaWAN frames are checked for
+  a valid MIC before decryption.
 
 Contributions are welcome to improve these areas or add missing features.
