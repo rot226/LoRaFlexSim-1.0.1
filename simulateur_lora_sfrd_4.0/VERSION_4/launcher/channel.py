@@ -27,6 +27,9 @@ class Channel:
         "rural": (2.0, 2.0),
         # Parameters matching the FLoRa log-normal shadowing model
         "flora": (2.7, 3.57),
+        # Additional presets for denser or indoor environments
+        "urban_dense": (3.0, 8.0),
+        "indoor": (3.5, 7.0),
     }
 
     # Preset frequency plans for common regions

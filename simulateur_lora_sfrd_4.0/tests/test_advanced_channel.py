@@ -163,3 +163,28 @@ def test_phase_noise_penalizes_snr():
     _, snr1 = adv.compute_rssi(14.0, 100.0)
     _, snr2 = adv.compute_rssi(14.0, 100.0)
     assert snr1 != snr2
+
+
+def test_dynamic_weather_variation():
+    random.seed(0)
+    adv = AdvancedChannel(
+        fading="",
+        shadowing_std=0,
+        weather_loss_dB_per_km=1.0,
+        weather_loss_std_dB_per_km=0.5,
+    )
+    r1, _ = adv.compute_rssi(14.0, 1000.0)
+    r2, _ = adv.compute_rssi(14.0, 1000.0)
+    assert r1 != r2
+
+
+def test_pa_nonlinearity_curve():
+    adv1 = AdvancedChannel(fading="", shadowing_std=0)
+    adv2 = AdvancedChannel(
+        fading="",
+        shadowing_std=0,
+        pa_non_linearity_curve=(-0.01, 0.1, 0.0),
+    )
+    r1, _ = adv1.compute_rssi(20.0, 50.0)
+    r2, _ = adv2.compute_rssi(20.0, 50.0)
+    assert r1 != r2

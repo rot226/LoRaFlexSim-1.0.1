@@ -67,6 +67,8 @@ class AdvancedChannel:
         rician_k: float = 1.0,
         terrain: str = "urban",
         weather_loss_dB_per_km: float = 0.0,
+        weather_loss_std_dB_per_km: float = 0.0,
+        weather_correlation: float | None = None,
         fine_fading_std: float = 0.0,
         fading_correlation: float = 0.9,
         variable_noise_std: float = 0.0,
@@ -80,6 +82,7 @@ class AdvancedChannel:
         temperature_std_K: float = 0.0,
         pa_non_linearity_dB: float = 0.0,
         pa_non_linearity_std_dB: float = 0.0,
+        pa_non_linearity_curve: tuple[float, float, float] | None = None,
         humidity_percent: float = 50.0,
         humidity_std_percent: float = 0.0,
         humidity_noise_coeff_dB: float = 0.0,
@@ -91,6 +94,8 @@ class AdvancedChannel:
         obstacle_height_map_file: str | None = None,
         default_obstacle_dB: float = 0.0,
         multipath_paths: int = 1,
+        indoor_n_floors: int = 0,
+        indoor_floor_loss_dB: float = 15.0,
         **kwargs,
     ) -> None:
         """Initialise the advanced channel with optional propagation models.
@@ -102,7 +107,11 @@ class AdvancedChannel:
         :param fading: Type de fading (``rayleigh`` ou ``rician``).
         :param rician_k: Facteur ``K`` pour le fading rician.
         :param terrain: Type de terrain pour Okumura‑Hata.
-        :param weather_loss_dB_per_km: Atténuation météo en dB/km.
+        :param weather_loss_dB_per_km: Atténuation météo moyenne en dB/km.
+        :param weather_loss_std_dB_per_km: Variation temporelle de cette
+            atténuation.
+        :param weather_correlation: Corrélation temporelle des variations
+            météo (par défaut ``fading_correlation``).
         :param kwargs: Paramètres transmis au constructeur de :class:`Channel`.
         :param fine_fading_std: Écart-type du fading temporel fin.
         :param fading_correlation: Facteur de corrélation temporelle.
@@ -126,6 +135,8 @@ class AdvancedChannel:
             de l'amplificateur de puissance.
         :param pa_non_linearity_std_dB: Variation temporelle (dB) de la
             non‑linéarité PA.
+        :param pa_non_linearity_curve: Courbe polynomiale ``(a, b, c)`` appliquée
+            à la puissance TX pour modéliser une non‑linéarité plus complexe.
         :param humidity_percent: Humidité relative moyenne (0‑100 %).
         :param humidity_std_percent: Variation temporelle de l'humidité
             relative.
@@ -134,6 +145,10 @@ class AdvancedChannel:
         :param phase_noise_std_dB: Bruit de phase appliqué au SNR (écart-type en
             dB).
         :param multipath_paths: Nombre de trajets multipath à simuler.
+        :param indoor_n_floors: Nombre d'étages à traverser pour le modèle
+            ``itu_indoor``.
+        :param indoor_floor_loss_dB: Perte moyenne par étage pour
+            ``itu_indoor``.
         :param obstacle_map: Maillage décrivant les pertes additionnelles (dB)
             sur le trajet. Une valeur négative bloque totalement la liaison.
         :param map_area_size: Taille (mètres) correspondant au maillage pour
@@ -171,6 +186,11 @@ class AdvancedChannel:
         )
         self.terrain = terrain.lower()
         self.weather_loss_dB_per_km = weather_loss_dB_per_km
+        if weather_correlation is None:
+            weather_correlation = fading_correlation
+        self._weather_loss = _CorrelatedValue(
+            weather_loss_dB_per_km, weather_loss_std_dB_per_km, weather_correlation
+        )
         self.frequency_offset_hz = frequency_offset_hz
         self.freq_offset_std_hz = freq_offset_std_hz
         self.sync_offset_s = sync_offset_s
@@ -187,6 +207,8 @@ class AdvancedChannel:
             dev_freq_offset_std_hz,
             fading_correlation,
         )
+        self.indoor_n_floors = int(indoor_n_floors)
+        self.indoor_floor_loss_dB = float(indoor_floor_loss_dB)
         self._temperature = _CorrelatedValue(
             self.base.omnet.temperature_K,
             temperature_std_K,
@@ -197,6 +219,7 @@ class AdvancedChannel:
             pa_non_linearity_std_dB,
             fading_correlation,
         )
+        self.pa_non_linearity_curve = pa_non_linearity_curve
         self._humidity = _CorrelatedValue(
             humidity_percent,
             humidity_std_percent,
@@ -233,11 +256,14 @@ class AdvancedChannel:
             loss = self._cost231_loss(distance)
         elif self.propagation_model == "okumura_hata":
             loss = self._okumura_hata_loss(distance)
+        elif self.propagation_model == "itu_indoor":
+            loss = self._itu_indoor_loss(distance)
         else:
             loss = self.base.path_loss(distance)
 
-        if self.weather_loss_dB_per_km:
-            loss += self.weather_loss_dB_per_km * (max(d, 1.0) / 1000.0)
+        if self.weather_loss_dB_per_km or self._weather_loss.std > 0.0:
+            loss_per_km = self._weather_loss.sample()
+            loss += loss_per_km * (max(d, 1.0) / 1000.0)
         return loss
 
     # ------------------------------------------------------------------
@@ -335,6 +361,15 @@ class AdvancedChannel:
             pl -= 4.78 * (math.log10(freq_mhz)) ** 2 - 18.33 * math.log10(freq_mhz) + 40.94
         return pl
 
+    def _itu_indoor_loss(self, distance: float) -> float:
+        """Simple ITU indoor path loss model."""
+        d = max(distance, 1.0)
+        freq_mhz = self.base.frequency_hz / 1e6
+        n = 30.0
+        loss = 20 * math.log10(freq_mhz) + n * math.log10(d) + 28
+        loss += self.indoor_floor_loss_dB * max(self.indoor_n_floors - 1, 0)
+        return loss
+
     # ------------------------------------------------------------------
     def compute_rssi(
         self,
@@ -376,6 +411,9 @@ class AdvancedChannel:
             loss += random.gauss(0, self.base.shadowing_std)
 
         tx_power_dBm += self._pa_nl.sample()
+        if self.pa_non_linearity_curve:
+            a, b, c = self.pa_non_linearity_curve
+            tx_power_dBm += a * tx_power_dBm ** 2 + b * tx_power_dBm + c
         rssi = (
             tx_power_dBm
             + self.base.tx_antenna_gain_dB
