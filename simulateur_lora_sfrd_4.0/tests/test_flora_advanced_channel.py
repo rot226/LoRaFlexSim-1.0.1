@@ -24,3 +24,10 @@ def test_advanced_channel_matches_flora():
     flora = load_flora_rx_stats(flora_csv)
     assert rssi == pytest.approx(flora["rssi"], abs=1e-3)
     assert snr == pytest.approx(flora["snr"], abs=1e-1)
+
+def test_flora_rx_stats_multi_average():
+    csv = Path(__file__).parent / "data" / "flora_rx_stats_multi.csv"
+    stats = load_flora_rx_stats(csv)
+    assert stats["rssi"] == pytest.approx(-72.0)
+    assert stats["snr"] == pytest.approx(67.0)
+    assert stats["collisions"] == 4
