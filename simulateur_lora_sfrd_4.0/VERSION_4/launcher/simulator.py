@@ -378,8 +378,8 @@ class Simulator:
     def _sample_interval(self) -> float:
         """Retourne un délai tiré de la loi exponentielle avec jitter."""
         interval = random.expovariate(1.0 / self.packet_interval)
-        if interval > 2 * self.packet_interval:
-            interval = 2 * self.packet_interval
+        if interval > 5 * self.packet_interval:
+            interval = 5 * self.packet_interval
         if self.interval_variation > 0.0:
             low = max(0.0, 1.0 - self.interval_variation)
             high = 1.0 + self.interval_variation
