@@ -1211,8 +1211,6 @@ controls = pn.WidgetBox(
     mobility_speed_max_input,
     flora_mode_toggle,
     detection_threshold_input,
-    fine_fading_input,
-    noise_std_input,
     min_interference_input,
     battery_capacity_input,
     payload_size_input,
