@@ -504,7 +504,7 @@ def select_adr(module, name: str) -> None:
         adr3_button.button_type = "primary"
     if sim is not None:
         if module is adr_standard_1:
-            module.apply(sim, degrade_channel=False)
+            module.apply(sim, degrade_channel=True)
         else:
             module.apply(sim)
 
@@ -701,7 +701,7 @@ def setup_simulation(seed_offset: int = 0):
     # Appliquer le profil ADR sélectionné
     if selected_adr_module:
         if selected_adr_module is adr_standard_1:
-            selected_adr_module.apply(sim, degrade_channel=False)
+            selected_adr_module.apply(sim, degrade_channel=True)
         else:
             selected_adr_module.apply(sim)
 
