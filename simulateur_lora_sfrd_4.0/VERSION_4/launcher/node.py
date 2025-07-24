@@ -748,7 +748,9 @@ class Node:
                 beacon_interval,
                 drift=self.beacon_drift,
             )
-
+            if last_beacon_time is None:
+                self.last_beacon_time = last_beacon - self.clock_offset
+        
         return next_ping_slot_time(
             last_beacon,
             current_time,
