@@ -90,22 +90,22 @@ def _cleanup_callbacks() -> None:
 
 
 # --- Widgets de configuration ---
-num_nodes_input = pn.widgets.IntInput(name="Nombre de nœuds", value=20, step=1, start=1)
+num_nodes_input = pn.widgets.IntInput(name="Nombre de nœuds", value=2, step=1, start=1)
 num_gateways_input = pn.widgets.IntInput(name="Nombre de passerelles", value=1, step=1, start=1)
 area_input = pn.widgets.FloatInput(name="Taille de l'aire (m)", value=1000.0, step=100.0, start=100.0)
 mode_select = pn.widgets.RadioButtonGroup(
     name="Mode d'émission", options=["Aléatoire", "Périodique"], value="Aléatoire"
 )
-interval_input = pn.widgets.FloatInput(name="Intervalle moyen (s)", value=30.0, step=1.0, start=0.1)
+interval_input = pn.widgets.FloatInput(name="Intervalle moyen (s)", value=100.0, step=1.0, start=0.1)
 packets_input = pn.widgets.IntInput(
-    name="Nombre de paquets par nœud (0=infin)", value=0, step=1, start=0
+    name="Nombre de paquets par nœud (0=infin)", value=80, step=1, start=0
 )
 seed_input = pn.widgets.IntInput(
     name="Graine (0 = aléatoire)", value=0, step=1, start=0
 )
 num_runs_input = pn.widgets.IntInput(name="Nombre de runs", value=1, start=1)
-adr_node_checkbox = pn.widgets.Checkbox(name="ADR nœud", value=False)
-adr_server_checkbox = pn.widgets.Checkbox(name="ADR serveur", value=False)
+adr_node_checkbox = pn.widgets.Checkbox(name="ADR nœud", value=True)
+adr_server_checkbox = pn.widgets.Checkbox(name="ADR serveur", value=True)
 
 # --- Boutons de sélection du profil ADR ---
 adr1_button = pn.widgets.Button(name="adr_1", button_type="primary")
@@ -150,13 +150,15 @@ fast_forward_button = pn.widgets.Button(
 fast_forward_button.disabled = int(packets_input.value) <= 0
 
 # --- Paramètres radio FLoRa ---
-flora_mode_toggle = pn.widgets.Toggle(name="Mode FLoRa complet", button_type="default", value=False)
+flora_mode_toggle = pn.widgets.Toggle(name="Mode FLoRa complet", button_type="primary", value=True)
 detection_threshold_input = pn.widgets.FloatInput(
     name="Seuil détection (dBm)", value=-110.0, step=1.0, start=-150.0
 )
+detection_threshold_input.disabled = True
 min_interference_input = pn.widgets.FloatInput(
-    name="Min interference (s)", value=0.0, step=0.1, start=0.0
+    name="Min interference (s)", value=5.0, step=0.1, start=0.0
 )
+min_interference_input.disabled = True
 # --- Paramètres supplémentaires ---
 battery_capacity_input = pn.widgets.FloatInput(
     name="Capacité batterie (J)", value=0.0, step=10.0, start=0.0
@@ -502,7 +504,7 @@ def select_adr(module, name: str) -> None:
         adr3_button.button_type = "primary"
     if sim is not None:
         if module is adr_standard_1:
-            module.apply(sim, degrade_channel=True)
+            module.apply(sim, degrade_channel=False)
         else:
             module.apply(sim)
 
@@ -699,7 +701,7 @@ def setup_simulation(seed_offset: int = 0):
     # Appliquer le profil ADR sélectionné
     if selected_adr_module:
         if selected_adr_module is adr_standard_1:
-            selected_adr_module.apply(sim, degrade_channel=True)
+            selected_adr_module.apply(sim, degrade_channel=False)
         else:
             selected_adr_module.apply(sim)
 
