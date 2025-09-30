@@ -5,19 +5,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+_Aucun changement notable pour le moment._
+
+## [1.0.1] - 2025-09-30
+### Added
+- Ajout du profil d'exécution « fast » pour les scripts MNE3SD afin de réduire automatiquement la taille des balayages et d'appliquer les préréglages associés (nœuds, réplicas, intervalles RX classe C). 
 ### Changed
-- Significantly increased channel degradation in `adr_standard_1` for simulator validation.
-- Send interval distribution now follows a strict exponential law and timestamps are only postponed when a transmission is still ongoing.
-- Removed the implicit LoRa processing gain from SNR calculations; the legacy behaviour is available via `processing_gain=True`.
-
-### Migration
-- FLoRa-aligned scenarios now inject the historical inter-SF capture matrix and lock the 6-symbol capture window automatically. Remove any custom `orthogonal_sf`/`non_orth_matrix` overrides and rely on the default behaviour when migrating configurations. The new `--long-range-demo very_long_range` preset replaces manual tuning for 15 km studies.
-
-## [1.0.1] - 2025-08-27
+- Les générateurs de trafic (simulateur CLI, nœuds complets et chargeur de configuration) s'appuient désormais sur `traffic.exponential.sample_interval` pour échantillonner strictement une loi exponentielle alignée sur OMNeT++ et ne repousser les transmissions que lorsque l'intervalle reste inférieur à la durée d'émission précédente. 
+- Le profil `adr_standard_1` active un canal dégradé plus sévère (bruit, fading et capture avancée) par défaut afin de refléter les validations radio.
+- Le gain de traitement LoRa n'est plus ajouté implicitement au calcul du SNR ; il devient un comportement opt-in via le paramètre `processing_gain`.
 ### Fixed
-- Align package metadata version with the README to publish release 1.0.1 consistently.
+- Les fenêtres périodiques des nœuds de classe C cessent de sonder lorsqu'aucun downlink n'est en attente, ce qui évite les boucles infinies observées lors des campagnes MNE3SD tout en garantissant la livraison finale.
+- Les balayages de densité MNE3SD peuvent forcer l'intervalle de sondage des nœuds de classe C, avec une valeur réduite appliquée automatiquement pour le profil « fast » afin d'accélérer les itérations.
 
-## [5.0] - 2025-07-24
+## [Draft]
+_Brouillon conservé pour une refonte majeure envisagée mais jamais publiée._
+
 ### Added
 - Complete rewrite of the LoRa network simulator in Python.
 - Command-line interface and interactive dashboard.
