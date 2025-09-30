@@ -4,14 +4,22 @@ from collections import defaultdict
 from dataclasses import dataclass
 import math
 
+# Conversion of the FLoRa (OMNeT++) ``energyConsumptionParameters.xml`` TX
+# currents from milliamperes to amperes.
 DEFAULT_TX_CURRENT_MAP_A: dict[float, float] = {
-    2.0: 0.02,  # ~20 mA
-    5.0: 0.027,  # ~27 mA
-    8.0: 0.035,  # ~35 mA
-    11.0: 0.045,  # ~45 mA
-    14.0: 0.060,  # ~60 mA
-    17.0: 0.10,  # ~100 mA
-    20.0: 0.12,  # ~120 mA
+    2.0: 0.024,
+    3.0: 0.024,
+    4.0: 0.024,
+    5.0: 0.025,
+    6.0: 0.025,
+    7.0: 0.025,
+    8.0: 0.025,
+    9.0: 0.026,
+    10.0: 0.031,
+    11.0: 0.032,
+    12.0: 0.034,
+    13.0: 0.035,
+    14.0: 0.044,
 }
 
 @dataclass(frozen=True)
@@ -19,8 +27,8 @@ class EnergyProfile:
     """Energy consumption parameters for a LoRa node."""
 
     voltage_v: float = 3.3
-    sleep_current_a: float = 1e-6
-    rx_current_a: float = 11e-3
+    sleep_current_a: float = 1e-7
+    rx_current_a: float = 9.7e-3
     listen_current_a: float = 0.0
     process_current_a: float = 0.0
     # Additional radio state modelling parameters
@@ -131,7 +139,9 @@ class EnergyAccumulator:
         return dict(self._by_state)
 
 
-# Default profile based on the FLoRa model (OMNeT++)
+# Default profile derived from the FLoRa (OMNeT++) energy model parameters
+# defined in ``flora-master/simulations/energyConsumptionParameters.xml``.
+# Currents are expressed in amperes (A).
 FLORA_PROFILE = EnergyProfile(
     tx_current_map_a=DEFAULT_TX_CURRENT_MAP_A,
     startup_current_a=1.6e-3,
@@ -142,13 +152,15 @@ FLORA_PROFILE = EnergyProfile(
     ramp_down_s=1e-3,
 )
 
-# Example of a lower power transceiver profile
+# Example of a lower power transceiver profile.  Values keep roughly the same
+# relative offsets with respect to the FLoRa profile while remaining strictly
+# lower for the supported power levels.
 LOW_POWER_TX_MAP_A: dict[float, float] = {
-    2.0: 0.015,
-    5.0: 0.022,
-    8.0: 0.029,
-    11.0: 0.040,
-    14.0: 0.055,
+    2.0: 0.018,
+    5.0: 0.020375,
+    8.0: 0.020725,
+    11.0: 0.028416,
+    14.0: 0.040348,
 }
 
 LOW_POWER_PROFILE = EnergyProfile(rx_current_a=7e-3, tx_current_map_a=LOW_POWER_TX_MAP_A)
