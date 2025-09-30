@@ -33,9 +33,8 @@ def main() -> None:
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots()
     ax.plot(noise_levels, mean_pdr, marker="o")
-    ax.set_xlabel("noise_std")
-    ax.set_ylabel("PDR(%)")
-    ax.set_title("PDR vs Noise")
+    ax.set_xlabel("Noise standard deviation")
+    ax.set_ylabel("Packet delivery ratio (%)")
     output_base = FIGURES_DIR / "pdr_vs_noise"
     for ext in ("png", "jpg", "eps"):
         dpi = 300 if ext in ("png", "jpg", "eps") else None

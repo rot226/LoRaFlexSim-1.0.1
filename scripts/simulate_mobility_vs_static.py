@@ -201,13 +201,13 @@ def plot_comparison(rows: list[dict], path: str) -> None:
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     axes[0].bar(labels, pdr, color="#4c72b0")
-    axes[0].set_ylabel("PDR (%)")
-    axes[0].set_title("Packet Delivery Ratio")
+    axes[0].set_ylabel("Packet delivery ratio (%)")
+    axes[0].set_xlabel("Scenario")
     axes[0].set_ylim(0, 100)
 
     axes[1].bar(labels, latency, color="#dd8452")
     axes[1].set_ylabel("95th percentile latency (s)")
-    axes[1].set_title("Latency distribution")
+    axes[1].set_xlabel("Scenario")
 
     fig.tight_layout()
     fig.savefig(path, dpi=150)

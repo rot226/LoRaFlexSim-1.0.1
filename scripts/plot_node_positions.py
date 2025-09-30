@@ -53,7 +53,14 @@ def main(argv: list[str] | None = None) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     fig, ax = plt.subplots()
-    ax.scatter(xs, ys, s=args.marker_size, edgecolors="black", facecolors="C0")
+    node_points = ax.scatter(
+        xs,
+        ys,
+        s=args.marker_size,
+        edgecolors="black",
+        facecolors="C0",
+        label="Nodes",
+    )
     for n in sim.nodes:
         ax.annotate(
             str(n.id),
@@ -64,14 +71,16 @@ def main(argv: list[str] | None = None) -> None:
             color="white",
         )
 
+    legend_handles = [node_points]
     if gateway_positions:
-        ax.scatter(
+        gateway_points = ax.scatter(
             gx,
             gy,
             marker="*",
             s=200,
             edgecolors="black",
             facecolors="red",
+            label="Gateways",
         )
         for g in sim.gateways:
             ax.annotate(
@@ -83,9 +92,13 @@ def main(argv: list[str] | None = None) -> None:
                 color="white",
             )
 
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_title("Node positions")
+        legend_handles.append(gateway_points)
+
+    if legend_handles:
+        ax.legend(handles=legend_handles, loc="best")
+
+    ax.set_xlabel("x coordinate (m)")
+    ax.set_ylabel("y coordinate (m)")
     for ext in ("png", "jpg", "eps"):
         dpi = 300 if ext in ("png", "jpg", "eps") else None
         fig.savefig(
