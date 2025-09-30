@@ -827,6 +827,8 @@ class Simulator:
         self.events_log: list[dict] = []
         # Accès direct aux événements par identifiant
         self._events_log_map: dict[int, dict] = {}
+        # Nœuds de classe C actuellement maintenus en écoute périodique
+        self._class_c_polling_nodes: set[int] = set()
 
         # Planifier le premier envoi de chaque nœud
         for node in self.nodes:
@@ -876,6 +878,8 @@ class Simulator:
                 eid = self.event_id_counter
                 self.event_id_counter += 1
                 self._push_event(0.0, EventType.RX_WINDOW, eid, node.id)
+                if node.class_type.upper() == "C":
+                    self._class_c_polling_nodes.add(node.id)
 
         # Première émission de beacon pour la synchronisation Class B
         eid = self.event_id_counter
@@ -1510,14 +1514,30 @@ class Simulator:
                 break
             # Replanifier selon la classe du nœud
             if node.class_type.upper() == "C":
-                if not (
-                    self.packets_to_send != 0
-                    and all(n.packets_sent >= self.packets_to_send for n in self.nodes)
-                ):
+                # Classe C : ne reprogamme la fenêtre périodique que si un
+                # downlink reste à livrer ou si le nœud n'a pas encore atteint
+                # son quota ``packets_to_send``. Cela évite de maintenir un
+                # polling infini une fois la simulation terminée tout en
+                # garantissant la livraison de la dernière trame demandée par
+                # le serveur.
+                needs_polling = node.downlink_pending > 0
+                if not needs_polling:
+                    if self.packets_to_send == 0:
+                        needs_polling = True
+                    elif node.packets_sent < self.packets_to_send:
+                        needs_polling = True
+                if needs_polling:
                     nxt = self._quantize(time + self.class_c_rx_interval)
                     eid = self.event_id_counter
                     self.event_id_counter += 1
                     self._push_event(nxt, EventType.RX_WINDOW, eid, node.id)
+                    self._class_c_polling_nodes.add(node.id)
+                else:
+                    # Arrêt explicite du polling : aucun downlink en attente et
+                    # quota atteint (ou simulation terminée). Un nouveau
+                    # downlink déclenchera lui-même la prochaine fenêtre via
+                    # ``node.downlink_pending``.
+                    self._class_c_polling_nodes.discard(node.id)
             return True
 
         elif priority == EventType.BEACON:
