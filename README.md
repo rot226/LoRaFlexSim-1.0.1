@@ -395,6 +395,8 @@ Un champ **Capacité batterie (J)** est disponible dans le tableau de bord pour
 saisir facilement cette valeur. Indiquez `0` pour une capacité illimitée : ce
 nombre est automatiquement converti en `None`, valeur attendue par LoRaFlexSim.
 
+Pour documenter ces tests hors du tableau de bord, le duo `scripts/run_battery_tracking.py` / `scripts/plot_battery_tracking.py` fournit un flux CLI complet : définissez une capacité (`--battery-capacity-j` ou `--node-capacity`), activez l'arrêt automatique avec `--watch-nodes` et `--stop-on-depletion`, puis générez la figure de suivi avec l'option `--annotate-depletion`. Les exécutions successives alimentent `results/battery_tracking.csv`, enrichi pour faciliter l'analyse reproductible.
+
 ## Paramètres de LoRaFlexSim
 
 Le constructeur `Simulator` accepte de nombreux arguments afin de reproduire les

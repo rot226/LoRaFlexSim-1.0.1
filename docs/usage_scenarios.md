@@ -34,8 +34,22 @@ sortie attendue.
   - `--nodes` (5) : nombre de nœuds.
   - `--packets` (3) : paquets par nœud.
   - `--seed` (1) : graine aléatoire.
-- **Sortie** : `results/battery_tracking.csv` avec `time`, `node_id`, `energy_j` et
-  `capacity_j`.
+  - `--replicates` (1) : exécutions indépendantes pour les statistiques.
+  - `--battery-capacity-j` (1000.0) : capacité globale appliquée à chaque nœud.
+  - `--node-capacity NODE=J` : surcharge ponctuelle pour certains nœuds.
+  - `--watch-nodes` : liste des nœuds surveillés pour détecter l'épuisement.
+  - `--stop-on-depletion` : interrompt la simulation quand tous les nœuds surveillés sont hors service.
+- **Arrêt automatique** : lorsqu'un test d'épuisement est actif, le script affiche un message
+  `"[<temps>s] Arrêt: batteries épuisées pour <ids>"` dès que les nœuds suivis ne sont plus alimentés.
+- **Sortie** : `results/battery_tracking.csv` enrichi avec `time`, `node_id`, `energy_j`,
+  `capacity_j`, `alive` et `replicate`.
+
+```bash
+python scripts/run_battery_tracking.py --nodes 8 --packets 20 --battery-capacity-j 250 --watch-nodes 0,1,2 --stop-on-depletion
+python scripts/plot_battery_tracking.py --annotate-depletion
+```
+
+Le premier appel réalise un test d'épuisement contrôlé (capacité fixée et arrêt automatique) tandis que le second génère la figure de suivi batterie à intégrer dans l'article.
 
 ## Scripts de visualisation (`plot_*`)
 
@@ -52,8 +66,8 @@ sortie attendue.
   nœud et le taux de collision.
 
 ### `plot_battery_tracking.py`
-- **Paramètres** : aucun ; lit `results/battery_tracking.csv`.
-- **Sortie** : `figures/battery_tracking.png` montrant l'énergie résiduelle.
+- **Paramètres** : `--annotate-depletion` pour annoter la première coupure et `--focus-node` pour mettre en évidence certains nœuds.
+- **Sortie** : `figures/battery_tracking.png` montrant l'énergie résiduelle et la variabilité entre répétitions.
 
 ### `plot_node_positions.py`
 - **Paramètres** : `--num-nodes` (100), `--area-size` (1000.0), `--seed` (42),
