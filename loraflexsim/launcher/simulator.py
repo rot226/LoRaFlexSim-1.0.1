@@ -1375,6 +1375,8 @@ class Simulator:
                                 new_queue.append(evt)
                             elif node.class_type.upper() == "C":
                                 class_c_cleanup.add(node.id)
+                            else:
+                                new_queue.append(evt)
                     heapq.heapify(new_queue)
                     self.event_queue = new_queue
                     for node_id in class_c_cleanup:

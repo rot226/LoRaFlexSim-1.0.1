@@ -97,7 +97,16 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         metavar="NODE",
         help="Identifiant de nœud à mettre en évidence (peut être répété ou séparé par des virgules)",
     )
-    return parser.parse_args(argv)
+    # ``argparse`` se base sur ``sys.argv`` quand ``argv`` est ``None``.  Les
+    # tests appellent ``main()`` après avoir exécuté un autre script qui a
+    # injecté ses propres arguments dans ``sys.argv``.  Dans ce cas nous ne
+    # voulons pas échouer sur des options inconnues : ces arguments ne concernent
+    # pas le script de tracé et doivent simplement être ignorés.  Utiliser
+    # ``parse_known_args`` permet de conserver un comportement standard en ligne
+    # de commande tout en rendant ``main()`` plus robuste lorsqu'il est invoqué
+    # de manière programmatique.
+    args, _ = parser.parse_known_args(argv)
+    return args
 
 
 def main(argv: Sequence[str] | None = None) -> None:

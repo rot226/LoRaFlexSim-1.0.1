@@ -30,6 +30,13 @@ except Exception as exc:  # pragma: no cover - handled at runtime
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
 
+# Limite du nombre d'enregistrements écrits par nœud et par réplicat.  Cette
+# réduction permet d'éviter des fichiers inutilement volumineux lorsque la
+# simulation progresse événement par événement, tout en conservant une
+# représentation fidèle de la tendance énergétique (premier/dernier échantillon
+# et points régulièrement espacés).
+MAX_RECORDS_PER_NODE = 40
+
 
 # Default battery capacity in joules for each node.  A finite value is required
 # to observe the remaining energy decreasing over time.
@@ -165,9 +172,34 @@ def main() -> None:
                     sim.stop()
                     break
 
+    df = pd.DataFrame(records)
+    if not df.empty:
+        # Conserver au maximum ``MAX_RECORDS_PER_NODE`` lignes par paire
+        # (réplicat, nœud) en préservant le premier et le dernier échantillon.
+        def _downsample(group: pd.DataFrame) -> pd.DataFrame:
+            if len(group) <= MAX_RECORDS_PER_NODE:
+                return group
+            if MAX_RECORDS_PER_NODE <= 2:
+                return group.iloc[[0, -1]]
+            step = (len(group) - 1) / (MAX_RECORDS_PER_NODE - 1)
+            indices = [round(i * step) for i in range(MAX_RECORDS_PER_NODE - 1)]
+            indices.append(len(group) - 1)
+            # ``sorted(set(...))`` évite les doublons lorsque ``step`` est < 1.
+            unique = sorted(set(indices))
+            return group.iloc[unique]
+
+        grouped: list[pd.DataFrame] = []
+        for _, group in df.groupby(["replicate", "node_id"]):
+            grouped.append(_downsample(group))
+        df = (
+            pd.concat(grouped, ignore_index=True)
+            .sort_values(["replicate", "node_id", "time"])
+            .reset_index(drop=True)
+        )
+
     os.makedirs(RESULTS_DIR, exist_ok=True)
     out_path = os.path.join(RESULTS_DIR, "battery_tracking.csv")
-    pd.DataFrame(records).to_csv(out_path, index=False)
+    df.to_csv(out_path, index=False)
     print(f"Saved {out_path}")
 
 
