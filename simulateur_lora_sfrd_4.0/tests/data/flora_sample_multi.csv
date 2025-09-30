@@ -1,4 +1,0 @@
-run,sent,received,collisions,energy_J,throughput_bps,avg_delay_s,energy_class_A_J,sf7,sf8,sf9,sf10,sf11,sf12,collisions_sf7,collisions_sf8,collisions_sf9,collisions_sf10,collisions_sf11,collisions_sf12
-1,2,2,0,0.0224,104.69,0.0566,0.0224,2,0,0,0,0,0,0,0,0,0,0,0
-2,2,1,1,0.0200,90.00,0.0600,0.0200,1,1,0,0,0,0,1,0,0,0,0,0
-3,2,2,0,0.0220,105.00,0.0550,0.0220,2,0,0,0,0,0,0,0,0,0,0,0
