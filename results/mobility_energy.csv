@@ -1,0 +1,3 @@
+scenario,energy_J,packets_delivered,energy_per_packet
+single_channel,2.326947026134257,93,0.025020935764884483
+multi_channel,2.326947026134257,135,0.017236644638031533

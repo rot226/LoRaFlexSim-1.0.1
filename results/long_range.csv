@@ -1,0 +1,2 @@
+preset,area_km2,nodes,packets_per_node,pdr_total_pct,pdr_sf12_pct,pdr_sf11_pct,pdr_sf10_pct,pdr_sf9_pct,max_rssi_sf12_dBm,max_snr_sf12_dB
+flora_hata,576.000,9,8,95.83,91.67,100.00,100.00,93.75,-114.62,2.39

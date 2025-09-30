@@ -1,0 +1,13 @@
+{
+  "events": 25,
+  "final_state": {
+    "sf": 10,
+    "tx_power": 14.0
+  },
+  "mismatches": 0,
+  "reference": "tests/integration/data/flora_multi_gateway_txconfig.json",
+  "scenario": "flora_multi_gateway_txconfig",
+  "throttled_events": [
+    21
+  ]
+}

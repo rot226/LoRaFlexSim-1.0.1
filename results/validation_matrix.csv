@@ -1,0 +1,13 @@
+scenario,description,pdr_sim,pdr_ref,pdr_delta,pdr_std,collisions_sim,collisions_ref,collisions_delta,snr_sim,snr_ref,snr_delta,tolerance_pdr,tolerance_collisions,tolerance_snr,status
+flora_example,Exemple FLoRa n100-gw1.ini,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,example
+long_range,Scénario longue portée 12 km dérivé du preset FLoRa.,0.8888888888888888,0.9027777777777778,0.01388888888888895,0.0,0.0,0.0,0.0,-1.7295800523000662,-1.9413691511020699,0.2117890988020037,0.015,0,0.22,ok
+mono_gw_single_channel_class_a,"Mono-passerelle, canal unique EU868, classes A statiques avec ADR nœud+serveur.",0.45,0.45,0.0,0.0,0.0,0.0,0.0,-8.383328480741046,-8.383328480741046,0.0,0.02,2,1.5,ok
+mono_gw_multichannel_node_adr,"Mono-passerelle, 3 canaux EU868, ADR côté nœud uniquement (classe A).",0.45,0.45,0.0,0.0,0.0,0.0,0.0,-7.772168715320888,-7.772168715320888,0.0,0.02,2,1.5,ok
+multi_gw_multichannel_server_adr,"Deux passerelles, multi-canaux, ADR serveur uniquement (classe A).",0.7,0.7,0.0,0.0,0.0,0.0,0.0,-8.823195465943469,-8.823195465943469,0.0,0.03,3,2.0,ok
+class_b_beacon_scheduling,"Classe B avec synchronisation beacon, canal unique, topologie statique.",0.1,0.1,0.0,0.0,0.0,0.0,0.0,-6.546101104315923,-6.546101104315923,0.0,0.05,2,2.5,ok
+class_c_mobility_multichannel,Classe C mobile avec 3 canaux et ADR serveur.,0.3,0.3,0.0,0.0,0.0,0.0,0.0,-4.571749503938942,-4.571749503938942,0.0,0.05,3,3.0,ok
+duty_cycle_enforcement_class_a,Duty cycle 1 % appliqué explicitement (classe A).,0.6,0.6,0.0,0.0,0.0,0.0,0.0,-9.604304281145177,-9.604304281145177,0.0,0.02,1,2.0,ok
+dynamic_multichannel_random_assignment,Multi-canaux avec répartition aléatoire et ADR combiné.,0.3,0.3,0.0,0.0,0.0,0.0,0.0,-7.14273730601496,-7.14273730601496,0.0,0.03,2,2.5,ok
+class_b_mobility_multichannel,Classe B mobile avec SmoothMobility et plan tri-canal.,0.2,0.2,0.0,0.0,0.0,0.0,0.0,-2.968889809456144,-2.968889809456144,0.0,0.05,3,3.0,ok
+explora_at_balanced_airtime,EXPLoRa-AT active l'équilibrage airtime ADR.,0.8,0.8,0.0,0.0,0.0,0.0,0.0,-15.252797504408383,-15.252797504408383,0.0,0.05,3,3.0,ok
+adr_ml_adaptive_strategy,ADR-ML appliqué aux nœuds tri-canaux (classe A).,0.8,0.8,0.0,0.0,0.0,0.0,0.0,-9.085200560296524,-9.085200560296524,0.0,0.05,3,3.0,ok
