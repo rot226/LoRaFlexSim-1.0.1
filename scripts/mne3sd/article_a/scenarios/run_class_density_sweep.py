@@ -6,6 +6,10 @@ in the network.  The packet interval is kept constant while running several
 replicates for every class/density pair.  The per-replicate metrics are written
 to ``results/mne3sd/article_a/class_density_metrics.csv`` for later analysis.
 
+Use ``--profile fast`` alongside ``--class-c-rx-interval`` (or rely on the
+default defined for the fast profile) to reduce the Class C polling interval and
+accelerate exploratory sweeps.
+
 Example usage::
 
     python scripts/mne3sd/article_a/scenarios/run_class_density_sweep.py \
@@ -45,6 +49,7 @@ DEFAULT_NODE_COUNTS = [50, 100, 250, 500]
 FAST_NODE_COUNTS = [50, 100, 150]
 FAST_REPLICATES = 3
 FAST_PACKETS_PER_NODE = 20
+FAST_CLASS_C_RX_INTERVAL = 5.0
 CI_NODE_COUNTS = [20]
 CI_REPLICATES = 1
 CI_PACKETS_PER_NODE = 5
@@ -111,6 +116,7 @@ def run_single_simulation(task: dict[str, object]) -> dict[str, object]:
         packet_interval=float(task["interval"]),
         adr_node=bool(task["adr_node"]),
         adr_server=bool(task["adr_server"]),
+        class_c_rx_interval=float(task.get("class_c_rx_interval", 1.0)),
     )
     sim.run()
     metrics = sim.get_metrics()
@@ -153,6 +159,12 @@ def main() -> None:  # noqa: D401 - CLI entry point
         type=float,
         default=300.0,
         help="Packet interval in seconds (kept constant across runs)",
+    )
+    parser.add_argument(
+        "--class-c-rx-interval",
+        type=float,
+        default=None,
+        help="Override for class C RX polling interval (seconds)",
     )
     parser.add_argument(
         "--packets", type=positive_int, default=40, help="Packets to send per node"
@@ -202,10 +214,13 @@ def main() -> None:  # noqa: D401 - CLI entry point
     configure_logging(args.verbose, args.quiet)
 
     profile = resolve_execution_profile(args.profile)
+    class_c_interval = args.class_c_rx_interval
     if profile == "ci":
         node_defaults = CI_NODE_COUNTS
     elif profile == "fast":
         node_defaults = FAST_NODE_COUNTS
+        if class_c_interval is None:
+            class_c_interval = FAST_CLASS_C_RX_INTERVAL
     else:
         node_defaults = DEFAULT_NODE_COUNTS
     node_counts = parse_nodes_list(args.nodes_list, default=node_defaults)
@@ -257,6 +272,11 @@ def main() -> None:  # noqa: D401 - CLI entry point
                         "interval": args.interval,
                         "adr_node": args.adr_node,
                         "adr_server": args.adr_server,
+                        **(
+                            {"class_c_rx_interval": class_c_interval}
+                            if class_c_interval is not None
+                            else {}
+                        ),
                     }
                 )
 
