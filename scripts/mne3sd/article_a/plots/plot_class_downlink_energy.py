@@ -117,8 +117,8 @@ def plot_energy_breakdown(
 
     ax.set_xticks(indices)
     ax.set_xticklabels([f"Class {name}" for name in classes])
+    ax.set_xlabel("LoRaWAN class")
     ax.set_ylabel("Average energy per node (J)")
-    ax.set_title("Energy breakdown by class")
     ax.grid(True, axis="y", linestyle="--", linewidth=0.5, alpha=0.6)
     ax.legend()
     fig.tight_layout()
@@ -153,9 +153,9 @@ def plot_pdr_comparison(
 
     ax.set_xticks(indices)
     ax.set_xticklabels([f"Class {name}" for name in classes])
+    ax.set_xlabel("LoRaWAN class")
     ax.set_ylabel("Delivery ratio (%)")
     ax.set_ylim(0, 105)
-    ax.set_title("Uplink vs downlink packet delivery ratio")
     ax.grid(True, axis="y", linestyle="--", linewidth=0.5, alpha=0.6)
     ax.legend()
     fig.tight_layout()

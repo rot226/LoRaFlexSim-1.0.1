@@ -120,7 +120,6 @@ def plot_pdr_vs_nodes(df: pd.DataFrame) -> None:
 
     ax.set_xlabel("Number of nodes")
     ax.set_ylabel("Packet delivery ratio (%)")
-    ax.set_title("Packet delivery ratio versus node density")
     ax.set_ylim(0, 105)
     ax.legend(title="Class")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
@@ -159,7 +158,6 @@ def plot_energy_vs_nodes(df: pd.DataFrame) -> bool:
 
     ax.set_xlabel("Number of nodes")
     ax.set_ylabel("Energy per node (J)")
-    ax.set_title("Energy consumption versus node density")
     ax.legend(title="Class")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
     fig.tight_layout()
