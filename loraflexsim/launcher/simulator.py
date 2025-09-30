@@ -1411,10 +1411,12 @@ class Simulator:
             if node.class_type.upper() != "C":
                 node.state = "sleep"
             self.network_server.deliver_scheduled(node.id, time)
+            delivered = False
             for gw in self.gateways:
                 downlink = gw.pop_downlink(node.id)
                 if not downlink:
                     continue
+                delivered = True
                 frame, data_rate, tx_power = downlink
                 payload_len = 0
                 if hasattr(frame, "payload"):
@@ -1507,10 +1509,12 @@ class Simulator:
                     )
                     if snr >= snr_threshold:
                         node.handle_downlink(frame)
+                        delivered = True
                     else:
                         node.downlink_pending = max(0, node.downlink_pending - 1)
                 else:
                     node.handle_downlink(frame)
+                    delivered = True
                 break
             # Replanifier selon la classe du nœud
             if node.class_type.upper() == "C":
@@ -1519,7 +1523,21 @@ class Simulator:
                 # son quota ``packets_to_send``. Cela évite de maintenir un
                 # polling infini une fois la simulation terminée tout en
                 # garantissant la livraison de la dernière trame demandée par
-                # le serveur.
+                # le serveur. Le garde-fou ci-dessous stoppe aussi les sondes
+                # lorsque ni le serveur ni les passerelles n'ont plus de
+                # downlink en réserve.
+                if not delivered:
+                    scheduler = getattr(self.network_server, "scheduler", None)
+                    next_time = None
+                    if scheduler is not None and hasattr(scheduler, "next_time"):
+                        next_time = scheduler.next_time(node.id)
+                    pending_gateway = any(
+                        bool(getattr(gw, "downlink_buffer", {}).get(node.id))
+                        for gw in self.gateways
+                    )
+                    if next_time is None and not pending_gateway:
+                        node.downlink_pending = max(0, node.downlink_pending - 1)
+                        self._class_c_polling_nodes.discard(node.id)
                 needs_polling = node.downlink_pending > 0
                 if not needs_polling:
                     if self.packets_to_send == 0:
