@@ -11,6 +11,10 @@ energy consumption per node.
 Aggregated mean and standard deviation statistics are appended to
 ``results/mne3sd/article_b/mobility_speed_metrics.csv``.
 
+Use ``--profile fast`` to limit the sweep to two mobility profiles
+(``pedestrian`` and ``urban``), at most 80 nodes, 25 packets per node and three
+replicates, which greatly accelerates exploratory runs.
+
 Example usage::
 
     python scripts/mne3sd/article_b/scenarios/run_mobility_speed_sweep.py \
@@ -57,6 +61,11 @@ CI_RANGE_KM = 5.0
 CI_NODES = 40
 CI_PACKETS = 10
 CI_REPLICATES = 1
+FAST_SPEED_PROFILES = DEFAULT_SPEED_PROFILES[:2]
+FAST_RANGE_KM = 5.0
+FAST_NODES = 80
+FAST_PACKETS = 25
+FAST_REPLICATES = 3
 
 ROOT = Path(__file__).resolve().parents[4]
 RESULTS_PATH = ROOT / "results" / "mne3sd" / "article_b" / "mobility_speed_metrics.csv"
@@ -273,13 +282,49 @@ def main() -> None:  # noqa: D401 - CLI entry point
             speed_profiles = speed_profiles[:1]
         else:
             speed_profiles = CI_SPEED_PROFILES.copy()
+    elif profile == "fast":
+        max_profiles = len(FAST_SPEED_PROFILES)
+        if args.speed_profiles:
+            limited: list[tuple[str, tuple[float, float]]] = []
+            seen: set[str] = set()
+            min_speed = FAST_SPEED_PROFILES[0][1][0]
+            max_speed = FAST_SPEED_PROFILES[-1][1][1]
+            for name, (speed_min, speed_max) in speed_profiles:
+                key = name.lower()
+                if key in seen:
+                    continue
+                clamped_min = max(speed_min, min_speed)
+                clamped_max = min(speed_max, max_speed)
+                if clamped_min > clamped_max:
+                    clamped_min, clamped_max = FAST_SPEED_PROFILES[0][1]
+                limited.append((name, (clamped_min, clamped_max)))
+                seen.add(key)
+                if len(limited) >= max_profiles:
+                    break
+            speed_profiles = limited
+        else:
+            speed_profiles = FAST_SPEED_PROFILES.copy()
 
-    range_km = args.range_km if profile != "ci" else min(args.range_km, CI_RANGE_KM)
+    if profile == "ci":
+        range_km = min(args.range_km, CI_RANGE_KM)
+    elif profile == "fast":
+        range_km = min(args.range_km, FAST_RANGE_KM)
+    else:
+        range_km = args.range_km
     area_size = range_km * 2000.0
 
-    nodes = args.nodes if profile != "ci" else min(args.nodes, CI_NODES)
-    packets = args.packets if profile != "ci" else min(args.packets, CI_PACKETS)
-    replicates = args.replicates if profile != "ci" else CI_REPLICATES
+    if profile == "ci":
+        nodes = min(args.nodes, CI_NODES)
+        packets = min(args.packets, CI_PACKETS)
+        replicates = CI_REPLICATES
+    elif profile == "fast":
+        nodes = min(args.nodes, FAST_NODES)
+        packets = min(args.packets, FAST_PACKETS)
+        replicates = min(args.replicates, FAST_REPLICATES)
+    else:
+        nodes = args.nodes
+        packets = args.packets
+        replicates = args.replicates
     workers = resolve_worker_count(args.workers, replicates)
 
     models = [

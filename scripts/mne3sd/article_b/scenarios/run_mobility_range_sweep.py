@@ -10,6 +10,9 @@ consumption per node and the spreading factor distribution.
 The per-replicate metrics together with aggregated mean and standard deviation
 values are written to ``results/mne3sd/article_b/mobility_range_metrics.csv``.
 
+Use ``--profile fast`` to constrain the sweep to two range values (5 and 10 km),
+80 nodes, 25 packets per node and three replicates to obtain results quickly.
+
 Example usage::
 
     python scripts/mne3sd/article_b/scenarios/run_mobility_range_sweep.py \
@@ -52,6 +55,10 @@ CI_RANGE_VALUES = [5.0]
 CI_NODES = 40
 CI_PACKETS = 10
 CI_REPLICATES = 1
+FAST_RANGE_VALUES = [5.0, 10.0]
+FAST_NODES = 80
+FAST_PACKETS = 25
+FAST_REPLICATES = 3
 ROOT = Path(__file__).resolve().parents[4]
 RESULTS_PATH = ROOT / "results" / "mne3sd" / "article_b" / "mobility_range_metrics.csv"
 
@@ -257,14 +264,42 @@ def main() -> None:  # noqa: D401 - CLI entry point
     profile = resolve_execution_profile(args.profile)
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    default_ranges = DEFAULT_RANGES_KM if profile != "ci" else CI_RANGE_VALUES
+    if profile == "ci":
+        default_ranges = CI_RANGE_VALUES
+    elif profile == "fast":
+        default_ranges = FAST_RANGE_VALUES
+    else:
+        default_ranges = DEFAULT_RANGES_KM
+
     range_values = parse_range_list(args.range_km, default=default_ranges)
     if profile == "ci" and args.range_km:
         range_values = range_values[:1]
+    elif profile == "fast":
+        max_values = len(FAST_RANGE_VALUES)
+        cap = FAST_RANGE_VALUES[-1]
+        limited: list[float] = []
+        seen: set[float] = set()
+        for value in range_values:
+            clamped = min(value, cap)
+            if clamped not in seen:
+                limited.append(clamped)
+                seen.add(clamped)
+            if len(limited) >= max_values:
+                break
+        range_values = limited
 
-    nodes = args.nodes if profile != "ci" else min(args.nodes, CI_NODES)
-    packets = args.packets if profile != "ci" else min(args.packets, CI_PACKETS)
-    replicates = args.replicates if profile != "ci" else CI_REPLICATES
+    if profile == "ci":
+        nodes = min(args.nodes, CI_NODES)
+        packets = min(args.packets, CI_PACKETS)
+        replicates = CI_REPLICATES
+    elif profile == "fast":
+        nodes = min(args.nodes, FAST_NODES)
+        packets = min(args.packets, FAST_PACKETS)
+        replicates = min(args.replicates, FAST_REPLICATES)
+    else:
+        nodes = args.nodes
+        packets = args.packets
+        replicates = args.replicates
     workers = resolve_worker_count(args.workers, replicates)
 
     models = [
