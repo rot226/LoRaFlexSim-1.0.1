@@ -28,12 +28,19 @@ def test_tx_energy_accounted_once():
         if node.profile.listen_current_a > 0.0
         else node.profile.rx_current_a
     )
+    window_duration = node.profile.rx_window_duration
+    expected_rx_window = (
+        rx_current * node.profile.voltage_v * window_duration * 2
+        if window_duration > 0.0
+        else 0.0
+    )
     expected_ramp_rx = rx_current * node.profile.voltage_v * (
         node.profile.ramp_up_s + node.profile.ramp_down_s
     )
     assert node.energy_ramp == pytest.approx(
         expected_ramp_tx + 2 * expected_ramp_rx
     )
+    assert node.energy_rx == pytest.approx(expected_rx_window)
     expected_startup = (
         node.profile.startup_current_a
         * node.profile.voltage_v
@@ -47,6 +54,10 @@ def test_tx_energy_accounted_once():
     )
     assert node.energy_startup == pytest.approx(expected_startup)
     assert node.energy_preamble == pytest.approx(expected_preamble)
+    metrics = sim.get_metrics()
+    breakdown = metrics["energy_breakdown_by_node"][node.id]
+    assert breakdown.get("rx", 0.0) == pytest.approx(node.energy_rx)
+    assert metrics["energy_nodes_J"] == pytest.approx(node.energy_consumed)
 
 
 def test_downlink_energy_uses_gateway_power():

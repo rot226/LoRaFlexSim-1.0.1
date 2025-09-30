@@ -304,6 +304,14 @@ La méthode ``OmnetPHY.update`` incrémente ainsi quatre compteurs :
 Un test de régression vérifie l'accumulation correcte de ces énergies lors
 d'une transmission.
 
+Depuis la version actuelle, LoRaFlexSim comptabilise également l'énergie
+consommée durant les deux fenêtres de réception FLoRa. Chaque uplink
+déclenche une écoute de `1` seconde (RX1 puis RX2) alimentée au courant
+``I_rx`` – ou ``I_listen`` lorsqu'il est explicitement défini – tout en
+conservant les rampes radio associées. Cette correction aligne le budget
+énergétique total (``energy_rx`` et ``energy_ramp``) sur les traces
+références FLoRa exportées par OMNeT++.
+
 ## Tableau de capture SF
 
 La décision de capture entre deux paquets repose sur la matrice
