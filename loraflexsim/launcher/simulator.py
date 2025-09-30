@@ -1760,10 +1760,19 @@ class Simulator:
         # Si autre type d'événement (non prévu)
         return True
 
-    def run(self, max_steps: int | None = None):
+    def run(
+        self,
+        max_steps: int | None = None,
+        *,
+        max_time: float | None = None,
+    ):
         """Exécute la simulation en traitant les événements jusqu'à épuisement ou jusqu'à une limite optionnelle."""
         step_count = 0
         while self.event_queue and self.running:
+            if max_time is not None:
+                next_time = self.event_queue[0].time
+                if next_time > max_time:
+                    break
             self.step()
             step_count += 1
             if max_steps and step_count >= max_steps:
