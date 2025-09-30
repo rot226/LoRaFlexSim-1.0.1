@@ -1385,6 +1385,7 @@ class Simulator:
                 ):
                     new_queue: list[Event] = []
                     class_c_cleanup: set[int] = set()
+                    rx_windows_kept: dict[int, int] = {}
                     for evt in self.event_queue:
                         if evt.type == EventType.TX_END:
                             new_queue.append(evt)
@@ -1398,8 +1399,21 @@ class Simulator:
                             elif node.class_type.upper() == "C":
                                 class_c_cleanup.add(node.id)
                             else:
-                                event_time = self._ticks_to_seconds(evt.time)
-                                self._apply_rx_window_energy(node, event_time)
+                                kept = rx_windows_kept.get(node.id, 0)
+                                # Conserver au moins les deux prochaines
+                                # fenêtres RX pour permettre au serveur de
+                                # planifier un downlink tant que l'événement
+                                # n'a pas été traité. Sans cela, la dernière
+                                # transmission d'un nœud de classe A pouvait
+                                # se voir retirer ses fenêtres RX avant même
+                                # que le test ait l'occasion d'y injecter un
+                                # downlink.
+                                if kept < 2:
+                                    new_queue.append(evt)
+                                    rx_windows_kept[node.id] = kept + 1
+                                else:
+                                    event_time = self._ticks_to_seconds(evt.time)
+                                    self._apply_rx_window_energy(node, event_time)
                     heapq.heapify(new_queue)
                     self.event_queue = new_queue
                     for node_id in class_c_cleanup:
