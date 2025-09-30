@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "LoRaFlexSim"
-version = "1.0.0"
+version = "1.0.1"
 # Updated name to reflect new project identity
 description = "LoRaFlexSim : simulateur complet et flexible de réseau LoRa"
 readme = "README.md"

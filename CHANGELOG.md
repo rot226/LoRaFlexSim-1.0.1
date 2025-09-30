@@ -13,6 +13,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Migration
 - FLoRa-aligned scenarios now inject the historical inter-SF capture matrix and lock the 6-symbol capture window automatically. Remove any custom `orthogonal_sf`/`non_orth_matrix` overrides and rely on the default behaviour when migrating configurations. The new `--long-range-demo very_long_range` preset replaces manual tuning for 15 km studies.
 
+## [1.0.1] - 2025-08-27
+### Fixed
+- Align package metadata version with the README to publish release 1.0.1 consistently.
+
 ## [5.0] - 2025-07-24
 ### Added
 - Complete rewrite of the LoRa network simulator in Python.
