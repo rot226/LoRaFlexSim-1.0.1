@@ -913,6 +913,28 @@ class Simulator:
             Event(self._seconds_to_ticks(time_s), event_type, eid, node_id),
         )
 
+    def _apply_rx_window_energy(self, node: "Node", window_time: float) -> tuple[str, float, float]:
+        """Account for the energy spent during an RX window."""
+
+        state = "listen" if node.profile.listen_current_a > 0.0 else "rx"
+        current = (
+            node.profile.listen_current_a
+            if node.profile.listen_current_a > 0.0
+            else node.profile.rx_current_a
+        )
+        duration = node.profile.rx_window_duration
+        energy_J = current * node.profile.voltage_v * duration
+        prev_energy = node.energy_consumed
+        node.add_energy(energy_J, state, duration_s=duration)
+        delta = node.energy_consumed - prev_energy
+        if delta > 0.0:
+            self.energy_nodes_J += delta
+            self.total_energy_J += delta
+        node.last_state_time = max(node.last_state_time, window_time + duration)
+        if node.class_type.upper() != "C":
+            node.state = "sleep"
+        return state, current, duration
+
     def schedule_event(self, node: Node, time: float, *, reason: str = "poisson"):
         """Planifie un événement de transmission pour un nœud."""
         if not node.alive:
@@ -1375,6 +1397,9 @@ class Simulator:
                                 new_queue.append(evt)
                             elif node.class_type.upper() == "C":
                                 class_c_cleanup.add(node.id)
+                            else:
+                                event_time = self._ticks_to_seconds(evt.time)
+                                self._apply_rx_window_energy(node, event_time)
                     heapq.heapify(new_queue)
                     self.event_queue = new_queue
                     for node_id in class_c_cleanup:
@@ -1391,37 +1416,13 @@ class Simulator:
 
         elif priority == EventType.RX_WINDOW:
             # Fenêtre de réception RX1/RX2 pour un nœud
+            state = "rx"
+            current = node.profile.rx_current_a
+            duration = node.profile.rx_window_duration
             if node.class_type.upper() != "C":
-                current = (
-                    node.profile.listen_current_a
-                    if node.profile.listen_current_a > 0.0
-                    else node.profile.rx_current_a
-                )
-                state = "listen" if node.profile.listen_current_a > 0.0 else "rx"
-                energy_J = (
-                    current
-                    * node.profile.voltage_v
-                    * node.profile.rx_window_duration
-                )
-                prev_energy = node.energy_consumed
-                node.add_energy(
-                    energy_J,
-                    state,
-                    duration_s=node.profile.rx_window_duration,
-                )
-                delta = node.energy_consumed - prev_energy
-                if delta > 0.0:
-                    self.energy_nodes_J += delta
-                    self.total_energy_J += delta
+                state, current, duration = self._apply_rx_window_energy(node, time)
             if not node.alive:
                 return True
-            node.last_state_time = time + (
-                node.profile.rx_window_duration
-                if node.class_type.upper() != "C"
-                else 0.0
-            )
-            if node.class_type.upper() != "C":
-                node.state = "sleep"
             self.network_server.deliver_scheduled(node.id, time)
             delivered = False
             for gw in self.gateways:
@@ -1471,7 +1472,7 @@ class Simulator:
                     self.total_energy_J += preamble_J
                     gw.add_energy(preamble_J, "preamble")
                 if node.class_type.upper() != "C":
-                    extra_time = max(duration_dl - node.profile.rx_window_duration, 0.0)
+                    extra_time = max(duration_dl - duration, 0.0)
                     if extra_time > 0.0:
                         extra_energy = current * node.profile.voltage_v * extra_time
                         prev_energy = node.energy_consumed

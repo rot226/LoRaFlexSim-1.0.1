@@ -447,7 +447,7 @@ class Node:
             preamble = self.profile.energy_for(
                 "preamble", self.profile.preamble_time_s
             )
-        elif state_key == "rx":
+        elif state_key in {"rx", "listen"}:
             ramp_duration = self.profile.ramp_up_s + self.profile.ramp_down_s
             if ramp_duration > 0.0:
                 ramp = self.profile.energy_for("ramp", ramp_duration)
