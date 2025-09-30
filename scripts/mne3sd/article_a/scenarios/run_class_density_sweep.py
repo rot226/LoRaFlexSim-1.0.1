@@ -309,7 +309,7 @@ def main() -> None:  # noqa: D401 - CLI entry point
         tasks,
         run_single_simulation,
         max_workers=worker_count,
-        progress_callback=log_progress if worker_count == 1 else None,
+        progress_callback=log_progress,
     )
 
     results.sort(key=lambda row: (row["class"], row["nodes"], row["replicate"]))
