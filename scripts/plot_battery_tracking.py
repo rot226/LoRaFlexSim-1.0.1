@@ -102,11 +102,13 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     # injecté ses propres arguments dans ``sys.argv``.  Dans ce cas nous ne
     # voulons pas échouer sur des options inconnues : ces arguments ne concernent
     # pas le script de tracé et doivent simplement être ignorés.  Utiliser
-    # ``parse_known_args`` permet de conserver un comportement standard en ligne
-    # de commande tout en rendant ``main()`` plus robuste lorsqu'il est invoqué
-    # de manière programmatique.
-    args, _ = parser.parse_known_args(argv)
-    return args
+    # ``parse_known_args`` uniquement dans ce scénario préserve en revanche un
+    # comportement strict lorsqu'un appel fournit explicitement ``argv`` (cas de
+    # la ligne de commande).
+    if argv is None:
+        args, _ = parser.parse_known_args()
+        return args
+    return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> None:

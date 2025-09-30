@@ -175,22 +175,57 @@ def main() -> None:
     df = pd.DataFrame(records)
     if not df.empty:
         # Conserver au maximum ``MAX_RECORDS_PER_NODE`` lignes par paire
-        # (réplicat, nœud) en préservant le premier et le dernier échantillon.
+        # (réplicat, nœud) en préservant les points clés : début, fin,
+        # transitions d'état et instants d'épuisement.
         def _downsample(group: pd.DataFrame) -> pd.DataFrame:
-            if len(group) <= MAX_RECORDS_PER_NODE:
+            length = len(group)
+            if length <= MAX_RECORDS_PER_NODE:
                 return group
             if MAX_RECORDS_PER_NODE <= 2:
                 return group.iloc[[0, -1]]
-            step = (len(group) - 1) / (MAX_RECORDS_PER_NODE - 1)
-            indices = [round(i * step) for i in range(MAX_RECORDS_PER_NODE - 1)]
-            indices.append(len(group) - 1)
-            # ``sorted(set(...))`` évite les doublons lorsque ``step`` est < 1.
-            unique = sorted(set(indices))
-            return group.iloc[unique]
+
+            # Indices à conserver en priorité
+            important: set[int] = {0, length - 1}
+
+            if "alive" in group.columns:
+                alive_values = group["alive"].astype(bool).tolist()
+                for idx in range(1, length):
+                    if alive_values[idx] != alive_values[idx - 1]:
+                        important.update({idx - 1, idx})
+
+            if "energy_j" in group.columns:
+                for idx, energy in enumerate(group["energy_j"].tolist()):
+                    if energy <= 0:
+                        important.add(idx)
+
+            # Si trop de points critiques, tronquer en conservant l'ordre.
+            if len(important) >= MAX_RECORDS_PER_NODE:
+                selected = sorted(important)[:MAX_RECORDS_PER_NODE]
+                return group.iloc[selected]
+
+            # Compléter avec un échantillonnage régulier pour représenter la tendance.
+            remaining_slots = MAX_RECORDS_PER_NODE - len(important)
+            if remaining_slots > 0:
+                step = (length - 1) / (remaining_slots + 1)
+                for i in range(1, remaining_slots + 1):
+                    important.add(round(i * step))
+                    if len(important) >= MAX_RECORDS_PER_NODE:
+                        break
+
+            # En cas de doublons dûs à l'arrondi, compléter séquentiellement.
+            idx = 0
+            limit = min(MAX_RECORDS_PER_NODE, length)
+            while len(important) < limit and idx < length:
+                if idx not in important:
+                    important.add(idx)
+                idx += 1
+
+            selected = sorted(important)[:MAX_RECORDS_PER_NODE]
+            return group.iloc[selected]
 
         grouped: list[pd.DataFrame] = []
-        for _, group in df.groupby(["replicate", "node_id"]):
-            grouped.append(_downsample(group))
+        for _, group in df.groupby(["replicate", "node_id"], sort=False):
+            grouped.append(_downsample(group.reset_index(drop=True)))
         df = (
             pd.concat(grouped, ignore_index=True)
             .sort_values(["replicate", "node_id", "time"])
