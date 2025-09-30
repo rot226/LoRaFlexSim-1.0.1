@@ -386,7 +386,7 @@ aléatoire des fréquences entre les nœuds.
 
 Le tableau de bord permet maintenant de fixer une **durée réelle maximale** en secondes. Par défaut cette limite vaut `86400` s (24 h). Lorsque cette limite est atteinte, la simulation s'arrête automatiquement. Un bouton « Accélérer jusqu'à la fin » lance l'exécution rapide pour obtenir aussitôt les métriques finales.
 **Attention :** cette accélération ne fonctionne que si un nombre fini de paquets est défini. Si le champ *Nombre de paquets* vaut 0 (infini), la simulation ne se termine jamais et l'export reste impossible.
-Depuis la version 4.0.1, une fois toutes les transmissions envoyées, l'accélération désactive la mobilité des nœuds restants afin d'éviter un blocage de LoRaFlexSim.
+Une fois toutes les transmissions envoyées, l'accélération désactive la mobilité des nœuds restants afin d'éviter un blocage de LoRaFlexSim.
 
 ## Suivi de batterie
 
