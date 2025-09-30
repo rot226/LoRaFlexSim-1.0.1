@@ -9,6 +9,11 @@ can be executed to gather statistics across runs.
 Usage::
 
     python scripts/run_battery_tracking.py --nodes 5 --packets 3 --seed 1 --replicates 2
+
+Le trafic est périodique (intervalle de 1 seconde), sans mobilité et avec
+une seule passerelle par défaut afin de garantir des mesures reproductibles.
+Les options ``--transmission-mode``, ``--packet-interval``, ``--mobility`` et
+``--gateways`` permettent de personnaliser ces paramètres si nécessaire.
 """
 
 from __future__ import annotations
@@ -73,6 +78,29 @@ def main() -> None:
         help="Number of simulation replicates",
     )
     parser.add_argument(
+        "--gateways",
+        type=int,
+        default=1,
+        help="Nombre de passerelles dans la simulation",
+    )
+    parser.add_argument(
+        "--transmission-mode",
+        default="Periodic",
+        help="Mode de transmission (ex. Periodic, Random)",
+    )
+    parser.add_argument(
+        "--packet-interval",
+        type=float,
+        default=1.0,
+        help="Intervalle moyen entre paquets (s)",
+    )
+    parser.add_argument(
+        "--mobility",
+        action="store_true",
+        default=False,
+        help="Active la mobilité aléatoire des nœuds",
+    )
+    parser.add_argument(
         "--battery-capacity-j",
         type=float,
         default=DEFAULT_BATTERY_J,
@@ -124,9 +152,13 @@ def main() -> None:
     for rep in range(args.replicates):
         sim = Simulator(
             num_nodes=args.nodes,
+            num_gateways=args.gateways,
             packets_to_send=args.packets,
             seed=args.seed + rep,
             battery_capacity_j=args.battery_capacity_j,
+            transmission_mode=args.transmission_mode,
+            packet_interval=args.packet_interval,
+            mobility=args.mobility,
         )
 
         monitored_nodes = list(sim.nodes)

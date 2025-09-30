@@ -97,7 +97,9 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         metavar="NODE",
         help="Identifiant de nœud à mettre en évidence (peut être répété ou séparé par des virgules)",
     )
-    return parser.parse_args(argv)
+    if argv is None:
+        argv = []
+    return parser.parse_args(list(argv))
 
 
 def main(argv: Sequence[str] | None = None) -> None:
