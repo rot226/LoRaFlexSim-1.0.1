@@ -3,8 +3,8 @@
 This script executes the simulator step by step, collecting the remaining
 energy of each node after every processed event.  The collected data is stored
 in ``results/battery_tracking.csv`` with columns ``time``, ``node_id``,
-``energy_j``, ``capacity_j`` and ``replicate``.  Multiple replicates can be
-executed to gather statistics across runs.
+``energy_j``, ``capacity_j``, ``alive`` and ``replicate``.  Multiple replicates
+can be executed to gather statistics across runs.
 
 Usage::
 
@@ -36,7 +36,7 @@ RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
 DEFAULT_BATTERY_J = 1000.0
 
 
-def _collect(sim: Simulator, replicate: int) -> Iterable[dict[str, float | int]]:
+def _collect(sim: Simulator, replicate: int) -> Iterable[dict[str, float | int | bool]]:
     """Yield a record for each node with current time and remaining energy."""
     for node in sim.nodes:
         # Prefer explicit battery attribute when available
@@ -55,6 +55,7 @@ def _collect(sim: Simulator, replicate: int) -> Iterable[dict[str, float | int]]
             "energy_j": energy,
             "capacity_j": capacity,
             "replicate": replicate,
+            "alive": getattr(node, "alive", True),
         }
 
 
@@ -71,20 +72,98 @@ def main() -> None:
         default=1,
         help="Number of simulation replicates",
     )
+    parser.add_argument(
+        "--battery-capacity-j",
+        type=float,
+        default=DEFAULT_BATTERY_J,
+        help="Capacité globale de la batterie attribuée à chaque nœud (J)",
+    )
+    parser.add_argument(
+        "--node-capacity",
+        action="append",
+        default=[],
+        metavar="NODE=J",
+        help="Surcharge ponctuelle de capacité (ex. 3=1500). Peut être répété",
+    )
+    parser.add_argument(
+        "--watch-nodes",
+        default="",
+        help="Liste d'identifiants de nœuds à surveiller (séparés par des virgules)",
+    )
+    parser.add_argument(
+        "--stop-on-depletion",
+        action="store_true",
+        help="Arrête la simulation lorsque tous les nœuds surveillés sont épuisés",
+    )
     args = parser.parse_args()
 
-    records: list[dict[str, float | int]] = []
+    node_capacity_overrides: dict[int, float] = {}
+    for override in args.node_capacity:
+        try:
+            node_str, value_str = override.split("=", 1)
+            node_capacity_overrides[int(node_str)] = float(value_str)
+        except ValueError as exc:  # pragma: no cover - validation utilisateur
+            raise SystemExit(
+                f"Format invalide pour --node-capacity '{override}': attendu NODE=J"
+            ) from exc
+
+    watch_ids: set[int] = set()
+    if args.watch_nodes:
+        for raw in args.watch_nodes.split(","):
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                watch_ids.add(int(raw))
+            except ValueError as exc:  # pragma: no cover - validation utilisateur
+                raise SystemExit(
+                    f"Identifiant de nœud invalide dans --watch-nodes: '{raw}'"
+                ) from exc
+
+    records: list[dict[str, float | int | bool]] = []
     for rep in range(args.replicates):
         sim = Simulator(
             num_nodes=args.nodes,
             packets_to_send=args.packets,
             seed=args.seed + rep,
-            battery_capacity_j=DEFAULT_BATTERY_J,
+            battery_capacity_j=args.battery_capacity_j,
         )
 
+        monitored_nodes = list(sim.nodes)
+        if watch_ids:
+            monitored_nodes = [n for n in sim.nodes if n.id in watch_ids]
+        if args.stop_on_depletion and not monitored_nodes:
+            monitored_nodes = list(sim.nodes)
+
+        for node in sim.nodes:
+            node.battery_capacity_j = args.battery_capacity_j
+            if hasattr(node, "battery_remaining_j"):
+                node.battery_remaining_j = args.battery_capacity_j
+            override = node_capacity_overrides.get(node.id)
+            if override is not None:
+                node.battery_capacity_j = override
+                if hasattr(node, "battery_remaining_j"):
+                    node.battery_remaining_j = override
+
+        if args.stop_on_depletion:
+            monitored_ids = ", ".join(str(n.id) for n in monitored_nodes)
+            if monitored_ids:
+                print(f"Surveillance active sur les nœuds: {monitored_ids}")
+
         while sim.event_queue and sim.running:
-            sim.run(max_steps=1)  # Process one event at a time
+            if not sim.step():
+                break
             records.extend(_collect(sim, replicate=rep))
+
+            if args.stop_on_depletion and monitored_nodes:
+                depleted_nodes = [n for n in monitored_nodes if not n.alive]
+                if depleted_nodes and all(not n.alive for n in monitored_nodes):
+                    depleted_ids = ", ".join(str(n.id) for n in depleted_nodes)
+                    print(
+                        f"[{sim.current_time:.3f}s] Arrêt: batteries épuisées pour {depleted_ids}"
+                    )
+                    sim.stop()
+                    break
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
     out_path = os.path.join(RESULTS_DIR, "battery_tracking.csv")
