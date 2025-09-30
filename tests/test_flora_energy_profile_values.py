@@ -58,3 +58,8 @@ def test_tx_currents_match_default_map() -> None:
         assert FLORA_PROFILE.tx_current_map_a[power_dbm] == pytest.approx(current_a)
 
 
+def test_flora_rx_window_duration_matches_reference() -> None:
+    """La fenêtre d'écoute FLoRa doit durer exactement une seconde."""
+    assert FLORA_PROFILE.rx_window_duration == pytest.approx(1.0)
+
+

@@ -150,6 +150,7 @@ FLORA_PROFILE = EnergyProfile(
     preamble_time_s=1e-3,
     ramp_up_s=1e-3,
     ramp_down_s=1e-3,
+    rx_window_duration=1.0,
 )
 
 # Example of a lower power transceiver profile.  Values keep roughly the same
