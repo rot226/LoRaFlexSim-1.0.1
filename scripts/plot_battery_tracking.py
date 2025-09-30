@@ -246,8 +246,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     ax.axhline(0, color="r", linestyle="--", label="Battery depleted")
 
     ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Remaining energy (%)")
-    ax.set_title("Temporal evolution of residual battery energy")
+    ax.set_ylabel("Residual battery energy (% of capacity)")
     ax.set_ylim(0, 100)
 
     if args.annotate_depletion and depletion_time is not None:
