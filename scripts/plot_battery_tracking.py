@@ -1,21 +1,25 @@
 """Plot battery evolution from ``results/battery_tracking.csv``.
 
 The CSV is expected to contain columns ``time``, ``node_id``, ``energy_j``,
-``capacity_j`` and ``replicate`` as produced by ``run_battery_tracking.py``.
-This utility computes the mean residual energy over nodes for each replicate,
-then plots all replicate trajectories in light grey alongside the overall mean
-with a shaded area representing ±1 standard deviation.  The figure is saved to
+``capacity_j``, ``alive`` and ``replicate`` as produced by
+``run_battery_tracking.py``.  This utility computes the mean residual energy
+over nodes for each replicate, then plots all replicate trajectories in light
+grey alongside the overall mean with a shaded area representing ±1 standard
+deviation.  Optionally, specific nodes can be highlighted and an annotation is
+added when the first battery depletion is detected.  The figure is saved to
 ``figures/battery_tracking.png``.
 
 Usage::
 
-    python scripts/plot_battery_tracking.py
+    python scripts/plot_battery_tracking.py [--annotate-depletion] [--focus-node 3]
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
+from collections.abc import Iterable, Sequence
 
 # Allow running the script from a clone without installation
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -35,7 +39,71 @@ RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
 FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "figures")
 
 
-def main() -> None:
+def _parse_focus_nodes(raw_values: Iterable[str]) -> list[int]:
+    focus_nodes: set[int] = set()
+    for raw in raw_values:
+        for chunk in raw.split(","):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            try:
+                focus_nodes.add(int(chunk))
+            except ValueError as exc:  # pragma: no cover - argument validation
+                raise SystemExit(
+                    f"Identifiant de nœud invalide pour --focus-node: '{chunk}'"
+                ) from exc
+    return sorted(focus_nodes)
+
+
+def _detect_depletion(
+    df: pd.DataFrame, focus_nodes: Iterable[int] | None = None
+) -> tuple[float | None, dict[int, float]]:
+    """Return the first depletion time globally and per node."""
+
+    if focus_nodes:
+        subset = df[df["node_id"].isin(set(focus_nodes))]
+    else:
+        subset = df
+
+    if subset.empty:
+        return None, {}
+
+    if "alive" in subset.columns:
+        depleted_mask = ~subset["alive"].astype(bool)
+        depleted_mask |= subset["energy_j"] <= 0
+    else:
+        depleted_mask = subset["energy_j"] <= 0
+
+    depleted_rows = subset.loc[depleted_mask]
+    if depleted_rows.empty:
+        return None, {}
+
+    per_node = depleted_rows.groupby("node_id")["time"].min().to_dict()
+    global_time = min(per_node.values()) if per_node else None
+    return global_time, per_node
+
+
+def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Trace l'évolution énergétique")
+    parser.add_argument(
+        "--annotate-depletion",
+        action="store_true",
+        help="Ajoute une annotation lorsque la batterie s'épuise",
+    )
+    parser.add_argument(
+        "--focus-node",
+        action="append",
+        default=[],
+        metavar="NODE",
+        help="Identifiant de nœud à mettre en évidence (peut être répété ou séparé par des virgules)",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    args = _parse_args(argv)
+    focus_nodes = _parse_focus_nodes(args.focus_node)
+
     in_path = os.path.join(RESULTS_DIR, "battery_tracking.csv")
     if not os.path.exists(in_path):
         raise SystemExit(f"Input file not found: {in_path}")
@@ -49,6 +117,8 @@ def main() -> None:
         df["replicate"] = 0
 
     df["energy_pct"] = df["energy_j"] / df["capacity_j"] * 100
+
+    depletion_time, per_node_depletion = _detect_depletion(df, focus_nodes or None)
 
     # Average energy across nodes for each replicate and time
     rep_avg = (
@@ -75,6 +145,9 @@ def main() -> None:
             def axhline(self, *args, **kwargs):
                 return None
 
+            def axvline(self, *args, **kwargs):
+                return None
+
             def set_xlabel(self, *args, **kwargs):
                 return None
 
@@ -91,6 +164,9 @@ def main() -> None:
                 return None
 
             def legend(self, *args, **kwargs):
+                return None
+
+            def text(self, *args, **kwargs):
                 return None
 
         class _DummyFigure:
@@ -123,6 +199,33 @@ def main() -> None:
             label="Replicates" if i == 0 else None,
         )
 
+    if focus_nodes:
+        focus_df = df[df["node_id"].isin(focus_nodes)]
+        if focus_df.empty:
+            print(
+                "Aucun échantillon trouvé pour les nœuds spécifiés; mise en évidence ignorée.",
+                file=sys.stderr,
+            )
+        else:
+            focus_stats = (
+                focus_df.groupby(["node_id", "time"])["energy_pct"].mean().reset_index()
+            )
+            color_cycle = plt.rcParams.get("axes.prop_cycle")
+            colors = []
+            if color_cycle is not None:
+                colors = color_cycle.by_key().get("color", [])
+            for idx, (node_id, group) in enumerate(focus_stats.groupby("node_id")):
+                color = None
+                if colors:
+                    color = colors[(idx + 1) % len(colors)]
+                ax.plot(
+                    group["time"],
+                    group["energy_pct"],
+                    linewidth=2,
+                    color=color,
+                    label=f"Nœud {node_id}",
+                )
+
     ax.plot(
         stats["time"],
         stats["mean"],
@@ -144,6 +247,34 @@ def main() -> None:
     ax.set_ylabel("Remaining energy (%)")
     ax.set_title("Temporal evolution of residual battery energy")
     ax.set_ylim(0, 100)
+
+    if args.annotate_depletion and depletion_time is not None:
+        ax.axvline(depletion_time, color="r", linestyle=":", linewidth=1.5)
+        y_max = ax.get_ylim()[1]
+        nodes_at_time = [
+            node
+            for node, time in per_node_depletion.items()
+            if time == depletion_time
+        ]
+        node_suffix = ""
+        if nodes_at_time:
+            node_suffix = " (nœud(s) " + ", ".join(str(n) for n in sorted(nodes_at_time)) + ")"
+        ax.text(
+            depletion_time,
+            y_max * 0.95,
+            "Batterie épuisée" + node_suffix,
+            color="r",
+            rotation=90,
+            va="top",
+            ha="right",
+            bbox={
+                "boxstyle": "round,pad=0.2",
+                "facecolor": "white",
+                "edgecolor": "none",
+                "alpha": 0.7,
+            },
+        )
+
     ax.grid(True)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.4), ncol=1)
     fig.tight_layout(rect=[0, 0, 1, 0.85])
