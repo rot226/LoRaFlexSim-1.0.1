@@ -88,7 +88,6 @@ def plot_energy_by_interval(df: pd.DataFrame) -> None:
 
     ax.set_xlabel("Reporting interval (s)")
     ax.set_ylabel("Average energy per node (J)")
-    ax.set_title("Average energy consumption per class")
     ax.legend(title="Class")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
     fig.tight_layout()
@@ -127,7 +126,6 @@ def plot_pdr_by_interval(df: pd.DataFrame) -> None:
 
     ax.set_xlabel("Reporting interval (s)")
     ax.set_ylabel("PDR (%)")
-    ax.set_title("Packet delivery ratio per class")
     ax.set_ylim(0, 105)
     ax.legend(title="Class")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)

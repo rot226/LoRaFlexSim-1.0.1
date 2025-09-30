@@ -169,7 +169,6 @@ def plot_pdr(summary: pd.DataFrame, *, figures_dir: Path | None) -> None:
 
     ax.set_xlabel("Reporting interval (s)")
     ax.set_ylabel("Packet delivery ratio (%)")
-    ax.set_title("Packet delivery ratio versus reporting interval")
     ax.set_ylim(0, 105)
     ax.legend(title="Configuration")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
@@ -216,7 +215,6 @@ def plot_delay(summary: pd.DataFrame, *, figures_dir: Path | None) -> bool:
 
     ax.set_xlabel("Reporting interval (s)")
     ax.set_ylabel("Average delay (s)")
-    ax.set_title("Average delay versus reporting interval")
     ax.legend(title="Configuration")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
     fig.tight_layout()
@@ -263,7 +261,6 @@ def plot_energy(summary: pd.DataFrame, *, figures_dir: Path | None) -> bool:
 
     ax.set_xlabel("Reporting interval (s)")
     ax.set_ylabel("Energy per node (J)")
-    ax.set_title("Energy consumption versus reporting interval")
     ax.legend(title="Configuration")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
     fig.tight_layout()
