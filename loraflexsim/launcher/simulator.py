@@ -1361,12 +1361,24 @@ class Simulator:
                 if self.packets_to_send != 0 and all(
                     n.packets_sent >= self.packets_to_send for n in self.nodes
                 ):
-                    new_queue = []
+                    new_queue: list[Event] = []
+                    class_c_cleanup: set[int] = set()
                     for evt in self.event_queue:
-                        if evt.type in (EventType.TX_END, EventType.RX_WINDOW):
+                        if evt.type == EventType.TX_END:
                             new_queue.append(evt)
+                        elif evt.type == EventType.RX_WINDOW:
+                            node = self.node_map[evt.node_id]
+                            if (
+                                node.packets_sent < self.packets_to_send
+                                or node.downlink_pending > 0
+                            ):
+                                new_queue.append(evt)
+                            elif node.class_type.upper() == "C":
+                                class_c_cleanup.add(node.id)
                     heapq.heapify(new_queue)
                     self.event_queue = new_queue
+                    for node_id in class_c_cleanup:
+                        self._class_c_polling_nodes.discard(node_id)
                     # Stop scheduling further mobility events once every node
                     # reached the packet limit to ensure the simulation
                     # completes when using fast forward.
