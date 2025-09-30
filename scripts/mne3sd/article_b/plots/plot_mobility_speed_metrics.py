@@ -155,7 +155,6 @@ def plot_grouped_bars(
     df: pd.DataFrame,
     value_column: str,
     ylabel: str,
-    title: str,
     output_name: str,
     dpi: int,
     value_format: str,
@@ -177,9 +176,8 @@ def plot_grouped_bars(
     fig, ax = plt.subplots(figsize=(fig_width, 2.6))
 
     pivot.plot(kind="bar", ax=ax, width=0.75)
-    ax.set_xlabel("Speed profile")
+    ax.set_xlabel("Speed profile (grouped by mobility model)")
     ax.set_ylabel(ylabel)
-    ax.set_title(title)
     if ylim is not None:
         ax.set_ylim(*ylim)
     ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
@@ -226,8 +224,7 @@ def plot_heatmap(df: pd.DataFrame, output_name: str, dpi: int) -> None:
     ax.set_xlabel("Communication range (km)")
     ax.set_yticks(range(len(pivot.index)))
     ax.set_yticklabels(pivot.index)
-    ax.set_ylabel("Speed profile")
-    ax.set_title("PDR by speed profile and range")
+    ax.set_ylabel("Speed profile (rows)")
 
     for y, profile in enumerate(pivot.index):
         for x, rng in enumerate(pivot.columns):
@@ -273,8 +270,7 @@ def main() -> None:  # pragma: no cover - CLI entry point
     plot_grouped_bars(
         metrics,
         "pdr_percent",
-        pdr_label,
-        "PDR by speed profile",
+        f"{pdr_label} by speed profile",
         "pdr_by_speed_profile",
         args.dpi,
         pdr_format,
@@ -284,8 +280,7 @@ def main() -> None:  # pragma: no cover - CLI entry point
     plot_grouped_bars(
         metrics,
         "avg_delay_s_value",
-        "Average delay (s)",
-        "Average delay by speed profile",
+        "Average delay (s) by speed profile",
         "average_delay_by_speed_profile",
         args.dpi,
         "{:.2f}",
