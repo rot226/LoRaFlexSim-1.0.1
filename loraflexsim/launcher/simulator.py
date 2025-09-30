@@ -1518,7 +1518,7 @@ class Simulator:
                 break
             # Replanifier selon la classe du nœud
             if node.class_type.upper() == "C":
-                # Classe C : ne reprogamme la fenêtre périodique que si un
+                # Classe C : ne reprogramme la fenêtre périodique que si un
                 # downlink reste à livrer ou si le nœud n'a pas encore atteint
                 # son quota ``packets_to_send``. Cela évite de maintenir un
                 # polling infini une fois la simulation terminée tout en
