@@ -1,0 +1,437 @@
+[
+  {
+    "event_id": 1,
+    "start_time": 5.0,
+    "end_time": 6.32,
+    "gateways": {
+      "1": {
+        "snr": -2,
+        "rssi": -32
+      },
+      "2": {
+        "snr": -4,
+        "rssi": -34
+      }
+    },
+    "best_gateway": 1,
+    "expected_command": null
+  },
+  {
+    "event_id": 2,
+    "start_time": 1205.0,
+    "end_time": 1206.32,
+    "gateways": {
+      "1": {
+        "snr": -1,
+        "rssi": -31
+      },
+      "2": {
+        "snr": -3,
+        "rssi": -33
+      }
+    },
+    "best_gateway": 1,
+    "expected_command": null
+  },
+  {
+    "event_id": 3,
+    "start_time": 2405.0,
+    "end_time": 2406.32,
+    "gateways": {
+      "1": {
+        "snr": 0,
+        "rssi": -30
+      },
+      "2": {
+        "snr": -2,
+        "rssi": -32
+      }
+    },
+    "best_gateway": 1,
+    "expected_command": null
+  },
+  {
+    "event_id": 4,
+    "start_time": 3605.0,
+    "end_time": 3606.32,
+    "gateways": {
+      "1": {
+        "snr": 1,
+        "rssi": -29
+      },
+      "2": {
+        "snr": 0,
+        "rssi": -30
+      }
+    },
+    "best_gateway": 1,
+    "expected_command": null
+  },
+  {
+    "event_id": 5,
+    "start_time": 4805.0,
+    "end_time": 4806.32,
+    "gateways": {
+      "1": {
+        "snr": 2,
+        "rssi": -28
+      },
+      "2": {
+        "snr": 1,
+        "rssi": -29
+      }
+    },
+    "best_gateway": 1,
+    "expected_command": null
+  },
+  {
+    "event_id": 6,
+    "start_time": 6005.0,
+    "end_time": 6006.32,
+    "gateways": {
+      "1": {
+        "snr": 1,
+        "rssi": -29
+      },
+      "2": {
+        "snr": 3,
+        "rssi": -27
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": null
+  },
+  {
+    "event_id": 7,
+    "start_time": 7205.0,
+    "end_time": 7206.32,
+    "gateways": {
+      "1": {
+        "snr": 1,
+        "rssi": -29
+      },
+      "2": {
+        "snr": 2,
+        "rssi": -28
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": null
+  },
+  {
+    "event_id": 8,
+    "start_time": 8405.0,
+    "end_time": 8406.32,
+    "gateways": {
+      "1": {
+        "snr": 0,
+        "rssi": -30
+      },
+      "2": {
+        "snr": 1,
+        "rssi": -29
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": null
+  },
+  {
+    "event_id": 9,
+    "start_time": 9605.0,
+    "end_time": 9606.32,
+    "gateways": {
+      "1": {
+        "snr": -1,
+        "rssi": -31
+      },
+      "2": {
+        "snr": 0,
+        "rssi": -30
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": null
+  },
+  {
+    "event_id": 10,
+    "start_time": 10805.0,
+    "end_time": 10806.32,
+    "gateways": {
+      "1": {
+        "snr": -2,
+        "rssi": -32
+      },
+      "2": {
+        "snr": -1,
+        "rssi": -31
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": null
+  },
+  {
+    "event_id": 11,
+    "start_time": 12005.0,
+    "end_time": 12006.32,
+    "gateways": {
+      "1": {
+        "snr": 0,
+        "rssi": -30
+      },
+      "2": {
+        "snr": 1,
+        "rssi": -29
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": null
+  },
+  {
+    "event_id": 12,
+    "start_time": 13205.0,
+    "end_time": 13206.32,
+    "gateways": {
+      "1": {
+        "snr": 1,
+        "rssi": -29
+      },
+      "2": {
+        "snr": 3,
+        "rssi": -27
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": null
+  },
+  {
+    "event_id": 13,
+    "start_time": 14405.0,
+    "end_time": 14406.32,
+    "gateways": {
+      "1": {
+        "snr": 2,
+        "rssi": -28
+      },
+      "2": {
+        "snr": 1,
+        "rssi": -29
+      }
+    },
+    "best_gateway": 1,
+    "expected_command": null
+  },
+  {
+    "event_id": 14,
+    "start_time": 15605.0,
+    "end_time": 15606.32,
+    "gateways": {
+      "1": {
+        "snr": 3,
+        "rssi": -27
+      },
+      "2": {
+        "snr": 2,
+        "rssi": -28
+      }
+    },
+    "best_gateway": 1,
+    "expected_command": null
+  },
+  {
+    "event_id": 15,
+    "start_time": 16805.0,
+    "end_time": 16806.32,
+    "gateways": {
+      "1": {
+        "snr": 4,
+        "rssi": -26
+      },
+      "2": {
+        "snr": 3,
+        "rssi": -27
+      }
+    },
+    "best_gateway": 1,
+    "expected_command": null
+  },
+  {
+    "event_id": 16,
+    "start_time": 18005.0,
+    "end_time": 18006.32,
+    "gateways": {
+      "1": {
+        "snr": 5,
+        "rssi": -25
+      },
+      "2": {
+        "snr": 2,
+        "rssi": -28
+      }
+    },
+    "best_gateway": 1,
+    "expected_command": null
+  },
+  {
+    "event_id": 17,
+    "start_time": 19205.0,
+    "end_time": 19206.32,
+    "gateways": {
+      "1": {
+        "snr": 4,
+        "rssi": -26
+      },
+      "2": {
+        "snr": 5,
+        "rssi": -25
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": null
+  },
+  {
+    "event_id": 18,
+    "start_time": 20405.0,
+    "end_time": 20406.32,
+    "gateways": {
+      "1": {
+        "snr": 3,
+        "rssi": -27
+      },
+      "2": {
+        "snr": 4,
+        "rssi": -26
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": null
+  },
+  {
+    "event_id": 19,
+    "start_time": 21605.0,
+    "end_time": 21606.32,
+    "gateways": {
+      "1": {
+        "snr": 2,
+        "rssi": -28
+      },
+      "2": {
+        "snr": 3,
+        "rssi": -27
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": null
+  },
+  {
+    "event_id": 20,
+    "start_time": 22805.0,
+    "end_time": 22806.32,
+    "gateways": {
+      "1": {
+        "snr": 1,
+        "rssi": -29
+      },
+      "2": {
+        "snr": 2,
+        "rssi": -28
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": {
+      "sf": 10,
+      "tx_power": 14.0,
+      "gateway_id": 2,
+      "downlink_time": 22807.32
+    }
+  },
+  {
+    "event_id": 21,
+    "start_time": 24005.0,
+    "end_time": 24006.32,
+    "gateways": {
+      "1": {
+        "snr": 0,
+        "rssi": -30
+      },
+      "2": {
+        "snr": 1,
+        "rssi": -29
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": {
+      "sf": 9,
+      "tx_power": 14.0,
+      "gateway_id": 2,
+      "downlink_time": 24007.32
+    }
+  },
+  {
+    "event_id": 22,
+    "start_time": 25205.0,
+    "end_time": 25206.32,
+    "gateways": {
+      "1": {
+        "snr": 1,
+        "rssi": -29
+      },
+      "2": {
+        "snr": 2,
+        "rssi": -28
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": null
+  },
+  {
+    "event_id": 23,
+    "start_time": 26405.0,
+    "end_time": 26406.32,
+    "gateways": {
+      "1": {
+        "snr": 2,
+        "rssi": -28
+      },
+      "2": {
+        "snr": 3,
+        "rssi": -27
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": null
+  },
+  {
+    "event_id": 24,
+    "start_time": 27605.0,
+    "end_time": 27606.32,
+    "gateways": {
+      "1": {
+        "snr": 3,
+        "rssi": -27
+      },
+      "2": {
+        "snr": 5,
+        "rssi": -25
+      }
+    },
+    "best_gateway": 2,
+    "expected_command": null
+  },
+  {
+    "event_id": 25,
+    "start_time": 28805.0,
+    "end_time": 28806.32,
+    "gateways": {
+      "1": {
+        "snr": 4,
+        "rssi": -26
+      },
+      "2": {
+        "snr": 3,
+        "rssi": -27
+      }
+    },
+    "best_gateway": 1,
+    "expected_command": null
+  }
+]

@@ -1,0 +1,4 @@
+scalar sim sent 10
+scalar sim received 1
+scalar sim collisions 0
+scalar sim snr -6.546101104315923

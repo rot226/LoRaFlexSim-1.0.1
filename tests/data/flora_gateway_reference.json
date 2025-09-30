@@ -1,0 +1,44 @@
+{
+  "cases": [
+    {
+      "rssi": [-50.0, -55.0],
+      "start": [0.0, 0.0065],
+      "end": [0.1, 0.1065],
+      "sf": [7, 7],
+      "preamble": [6, 6],
+      "expected": [true, false]
+    },
+    {
+      "rssi": [-55.0, -50.0],
+      "start": [0.0, 0.0065],
+      "end": [0.1, 0.1065],
+      "sf": [7, 7],
+      "preamble": [6, 6],
+      "expected": [false, true]
+    },
+    {
+      "rssi": [-45.0, -58.0],
+      "start": [0.0, 0.0065],
+      "end": [0.1, 0.1065],
+      "sf": [7, 8],
+      "preamble": [8, 8],
+      "expected": [true, false]
+    },
+    {
+      "rssi": [-60.0, -50.0],
+      "start": [0.0, 0.0065],
+      "end": [0.1, 0.1065],
+      "sf": [9, 7],
+      "preamble": [8, 8],
+      "expected": [false, true]
+    },
+    {
+      "rssi": [-50.0, -55.0, -52.0],
+      "start": [0.0, 0.0065, 0.009],
+      "end": [0.12, 0.1265, 0.129],
+      "sf": [7, 8, 9],
+      "preamble": [9, 9, 9],
+      "expected": [true, false, false]
+    }
+  ]
+}

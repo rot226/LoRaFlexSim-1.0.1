@@ -1,0 +1,9 @@
+scenario,nodes,packets,interval,area_size,speed,channels,mobility,adr_node,adr_server,pdr_mean,pdr_std,collision_rate_mean,collision_rate_std,avg_delay_s_mean,avg_delay_s_std,energy_per_node_mean,energy_per_node_std,avg_sf_mean,avg_sf_std
+n50_c1_static,50,100,60.0,1000.0,0.0,1,False,False,False,80.0,0.0,20.0,0.0,1.5,0.0,0.2,0.0,7.0,0.0
+n50_c1_mobile,50,100,60.0,1000.0,5.0,1,True,False,False,80.0,0.0,20.0,0.0,1.5,0.0,0.2,0.0,7.0,0.0
+n50_c3_mobile,50,100,60.0,1000.0,5.0,3,True,False,False,80.0,0.0,20.0,0.0,1.5,0.0,0.2,0.0,7.0,0.0
+n50_c6_static,50,100,60.0,1000.0,0.0,6,False,False,False,80.0,0.0,20.0,0.0,1.5,0.0,0.2,0.0,7.0,0.0
+n200_c1_static,200,100,60.0,1000.0,0.0,1,False,False,False,80.0,0.0,20.0,0.0,1.5,0.0,0.05,0.0,7.0,0.0
+n200_c1_mobile,200,100,60.0,1000.0,5.0,1,True,False,False,80.0,0.0,20.0,0.0,1.5,0.0,0.05,0.0,7.0,0.0
+n200_c3_mobile,200,100,60.0,1000.0,5.0,3,True,False,False,80.0,0.0,20.0,0.0,1.5,0.0,0.05,0.0,7.0,0.0
+n200_c6_static,200,100,60.0,1000.0,0.0,6,False,False,False,80.0,0.0,20.0,0.0,1.5,0.0,0.05,0.0,7.0,0.0
