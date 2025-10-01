@@ -72,6 +72,8 @@ RESULTS_PATH = ROOT / "results" / "mne3sd" / "article_b" / "mobility_speed_metri
 
 LOGGER = logging.getLogger("mobility_speed_sweep")
 
+MAX_RANGE_KM = 15.0
+
 FIELDNAMES = [
     "model",
     "speed_profile",
@@ -240,7 +242,10 @@ def main() -> None:  # noqa: D401 - CLI entry point
         "--range-km",
         type=positive_float,
         default=10.0,
-        help="Communication range expressed in kilometres used to derive the area size",
+        help=(
+            "Communication range expressed in kilometres used to derive the area size. "
+            "Maximum allowed value is 15 km."
+        ),
     )
     parser.add_argument("--nodes", type=positive_int, default=100, help="Number of end devices")
     parser.add_argument(
@@ -276,6 +281,10 @@ def main() -> None:  # noqa: D401 - CLI entry point
     profile = resolve_execution_profile(args.profile)
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    if profile == "full" and args.range_km > MAX_RANGE_KM:
+        parser.error(f"--range-km cannot exceed {MAX_RANGE_KM:g} km")
+
     speed_profiles = parse_speed_profiles(args.speed_profiles)
     if profile == "ci":
         if args.speed_profiles:

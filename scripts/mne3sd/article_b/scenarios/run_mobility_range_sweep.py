@@ -50,6 +50,7 @@ from scripts.mne3sd.common import (
 
 LOGGER = logging.getLogger("mobility_range_sweep")
 
+MAX_RANGE_KM = 15.0
 DEFAULT_RANGES_KM = [5.0, 10.0, 15.0]
 CI_RANGE_VALUES = [5.0]
 CI_NODES = 40
@@ -122,6 +123,10 @@ def parse_range_list(
 
     for part in iter_parts(values):
         distance = positive_float(part)
+        if distance > MAX_RANGE_KM:
+            raise argparse.ArgumentTypeError(
+                f"communication range cannot exceed {MAX_RANGE_KM:g} km"
+            )
         if distance not in seen:
             ranges.append(distance)
             seen.add(distance)
@@ -227,7 +232,7 @@ def main() -> None:  # noqa: D401 - CLI entry point
         action="append",
         help=(
             "Comma separated list of communication ranges in kilometres. Can be repeated. "
-            "Defaults to 5,10,15 when omitted."
+            "Defaults to 5,10,15 when omitted. Maximum allowed value is 15 km."
         ),
     )
     parser.add_argument("--nodes", type=positive_int, default=100, help="Number of end devices")
