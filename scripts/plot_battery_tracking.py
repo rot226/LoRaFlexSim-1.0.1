@@ -235,10 +235,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         linewidth=2,
         label="Mean residual energy",
     )
+    std_series = stats["std"].fillna(0)
     ax.fill_between(
         stats["time"],
-        stats["mean"] - stats["std"],
-        stats["mean"] + stats["std"],
+        stats["mean"] - std_series,
+        stats["mean"] + std_series,
         color="C0",
         alpha=0.3,
         label="±1 std",
@@ -247,7 +248,44 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Residual battery energy (% of capacity)")
-    ax.set_ylim(0, 100)
+
+    def _compute_dynamic_ylim() -> tuple[float, float]:
+        """Return y-axis limits adapted to the observed data."""
+
+        candidates: list[pd.Series] = [rep_avg["energy_pct"], stats["mean"]]
+        candidates.append(stats["mean"] - std_series)
+        candidates.append(stats["mean"] + std_series)
+
+        finite_values: list[float] = []
+        for series in candidates:
+            if series.empty:
+                continue
+            finite = series[pd.notna(series)].to_numpy()
+            if finite.size:
+                finite_values.append(float(finite.min()))
+                finite_values.append(float(finite.max()))
+
+        if not finite_values:
+            return 0.0, 100.0
+
+        y_min = min(finite_values)
+        y_max = max(finite_values)
+        if y_min == y_max:
+            # Avoid a flat line by expanding by a small symmetrical margin
+            margin = max(1.0, abs(y_min) * 0.02)
+            return y_min - margin, y_max + margin
+
+        y_range = y_max - y_min
+        margin = max(y_range * 0.02, 1.0)
+        lower = y_min - margin
+        upper = y_max + margin
+
+        if lower <= 2 and upper >= 98:
+            return 0.0, 100.0
+
+        return lower, upper
+
+    ax.set_ylim(_compute_dynamic_ylim())
 
     if args.annotate_depletion and depletion_time is not None:
         ax.axvline(depletion_time, color="r", linestyle=":", linewidth=1.5)
