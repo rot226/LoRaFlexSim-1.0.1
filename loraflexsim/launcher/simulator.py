@@ -1409,6 +1409,11 @@ class Simulator:
                     class_c_cleanup: set[int] = set()
                     rx_windows_kept: dict[int, int] = {}
                     for evt in self.event_queue:
+                        if evt.type == EventType.PING_SLOT:
+                            # Les créneaux ping de classe B ne doivent pas
+                            # prolonger la simulation une fois la limite de
+                            # paquets atteinte.
+                            continue
                         if evt.type == EventType.TX_END:
                             new_queue.append(evt)
                         elif evt.type == EventType.RX_WINDOW:
@@ -1420,6 +1425,30 @@ class Simulator:
                                 new_queue.append(evt)
                             elif node.class_type.upper() == "C":
                                 class_c_cleanup.add(node.id)
+                                event_time = self._ticks_to_seconds(evt.time)
+                                prev_energy = node.energy_consumed
+                                node.consume_until(event_time)
+                                state = (
+                                    "listen"
+                                    if node.profile.listen_current_a > 0.0
+                                    else "rx"
+                                )
+                                current = (
+                                    node.profile.listen_current_a
+                                    if node.profile.listen_current_a > 0.0
+                                    else node.profile.rx_current_a
+                                )
+                                duration = node.profile.rx_window_duration
+                                energy_j = current * node.profile.voltage_v * duration
+                                node.add_energy(energy_j, state, duration_s=duration)
+                                delta = node.energy_consumed - prev_energy
+                                if delta > 0.0:
+                                    self.energy_nodes_J += delta
+                                    self.total_energy_J += delta
+                                node.last_state_time = max(
+                                    node.last_state_time, event_time + duration
+                                )
+                                node.state = "rx"
                             else:
                                 kept = rx_windows_kept.get(node.id, 0)
                                 # Conserver au moins les deux prochaines
