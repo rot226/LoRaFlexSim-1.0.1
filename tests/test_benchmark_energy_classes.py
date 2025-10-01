@@ -1,6 +1,8 @@
 from pathlib import Path
 import csv
 
+import pytest
+
 from loraflexsim.launcher.simulator import Simulator
 from scripts import benchmark_energy_classes
 
@@ -83,3 +85,36 @@ def test_energy_cleanup_for_limited_packets() -> None:
     )
     tolerance = max(1e-9, min_rx_energy * 0.05)
     assert rx_energy + tolerance >= min_rx_energy
+
+
+@pytest.mark.slow
+def test_class_energy_ordering_matches_flora_profile() -> None:
+    """Class B/C listening cost should dominate energy consumption."""
+
+    base_kwargs = dict(
+        num_nodes=5,
+        num_gateways=1,
+        area_size=1000.0,
+        transmission_mode="Periodic",
+        packet_interval=60.0,
+        packets_to_send=3,
+        duty_cycle=None,
+        mobility=False,
+        flora_mode=True,
+        flora_timing=True,
+        seed=4,
+    )
+
+    per_node_energy: dict[str, float] = {}
+    for cls in ("A", "B", "C"):
+        sim = Simulator(node_class=cls, **base_kwargs)
+        sim.run()
+        metrics = sim.get_metrics()
+        per_node_energy[cls] = (
+            metrics["energy_nodes_J"] / base_kwargs["num_nodes"]
+            if base_kwargs["num_nodes"] > 0
+            else 0.0
+        )
+
+    assert per_node_energy["A"] * 2 < per_node_energy["B"]
+    assert per_node_energy["B"] * 10 < per_node_energy["C"]
