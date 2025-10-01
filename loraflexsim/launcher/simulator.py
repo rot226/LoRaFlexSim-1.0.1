@@ -875,11 +875,12 @@ class Simulator:
             if self.mobility_enabled:
                 self.schedule_mobility(node, self.mobility_model.step)
             if node.class_type.upper() in ("B", "C"):
-                eid = self.event_id_counter
-                self.event_id_counter += 1
-                self._push_event(0.0, EventType.RX_WINDOW, eid, node.id)
                 if node.class_type.upper() == "C":
-                    self._class_c_polling_nodes.add(node.id)
+                    self._ensure_class_c_polling(node, 0.0)
+                else:
+                    eid = self.event_id_counter
+                    self.event_id_counter += 1
+                    self._push_event(0.0, EventType.RX_WINDOW, eid, node.id)
 
         # Première émission de beacon pour la synchronisation Class B
         eid = self.event_id_counter
@@ -912,6 +913,27 @@ class Simulator:
             self.event_queue,
             Event(self._seconds_to_ticks(time_s), event_type, eid, node_id),
         )
+
+    def _ensure_class_c_polling(self, node: Node | int, when: float) -> None:
+        """Garantit qu'un nœud de classe C possède une fenêtre RX planifiée."""
+
+        node_id = node if isinstance(node, int) else node.id
+        scheduled_time = self._quantize(when)
+        earliest: float | None = None
+        for evt in self.event_queue:
+            if evt.type != EventType.RX_WINDOW or evt.node_id != node_id:
+                continue
+            evt_time = self._ticks_to_seconds(evt.time)
+            if earliest is None or evt_time < earliest:
+                earliest = evt_time
+        tolerance = 1e-9
+        if earliest is not None and earliest <= scheduled_time + tolerance:
+            self._class_c_polling_nodes.add(node_id)
+            return
+        eid = self.event_id_counter
+        self.event_id_counter += 1
+        self._push_event(scheduled_time, EventType.RX_WINDOW, eid, node_id)
+        self._class_c_polling_nodes.add(node_id)
 
     def _apply_rx_window_energy(self, node: "Node", window_time: float) -> tuple[str, float, float]:
         """Account for the energy spent during an RX window."""
@@ -1552,43 +1574,35 @@ class Simulator:
                 break
             # Replanifier selon la classe du nœud
             if node.class_type.upper() == "C":
-                # Classe C : ne reprogramme la fenêtre périodique que si un
-                # downlink reste à livrer ou si le nœud n'a pas encore atteint
-                # son quota ``packets_to_send``. Cela évite de maintenir un
-                # polling infini une fois la simulation terminée tout en
-                # garantissant la livraison de la dernière trame demandée par
-                # le serveur. Le garde-fou ci-dessous stoppe aussi les sondes
-                # lorsque ni le serveur ni les passerelles n'ont plus de
-                # downlink en réserve.
-                if not delivered:
-                    scheduler = getattr(self.network_server, "scheduler", None)
-                    next_time = None
-                    if scheduler is not None and hasattr(scheduler, "next_time"):
+                scheduler = getattr(self.network_server, "scheduler", None)
+                next_time: float | None = None
+                if scheduler is not None and hasattr(scheduler, "next_time"):
+                    try:
                         next_time = scheduler.next_time(node.id)
-                    pending_gateway = any(
-                        bool(getattr(gw, "downlink_buffer", {}).get(node.id))
-                        for gw in self.gateways
-                    )
-                    if next_time is None and not pending_gateway:
-                        node.downlink_pending = max(0, node.downlink_pending - 1)
-                        self._class_c_polling_nodes.discard(node.id)
-                needs_polling = node.downlink_pending > 0
-                if not needs_polling:
-                    if self.packets_to_send == 0:
-                        needs_polling = True
-                    elif node.packets_sent < self.packets_to_send:
-                        needs_polling = True
+                    except Exception:
+                        next_time = None
+                pending_gateway = any(
+                    bool(getattr(gw, "downlink_buffer", {}).get(node.id))
+                    for gw in self.gateways
+                )
+                if (
+                    not delivered
+                    and node.downlink_pending > 0
+                    and next_time is None
+                    and not pending_gateway
+                ):
+                    node.downlink_pending = max(0, node.downlink_pending - 1)
+                needs_polling = (
+                    node.downlink_pending > 0
+                    or next_time is not None
+                    or pending_gateway
+                )
                 if needs_polling:
-                    nxt = self._quantize(time + self.class_c_rx_interval)
-                    eid = self.event_id_counter
-                    self.event_id_counter += 1
-                    self._push_event(nxt, EventType.RX_WINDOW, eid, node.id)
-                    self._class_c_polling_nodes.add(node.id)
+                    nxt = time + self.class_c_rx_interval
+                    self._ensure_class_c_polling(node.id, nxt)
                 else:
-                    # Arrêt explicite du polling : aucun downlink en attente et
-                    # quota atteint (ou simulation terminée). Un nouveau
-                    # downlink déclenchera lui-même la prochaine fenêtre via
-                    # ``node.downlink_pending``.
+                    # Arrêt explicite du polling : aucun downlink n'est attendu
+                    # tant que le serveur ne reprogramme pas une fenêtre.
                     self._class_c_polling_nodes.discard(node.id)
             return True
 
