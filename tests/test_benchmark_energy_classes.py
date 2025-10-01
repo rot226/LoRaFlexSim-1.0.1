@@ -3,7 +3,7 @@ import csv
 
 import pytest
 
-from loraflexsim.launcher.simulator import Simulator
+from loraflexsim.launcher.simulator import EventType, Simulator
 from scripts import benchmark_energy_classes
 
 
@@ -118,3 +118,53 @@ def test_class_energy_ordering_matches_flora_profile() -> None:
 
     assert per_node_energy["A"] * 2 < per_node_energy["B"]
     assert per_node_energy["B"] * 10 < per_node_energy["C"]
+
+
+def test_class_b_beacon_listen_energy_accounting() -> None:
+    base_kwargs = dict(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=100.0,
+        transmission_mode="Periodic",
+        packet_interval=60.0,
+        packets_to_send=0,
+        duty_cycle=None,
+        mobility=False,
+        flora_mode=True,
+        flora_timing=True,
+        seed=1,
+    )
+
+    sim = Simulator(node_class="B", **base_kwargs)
+    node = sim.nodes[0]
+
+    while sim.event_queue and sim.event_queue[0].type != EventType.BEACON:
+        sim.step()
+
+    metrics_before = sim.get_metrics()
+    energy_before = metrics_before["energy_nodes_J"]
+
+    sim.step()  # Traiter le beacon courant
+
+    metrics_after = sim.get_metrics()
+    energy_after = metrics_after["energy_nodes_J"]
+
+    assert energy_after > energy_before
+
+    state = "listen" if node.profile.listen_current_a > 0.0 else "rx"
+    duration = getattr(node.profile, "beacon_listen_duration", 0.0)
+    if duration <= 0.0:
+        duration = node.profile.rx_window_duration
+    expected = node.profile.energy_for(state, duration)
+
+    assert energy_after == pytest.approx(
+        energy_before + expected, rel=0.05, abs=1e-9
+    )
+
+    breakdown_before = metrics_before["energy_breakdown_by_node"][node.id]
+    breakdown_after = metrics_after["energy_breakdown_by_node"][node.id]
+    delta_breakdown = breakdown_after.get(state, 0.0) - breakdown_before.get(state, 0.0)
+    assert delta_breakdown == pytest.approx(expected, rel=0.05, abs=1e-9)
+
+    assert node.last_state_time == pytest.approx(duration)
+    assert node.state == "sleep"
