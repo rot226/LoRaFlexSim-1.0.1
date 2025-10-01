@@ -247,7 +247,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     ax.axhline(0, color="r", linestyle="--", label="Battery depleted")
 
     ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Residual battery energy (% of capacity)")
+    ax.set_ylabel("Residual battery energy (% of capacity)", labelpad=12)
 
     def _compute_dynamic_ylim() -> tuple[float, float]:
         """Return y-axis limits adapted to the observed data."""
@@ -317,13 +317,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     ax.grid(True)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.4), ncol=1)
     fig.tight_layout(rect=[0, 0, 1, 0.85])
+    fig.subplots_adjust(left=0.12)
 
     os.makedirs(FIGURES_DIR, exist_ok=True)
     base = os.path.join(FIGURES_DIR, "battery_tracking")
     for ext in ("png", "jpg", "eps"):
         dpi = 300 if ext in ("png", "jpg", "eps") else None
         path = f"{base}.{ext}"
-        fig.savefig(path, dpi=dpi, bbox_inches="tight", pad_inches=0)
+        fig.savefig(path, dpi=dpi, bbox_inches="tight", pad_inches=0.1)
         print(f"Saved {path}")
     if hasattr(plt, "close"):
         plt.close(fig)
