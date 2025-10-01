@@ -449,7 +449,9 @@ scénarios FLoRa. Voici la liste complète des options :
 - `seed` : graine aléatoire utilisée pour reproduire le placement des nœuds et le même ordre statistique des intervalles.
 - `class_c_rx_interval` : période de vérification des downlinks en classe C.
 - `beacon_interval` : durée séparant deux beacons pour la classe B (s).
-- `ping_slot_interval` : intervalle de base entre ping slots successifs (s).
+- `ping_slot_interval` : intervalle de base (classe B). L'espacement réel entre
+  deux ping slots consécutifs est `ping_slot_interval * 2^(7 - periodicity)` en
+  appliquant la périodicité LoRaWAN bornée à `[0, 7]`.
 - `ping_slot_offset` : délai après le beacon avant le premier ping slot (s).
 - `dump_intervals` : conserve l'historique des dates Poisson et effectives.
   La méthode `dump_interval_logs()` écrit un fichier Parquet par nœud pour

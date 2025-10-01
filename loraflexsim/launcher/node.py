@@ -1031,10 +1031,12 @@ class Node:
             if last_beacon_time is None:
                 self.last_beacon_time = last_beacon - self.clock_offset
 
+        periodicity = self.ping_slot_periodicity or 0
+        periodicity = max(0, min(7, periodicity))
         return next_ping_slot_time(
             last_beacon,
             current_time,
-            self.ping_slot_periodicity or 0,
+            periodicity,
             ping_slot_interval,
             ping_slot_offset,
             beacon_drift=self.beacon_drift,

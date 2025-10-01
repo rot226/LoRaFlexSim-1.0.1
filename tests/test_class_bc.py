@@ -96,6 +96,8 @@ def test_class_b_explicit_rate_and_gateway_congestion():
         tx_power=10.0,
     )
     duration_first = node.channel.airtime(DR_TO_SF[5], len(frame_a))
+    periodicity = max(0, min(7, node.ping_slot_periodicity or 0))
+    slot_spacing = 1.0 * (2 ** (7 - periodicity))
     t2 = scheduler.schedule_class_b(
         node,
         0.0,
@@ -107,7 +109,7 @@ def test_class_b_explicit_rate_and_gateway_congestion():
         data_rate=4,
     )
     assert math.isclose(t1, 2.0)
-    assert math.isclose(t2, t1 + 1.0)
+    assert math.isclose(t2, t1 + slot_spacing)
     entry1 = scheduler.pop_ready(node.id, t1)
     assert entry1 and entry1.data_rate == 5 and entry1.tx_power == 10.0
     entry2 = scheduler.pop_ready(node.id, t2)
@@ -146,7 +148,9 @@ def test_class_b_priority_preemption():
     assert math.isclose(t_high, 2.0)
     first = scheduler.pop_ready(node.id, t_high)
     assert first and first.frame == high_frame
-    second = scheduler.pop_ready(node.id, t_high + 1.0)
+    periodicity = max(0, min(7, node.ping_slot_periodicity or 0))
+    slot_spacing = 1.0 * (2 ** (7 - periodicity))
+    second = scheduler.pop_ready(node.id, t_high + slot_spacing)
     assert second and second.frame == low_frame
 
 

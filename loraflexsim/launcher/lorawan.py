@@ -861,13 +861,19 @@ def next_ping_slot_time(
     ``beacon_drift`` can be used to apply the same drift as returned by
     :func:`next_beacon_time` when computing the window relative to the last
     beacon.
+
+    The LoRaWAN specification defines the ping period as ``2**(7 - periodicity)``
+    slots per beacon interval (with ``periodicity`` clamped to ``[0, 7]``).  The
+    spacing between two successive ping slots is therefore
+    ``ping_slot_interval * 2**(7 - periodicity)``.
     """
     import math
 
+    periodicity = max(0, min(7, periodicity))
     first_slot = last_beacon_time + beacon_drift + ping_slot_offset
     if after_time <= first_slot:
         return first_slot
-    interval = ping_slot_interval * (2**periodicity)
+    interval = ping_slot_interval * (2 ** (7 - periodicity))
     slots = math.ceil((after_time - first_slot) / interval)
     return first_slot + slots * interval
 

@@ -1650,8 +1650,10 @@ class Simulator:
                         n.register_beacon(time)
                     else:
                         n.miss_beacon(self.beacon_interval)
-                    periodicity = 2 ** (getattr(n, "ping_slot_periodicity", 0) or 0)
-                    interval = self.ping_slot_interval * periodicity
+                    periodicity_value = getattr(n, "ping_slot_periodicity", 0) or 0
+                    periodicity_value = max(0, min(7, periodicity_value))
+                    slots_per_period = 2 ** (7 - periodicity_value)
+                    interval = self.ping_slot_interval * slots_per_period
                     slot = self._quantize(
                         n.next_ping_slot_time(
                             time,
