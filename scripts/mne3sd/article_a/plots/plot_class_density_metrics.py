@@ -134,7 +134,7 @@ def plot_pdr_vs_nodes(df: pd.DataFrame) -> None:
 
 
 def plot_energy_vs_nodes(df: pd.DataFrame) -> bool:
-    """Plot average per-node energy versus node count if data is available."""
+    """Plot total energy consumption versus node count if data is available."""
     if "energy_per_node_J" not in df.columns:
         return False
 
@@ -142,6 +142,13 @@ def plot_energy_vs_nodes(df: pd.DataFrame) -> bool:
         return False
 
     stats = summarise_metric(df, "energy_per_node_J")
+    stats = stats.dropna(subset=["energy_per_node_J_mean"])
+
+    if stats.empty:
+        return False
+
+    stats["energy_total_J_mean"] = stats["energy_per_node_J_mean"] * stats["nodes"]
+    stats["energy_total_J_std"] = stats["energy_per_node_J_std"] * stats["nodes"]
 
     fig, ax = plt.subplots()
 
@@ -149,15 +156,15 @@ def plot_energy_vs_nodes(df: pd.DataFrame) -> bool:
         ordered = class_data.sort_values("nodes")
         ax.errorbar(
             ordered["nodes"],
-            ordered["energy_per_node_J_mean"],
-            yerr=ordered["energy_per_node_J_std"],
+            ordered["energy_total_J_mean"],
+            yerr=ordered["energy_total_J_std"],
             marker="o",
             capsize=3,
             label=f"Class {class_name}",
         )
 
     ax.set_xlabel("Number of nodes")
-    ax.set_ylabel("Energy per node (J)")
+    ax.set_ylabel("Energy consumption (J)")
     ax.legend(title="Class")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
     fig.tight_layout()
