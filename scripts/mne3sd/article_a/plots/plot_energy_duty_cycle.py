@@ -116,7 +116,7 @@ def _resolve_figures_base(path: Path) -> Path:
 def plot_energy_per_node_vs_duty_cycle(df: pd.DataFrame, figures_base: Path) -> None:
     """Tracer l'énergie moyenne par nœud en fonction du duty-cycle."""
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(constrained_layout=True)
     for class_name, group in df.groupby("class"):
         ordered = group.sort_values("duty_cycle")
         duty_cycle_pct = ordered["duty_cycle"] * 100.0
@@ -132,8 +132,7 @@ def plot_energy_per_node_vs_duty_cycle(df: pd.DataFrame, figures_base: Path) -> 
     ax.set_xlabel("Duty cycle (%)")
     ax.set_ylabel("Energy consumption (J)")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
-    ax.legend(title="Class")
-    fig.tight_layout()
+    ax.legend(title="Class", loc="center left", bbox_to_anchor=(1.02, 0.5))
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
