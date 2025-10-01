@@ -65,6 +65,8 @@ Les lanceurs de scénarios respectent l'option `--profile` partagée ainsi que l
 - `full` *(par défaut)* – exécute l'intégralité de la grille de scénarios avec les paramètres de recherche documentés.
 - `ci` – réduit le nombre de nœuds, les plages de mobilité, les permutations de passerelles et les répétitions Monte Carlo afin d'accélérer les tests automatisés tout en produisant des résultats représentatifs.
 
+Quel que soit le profil choisi, la portée radio configurée via `--range-km` est plafonnée à 15 km afin de rester cohérente avec le domaine de validité des modèles de propagation retenus. Toute tentative de dépasser cette borne renvoie une erreur de parsing explicite.
+
 ### Parallélisation des réplicats
 Les scripts `run_mobility_range_sweep.py`, `run_mobility_speed_sweep.py` et `run_mobility_gateway_sweep.py` acceptent un paramètre commun `--workers` (par défaut `1`) pour répartir les réplicats Monte Carlo sur plusieurs processus. Les résultats agrégés restent triés de manière déterministe quel que soit le nombre de workers, ce qui facilite la comparaison entre exécutions. En dehors des traitements lourds, conservez la valeur par défaut pour éviter un surcoût d'initialisation. Pour des vérifications rapides sous Windows 11 ou dans un pipeline CI, combinez `--workers 1` avec `--profile ci` afin de bénéficier des paramètres allégés documentés ci-dessus.
 
