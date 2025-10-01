@@ -177,9 +177,21 @@ def plot_grouped_bars(
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
     pivot.plot(kind="bar", ax=ax, width=0.75)
+
+    containers = ax.containers
+    max_height = max(
+        (bar.get_height() for container in containers for bar in container),
+        default=0.0,
+    )
+
     ax.set_xlabel("Speed profile (grouped by mobility model)")
     ax.set_ylabel(ylabel)
-    if ylim is not None:
+    if ylim is None:
+        if max_height > 0:
+            ax.set_ylim(0, max_height * 1.1)
+        else:
+            ax.margins(y=0.1)
+    else:
         ax.set_ylim(*ylim)
     ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
     ax.set_axisbelow(True)
@@ -191,7 +203,7 @@ def plot_grouped_bars(
         frameon=False,
     )
 
-    for container in ax.containers:
+    for container in containers:
         ax.bar_label(container, fmt=value_format, padding=2, fontsize=7)
 
     fig.subplots_adjust(right=0.8)
