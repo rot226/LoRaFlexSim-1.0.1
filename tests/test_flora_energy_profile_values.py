@@ -63,3 +63,8 @@ def test_flora_rx_window_duration_matches_reference() -> None:
     assert FLORA_PROFILE.rx_window_duration == pytest.approx(1.0)
 
 
+def test_flora_profile_disables_transients() -> None:
+    """Le profil FLORA ne doit pas comptabiliser les phases transitoires."""
+    assert FLORA_PROFILE.include_transients is False
+
+

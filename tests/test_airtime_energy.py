@@ -20,4 +20,4 @@ def test_energy_and_airtime_metrics():
     assert abs(metrics["airtime_by_node"][nid] - node.total_airtime) < 1e-9
     breakdown = metrics["energy_breakdown_by_node"][nid]
     assert breakdown["tx"] == pytest.approx(node.energy_tx)
-    assert breakdown["ramp"] == pytest.approx(node.energy_ramp)
+    assert breakdown.get("ramp", 0.0) == pytest.approx(node.energy_ramp)

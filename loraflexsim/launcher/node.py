@@ -437,20 +437,24 @@ class Node:
         ramp = 0.0
         startup = 0.0
         preamble = 0.0
-        if state_key == "tx":
-            ramp_duration = self.profile.ramp_up_s + self.profile.ramp_down_s
-            if ramp_duration > 0.0:
-                ramp = self.profile.energy_for("ramp", ramp_duration, self.tx_power)
-            startup = self.profile.energy_for(
-                "startup", self.profile.startup_time_s
-            )
-            preamble = self.profile.energy_for(
-                "preamble", self.profile.preamble_time_s
-            )
-        elif state_key in {"rx", "listen"}:
-            ramp_duration = self.profile.ramp_up_s + self.profile.ramp_down_s
-            if ramp_duration > 0.0:
-                ramp = self.profile.energy_for("ramp", ramp_duration)
+        include_transients = getattr(self.profile, "include_transients", True)
+        if include_transients:
+            if state_key == "tx":
+                ramp_duration = self.profile.ramp_up_s + self.profile.ramp_down_s
+                if ramp_duration > 0.0:
+                    ramp = self.profile.energy_for(
+                        "ramp", ramp_duration, self.tx_power
+                    )
+                startup = self.profile.energy_for(
+                    "startup", self.profile.startup_time_s
+                )
+                preamble = self.profile.energy_for(
+                    "preamble", self.profile.preamble_time_s
+                )
+            elif state_key in {"rx", "listen"}:
+                ramp_duration = self.profile.ramp_up_s + self.profile.ramp_down_s
+                if ramp_duration > 0.0:
+                    ramp = self.profile.energy_for("ramp", ramp_duration)
 
         total = base_energy + ramp + startup + preamble
         if state_key == "tx":

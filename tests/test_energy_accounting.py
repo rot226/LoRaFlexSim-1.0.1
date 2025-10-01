@@ -20,9 +20,11 @@ def test_tx_energy_accounted_once():
     airtime = node.channel.airtime(node.sf, payload_size=sim.payload_size_bytes)
     expected_tx = current * node.profile.voltage_v * airtime
     assert node.energy_tx == pytest.approx(expected_tx)
-    expected_ramp_tx = current * node.profile.voltage_v * (
-        node.profile.ramp_up_s + node.profile.ramp_down_s
-    )
+    expected_ramp_tx = 0.0
+    if getattr(node.profile, "include_transients", True):
+        expected_ramp_tx = current * node.profile.voltage_v * (
+            node.profile.ramp_up_s + node.profile.ramp_down_s
+        )
     rx_current = (
         node.profile.listen_current_a
         if node.profile.listen_current_a > 0.0
@@ -34,24 +36,29 @@ def test_tx_energy_accounted_once():
         if window_duration > 0.0
         else 0.0
     )
-    expected_ramp_rx = rx_current * node.profile.voltage_v * (
-        node.profile.ramp_up_s + node.profile.ramp_down_s
-    )
+    expected_ramp_rx = 0.0
+    if getattr(node.profile, "include_transients", True):
+        expected_ramp_rx = rx_current * node.profile.voltage_v * (
+            node.profile.ramp_up_s + node.profile.ramp_down_s
+        )
     assert node.energy_ramp == pytest.approx(
         expected_ramp_tx + 2 * expected_ramp_rx
     )
     assert node.energy_rx == pytest.approx(expected_rx_window)
-    expected_startup = (
-        node.profile.startup_current_a
-        * node.profile.voltage_v
-        * node.profile.startup_time_s
-        * 2
-    )
-    expected_preamble = (
-        node.profile.preamble_current_a
-        * node.profile.voltage_v
-        * node.profile.preamble_time_s
-    )
+    expected_startup = 0.0
+    expected_preamble = 0.0
+    if getattr(node.profile, "include_transients", True):
+        expected_startup = (
+            node.profile.startup_current_a
+            * node.profile.voltage_v
+            * node.profile.startup_time_s
+            * 2
+        )
+        expected_preamble = (
+            node.profile.preamble_current_a
+            * node.profile.voltage_v
+            * node.profile.preamble_time_s
+        )
     assert node.energy_startup == pytest.approx(expected_startup)
     assert node.energy_preamble == pytest.approx(expected_preamble)
     metrics = sim.get_metrics()
@@ -84,8 +91,10 @@ def test_downlink_energy_uses_gateway_power():
     current = gw.profile.get_tx_current(gw.downlink_power_dBm)
     airtime = node.channel.airtime(node.sf, len(b"x"))
     expected_tx = current * gw.profile.voltage_v * airtime
-    expected_ramp = current * gw.profile.voltage_v * (
-        gw.profile.ramp_up_s + gw.profile.ramp_down_s
-    )
+    expected_ramp = 0.0
+    if getattr(gw.profile, "include_transients", True):
+        expected_ramp = current * gw.profile.voltage_v * (
+            gw.profile.ramp_up_s + gw.profile.ramp_down_s
+        )
     assert gw.energy_tx == pytest.approx(expected_tx)
     assert gw.energy_ramp == pytest.approx(expected_ramp)

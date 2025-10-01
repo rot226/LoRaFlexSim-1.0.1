@@ -16,5 +16,4 @@ def test_energy_breakdown_reports_pa_ramp_component():
     sim.run()
     node = sim.nodes[0]
     breakdown = node.get_energy_breakdown()
-    assert "ramp" in breakdown
-    assert breakdown["ramp"] == pytest.approx(node.energy_ramp)
+    assert breakdown.get("ramp", 0.0) == pytest.approx(node.energy_ramp)
