@@ -130,7 +130,7 @@ def plot_energy_per_node_vs_duty_cycle(df: pd.DataFrame, figures_base: Path) -> 
         )
 
     ax.set_xlabel("Duty cycle (%)")
-    ax.set_ylabel("Energy per node (J)")
+    ax.set_ylabel("Energy consumption (J)")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
     ax.legend(title="Class")
     fig.tight_layout()
