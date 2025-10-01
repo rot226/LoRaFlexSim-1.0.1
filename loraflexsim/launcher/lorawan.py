@@ -33,12 +33,10 @@ REGION_DEFAULT_RX2_DR = {
 # Transmission power levels (matching the FLoRa reference values)
 TX_POWER_INDEX_TO_DBM = {
     0: 14.0,
-    1: 12.0,
-    2: 10.0,
-    3: 8.0,
-    4: 6.0,
-    5: 4.0,
-    6: 2.0,
+    1: 11.0,
+    2: 8.0,
+    3: 5.0,
+    4: 2.0,
 }
 DBM_TO_TX_POWER_INDEX = {int(v): k for k, v in TX_POWER_INDEX_TO_DBM.items()}
 

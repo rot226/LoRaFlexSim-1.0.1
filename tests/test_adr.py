@@ -34,7 +34,7 @@ def _run(distance: float, initial_sf: int = 12, packets: int = 30):
 def test_adr_decreases_sf_with_good_link():
     node = _run(distance=1.0)
     assert node.sf == 7
-    assert node.tx_power == TX_POWER_INDEX_TO_DBM[6]
+    assert node.tx_power == TX_POWER_INDEX_TO_DBM[4]
 
 
 def test_adr_increases_sf_with_poor_link():

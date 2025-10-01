@@ -13,12 +13,10 @@ from loraflexsim.launcher.flora_phy import FloraPHY
 # TX_POWER_INDEX_TO_DBM table from the specification and the FLoRa code base.
 TX_POWER_INDEX_TO_DBM = {
     0: 14.0,
-    1: 12.0,
-    2: 10.0,
-    3: 8.0,
-    4: 6.0,
-    5: 4.0,
-    6: 2.0,
+    1: 11.0,
+    2: 8.0,
+    3: 5.0,
+    4: 2.0,
 }
 DBM_TO_TX_POWER_INDEX = {int(v): k for k, v in TX_POWER_INDEX_TO_DBM.items()}
 
@@ -131,23 +129,30 @@ def _flora_adr_decision(
 
     sf = initial_sf
     power_idx = DBM_TO_TX_POWER_INDEX.get(int(round(initial_power_dBm)), 0)
-    max_power_idx = max(TX_POWER_INDEX_TO_DBM.keys())
+    power_order = sorted(
+        TX_POWER_INDEX_TO_DBM.items(), key=lambda item: item[1], reverse=True
+    )
+    idx_to_rank = {idx: rank for rank, (idx, _) in enumerate(power_order)}
+    rank_to_idx = {rank: idx for idx, rank in idx_to_rank.items()}
+    power_rank = idx_to_rank.get(power_idx, 0)
+    max_rank = len(power_order) - 1
 
     if nstep > 0:
         while nstep > 0 and sf > 7:
             sf -= 1
             nstep -= 1
-        while nstep > 0 and power_idx < max_power_idx:
-            power_idx += 1
+        while nstep > 0 and power_rank < max_rank:
+            power_rank += 1
             nstep -= 1
     elif nstep < 0:
-        while nstep < 0 and power_idx > 0:
-            power_idx -= 1
+        while nstep < 0 and power_rank > 0:
+            power_rank -= 1
             nstep += 1
         while nstep < 0 and sf < 12:
             sf += 1
             nstep += 1
 
+    power_idx = rank_to_idx.get(power_rank, power_idx)
     power = TX_POWER_INDEX_TO_DBM.get(power_idx, initial_power_dBm)
 
     if sf == initial_sf and math.isclose(power, initial_power_dBm, abs_tol=1e-6):
