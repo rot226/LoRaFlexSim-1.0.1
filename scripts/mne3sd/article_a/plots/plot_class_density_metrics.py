@@ -121,9 +121,16 @@ def plot_pdr_vs_nodes(df: pd.DataFrame) -> None:
     ax.set_xlabel("Number of nodes")
     ax.set_ylabel("Packet delivery ratio (%)")
     ax.set_ylim(0, 105)
-    ax.legend(title="Class")
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(
+        handles,
+        labels,
+        title="Class",
+        loc="center left",
+        bbox_to_anchor=(1.02, 0.5),
+    )
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0, 0.82, 1])
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
@@ -165,9 +172,16 @@ def plot_energy_vs_nodes(df: pd.DataFrame) -> bool:
 
     ax.set_xlabel("Number of nodes")
     ax.set_ylabel("Energy consumption (J)")
-    ax.legend(title="Class")
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(
+        handles,
+        labels,
+        title="Class",
+        loc="center left",
+        bbox_to_anchor=(1.02, 0.5),
+    )
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0, 0.82, 1])
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
