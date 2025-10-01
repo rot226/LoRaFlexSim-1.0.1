@@ -183,11 +183,18 @@ def plot_grouped_bars(
         ax.set_ylim(*ylim)
     ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
     ax.set_axisbelow(True)
-    ax.legend(title="Mobility model", loc="best")
+    ax.legend(
+        title="Mobility model",
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1),
+        borderaxespad=0,
+        frameon=False,
+    )
 
     for container in ax.containers:
         ax.bar_label(container, fmt=value_format, padding=2, fontsize=7)
 
+    fig.subplots_adjust(right=0.8)
     fig.tight_layout()
     output_dir = prepare_figure_directory(
         article=ARTICLE,
