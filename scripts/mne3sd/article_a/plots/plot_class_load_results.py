@@ -47,6 +47,14 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Display the figures instead of running in batch mode",
     )
+    parser.add_argument(
+        "--no-energy-axis-split",
+        action="store_true",
+        help=(
+            "Disable the automatic separation of energy curves on two axes when "
+            "their magnitudes differ greatly."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -69,27 +77,108 @@ def load_metrics(path: Path) -> pd.DataFrame:
     return df
 
 
-def plot_energy_by_interval(df: pd.DataFrame) -> None:
-    """Plot the average per-node energy versus interval for each class."""
-    grouped = (
-        df.groupby(["class", "interval_s"], as_index=False)["energy_per_node_J"].mean()
+def plot_energy_by_interval(
+    df: pd.DataFrame,
+    *,
+    enable_split: bool = True,
+    split_threshold: float = 20.0,
+) -> None:
+    """Plot the average per-node energy versus interval for each class.
+
+    When the peak energy of one class is far above the others (by default 20×), the
+    plot is automatically split across two Y axes so that low-consumption classes
+    remain legible while still displaying the high-consumption class.
+    """
+
+    stats = (
+        df.groupby(["class", "interval_s"], as_index=False)["energy_per_node_J"]
+        .agg(["mean", "std"])
+        .reset_index()
     )
+    stats.rename(
+        columns={"mean": "energy_mean", "std": "energy_std"}, inplace=True
+    )
+    stats["energy_std"] = stats["energy_std"].fillna(0.0)
 
-    fig, ax = plt.subplots()
+    class_peaks = stats.groupby("class")["energy_mean"].max()
+    max_peak = class_peaks.max()
+    second_peak = class_peaks.sort_values(ascending=False).iloc[1] if len(class_peaks) > 1 else 0.0
+    ratio = max_peak / second_peak if second_peak > 0 else float("inf") if max_peak > 0 else 1.0
 
-    for class_name, class_data in grouped.groupby("class"):
+    should_split = enable_split and ratio >= split_threshold and len(class_peaks) > 1
+
+    fig, ax_low = plt.subplots()
+    ax_high = None
+
+    if should_split:
+        cutoff = max_peak / split_threshold if split_threshold > 0 else max_peak
+        low_classes = class_peaks[class_peaks <= cutoff].index.tolist()
+        high_classes = class_peaks.index.difference(low_classes)
+        if not low_classes:
+            should_split = False
+        else:
+            ax_high = ax_low.twinx()
+    if not should_split:
+        low_classes = class_peaks.index.tolist()
+        high_classes = []
+
+    axes_for_class = {cls: ax_low for cls in low_classes}
+    if ax_high is not None:
+        for cls in high_classes:
+            axes_for_class[cls] = ax_high
+
+    y_limits = {ax_low: [0.0, 0.0]}
+    if ax_high is not None:
+        y_limits[ax_high] = [0.0, 0.0]
+
+    for class_name, class_data in stats.groupby("class"):
         ordered = class_data.sort_values("interval_s")
-        ax.plot(
+        axis = axes_for_class[class_name]
+        axis.errorbar(
             ordered["interval_s"],
-            ordered["energy_per_node_J"],
+            ordered["energy_mean"],
+            yerr=ordered["energy_std"],
             marker="o",
+            capsize=3,
             label=f"Class {class_name}",
         )
 
-    ax.set_xlabel("Reporting interval (s)")
-    ax.set_ylabel("Average energy per node (J)")
-    ax.legend(title="Class")
-    ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
+        ymin, ymax = y_limits[axis]
+        ymin = min(ymin, ordered["energy_mean"].min()) if ymin else ordered["energy_mean"].min()
+        ymax = max(ymax, ordered["energy_mean"].max())
+        y_limits[axis] = [ymin, ymax]
+
+    for axis, (ymin, ymax) in y_limits.items():
+        if ymax == 0 and ymin == 0:
+            axis.set_ylim(0, 1)
+        else:
+            span = ymax - ymin
+            margin = 0.1 * span if span > 0 else 0.1 * ymax
+            lower = 0 if ymin >= 0 else ymin - margin
+            axis.set_ylim(lower, ymax + margin)
+
+    ax_low.set_xlabel("Reporting interval (s)")
+    ax_low.set_ylabel("Average energy per node (J)")
+    if ax_high is not None:
+        ax_high.set_ylabel("Average energy per node (J)")
+
+    legend_handles = []
+    legend_labels = []
+    handles_low, labels_low = ax_low.get_legend_handles_labels()
+    legend_handles.extend(handles_low)
+    if should_split and ax_high is not None:
+        handles_high, labels_high = ax_high.get_legend_handles_labels()
+        labels_low = [f"{label} (axe gauche)" for label in labels_low]
+        labels_high = [f"{label} (axe droit)" for label in labels_high]
+        legend_labels.extend(labels_low)
+        legend_labels.extend(labels_high)
+        legend_handles.extend(handles_high)
+    else:
+        legend_labels.extend(labels_low)
+
+    ax_low.legend(legend_handles, legend_labels, title="Class")
+    ax_low.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
+
     fig.tight_layout()
 
     output_dir = prepare_figure_directory(
@@ -148,7 +237,10 @@ def main() -> None:
 
     metrics = load_metrics(args.results)
 
-    plot_energy_by_interval(metrics)
+    plot_energy_by_interval(
+        metrics,
+        enable_split=not args.no_energy_axis_split,
+    )
     plot_pdr_by_interval(metrics)
 
     if args.show:
