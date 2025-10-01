@@ -41,7 +41,7 @@ def test_server_uses_margin_and_rounding_for_positive_steps(monkeypatch):
 
     server.receive(1, node.id, gw.id, rssi=-120.0, frame=None, end_time=1.0, snir=5.0)
 
-    assert captured["adr_command"] == (7, 12.0, node.chmask, node.nb_trans)
+    assert captured["adr_command"] == (7, 11.0, node.chmask, node.nb_trans)
 
 
 def test_server_rounding_matches_flora_for_negative_steps(monkeypatch):
@@ -67,7 +67,33 @@ def test_server_rounding_matches_flora_for_negative_steps(monkeypatch):
 
     server.receive(1, node.id, gw.id, rssi=-130.0, frame=None, end_time=1.0, snir=-10.0)
 
-    assert captured["adr_command"] == (9, 14.0, node.chmask, node.nb_trans)
+    assert captured["adr_command"] == (10, 14.0, node.chmask, node.nb_trans)
+
+
+def test_server_reduces_power_when_sf_already_min(monkeypatch):
+    server = NetworkServer()
+    server.adr_enabled = True
+    server.adr_method = "avg"
+    server.MARGIN_DB = 10.0
+
+    gw = Gateway(2, 0.0, 0.0)
+
+    node = _make_node(4, 7, 14.0)
+    node.snr_history = [(gw.id, 10.0)] * 19
+    node.frames_since_last_adr_command = 19
+    server.nodes = [node]
+    server.gateways = [gw]
+
+    captured: dict[str, tuple] = {}
+
+    def fake_send_downlink(target, payload=b"", confirmed=False, adr_command=None, **kwargs):
+        captured["adr_command"] = adr_command
+
+    monkeypatch.setattr(server, "send_downlink", fake_send_downlink)
+
+    server.receive(1, node.id, gw.id, rssi=-90.0, frame=None, end_time=1.0, snir=10.0)
+
+    assert captured["adr_command"] == (7, 5.0, node.chmask, node.nb_trans)
 
 
 def test_node_resets_adr_ack_counter_on_downlink():

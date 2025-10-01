@@ -854,23 +854,36 @@ class NetworkServer:
 
                     sf = node.sf
                     p_idx = DBM_TO_TX_POWER_INDEX.get(int(node.tx_power), 0)
-                    max_power_index = max(TX_POWER_INDEX_TO_DBM.keys())
+                    power_order = sorted(
+                        TX_POWER_INDEX_TO_DBM.items(),
+                        key=lambda item: item[1],
+                        reverse=True,
+                    )
+                    idx_to_rank = {
+                        idx: rank for rank, (idx, _) in enumerate(power_order)
+                    }
+                    rank_to_idx = {
+                        rank: idx for idx, rank in idx_to_rank.items()
+                    }
+                    power_rank = idx_to_rank.get(p_idx, 0)
+                    max_power_rank = len(power_order) - 1
 
                     if nstep > 0:
                         while nstep > 0 and sf > 7:
                             sf -= 1
                             nstep -= 1
-                        while nstep > 0 and p_idx < max_power_index:
-                            p_idx += 1
+                        while nstep > 0 and power_rank < max_power_rank:
+                            power_rank += 1
                             nstep -= 1
                     elif nstep < 0:
-                        while nstep < 0 and p_idx > 0:
-                            p_idx -= 1
+                        while nstep < 0 and power_rank > 0:
+                            power_rank -= 1
                             nstep += 1
                         while nstep < 0 and sf < 12:
                             sf += 1
                             nstep += 1
 
+                    p_idx = rank_to_idx.get(power_rank, p_idx)
                     power = TX_POWER_INDEX_TO_DBM.get(p_idx, node.tx_power)
 
                     if sf != node.sf or power != node.tx_power:
