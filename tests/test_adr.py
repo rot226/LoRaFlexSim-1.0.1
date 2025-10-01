@@ -1,7 +1,9 @@
-from loraflexsim.launcher.simulator import Simulator
+import pytest
+
 from loraflexsim.launcher.adr_standard_1 import apply as apply_adr
 from loraflexsim.launcher.channel import Channel
 from loraflexsim.launcher.lorawan import TX_POWER_INDEX_TO_DBM
+from loraflexsim.launcher.simulator import Simulator
 
 
 def _run(distance: float, initial_sf: int = 12, packets: int = 30):
@@ -104,3 +106,32 @@ def test_adr_recovers_after_rx2_rejection():
     node.handle_downlink(entry.frame)
     assert node.sf == 7
     assert node.downlink_pending == initial_pending
+
+
+@pytest.mark.parametrize("node_class", ["B", "C"])
+def test_adr_scheduler_quantization(node_class: str):
+    ch = Channel(shadowing_std=0.0, fast_fading_std=0.0, noise_floor_std=0.0)
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        node_class=node_class,
+        transmission_mode="Periodic",
+        packet_interval=1.0,
+        packets_to_send=40,
+        mobility=False,
+        adr_server=True,
+        adr_method="avg",
+        channels=[ch],
+        seed=1,
+        tick_ns=1_000_000,
+    )
+    apply_adr(sim)
+    node = sim.nodes[0]
+    gw = sim.gateways[0]
+    node.x = 0.0
+    node.y = 0.0
+    gw.x = 0.0
+    gw.y = 0.0
+    initial_sf = node.sf
+    sim.run()
+    assert node.sf < initial_sf
