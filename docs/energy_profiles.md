@@ -68,7 +68,11 @@ Les options principales permettent de :
 
 - préciser la source des données via `--results` ;
 - activer la génération d'un rendu LaTeX (`--latex`) ;
-- afficher les figures à l'écran (`--show`).
+- afficher les figures à l'écran (`--show`) ;
+- contrôler l'échelle de l'axe Y avec `--y-scale {auto,linear,log}`.  En mode
+  `auto` (valeur par défaut), le script détecte les écarts importants entre
+  classes (rapport max/min ≥ 20) et applique automatiquement une échelle
+  logarithmique afin de mettre en évidence les courbes de faible consommation.
 
 La commande fonctionne également sous Windows 11 (fenêtre **cmd**) en adaptant
 les chemins (`python -m ...`).  Elle facilite ainsi la traçabilité des

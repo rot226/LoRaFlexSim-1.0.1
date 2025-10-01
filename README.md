@@ -1027,6 +1027,11 @@ La commande `plot_energy_duty_cycle` est détaillée dans la documentation
 [« Profils énergétiques »](docs/energy_profiles.md#visualisation-du-cycle-dactivité-énergétique)
 et produit automatiquement un résumé (`results/.../energy_consumption_summary.csv`)
 et les figures associées (`figures/.../*.png`, `figures/.../*.eps`).
+Lorsque les écarts d'énergie moyenne entre classes deviennent très grands,
+le script bascule désormais automatiquement l'axe Y du graphique
+`energy_per_node_vs_duty_cycle` en échelle logarithmique pour maintenir la
+lisibilité.  L'option `--y-scale {auto,linear,log}` permet de forcer un mode
+spécifique si besoin.
 
 ## Calcul de l'airtime
 
