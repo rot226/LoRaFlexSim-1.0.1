@@ -39,6 +39,7 @@ class EnergyProfile:
     ramp_up_s: float = 0.0
     ramp_down_s: float = 0.0
     rx_window_duration: float = 0.0
+    include_transients: bool = True
     tx_current_map_a: dict[float, float] | None = None
 
     def get_tx_current(self, power_dBm: float) -> float:
@@ -67,8 +68,12 @@ class EnergyProfile:
         if key == "processing":
             return self.process_current_a
         if key == "startup":
+            if not self.include_transients:
+                return 0.0
             return self.startup_current_a
         if key == "preamble":
+            if not self.include_transients:
+                return 0.0
             return self.preamble_current_a
         if key == "tx":
             if power_dBm is None:
@@ -76,6 +81,8 @@ class EnergyProfile:
             return self.get_tx_current(power_dBm)
         if key == "ramp":
             # Ramp phases use the TX (or listen) current depending on context.
+            if not self.include_transients:
+                return 0.0
             if self.listen_current_a > 0.0:
                 return self.listen_current_a
             if power_dBm is None:
@@ -114,7 +121,7 @@ class EnergyProfile:
             return energy_joules
         expected = self.energy_for(state, duration_s, power_dBm)
         if expected == 0.0:
-            return 0.0 if math.isclose(energy_joules, 0.0, abs_tol=abs_tol) else energy_joules
+            return 0.0
         if math.isclose(energy_joules, expected, rel_tol=rel_tol, abs_tol=abs_tol):
             return energy_joules
         return expected
@@ -151,6 +158,7 @@ FLORA_PROFILE = EnergyProfile(
     ramp_up_s=1e-3,
     ramp_down_s=1e-3,
     rx_window_duration=1.0,
+    include_transients=False,
 )
 
 # Example of a lower power transceiver profile.  Values keep roughly the same

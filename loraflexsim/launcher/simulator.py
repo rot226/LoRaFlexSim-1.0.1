@@ -1467,20 +1467,27 @@ class Simulator:
                 )
                 current_gw = gw.profile.get_tx_current(tx_power_dl)
                 energy_tx = current_gw * gw.profile.voltage_v * duration_dl
-                ramp = current_gw * gw.profile.voltage_v * (
-                    gw.profile.ramp_up_s + gw.profile.ramp_down_s
+                include_transients = getattr(
+                    gw.profile, "include_transients", True
                 )
+                ramp = 0.0
+                if include_transients:
+                    ramp = current_gw * gw.profile.voltage_v * (
+                        gw.profile.ramp_up_s + gw.profile.ramp_down_s
+                    )
                 total_tx = energy_tx + ramp
                 self.energy_gateways_J += total_tx
                 self.total_energy_J += total_tx
                 gw.add_energy(energy_tx, "tx")
                 if ramp > 0.0:
                     gw.add_energy(ramp, "ramp")
-                preamble_J = (
-                    gw.profile.preamble_current_a
-                    * gw.profile.voltage_v
-                    * gw.profile.preamble_time_s
-                )
+                preamble_J = 0.0
+                if include_transients:
+                    preamble_J = (
+                        gw.profile.preamble_current_a
+                        * gw.profile.voltage_v
+                        * gw.profile.preamble_time_s
+                    )
                 if preamble_J > 0.0:
                     self.energy_gateways_J += preamble_J
                     self.total_energy_J += preamble_J
@@ -1674,20 +1681,27 @@ class Simulator:
                 )
                 current_gw = gw.profile.get_tx_current(tx_power_dl)
                 energy_tx = current_gw * gw.profile.voltage_v * duration_dl
-                ramp = current_gw * gw.profile.voltage_v * (
-                    gw.profile.ramp_up_s + gw.profile.ramp_down_s
+                include_transients = getattr(
+                    gw.profile, "include_transients", True
                 )
+                ramp = 0.0
+                if include_transients:
+                    ramp = current_gw * gw.profile.voltage_v * (
+                        gw.profile.ramp_up_s + gw.profile.ramp_down_s
+                    )
                 total_tx = energy_tx + ramp
                 self.energy_gateways_J += total_tx
                 self.total_energy_J += total_tx
                 gw.add_energy(energy_tx, "tx")
                 if ramp > 0.0:
                     gw.add_energy(ramp, "ramp")
-                preamble_J = (
-                    gw.profile.preamble_current_a
-                    * gw.profile.voltage_v
-                    * gw.profile.preamble_time_s
-                )
+                preamble_J = 0.0
+                if include_transients:
+                    preamble_J = (
+                        gw.profile.preamble_current_a
+                        * gw.profile.voltage_v
+                        * gw.profile.preamble_time_s
+                    )
                 if preamble_J > 0.0:
                     self.energy_gateways_J += preamble_J
                     self.total_energy_J += preamble_J
