@@ -65,6 +65,15 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Afficher les figures au lieu de les fermer en mode batch",
     )
+    parser.add_argument(
+        "--y-scale",
+        choices={"auto", "linear", "log"},
+        default="auto",
+        help=(
+            "Mode d'échelle pour l'axe Y du graphe énergie/duty-cycle. "
+            "En mode auto, une échelle logarithmique est utilisée si les écarts de moyenne sont très grands."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -113,7 +122,25 @@ def _resolve_figures_base(path: Path) -> Path:
     return path
 
 
-def plot_energy_per_node_vs_duty_cycle(df: pd.DataFrame, figures_base: Path) -> None:
+def _select_energy_scale(energy_means: pd.Series, y_scale: str, threshold: float = 20.0) -> str:
+    """Déterminer l'échelle la plus adaptée pour les valeurs d'énergie."""
+
+    if y_scale != "auto":
+        return y_scale
+
+    positive_means = energy_means[energy_means > 0]
+    if positive_means.empty:
+        return "linear"
+
+    ratio = positive_means.max() / positive_means.min()
+    if ratio >= threshold:
+        return "log"
+    return "linear"
+
+
+def plot_energy_per_node_vs_duty_cycle(
+    df: pd.DataFrame, figures_base: Path, y_scale: str = "auto"
+) -> None:
     """Tracer l'énergie moyenne par nœud en fonction du duty-cycle."""
 
     fig, ax = plt.subplots(constrained_layout=True)
@@ -128,6 +155,10 @@ def plot_energy_per_node_vs_duty_cycle(df: pd.DataFrame, figures_base: Path) -> 
             capsize=3,
             label=f"Class {class_name}",
         )
+
+    selected_scale = _select_energy_scale(df["energy_per_node_J_mean"], y_scale)
+    if selected_scale == "log":
+        ax.set_yscale("log")
 
     ax.set_xlabel("Duty cycle (%)")
     ax.set_ylabel("Energy consumption (J)")
@@ -225,7 +256,7 @@ def main() -> None:
 
     figures_base = _resolve_figures_base(args.figures_dir)
 
-    plot_energy_per_node_vs_duty_cycle(summary, figures_base)
+    plot_energy_per_node_vs_duty_cycle(summary, figures_base, y_scale=args.y_scale)
     plot_pdr_vs_duty_cycle(summary, figures_base)
     plot_energy_breakdown(summary, figures_base)
 
