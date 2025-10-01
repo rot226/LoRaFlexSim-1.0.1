@@ -346,7 +346,9 @@ class NetworkServer:
             dr = SF_TO_DR.get(sf, 5)
             p_idx = DBM_TO_TX_POWER_INDEX.get(int(power), 0)
             frame.payload = LinkADRReq(dr, p_idx, chmask, nbtrans).to_bytes()
+        adr_frames_before: int | None = None
         if adr_command and hasattr(node, "frames_since_last_adr_command"):
+            adr_frames_before = node.frames_since_last_adr_command
             node.frames_since_last_adr_command = 0
         if node.security_enabled and isinstance(frame, LoRaWANFrame):
             from .lorawan import encrypt_payload, compute_mic
@@ -356,9 +358,11 @@ class NetworkServer:
             )
             frame.encrypted_payload = enc
             frame.mic = compute_mic(node.nwkskey, node.devaddr, node.fcnt_down, 1, enc)
+        frame_counter_start = node.fcnt_down
         node.fcnt_down += 1
         scheduled_time: float | None = None
         previous_pending = getattr(node, "downlink_pending", 0)
+        scheduled = False
 
         if at_time is None:
             if node.class_type.upper() == "B":
@@ -366,7 +370,7 @@ class NetworkServer:
                 beacon_reference = getattr(node, "last_beacon_time", None)
                 if beacon_reference is not None:
                     beacon_reference += getattr(node, "clock_offset", 0.0)
-                self.scheduler.schedule_class_b(
+                scheduled_time = self.scheduler.schedule_class_b(
                     node,
                     after,
                     frame,
@@ -377,11 +381,13 @@ class NetworkServer:
                     last_beacon_time=beacon_reference,
                     priority=priority,
                 )
+                scheduled = True
             elif node.class_type.upper() == "C":
                 after = self.simulator.current_time if self.simulator else 0.0
                 scheduled_time = self.scheduler.schedule_class_c(
                     node, after, frame, gw, priority=priority
                 )
+                scheduled = scheduled_time is not None
             else:
                 end = getattr(node, "last_uplink_end_time", None)
                 if end is not None:
@@ -390,7 +396,7 @@ class NetworkServer:
                     after = self.simulator.current_time if self.simulator else 0.0
                     rx1 = compute_rx1(end, node.rx_delay)
                     rx2 = compute_rx2(end, node.rx_delay)
-                    self.scheduler.schedule_class_a(
+                    scheduled_time = self.scheduler.schedule_class_a(
                         node,
                         after,
                         rx1,
@@ -399,11 +405,13 @@ class NetworkServer:
                         gw,
                         priority=priority,
                     )
+                    scheduled = scheduled_time is not None
                 else:
                     gw.buffer_downlink(node.id, frame)
+                    scheduled = True
         else:
             if node.class_type.upper() == "B":
-                self.scheduler.schedule_class_b(
+                scheduled_time = self.scheduler.schedule_class_b(
                     node,
                     at_time,
                     frame,
@@ -414,12 +422,26 @@ class NetworkServer:
                     last_beacon_time=getattr(node, "last_beacon_time", None),
                     priority=priority,
                 )
+                scheduled = True
             elif node.class_type.upper() == "C":
                 scheduled_time = self.scheduler.schedule_class_c(
                     node, at_time, frame, gw, priority=priority
                 )
+                scheduled = scheduled_time is not None
             else:
                 self.scheduler.schedule(node.id, at_time, frame, gw, priority=priority)
+                scheduled_time = at_time
+                scheduled = True
+        if not scheduled:
+            node.fcnt_down = frame_counter_start
+            if adr_frames_before is not None:
+                node.frames_since_last_adr_command = adr_frames_before
+            logger.debug(
+                "Downlink non planifié pour le nœud %s (classe %s)",
+                node.id,
+                node.class_type,
+            )
+            return
         try:
             node.downlink_pending += 1
         except AttributeError:

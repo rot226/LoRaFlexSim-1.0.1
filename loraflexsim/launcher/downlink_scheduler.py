@@ -1,6 +1,10 @@
 import heapq
+import logging
 from dataclasses import dataclass
 from typing import Any, Optional
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -232,8 +236,12 @@ class DownlinkScheduler:
         gateway,
         *,
         priority: int = 0,
-    ) -> float:
-        """Schedule ``frame`` for a Class A node in the next available window."""
+    ) -> float | None:
+        """Schedule ``frame`` for a Class A node in the next available window.
+
+        Returns the scheduled time if the frame could be planned, otherwise
+        :data:`None` when both RX windows are unavailable.
+        """
         duration = node.channel.airtime(node.sf, self._payload_length(frame))
         busy = self._gateway_busy.get(gateway.id, 0.0)
         candidate = max(after_time, busy)
@@ -242,7 +250,15 @@ class DownlinkScheduler:
         elif candidate <= rx2:
             t = rx2
         else:
-            t = candidate
+            logger.warning(
+                "Rejet du downlink classe A pour le nœud %s via la passerelle %s : "
+                "fenêtre RX2 dépassée (libre à %.3fs, RX2 à %.3fs).",
+                getattr(node, "id", "?"),
+                getattr(gateway, "id", "?"),
+                candidate,
+                rx2,
+            )
+            return None
         t += self.link_delay
         self.schedule(node.id, t, frame, gateway, priority=priority)
         self._gateway_busy[gateway.id] = t + duration
@@ -272,3 +288,4 @@ class DownlinkScheduler:
         if not q:
             return None
         return q[0][0]
+
