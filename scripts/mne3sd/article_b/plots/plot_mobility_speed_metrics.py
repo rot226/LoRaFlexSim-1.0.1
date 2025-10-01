@@ -172,8 +172,9 @@ def plot_grouped_bars(
     pivot = pivot[pivot.columns.sort_values()]
 
     num_profiles = len(pivot.index)
-    fig_width = max(3.5, 0.75 * num_profiles)
-    fig, ax = plt.subplots(figsize=(fig_width, 2.6))
+    fig_width = max(4.5, 1.0 * num_profiles)
+    fig_height = 3.1
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
     pivot.plot(kind="bar", ax=ax, width=0.75)
     ax.set_xlabel("Speed profile (grouped by mobility model)")
