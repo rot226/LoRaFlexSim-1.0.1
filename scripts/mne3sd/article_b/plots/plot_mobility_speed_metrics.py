@@ -206,8 +206,7 @@ def plot_grouped_bars(
     for container in containers:
         ax.bar_label(container, fmt=value_format, padding=2, fontsize=7)
 
-    fig.subplots_adjust(right=0.8)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 0.82, 1))
     output_dir = prepare_figure_directory(
         article=ARTICLE,
         scenario=SCENARIO,
