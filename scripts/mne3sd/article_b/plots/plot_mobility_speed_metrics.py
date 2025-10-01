@@ -173,22 +173,22 @@ def plot_grouped_bars(
 
     num_profiles = len(pivot.index)
     fig_width = max(4.5, 1.0 * num_profiles)
-    fig_height = 3.1
+    fig_height = 3.2
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
     pivot.plot(kind="bar", ax=ax, width=0.75)
 
+    data = pivot.to_numpy(dtype=float)
+    finite_mask = np.isfinite(data)
+    max_value = data[finite_mask].max() if finite_mask.any() else 0.0
+
     containers = ax.containers
-    max_height = max(
-        (bar.get_height() for container in containers for bar in container),
-        default=0.0,
-    )
 
     ax.set_xlabel("Speed profile (grouped by mobility model)")
     ax.set_ylabel(ylabel)
     if ylim is None:
-        if max_height > 0:
-            ax.set_ylim(0, max_height * 1.1)
+        if max_value > 0:
+            ax.set_ylim(0, max_value * 1.1)
         else:
             ax.margins(y=0.1)
     else:
