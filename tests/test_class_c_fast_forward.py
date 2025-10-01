@@ -51,6 +51,45 @@ def test_class_c_fast_polling_stops_after_quota():
     assert not sim.event_queue
 
 
+def test_class_c_long_interval_queue_bounded():
+    """Un intervalle long sans downlink ne doit pas empiler de fenêtres RX."""
+
+    channel = make_clean_channel()
+    sim = Simulator(
+        num_nodes=1,
+        num_gateways=1,
+        area_size=1.0,
+        transmission_mode="Periodic",
+        packet_interval=600.0,
+        packets_to_send=1,
+        mobility=False,
+        channels=[channel],
+        node_class="C",
+        class_c_rx_interval=0.25,
+        fixed_sf=7,
+        fixed_tx_power=14,
+        seed=73,
+    )
+
+    node = sim.nodes[0]
+    max_rx_without_downlink = 0
+
+    while sim.event_queue:
+        rx_events = [
+            evt
+            for evt in sim.event_queue
+            if evt.type == EventType.RX_WINDOW and evt.node_id == node.id
+        ]
+        if node.downlink_pending == 0:
+            max_rx_without_downlink = max(max_rx_without_downlink, len(rx_events))
+        sim.step()
+
+    assert max_rx_without_downlink <= 2
+    assert node.downlink_pending == 0
+    assert node.id not in sim._class_c_polling_nodes
+    assert all(event.type != EventType.RX_WINDOW for event in sim.event_queue)
+
+
 class _NullScheduler:
     """Planificateur factice qui n'injecte jamais de downlink."""
 

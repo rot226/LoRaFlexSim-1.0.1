@@ -357,6 +357,9 @@ class NetworkServer:
             frame.encrypted_payload = enc
             frame.mic = compute_mic(node.nwkskey, node.devaddr, node.fcnt_down, 1, enc)
         node.fcnt_down += 1
+        scheduled_time: float | None = None
+        previous_pending = getattr(node, "downlink_pending", 0)
+
         if at_time is None:
             if node.class_type.upper() == "B":
                 after = self.simulator.current_time if self.simulator else 0.0
@@ -376,7 +379,9 @@ class NetworkServer:
                 )
             elif node.class_type.upper() == "C":
                 after = self.simulator.current_time if self.simulator else 0.0
-                self.scheduler.schedule_class_c(node, after, frame, gw, priority=priority)
+                scheduled_time = self.scheduler.schedule_class_c(
+                    node, after, frame, gw, priority=priority
+                )
             else:
                 end = getattr(node, "last_uplink_end_time", None)
                 if end is not None:
@@ -410,28 +415,37 @@ class NetworkServer:
                     priority=priority,
                 )
             elif node.class_type.upper() == "C":
-                self.scheduler.schedule_class_c(node, at_time, frame, gw, priority=priority)
-                if self.simulator is not None:
-                    from .simulator import EventType
-
-                    eid = self.simulator.event_id_counter
-                    self.simulator.event_id_counter += 1
-                    if hasattr(self.simulator, "_push_event"):
-                        self.simulator._push_event(at_time, EventType.RX_WINDOW, eid, node.id)
-                    else:
-                        from .simulator import Event
-                        import heapq
-
-                        heapq.heappush(
-                            self.simulator.event_queue,
-                            Event(at_time, EventType.RX_WINDOW, eid, node.id),
-                        )
+                scheduled_time = self.scheduler.schedule_class_c(
+                    node, at_time, frame, gw, priority=priority
+                )
             else:
                 self.scheduler.schedule(node.id, at_time, frame, gw, priority=priority)
         try:
             node.downlink_pending += 1
         except AttributeError:
             pass
+        else:
+            if (
+                self.simulator is not None
+                and node.class_type.upper() == "C"
+                and hasattr(self.simulator, "_ensure_class_c_polling")
+            ):
+                trigger_time: float | None = None
+                if at_time is not None:
+                    trigger_time = at_time
+                elif previous_pending == 0 and node.downlink_pending > 0:
+                    current_time = self.simulator.current_time
+                    if scheduled_time is None and hasattr(self.scheduler, "next_time"):
+                        try:
+                            scheduled_time = self.scheduler.next_time(node.id)
+                        except Exception:
+                            scheduled_time = None
+                    if scheduled_time is not None:
+                        trigger_time = min(current_time, scheduled_time)
+                    else:
+                        trigger_time = current_time
+                if trigger_time is not None:
+                    self.simulator._ensure_class_c_polling(node.id, trigger_time)
 
     def _derive_keys(
         self, appkey: bytes, devnonce: int, appnonce: int
