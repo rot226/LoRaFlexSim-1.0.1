@@ -72,6 +72,8 @@ class NetworkServer:
         self.net_id = 0
         self.next_devaddr = 1
         self.scheduler = DownlinkScheduler(link_delay=network_delay)
+        if simulator is not None:
+            self.scheduler.quantize = simulator._quantize
         self.join_server = join_server
         self.simulator = simulator
         self.process_delay = process_delay
@@ -320,6 +322,12 @@ class NetworkServer:
         gw = gateway or (self.gateways[0] if self.gateways else None)
         if gw is None:
             return
+        if (
+            self.simulator is not None
+            and getattr(self.scheduler, "quantize", None)
+            is getattr(self.scheduler, "_identity_quantize", None)
+        ):
+            self.scheduler.quantize = self.simulator._quantize
         fctrl = 0x20 if request_ack else 0
         frame: LoRaWANFrame | JoinAccept
         if isinstance(payload, JoinAccept):
