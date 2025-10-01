@@ -55,34 +55,30 @@ run_density_sweep_adr() {
 run_range_sweep() {
   local nodes=$1
   log "Article B – mobility range sweep (${nodes} nodes, profile ${PROFILE})"
+  local target="${ROOT_DIR}/results/mne3sd/article_b/mobility_range_metrics_nodes_${nodes}.csv"
   "${PYTHON_BIN}" -m scripts.mne3sd.article_b.scenarios.run_mobility_range_sweep \
     --nodes "${nodes}" \
     --profile "${PROFILE}" \
-    --seed $((80 + nodes))
-  local output="${ROOT_DIR}/results/mne3sd/article_b/mobility_range_metrics.csv"
-  local target="${ROOT_DIR}/results/mne3sd/article_b/mobility_range_metrics_nodes_${nodes}.csv"
-  if [[ -f "${output}" ]]; then
-    mv -f "${output}" "${target}"
-  else
-    log "Warning: expected mobility range metrics at ${output} not found"
+    --seed $((80 + nodes)) \
+    --results "${target}"
+  if [[ ! -f "${target}" ]]; then
+    log "Warning: expected mobility range metrics at ${target} not found"
   fi
 }
 
 run_range_sweep_adr() {
   local nodes=$1
   log "Article B – ADR sensitivity (${nodes} nodes)"
+  local target="${ROOT_DIR}/results/mne3sd/article_b/mobility_range_metrics_adr_nodes_${nodes}.csv"
   "${PYTHON_BIN}" -m scripts.mne3sd.article_b.scenarios.run_mobility_range_sweep \
     --nodes "${nodes}" \
     --profile "${PROFILE}" \
     --adr-node \
     --adr-server \
-    --seed $((180 + nodes))
-  local output="${ROOT_DIR}/results/mne3sd/article_b/mobility_range_metrics.csv"
-  local target="${ROOT_DIR}/results/mne3sd/article_b/mobility_range_metrics_adr_nodes_${nodes}.csv"
-  if [[ -f "${output}" ]]; then
-    mv -f "${output}" "${target}"
-  else
-    log "Warning: expected ADR mobility metrics at ${output} not found"
+    --seed $((180 + nodes)) \
+    --results "${target}"
+  if [[ ! -f "${target}" ]]; then
+    log "Warning: expected ADR mobility metrics at ${target} not found"
   fi
 }
 

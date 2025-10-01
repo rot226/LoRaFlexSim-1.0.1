@@ -20,7 +20,8 @@ Example usage::
     python scripts/mne3sd/article_b/scenarios/run_mobility_speed_sweep.py \
         --nodes 200 --replicates 10 --seed 42 \
         --speed-profiles "pedestrian: (0.5, 1.5)" \
-        --speed-profiles "urban: (1.5, 3.5)"
+        --speed-profiles "urban: (1.5, 3.5)" \
+        --results results/mne3sd/article_b/mobility_speed_metrics_custom.csv
 """
 
 from __future__ import annotations
@@ -274,10 +275,19 @@ def main() -> None:  # noqa: D401 - CLI entry point
         action="store_true",
         help="Skip simulations that already exist in the detailed CSV",
     )
+    parser.add_argument(
+        "--results",
+        type=Path,
+        default=RESULTS_PATH,
+        help=(
+            "Destination CSV for the sweep results. Defaults to %(default)s."
+        ),
+    )
     add_worker_argument(parser, default="auto")
     add_execution_profile_argument(parser)
     args = parser.parse_args()
 
+    results_path = Path(args.results)
     profile = resolve_execution_profile(args.profile)
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -371,10 +381,10 @@ def main() -> None:  # noqa: D401 - CLI entry point
                     for replicate in range(1, replicates + 1)
                 ]
 
-                if args.resume and RESULTS_PATH.exists():
+                if args.resume and results_path.exists():
                     original_count = len(tasks)
                     tasks = filter_completed_tasks(
-                        RESULTS_PATH, ("model", "speed_profile", "replicate"), tasks
+                        results_path, ("model", "speed_profile", "replicate"), tasks
                     )
                     skipped = original_count - len(tasks)
                     LOGGER.info(
@@ -418,9 +428,9 @@ def main() -> None:  # noqa: D401 - CLI entry point
         if executor is not None:
             executor.shutdown()
 
-    write_csv(RESULTS_PATH, FIELDNAMES, results)
+    write_csv(results_path, FIELDNAMES, results)
 
-    print(f"Results saved to {RESULTS_PATH}")
+    print(f"Results saved to {results_path}")
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
