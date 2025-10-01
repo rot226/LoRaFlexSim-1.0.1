@@ -1645,6 +1645,34 @@ class Simulator:
             end_of_cycle = nxt
             for n in self.nodes:
                 if n.class_type.upper() == "B":
+                    prev_energy = n.energy_consumed
+                    n.consume_until(time)
+                    delta = n.energy_consumed - prev_energy
+                    if delta > 0.0:
+                        self.energy_nodes_J += delta
+                        self.total_energy_J += delta
+                    if not n.alive:
+                        continue
+                    state = "listen" if n.profile.listen_current_a > 0.0 else "rx"
+                    duration = getattr(n.profile, "beacon_listen_duration", 0.0)
+                    if duration <= 0.0:
+                        duration = n.profile.rx_window_duration
+                    current = (
+                        n.profile.listen_current_a
+                        if n.profile.listen_current_a > 0.0
+                        else n.profile.rx_current_a
+                    )
+                    energy_J = current * n.profile.voltage_v * duration
+                    prev_energy = n.energy_consumed
+                    n.add_energy(energy_J, state, duration_s=duration)
+                    delta = n.energy_consumed - prev_energy
+                    if delta > 0.0:
+                        self.energy_nodes_J += delta
+                        self.total_energy_J += delta
+                    n.last_state_time = time + duration
+                    n.state = "sleep"
+                    if not n.alive:
+                        continue
                     received = random.random() >= getattr(n, "beacon_loss_prob", 0.0)
                     if received:
                         n.register_beacon(time)
