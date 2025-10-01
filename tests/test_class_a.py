@@ -29,6 +29,16 @@ def test_schedule_class_a_after_delay():
     assert entry and entry.frame == b"b" and entry.gateway is gw
 
 
+def test_schedule_class_a_rejects_after_rx2():
+    scheduler = DownlinkScheduler()
+    gw = Gateway(1, 0, 0)
+    node = Node(1, 0.0, 0.0, 7, 14)
+    scheduler._gateway_busy[gw.id] = 3.0
+    t = scheduler.schedule_class_a(node, 0.0, 1.0, 2.0, b"c", gw)
+    assert t is None
+    assert scheduler.pop_ready(node.id, 10.0) is None
+
+
 def test_downlink_with_server_delays():
     sim = SimpleNamespace(current_time=0.0, event_queue=[], event_id_counter=0)
     server = NetworkServer(simulator=sim, process_delay=1.0, network_delay=1.0)
