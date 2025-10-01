@@ -68,6 +68,13 @@ Les lanceurs de scénarios respectent l'option `--profile` partagée ainsi que l
 ### Parallélisation des réplicats
 Les scripts `run_mobility_range_sweep.py`, `run_mobility_speed_sweep.py` et `run_mobility_gateway_sweep.py` acceptent un paramètre commun `--workers` (par défaut `1`) pour répartir les réplicats Monte Carlo sur plusieurs processus. Les résultats agrégés restent triés de manière déterministe quel que soit le nombre de workers, ce qui facilite la comparaison entre exécutions. En dehors des traitements lourds, conservez la valeur par défaut pour éviter un surcoût d'initialisation. Pour des vérifications rapides sous Windows 11 ou dans un pipeline CI, combinez `--workers 1` avec `--profile ci` afin de bénéficier des paramètres allégés documentés ci-dessus.
 
+Chaque sweep expose également `--results` pour définir explicitement le chemin du CSV généré. Cela permet de séparer les différentes séries d'expériences sans devoir renommer les fichiers a posteriori, par exemple :
+
+```
+python -m scripts.mne3sd.article_b.scenarios.run_mobility_speed_sweep \
+    --profile fast --workers 4 --results results/mne3sd/article_b/mobility_speed_fast.csv
+```
+
 ## Structure du répertoire
 
 ```
@@ -109,6 +116,10 @@ python -m scripts.mne3sd.article_b.scenarios.<scenario_module> \
     --duration 7200 \
     --seed 123 \
     --output results/mne3sd/article_b/<scenario_name>.csv
+
+python -m scripts.mne3sd.article_b.scenarios.run_mobility_range_sweep \
+    --replicates 5 --seed 321 \
+    --results results/mne3sd/article_b/mobility_range_custom.csv
 ```
 
 Pour balayer différentes plages de distance ou de vitesse, utilisez `--distance-min`, `--distance-max`, `--speed-min` et `--speed-max`. Les modules de scénario peuvent proposer des options additionnelles (par exemple `--handover-threshold` dans `rural_highway`). Consultez la docstring pour les détails.
