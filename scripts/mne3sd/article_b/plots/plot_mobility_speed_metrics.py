@@ -92,6 +92,9 @@ def load_metrics(path: Path) -> pd.DataFrame:
             "jitter_s",
             "jitter_s_mean",
             "jitter_s_std",
+            "energy_per_node_J",
+            "energy_per_node_J_mean",
+            "energy_per_node_J_std",
         ),
     )
 
@@ -108,6 +111,8 @@ def load_metrics(path: Path) -> pd.DataFrame:
             agg_dict["jitter_s"] = ["mean", "std"]
         if "range_km" in df.columns:
             agg_dict["range_km"] = ["mean"]
+        if "energy_per_node_J" in df.columns:
+            agg_dict["energy_per_node_J"] = ["mean", "std"]
 
         grouped = df.groupby(["model", "speed_profile"], as_index=False).agg(agg_dict)
         grouped.columns = [
@@ -164,6 +169,11 @@ def load_metrics(path: Path) -> pd.DataFrame:
 
     if "range_km" in aggregated.columns:
         aggregated["range_km"] = aggregated["range_km"].astype(float)
+
+    if "energy_per_node_J_mean" in aggregated.columns:
+        aggregated["energy_per_node_J_mean"] = aggregated["energy_per_node_J_mean"].astype(float)
+    if "energy_per_node_J_std" in aggregated.columns:
+        aggregated["energy_per_node_J_std"] = aggregated["energy_per_node_J_std"].astype(float)
 
     return aggregated
 
@@ -317,6 +327,151 @@ def plot_jitter_by_speed_profile(df: pd.DataFrame, dpi: int) -> None:
     plt.close(fig)
 
 
+def _resolve_energy_columns(df: pd.DataFrame) -> tuple[str | None, str | None]:
+    """Return the energy mean and std columns when available."""
+
+    energy_mean_column = next(
+        (
+            column
+            for column in ("energy_per_node_J_mean", "energy_per_node_J")
+            if column in df.columns and df[column].notna().any()
+        ),
+        None,
+    )
+    if energy_mean_column is None:
+        return None, None
+
+    energy_std_column = next(
+        (
+            column
+            for column in ("energy_per_node_J_std",)
+            if column in df.columns and df[column].notna().any()
+        ),
+        None,
+    )
+    return energy_mean_column, energy_std_column
+
+
+def plot_energy_by_speed_profile(df: pd.DataFrame, dpi: int) -> None:
+    """Plot average energy per node versus speed profile with error bars."""
+
+    energy_mean_column, energy_std_column = _resolve_energy_columns(df)
+    if energy_mean_column is None:
+        return
+
+    mean_pivot = df.pivot_table(
+        index="speed_profile",
+        columns="model_label",
+        values=energy_mean_column,
+        aggfunc="mean",
+    )
+    if mean_pivot.empty:
+        return
+
+    mean_pivot = mean_pivot.sort_index()
+    mean_pivot = mean_pivot[mean_pivot.columns.sort_values()]
+
+    std_pivot: pd.DataFrame | None = None
+    if energy_std_column is not None:
+        std_pivot = df.pivot_table(
+            index="speed_profile",
+            columns="model_label",
+            values=energy_std_column,
+            aggfunc="mean",
+        )
+        std_pivot = std_pivot.reindex_like(mean_pivot)
+
+    profiles = list(mean_pivot.index)
+    x = np.arange(len(profiles), dtype=float)
+
+    fig_width = max(4.5, 1.0 * len(profiles))
+    fig, ax = plt.subplots(figsize=(fig_width, 3.2))
+
+    for model_label in mean_pivot.columns:
+        y = mean_pivot[model_label].to_numpy(dtype=float)
+        if np.all(np.isnan(y)):
+            continue
+        yerr = None
+        if std_pivot is not None and model_label in std_pivot.columns:
+            yerr = std_pivot[model_label].to_numpy(dtype=float)
+            if np.all(np.isnan(yerr)):
+                yerr = None
+
+        ax.errorbar(
+            x,
+            y,
+            yerr=yerr,
+            marker="o",
+            linewidth=1.6,
+            capsize=3,
+            label=model_label,
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(profiles)
+    ax.set_xlabel("Speed profile")
+    ax.set_ylabel("Average energy per node (J)")
+    ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
+    ax.set_axisbelow(True)
+    ax.legend(title="Mobility model", loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
+
+    fig.tight_layout(rect=(0, 0, 0.82, 1))
+    output_dir = prepare_figure_directory(
+        article=ARTICLE,
+        scenario=SCENARIO,
+        metric="energy_by_speed_profile",
+    )
+    save_figure(fig, "energy_by_speed_profile", output_dir, dpi=dpi)
+    plt.close(fig)
+
+
+def plot_energy_stack_by_speed_profile(df: pd.DataFrame, dpi: int) -> None:
+    """Plot a stacked area chart of energy per node grouped by speed profile."""
+
+    energy_mean_column, _ = _resolve_energy_columns(df)
+    if energy_mean_column is None:
+        return
+
+    pivot = df.pivot_table(
+        index="speed_profile",
+        columns="model_label",
+        values=energy_mean_column,
+        aggfunc="mean",
+    )
+    if pivot.empty:
+        return
+
+    pivot = pivot.sort_index()
+    pivot = pivot[pivot.columns.sort_values()]
+
+    profiles = list(pivot.index)
+    x = np.arange(len(profiles), dtype=float)
+
+    values = np.nan_to_num(pivot.to_numpy(dtype=float), nan=0.0)
+
+    fig_width = max(4.5, 1.0 * len(profiles))
+    fig, ax = plt.subplots(figsize=(fig_width, 3.2))
+
+    ax.stackplot(x, values.T, labels=pivot.columns, alpha=0.85)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(profiles)
+    ax.set_xlabel("Speed profile")
+    ax.set_ylabel("Average energy per node (J)")
+    ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
+    ax.set_axisbelow(True)
+    ax.legend(title="Mobility model", loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
+
+    fig.tight_layout(rect=(0, 0, 0.82, 1))
+    output_dir = prepare_figure_directory(
+        article=ARTICLE,
+        scenario=SCENARIO,
+        metric="energy_stack_by_speed_profile",
+    )
+    save_figure(fig, "energy_stack_by_speed_profile", output_dir, dpi=dpi)
+    plt.close(fig)
+
+
 def plot_heatmap(df: pd.DataFrame, output_name: str, dpi: int) -> None:
     """Plot a heatmap of PDR versus communication range when available."""
 
@@ -405,6 +560,9 @@ def main() -> None:  # pragma: no cover - CLI entry point
         args.dpi,
         "{:.2f}",
     )
+
+    plot_energy_by_speed_profile(metrics, args.dpi)
+    plot_energy_stack_by_speed_profile(metrics, args.dpi)
 
     plot_jitter_by_speed_profile(metrics, args.dpi)
 
