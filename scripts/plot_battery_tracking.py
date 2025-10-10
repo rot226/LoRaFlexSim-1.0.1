@@ -180,6 +180,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             def tight_layout(self, *args, **kwargs):
                 return None
 
+            def subplots_adjust(self, *args, **kwargs):
+                return None
+
         try:
             fig = plt.figure()
         except AttributeError:

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import csv
 import math
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
@@ -58,41 +60,152 @@ def _parse_sca_file(path: Path) -> dict[str, Any]:
     return row
 
 
-def _aggregate_df(df: 'pd.DataFrame') -> dict[str, Any]:
-    """Compute aggregated metrics from a DataFrame of raw values."""
-    if pd is None:
-        raise RuntimeError("pandas is required for this function")
-    total_sent = int(df["sent"].sum()) if "sent" in df.columns else 0
-    total_recv = int(df["received"].sum()) if "received" in df.columns else 0
+def _iter_rows(
+    data: "pd.DataFrame | Mapping[str, Any] | Iterable[Mapping[str, Any]]",
+) -> list[dict[str, Any]]:
+    """Return an iterable of dictionaries from heterogeneous inputs."""
+
+    if pd is not None and "DataFrame" in pd.__dict__ and isinstance(data, pd.DataFrame):
+        return data.to_dict("records")
+
+    if isinstance(data, Mapping):
+        return [dict(data)]
+
+    rows: list[dict[str, Any]] = []
+    for row in data:
+        if isinstance(row, Mapping):
+            rows.append(dict(row))
+        else:  # pragma: no cover - defensive programming
+            raise TypeError(f"Unsupported row type: {type(row)!r}")
+    return rows
+
+
+def _to_float(value: Any) -> float | None:
+    """Best-effort conversion of raw values to ``float``."""
+
+    if value is None:
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return float(text)
+        except ValueError:
+            return None
+    return None
+
+
+def _mean(values: Iterable[float]) -> float:
+    values_list = list(values)
+    if not values_list:
+        return 0.0
+    return float(sum(values_list) / len(values_list))
+
+
+def _aggregate_df(
+    data: "pd.DataFrame | Mapping[str, Any] | Iterable[Mapping[str, Any]]",
+) -> dict[str, Any]:
+    """Compute aggregated metrics from raw rows or DataFrames."""
+
+    rows = _iter_rows(data)
+    if not rows:
+        return {
+            "PDR": 0.0,
+            "sf_distribution": {},
+            "throughput_bps": 0.0,
+            "energy_J": 0.0,
+            "avg_delay_s": 0.0,
+            "collision_distribution": {},
+            "collisions": 0,
+        }
+
+    total_sent = sum(
+        int(val)
+        for row in rows
+        if (val := _to_float(row.get("sent"))) is not None
+    )
+    total_recv = sum(
+        int(val)
+        for row in rows
+        if (val := _to_float(row.get("received"))) is not None
+    )
     pdr = total_recv / total_sent if total_sent else 0.0
 
+    all_keys: set[str] = set()
+    for row in rows:
+        all_keys.update(row.keys())
+
     sf_cols = [
-        c
-        for c in df.columns
-        if c.startswith("sf") and not c.startswith("collisions_sf")
+        key
+        for key in all_keys
+        if key.startswith("sf") and not key.startswith("collisions_sf") and key[2:].isdigit()
     ]
-    sf_hist = {int(c[2:]): int(df[c].sum()) for c in sf_cols}
-
-    throughput = (
-        float(df["throughput_bps"].mean()) if "throughput_bps" in df.columns else 0.0
-    )
-    avg_delay = float(df["avg_delay_s"].mean()) if "avg_delay_s" in df.columns else 0.0
-    if "energy_J" in df.columns:
-        energy = float(df["energy_J"].mean())
-    elif "energy" in df.columns:
-        energy = float(df["energy"].mean())
-    else:
-        energy = 0.0
-
-    collisions = int(df["collisions"].sum()) if "collisions" in df.columns else 0
-    collision_cols = [c for c in df.columns if c.startswith("collisions_sf")]
-    collision_dist = {int(c.split("sf")[1]): int(df[c].sum()) for c in collision_cols}
-
-    energy_class = {
-        col.split("_")[2]: float(df[col].mean())
-        for col in df.columns
-        if col.startswith("energy_class_")
+    sf_hist = {
+        int(col[2:]): sum(
+            int(val)
+            for row in rows
+            if (val := _to_float(row.get(col))) is not None
+        )
+        for col in sf_cols
     }
+
+    throughput = _mean(
+        _to_float(row.get("throughput_bps"))
+        for row in rows
+        if _to_float(row.get("throughput_bps")) is not None
+    )
+    avg_delay = _mean(
+        _to_float(row.get("avg_delay_s"))
+        for row in rows
+        if _to_float(row.get("avg_delay_s")) is not None
+    )
+
+    energy_values = [
+        _to_float(row.get("energy_J"))
+        for row in rows
+        if _to_float(row.get("energy_J")) is not None
+    ]
+    if not energy_values:
+        energy_values = [
+            _to_float(row.get("energy"))
+            for row in rows
+            if _to_float(row.get("energy")) is not None
+        ]
+    energy = _mean(energy_values)
+
+    collisions = sum(
+        int(val)
+        for row in rows
+        if (val := _to_float(row.get("collisions"))) is not None
+    )
+    collision_cols = [
+        key
+        for key in all_keys
+        if key.startswith("collisions_sf") and key.split("sf", 1)[-1].isdigit()
+    ]
+    collision_dist = {
+        int(col.split("sf", 1)[1]): sum(
+            int(val)
+            for row in rows
+            if (val := _to_float(row.get(col))) is not None
+        )
+        for col in collision_cols
+    }
+
+    energy_class: dict[str, float] = {}
+    for key in all_keys:
+        if key.startswith("energy_class_"):
+            cls = key.split("_")[2]
+            values = [
+                _to_float(row.get(key))
+                for row in rows
+                if _to_float(row.get(key)) is not None
+            ]
+            if values:
+                energy_class[cls] = _mean(values)
 
     return {
         "PDR": pdr,
@@ -108,11 +221,8 @@ def _aggregate_df(df: 'pd.DataFrame') -> dict[str, Any]:
 
 def _load_sca_file(path: Path) -> dict[str, Any]:
     """Parse a single ``.sca`` file and compute aggregated metrics."""
-    if pd is None:
-        raise RuntimeError("pandas is required for this function")
     row = _parse_sca_file(path)
-    df = pd.DataFrame([row])
-    return _aggregate_df(df)
+    return _aggregate_df([row])
 
 
 def load_flora_metrics(path: str | Path) -> dict[str, Any]:
@@ -133,59 +243,22 @@ def load_flora_metrics(path: str | Path) -> dict[str, Any]:
     ``collisions_sfX``
         Number of collisions that occurred with spreading factor ``X``.
     """
-    if pd is None:
-        raise RuntimeError("pandas is required for this function")
     path = Path(path)
     if path.is_dir():
         rows = [_parse_sca_file(p) for p in sorted(path.glob("*.sca"))]
-        df = pd.DataFrame(rows)
-        return _aggregate_df(df)
+        return _aggregate_df(rows)
 
     if path.suffix.lower() == ".sca":
         return _load_sca_file(path)
 
-    df = pd.read_csv(path)
-    total_sent = int(df["sent"].sum()) if "sent" in df.columns else 0
-    total_recv = int(df["received"].sum()) if "received" in df.columns else 0
-    pdr = total_recv / total_sent if total_sent else 0.0
-    sf_cols = [
-        c
-        for c in df.columns
-        if c.startswith("sf") and not c.startswith("collisions_sf")
-    ]
-    sf_hist = {int(c[2:]): int(df[c].sum()) for c in sf_cols}
+    if pd is not None:
+        df = pd.read_csv(path)
+        return _aggregate_df(df)
 
-    throughput = (
-        float(df["throughput_bps"].mean()) if "throughput_bps" in df.columns else 0.0
-    )
-    avg_delay = float(df["avg_delay_s"].mean()) if "avg_delay_s" in df.columns else 0.0
-    if "energy_J" in df.columns:
-        energy = float(df["energy_J"].mean())
-    elif "energy" in df.columns:
-        energy = float(df["energy"].mean())
-    else:
-        energy = 0.0
-
-    collisions = int(df["collisions"].sum()) if "collisions" in df.columns else 0
-
-    collision_cols = [c for c in df.columns if c.startswith("collisions_sf")]
-    collision_dist = {int(c.split("sf")[1]): int(df[c].sum()) for c in collision_cols}
-    energy_class = {
-        col.split("_")[2]: float(df[col].mean())
-        for col in df.columns
-        if col.startswith("energy_class_")
-    }
-
-    return {
-        "PDR": pdr,
-        "sf_distribution": sf_hist,
-        "throughput_bps": throughput,
-        "energy_J": energy,
-        "avg_delay_s": avg_delay,
-        **{f"energy_class_{cls}_J": val for cls, val in energy_class.items()},
-        "collision_distribution": collision_dist,
-        "collisions": collisions,
-    }
+    with open(path, newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        rows = [dict(row) for row in reader]
+    return _aggregate_df(rows)
 
 
 def compare_with_sim(
