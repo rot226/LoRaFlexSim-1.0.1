@@ -89,6 +89,9 @@ def load_metrics(path: Path) -> pd.DataFrame:
             "avg_delay_s",
             "avg_delay_s_mean",
             "range_km",
+            "jitter_s",
+            "jitter_s_mean",
+            "jitter_s_std",
         ),
     )
 
@@ -100,13 +103,22 @@ def load_metrics(path: Path) -> pd.DataFrame:
         aggregated = pd.DataFrame()
 
     if aggregated.empty:
-        aggregations: dict[str, str] = {"pdr": "mean", "avg_delay_s": "mean"}
+        agg_dict: dict[str, list[str]] = {"pdr": ["mean"], "avg_delay_s": ["mean"]}
+        if "jitter_s" in df.columns:
+            agg_dict["jitter_s"] = ["mean", "std"]
         if "range_km" in df.columns:
-            aggregations["range_km"] = "mean"
-        grouped = df.groupby(["model", "speed_profile"], as_index=False).agg(aggregations)
-        aggregated = grouped.rename(
-            columns={"pdr": "pdr_mean", "avg_delay_s": "avg_delay_s_mean"}
-        )
+            agg_dict["range_km"] = ["mean"]
+
+        grouped = df.groupby(["model", "speed_profile"], as_index=False).agg(agg_dict)
+        grouped.columns = [
+            column
+            if isinstance(column, str)
+            else "_".join(part for part in column if part)
+            for column in grouped.columns
+        ]
+
+        rename_map = {"range_km_mean": "range_km"}
+        aggregated = grouped.rename(columns=rename_map)
 
     pdr_column = next(
         (
@@ -144,6 +156,11 @@ def load_metrics(path: Path) -> pd.DataFrame:
         aggregated["pdr_label"] = "PDR"
 
     aggregated["avg_delay_s_value"] = aggregated[delay_column].astype(float)
+
+    if "jitter_s_mean" in aggregated.columns:
+        aggregated["jitter_s_mean"] = aggregated["jitter_s_mean"].astype(float)
+    if "jitter_s_std" in aggregated.columns:
+        aggregated["jitter_s_std"] = aggregated["jitter_s_std"].astype(float)
 
     if "range_km" in aggregated.columns:
         aggregated["range_km"] = aggregated["range_km"].astype(float)
@@ -208,6 +225,95 @@ def plot_grouped_bars(
         metric=output_name,
     )
     save_figure(fig, output_name, output_dir, dpi=dpi)
+    plt.close(fig)
+
+
+def plot_jitter_by_speed_profile(df: pd.DataFrame, dpi: int) -> None:
+    """Plot latency jitter versus speed profile with error bars per mobility model."""
+
+    jitter_mean_column = next(
+        (
+            column
+            for column in ("jitter_s_mean", "jitter_s")
+            if column in df.columns and df[column].notna().any()
+        ),
+        None,
+    )
+    if jitter_mean_column is None:
+        return
+
+    jitter_std_column = next(
+        (
+            column
+            for column in ("jitter_s_std",)
+            if column in df.columns and df[column].notna().any()
+        ),
+        None,
+    )
+
+    mean_pivot = df.pivot_table(
+        index="speed_profile",
+        columns="model_label",
+        values=jitter_mean_column,
+        aggfunc="mean",
+    )
+    if mean_pivot.empty:
+        return
+
+    mean_pivot = mean_pivot.sort_index()
+    mean_pivot = mean_pivot[mean_pivot.columns.sort_values()]
+
+    std_pivot: pd.DataFrame | None = None
+    if jitter_std_column is not None:
+        std_pivot = df.pivot_table(
+            index="speed_profile",
+            columns="model_label",
+            values=jitter_std_column,
+            aggfunc="mean",
+        )
+        std_pivot = std_pivot.reindex_like(mean_pivot)
+
+    profiles = list(mean_pivot.index)
+    x = np.arange(len(profiles), dtype=float)
+
+    fig_width = max(4.5, 1.0 * len(profiles))
+    fig, ax = plt.subplots(figsize=(fig_width, 3.2))
+
+    for model_label in mean_pivot.columns:
+        y = mean_pivot[model_label].to_numpy(dtype=float)
+        if np.all(np.isnan(y)):
+            continue
+        yerr = None
+        if std_pivot is not None and model_label in std_pivot.columns:
+            yerr = std_pivot[model_label].to_numpy(dtype=float)
+            if np.all(np.isnan(yerr)):
+                yerr = None
+
+        ax.errorbar(
+            x,
+            y,
+            yerr=yerr,
+            marker="o",
+            capsize=3,
+            linewidth=1.5,
+            label=model_label,
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(profiles)
+    ax.set_xlabel("Speed profile")
+    ax.set_ylabel("Latency jitter (s)")
+    ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
+    ax.set_axisbelow(True)
+    ax.legend(title="Mobility model", loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
+
+    fig.tight_layout(rect=(0, 0, 0.82, 1))
+    output_dir = prepare_figure_directory(
+        article=ARTICLE,
+        scenario=SCENARIO,
+        metric="latency_jitter_by_speed_profile",
+    )
+    save_figure(fig, "latency_jitter_by_speed_profile", output_dir, dpi=dpi)
     plt.close(fig)
 
 
@@ -299,6 +405,8 @@ def main() -> None:  # pragma: no cover - CLI entry point
         args.dpi,
         "{:.2f}",
     )
+
+    plot_jitter_by_speed_profile(metrics, args.dpi)
 
     plot_heatmap(
         metrics,
