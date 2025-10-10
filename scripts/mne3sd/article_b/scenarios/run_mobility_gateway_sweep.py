@@ -234,14 +234,19 @@ class DownlinkDelayTracker:
             return schedule_func(this, node_id, time, frame, gateway, *args, **kwargs)
 
         def pop_ready_wrapper(this, node_id, current_time, *args, **kwargs):
-            frame, gw = pop_ready_func(this, node_id, current_time, *args, **kwargs)
+            entry = pop_ready_func(this, node_id, current_time, *args, **kwargs)
+            if entry is None:
+                return None
+
+            frame = getattr(entry, "frame", None)
             if frame is not None:
                 scheduled_time = scheduled.pop(id(frame), None)
                 if scheduled_time is not None:
                     delay = max(current_time, scheduled_time) - scheduled_time
                     if delay >= 0:
                         delays.append(delay)
-            return frame, gw
+
+            return entry
 
         scheduler.schedule = types.MethodType(schedule_wrapper, scheduler)  # type: ignore[assignment]
         scheduler.pop_ready = types.MethodType(pop_ready_wrapper, scheduler)  # type: ignore[assignment]
