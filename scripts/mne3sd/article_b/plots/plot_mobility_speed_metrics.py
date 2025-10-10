@@ -182,8 +182,6 @@ def plot_grouped_bars(
     finite_mask = np.isfinite(data)
     max_value = data[finite_mask].max() if finite_mask.any() else 0.0
 
-    containers = ax.containers
-
     ax.set_xlabel("Speed profile (grouped by mobility model)")
     ax.set_ylabel(ylabel)
     if ylim is None:
@@ -202,9 +200,6 @@ def plot_grouped_bars(
         borderaxespad=0,
         frameon=False,
     )
-
-    for container in containers:
-        ax.bar_label(container, fmt=value_format, padding=2, fontsize=7)
 
     fig.tight_layout(rect=(0, 0, 0.82, 1))
     output_dir = prepare_figure_directory(
