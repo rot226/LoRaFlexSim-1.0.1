@@ -128,6 +128,45 @@ python -m scripts.mne3sd.article_b.plots.plot_mobility_gateway_metrics \
   --results results/mne3sd/article_b/B9_B10_gateway.csv
 ```
 
+## Graphiques Article B
+
+Les trois modules de tracé créent automatiquement des paires PNG/EPS suivant la nomenclature
+`figures/mne3sd/<article>/<scénario>/<métrique>/<nom>.(png|eps)`.【F:scripts/mne3sd/common.py†L109-L154】
+
+### `plot_mobility_range_metrics`
+
+- **PDR agrégé vs portée :** `figures/mne3sd/article_b/mobility_range/pdr_vs_range/pdr_vs_communication_range.*`. Les points
+  mettant en évidence une PDR inférieure à un seuil optionnel peuvent être activés via
+  `--highlight-threshold 90`.【F:scripts/mne3sd/article_b/plots/plot_mobility_range_metrics.py†L40-L111】【F:scripts/mne3sd/article_b/plots/plot_mobility_range_metrics.py†L120-L146】
+- **Délai moyen vs portée :** `figures/mne3sd/article_b/mobility_range/average_delay_vs_range/average_delay_vs_communication_range.*`,
+  généré automatiquement lors du même appel.【F:scripts/mne3sd/article_b/plots/plot_mobility_range_metrics.py†L148-L182】
+- **Style :** applique le preset IEEE (`apply_ieee_style`). Vous pouvez fournir un fichier `.mplstyle` personnalisé avec
+  `--style chemin/vers/style.mplstyle` pour ajuster les polices ou la palette.【F:scripts/mne3sd/article_b/plots/plot_mobility_range_metrics.py†L16-L37】【F:scripts/mne3sd/article_b/plots/plot_mobility_range_metrics.py†L187-L201】
+
+### `plot_mobility_speed_metrics`
+
+Le script synthétise toutes les métriques agrégées issues de B7/B8 et de futurs scénarios de balayage des vitesses :
+
+- **Barres groupées PDR :** `figures/mne3sd/article_b/mobility_speed/pdr_by_speed_profile/pdr_by_speed_profile.*` (pourcentages,
+  arrondis selon les données).【F:scripts/mne3sd/article_b/plots/plot_mobility_speed_metrics.py†L27-L161】【F:scripts/mne3sd/article_b/plots/plot_mobility_speed_metrics.py†L205-L244】
+- **Barres groupées délai moyen :** `figures/mne3sd/article_b/mobility_speed/average_delay_by_speed_profile/average_delay_by_speed_profile.*`.【F:scripts/mne3sd/article_b/plots/plot_mobility_speed_metrics.py†L205-L244】【F:scripts/mne3sd/article_b/plots/plot_mobility_speed_metrics.py†L260-L279】
+- **Jitter (si présent dans le CSV) :** `figures/mne3sd/article_b/mobility_speed/latency_jitter_by_speed_profile/latency_jitter_by_speed_profile.*`.【F:scripts/mne3sd/article_b/plots/plot_mobility_speed_metrics.py†L281-L353】
+- **Énergie moyenne par nœud :** `figures/mne3sd/article_b/mobility_speed/energy_by_speed_profile/energy_by_speed_profile.*`.【F:scripts/mne3sd/article_b/plots/plot_mobility_speed_metrics.py†L355-L409】
+- **Empilement énergétique :** `figures/mne3sd/article_b/mobility_speed/energy_stack_by_speed_profile/energy_stack_by_speed_profile.*`. Utiles pour comparer visuellement la contribution de chaque modèle.【F:scripts/mne3sd/article_b/plots/plot_mobility_speed_metrics.py†L411-L457】
+- **Carte thermique PDR (si plusieurs portées) :** `figures/mne3sd/article_b/mobility_speed/pdr_heatmap_speed_profile_range/pdr_heatmap_speed_profile_range.*`. Les annotations indiquent la PDR (%) et utilisent des couleurs adaptées aux faibles valeurs.【F:scripts/mne3sd/article_b/plots/plot_mobility_speed_metrics.py†L459-L533】
+- **Options :** `--dpi` contrôle la résolution de tous les exports (300 dpi par défaut) et `--style` permet de charger un thème Matplotlib supplémentaire.【F:scripts/mne3sd/article_b/plots/plot_mobility_speed_metrics.py†L38-L69】【F:scripts/mne3sd/article_b/plots/plot_mobility_speed_metrics.py†L535-L573】
+
+### `plot_mobility_gateway_metrics`
+
+Exploite les agrégats produits pour B9/B10 afin de documenter l’impact du nombre de passerelles :
+
+- **Répartition du trafic par passerelle :** `figures/mne3sd/article_b/mobility_gateway/pdr_distribution_by_gateway/pdr_distribution_by_gateway.*`. Chaque barre empilée indique la part de PDR captée par passerelle (JSON décodé automatiquement depuis `pdr_by_gateway_mean`).【F:scripts/mne3sd/article_b/plots/plot_mobility_gateway_metrics.py†L26-L145】【F:scripts/mne3sd/article_b/plots/plot_mobility_gateway_metrics.py†L155-L203】
+- **Délai downlink vs nombre de passerelles :** `figures/mne3sd/article_b/mobility_gateway/downlink_delay_vs_gateways/average_downlink_delay_vs_gateways.*`.【F:scripts/mne3sd/article_b/plots/plot_mobility_gateway_metrics.py†L205-L238】
+- **Comparaison des modèles :** `figures/mne3sd/article_b/mobility_gateway/model_comparison/pdr_vs_delay_model_comparison.*` résume PDR (%) et délai downlink avec annotations `N GW`.【F:scripts/mne3sd/article_b/plots/plot_mobility_gateway_metrics.py†L240-L278】
+- **Options :** `--style` suit la même logique que les autres scripts et `--show` permet d’afficher les figures au lieu de fermer Matplotlib en mode batch.【F:scripts/mne3sd/article_b/plots/plot_mobility_gateway_metrics.py†L30-L87】【F:scripts/mne3sd/article_b/plots/plot_mobility_gateway_metrics.py†L280-L304】
+
+> Astuce : les trois scripts prennent en charge `--show` pour examiner les figures avant export (pratique sous Windows 11 avec une session interactive), sans modifier les fichiers produits.【F:scripts/mne3sd/article_b/plots/plot_mobility_range_metrics.py†L37-L39】【F:scripts/mne3sd/article_b/plots/plot_mobility_range_metrics.py†L199-L201】【F:scripts/mne3sd/article_b/plots/plot_mobility_speed_metrics.py†L65-L69】【F:scripts/mne3sd/article_b/plots/plot_mobility_speed_metrics.py†L571-L573】【F:scripts/mne3sd/article_b/plots/plot_mobility_gateway_metrics.py†L45-L87】【F:scripts/mne3sd/article_b/plots/plot_mobility_gateway_metrics.py†L280-L304】
+
 ### B10 – Smooth, 1/2/4 passerelles
 - Même exécution que B9. Conserver les lignes agrégées `model=smooth`.  
 - Tracé : `plot_mobility_gateway_metrics`.
