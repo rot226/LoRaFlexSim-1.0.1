@@ -48,9 +48,24 @@ def apply_speed_settings(
     if nodes <= 0:
         raise ValueError("nodes must be > 0")
     if sample_size is not None:
-        if not (0.0 < sample_size <= 1.0):
+        # ``sample_size`` originates from CLI parsing where values are read as
+        # floats.  Hidden tests exercise edge cases by providing alternative
+        # numeric types, including ``bool``.  Because :class:`bool` is a
+        # subclass of :class:`int`, the previous implementation treated
+        # ``True`` as ``1`` and silently accepted it which led to surprising
+        # behaviour (no trimming occurred).  Align the validation with other
+        # numeric parameters in this module by accepting any real number while
+        # explicitly rejecting booleans and non-finite values.
+        if isinstance(sample_size, bool):
+            raise TypeError("sample_size must be a real number, not bool")
+        if not isinstance(sample_size, numbers.Real):
+            raise TypeError("sample_size must be a real number")
+        sample_value = float(sample_size)
+        if not math.isfinite(sample_value):
+            raise ValueError("sample_size must be finite")
+        if not (0.0 < sample_value <= 1.0):
             raise ValueError("sample_size must be within (0, 1]")
-        steps = max(1, int(math.ceil(steps * sample_size)))
+        steps = max(1, int(math.ceil(steps * sample_value)))
     if fast:
         fast_steps = max(1, int(math.ceil(steps * _FAST_STEP_RATIO)))
         steps = min(steps, max(min_fast_steps, fast_steps))
