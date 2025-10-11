@@ -369,6 +369,14 @@ class QoSManager:
         self.cluster_offered_totals = totals
         self.cluster_interference = interference
         self.cluster_capacity_limits = capacities
+        cluster_config = {
+            cluster.cluster_id: {
+                "arrival_rate": float(cluster.arrival_rate),
+                "pdr_target": float(cluster.pdr_target),
+                "device_share": float(cluster.device_share),
+            }
+            for cluster in self.clusters
+        }
         setattr(simulator, "qos_sf_limits", cluster_limits)
         setattr(simulator, "qos_node_sf_access", node_sf_access)
         setattr(simulator, "qos_node_clusters", node_cluster_ids)
@@ -378,6 +386,7 @@ class QoSManager:
         setattr(simulator, "qos_offered_totals", totals)
         setattr(simulator, "qos_interference", interference)
         setattr(simulator, "qos_capacity_limits", capacities)
+        setattr(simulator, "qos_clusters_config", cluster_config)
 
         node_ids = {getattr(node, "id", id(node)) for node in nodes}
         self._last_node_ids = node_ids
@@ -412,6 +421,7 @@ class QoSManager:
         setattr(simulator, "qos_offered_totals", {})
         setattr(simulator, "qos_capacity_limits", {})
         setattr(simulator, "qos_interference", {})
+        setattr(simulator, "qos_clusters_config", {})
         self._last_node_ids = set()
         self._last_recent_pdr = {}
         self._last_reconfig_time = None

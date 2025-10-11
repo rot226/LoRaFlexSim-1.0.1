@@ -4,7 +4,11 @@ import math
 
 import pytest
 
+from types import SimpleNamespace
+
 from loraflexsim.launcher import qos as qos_module
+from loraflexsim.launcher.channel import Channel
+from loraflexsim.launcher.node import Node
 from loraflexsim.launcher.qos import Cluster, QoSManager, build_clusters
 from loraflexsim.launcher.simulator import Simulator
 
@@ -383,4 +387,101 @@ def test_qos_reconfig_triggers_on_node_change_and_pdr_drift():
     manager.apply(simulator, "MixRA-Opt")
     drift_time = manager._last_reconfig_time
     assert drift_time is not None and drift_time > node_change_time
+
+
+def test_simulator_metrics_expose_qos_statistics():
+    sim = Simulator.__new__(Simulator)
+    sim.tx_attempted = 0
+    sim.rx_delivered = 0
+    sim.total_delay = 0.0
+    sim.delivered_count = 0
+    sim.current_time = 100.0
+    sim.packets_delivered = 0
+    sim.payload_size_bytes = 20
+    sim.nodes = []
+    sim.gateways = []
+    sim.network_server = SimpleNamespace(duplicate_packets=0, event_gateway={})
+    sim.packets_lost_collision = 0
+    sim.total_energy_J = 0.0
+    sim.energy_nodes_J = 0.0
+    sim.energy_gateways_J = 0.0
+    sim.retransmissions = 0
+    sim.events_log = []
+    sim._events_log_map = {}
+    sim.warm_up_intervals = 0
+    sim.dump_intervals = False
+
+    channel0 = Channel()
+    channel0.channel_index = 0
+    channel1 = Channel()
+    channel1.channel_index = 1
+
+    node1 = Node(1, 0.0, 0.0, 7, 14.0, channel=channel0)
+    node1.tx_attempted = 10
+    node1.rx_delivered = 9
+    node1.qos_cluster_id = 1
+
+    node2 = Node(2, 0.0, 0.0, 8, 14.0, channel=channel1)
+    node2.tx_attempted = 5
+    node2.rx_delivered = 4
+    node2.qos_cluster_id = 2
+
+    node3 = Node(3, 0.0, 0.0, 9, 14.0, channel=channel0)
+    node3.tx_attempted = 8
+    node3.rx_delivered = 6
+    node3.qos_cluster_id = 1
+
+    sim.nodes = [node1, node2, node3]
+    for node in sim.nodes:
+        node.interval_log = []
+        node.arrival_interval_sum = 0.0
+        node.arrival_interval_count = 0
+    sim.tx_attempted = sum(node.tx_attempted for node in sim.nodes)
+    sim.rx_delivered = sum(node.rx_delivered for node in sim.nodes)
+    sim.packets_delivered = sim.rx_delivered
+    sim.delivered_count = sim.rx_delivered
+
+    sim.qos_clusters_config = {
+        1: {"arrival_rate": 0.2, "pdr_target": 0.95, "device_share": 0.6},
+        2: {"arrival_rate": 0.1, "pdr_target": 0.85, "device_share": 0.4},
+    }
+    sim.qos_node_clusters = {1: 1, 2: 2, 3: 1}
+
+    metrics = sim.get_metrics()
+
+    cluster_pdr = metrics["qos_cluster_pdr"]
+    assert cluster_pdr[1] == pytest.approx(15 / 18)
+    assert cluster_pdr[2] == pytest.approx(4 / 5)
+
+    targets = metrics["qos_cluster_targets"]
+    assert targets == {1: 0.95, 2: 0.85}
+
+    gaps = metrics["qos_cluster_pdr_gap"]
+    assert gaps[1] == pytest.approx((15 / 18) - 0.95)
+    assert gaps[2] == pytest.approx((4 / 5) - 0.85)
+
+    throughputs = metrics["qos_cluster_throughput_bps"]
+    expected_pdr1 = 15 / 18
+    expected_throughput1 = 2 * 0.2 * 160 * expected_pdr1
+    expected_throughput2 = 1 * 0.1 * 160 * (4 / 5)
+    assert throughputs[1] == pytest.approx(expected_throughput1)
+    assert throughputs[2] == pytest.approx(expected_throughput2)
+
+    gini_expected = (
+        sum(
+            abs(a - b)
+            for a in (expected_throughput1, expected_throughput2)
+            for b in (expected_throughput1, expected_throughput2)
+        )
+        / (2 * 2 * (expected_throughput1 + expected_throughput2))
+    )
+    assert metrics["qos_throughput_gini"] == pytest.approx(gini_expected)
+
+    counts = metrics["qos_cluster_node_counts"]
+    assert counts == {1: 2, 2: 1}
+
+    sf_channel = metrics["qos_cluster_sf_channel"]
+    assert sf_channel[1][7][sim.channel_index(channel0)] == 1
+    assert sf_channel[1][9][sim.channel_index(channel0)] == 1
+    assert sf_channel[2][8][sim.channel_index(channel1)] == 1
 
