@@ -360,6 +360,56 @@ def test_mixra_opt_respects_duty_cycle_and_capacity():
         total_load = sum(channel_loads.values())
         assert total_load <= capacity + 1e-6
 
+
+def test_mixra_h_respects_cluster_capacity_limit():
+    channel0 = DummyChannel(channel_index=0)
+    channel1 = DummyChannel(channel_index=1)
+    nodes = [
+        DummyNode(1, 80.0, 0.0, 14.0, channel0),
+        DummyNode(2, 120.0, 0.0, 14.0, channel0),
+        DummyNode(3, 180.0, 0.0, 14.0, channel0),
+        DummyNode(4, 220.0, 0.0, 14.0, channel0),
+        DummyNode(5, 260.0, 0.0, 14.0, channel0),
+        DummyNode(6, 300.0, 0.0, 14.0, channel0),
+    ]
+    gateways = [DummyGateway(0.0, 0.0)]
+    simulator = DummySimulator(
+        nodes,
+        gateways,
+        channel0,
+        extra_channels=[channel1],
+        duty_cycle=0.01,
+    )
+
+    manager = QoSManager()
+    manager.configure_clusters(
+        1,
+        proportions=[1.0],
+        arrival_rates=[0.05],
+        pdr_targets=[0.9],
+    )
+
+    manager.apply(simulator, "MixRA-H")
+
+    cluster = manager.clusters[0]
+    cluster_id = cluster.cluster_id
+    airtimes = manager.sf_airtimes
+    channel_loads: dict[int, float] = {}
+    for node in nodes:
+        if manager.node_clusters.get(node.id) != cluster_id:
+            continue
+        sf = node.sf
+        tau = airtimes.get(sf, 0.0)
+        channel_index = getattr(getattr(node, "channel", None), "channel_index", 0)
+        channel_loads[channel_index] = channel_loads.get(channel_index, 0.0) + cluster.arrival_rate * tau
+
+    assert channel_loads
+    total_load = sum(channel_loads.values())
+    capacity = manager.cluster_capacity_limits.get(cluster_id)
+    if capacity is not None:
+        assert total_load <= capacity + 1e-6
+
+
 def test_qos_reconfig_triggers_on_node_change_and_pdr_drift():
     channel = DummyChannel()
     nodes = [

@@ -1220,10 +1220,13 @@ class QoSManager:
             capacity_limit = self.cluster_capacity_limits.get(cluster_id)
             if capacity_limit is None or capacity_limit <= 0.0:
                 per_channel_capacity = float("inf")
+                cluster_remaining = float("inf")
             else:
                 per_channel_capacity = float(capacity_limit)
+                cluster_remaining = float(capacity_limit)
             channel_remaining = {idx: per_channel_capacity for idx in channel_indices}
             channel_pos = 0
+            cluster_exhausted = False
 
             for sf_index, sf in enumerate(sfs):
                 queue = buckets.get(sf)
@@ -1231,6 +1234,10 @@ class QoSManager:
                     continue
                 load_per_node = cluster.arrival_rate * airtimes.get(sf, 0.0)
                 while queue:
+                    if cluster_remaining <= 1e-9:
+                        cluster_remaining = 0.0
+                        cluster_exhausted = True
+                        break
                     if load_per_node <= 0.0:
                         entry, access = queue.popleft()
                         target_sf = sf if sf in access else (access[0] if access else sf)
@@ -1277,7 +1284,8 @@ class QoSManager:
 
                     channel_idx = channel_indices[channel_pos]
                     remaining = channel_remaining.get(channel_idx, float("inf"))
-                    if remaining <= load_per_node - 1e-9:
+                    effective_remaining = min(remaining, cluster_remaining)
+                    if effective_remaining <= load_per_node - 1e-9:
                         channel_remaining[channel_idx] = 0.0
                         channel_pos += 1
                         continue
@@ -1304,10 +1312,18 @@ class QoSManager:
                     if channel_obj is not None:
                         node.channel = channel_obj
                     node.tx_power = self._assign_tx_power(sf_order_map.get(sf, len(sfs) - 1))
-                    channel_remaining[channel_idx] = remaining - load_per_node
+                    channel_remaining[channel_idx] = max(0.0, remaining - load_per_node)
+                    cluster_remaining = max(0.0, cluster_remaining - load_per_node)
                     if channel_remaining[channel_idx] <= 1e-9:
                         channel_remaining[channel_idx] = 0.0
                         channel_pos += 1
+                    if cluster_remaining <= 1e-9:
+                        cluster_remaining = 0.0
+                        cluster_exhausted = True
+                        break
+
+                if cluster_exhausted:
+                    break
 
             for sf in sfs:
                 queue = buckets.get(sf)
