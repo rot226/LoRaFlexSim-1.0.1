@@ -26,6 +26,17 @@ def test_build_clusters_returns_normalised_instances():
     ]
 
 
+def test_build_clusters_accepts_rounding_error_on_proportions():
+    clusters = build_clusters(
+        3,
+        proportions=[0.333334, 0.333333, 0.333333],
+        arrival_rates=[0.2, 0.1, 0.05],
+        pdr_targets=[0.95, 0.9, 0.85],
+    )
+    assert len(clusters) == 3
+    assert math.isclose(sum(cluster.device_share for cluster in clusters), 1.0, rel_tol=1e-9)
+
+
 def test_build_clusters_validates_lengths_and_values():
     with pytest.raises(ValueError):
         build_clusters(
@@ -716,3 +727,102 @@ def test_build_d_matrix_counts_minimum_sf_only():
         1: {7: 1, 8: 0, 9: 0},
         2: {7: 0, 8: 0, 9: 1},
     }
+
+
+def _make_topology(num_nodes: int, *, num_channels: int, radius_step: float = 30.0):
+    channels = [DummyChannel(channel_index=index) for index in range(num_channels)]
+    nodes = []
+    for idx in range(1, num_nodes + 1):
+        distance = radius_step * idx
+        nodes.append(
+            DummyNode(
+                idx,
+                distance,
+                0.0,
+                14.0,
+                channels[(idx - 1) % num_channels],
+            )
+        )
+    gateways = [DummyGateway(0.0, 0.0)]
+    simulator = DummySimulator(nodes, gateways, channels[0], extra_channels=channels[1:])
+    return nodes, simulator
+
+
+@pytest.mark.parametrize(
+    "label, proportions, arrival_rates, pdr_targets, num_nodes, num_channels",
+    [
+        (
+            "small_single_cluster",
+            [1.0],
+            [1.0 / 120.0],
+            [0.9],
+            5,
+            1,
+        ),
+        (
+            "dual_balanced_clusters",
+            [0.55, 0.45],
+            [1.0 / 180.0, 1.0 / 90.0],
+            [0.95, 0.9],
+            10,
+            2,
+        ),
+        (
+            "triple_dense_clusters",
+            [0.4, 0.35, 0.25],
+            [1.0 / 300.0, 1.0 / 180.0, 1.0 / 60.0],
+            [0.97, 0.92, 0.88],
+            18,
+            3,
+        ),
+    ],
+)
+def test_qos_manager_supports_varied_topologies(
+    label, proportions, arrival_rates, pdr_targets, num_nodes, num_channels
+):
+    nodes, simulator = _make_topology(num_nodes, num_channels=num_channels)
+    manager = QoSManager()
+    manager.configure_clusters(
+        len(proportions),
+        proportions=proportions,
+        arrival_rates=arrival_rates,
+        pdr_targets=pdr_targets,
+    )
+
+    simulator.current_time = 0.0
+    manager.apply(simulator, "MixRA-Opt")
+
+    assert manager.clusters
+    assert set(manager.node_clusters.values()) == {cluster.cluster_id for cluster in manager.clusters}
+
+    counts = {cluster.cluster_id: 0 for cluster in manager.clusters}
+    for cluster_id in manager.node_clusters.values():
+        counts[cluster_id] = counts.get(cluster_id, 0) + 1
+
+    for cluster, share in zip(manager.clusters, proportions):
+        expected = share * num_nodes
+        actual = counts.get(cluster.cluster_id, 0)
+        assert abs(actual - expected) <= 1.0, f"{label}: distribution inattendue pour le cluster {cluster.cluster_id}"
+        assert manager.cluster_offered_totals[cluster.cluster_id] >= 0.0
+
+    airtimes = manager.sf_airtimes
+    for node in nodes:
+        cluster_id = manager.node_clusters.get(node.id)
+        if cluster_id is None:
+            continue
+        sf = node.qos_min_sf
+        assert sf is not None
+        assert sf in manager.node_sf_access[node.id]
+        airtime = airtimes.get(sf, 0.0)
+        assert airtime > 0.0
+
+    for cluster in manager.clusters:
+        total = manager.cluster_offered_totals[cluster.cluster_id]
+        assert total == pytest.approx(
+            sum(
+                cluster.arrival_rate * airtimes[node.qos_min_sf]
+                for node in nodes
+                if manager.node_clusters.get(node.id) == cluster.cluster_id
+                and node.qos_min_sf is not None
+            )
+        )
