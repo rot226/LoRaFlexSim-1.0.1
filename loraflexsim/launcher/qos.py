@@ -13,6 +13,7 @@ peuvent être affinées par la suite si un modèle plus précis est nécessaire.
 from __future__ import annotations
 
 import importlib.util
+from collections import deque
 from dataclasses import dataclass
 import math
 from typing import Iterable, Sequence
@@ -1038,29 +1039,158 @@ class QoSManager:
         pairs = self._sorted_distances(simulator)
         if not pairs:
             return
-        sfs = [7, 8, 9, 10, 11, 12]
-        # Répartition heuristique : favorise les petits SF tout en réservant une
-        # part non négligeable aux valeurs élevées pour couvrir les zones plus
-        # éloignées.
-        distribution = [0.28, 0.22, 0.18, 0.14, 0.10, 0.08]
-        total = len(pairs)
-        cumulative = 0
-        boundaries = []
-        for share in distribution:
-            cumulative += share * total
-            boundaries.append(round(cumulative))
-        boundaries[-1] = total
-        current = 0
-        for sf_index, boundary in enumerate(boundaries):
-            sf = sfs[sf_index]
-            while current < min(boundary, total):
-                entry = pairs[current]
-                entry.node.sf = sf
-                entry.node.tx_power = self._assign_tx_power(sf_index)
-                current += 1
-        while current < total:
-            entry = pairs[current]
-            entry.node.sf = sfs[-1]
-            entry.node.tx_power = self._assign_tx_power(len(sfs) - 1)
-            current += 1
+        if not self.clusters or not self.node_sf_access:
+            self._assign_distance_based(pairs)
+            return
+
+        channel_map: dict[int, object | None] = {}
+        multichannel = getattr(simulator, "multichannel", None)
+        if multichannel is not None:
+            for index, channel in enumerate(getattr(multichannel, "channels", []) or []):
+                channel_index = getattr(channel, "channel_index", index)
+                channel_map[channel_index] = channel
+        base_channel = getattr(simulator, "channel", None)
+        if base_channel is not None:
+            channel_index = getattr(base_channel, "channel_index", 0)
+            channel_map.setdefault(channel_index, base_channel)
+        if not channel_map:
+            channel_map[0] = base_channel
+        channel_indices = sorted(channel_map)
+        default_channel_index = channel_indices[0]
+
+        sfs = sorted({sf for access in self.node_sf_access.values() for sf in access})
+        if not sfs:
+            sfs = [7, 8, 9, 10, 11, 12]
+        sf_order_map = {sf: position for position, sf in enumerate(sfs)}
+
+        airtimes = self.sf_airtimes or self._compute_sf_airtimes(simulator, sfs)
+
+        cluster_nodes: dict[int, dict[int, deque[tuple[_NodeDistance, list[int]]]]] = {}
+        fallback_pairs: list[_NodeDistance] = []
+        for entry in pairs:
+            node = entry.node
+            node_id = getattr(node, "id", id(node))
+            cluster_id = self.node_clusters.get(node_id)
+            accessible = self.node_sf_access.get(node_id) or []
+            if cluster_id is None or not accessible:
+                fallback_pairs.append(entry)
+                continue
+            min_sf = accessible[0]
+            cluster_nodes.setdefault(cluster_id, {sf: deque() for sf in sfs})
+            if min_sf not in cluster_nodes[cluster_id]:
+                cluster_nodes[cluster_id][min_sf] = deque()
+            cluster_nodes[cluster_id][min_sf].append((entry, accessible))
+
+        if not cluster_nodes:
+            self._assign_distance_based(pairs)
+            return
+
+        ordered_clusters = sorted(self.clusters, key=lambda c: c.pdr_target, reverse=True)
+
+        for cluster in ordered_clusters:
+            cluster_id = cluster.cluster_id
+            buckets = cluster_nodes.get(cluster_id)
+            if not buckets:
+                continue
+            capacity_limit = self.cluster_capacity_limits.get(cluster_id)
+            if capacity_limit is None or capacity_limit <= 0.0:
+                per_channel_capacity = float("inf")
+            else:
+                per_channel_capacity = float(capacity_limit)
+            channel_remaining = {idx: per_channel_capacity for idx in channel_indices}
+            channel_pos = 0
+
+            for sf_index, sf in enumerate(sfs):
+                queue = buckets.get(sf)
+                if not queue:
+                    continue
+                load_per_node = cluster.arrival_rate * airtimes.get(sf, 0.0)
+                while queue:
+                    if load_per_node <= 0.0:
+                        entry, access = queue.popleft()
+                        target_sf = sf if sf in access else (access[0] if access else sf)
+                        sf_pos = sf_order_map.get(target_sf, len(sfs) - 1)
+                        channel_idx = channel_indices[min(channel_pos, len(channel_indices) - 1)]
+                        channel_obj = channel_map.get(channel_idx, channel_map.get(default_channel_index))
+                        node = entry.node
+                        node.sf = target_sf
+                        if channel_obj is not None:
+                            node.channel = channel_obj
+                        node.tx_power = self._assign_tx_power(sf_pos)
+                        continue
+
+                    if channel_pos >= len(channel_indices):
+                        if sf_index + 1 < len(sfs):
+                            next_sf = sfs[sf_index + 1]
+                            next_queue = buckets.setdefault(next_sf, deque())
+                            while queue:
+                                entry, access = queue.popleft()
+                                if next_sf in access:
+                                    next_queue.append((entry, access))
+                                else:
+                                    fallback_pairs.append(entry)
+                            break
+                        else:
+                            channel_idx = channel_indices[-1]
+                            channel_obj = channel_map.get(channel_idx, channel_map.get(default_channel_index))
+                            while queue:
+                                entry, access = queue.popleft()
+                                if not access:
+                                    fallback_pairs.append(entry)
+                                    continue
+                                chosen_sf = sf if sf in access else access[-1]
+                                sf_pos = sf_order_map.get(chosen_sf, len(sfs) - 1)
+                                node = entry.node
+                                node.sf = chosen_sf
+                                if channel_obj is not None:
+                                    node.channel = channel_obj
+                                node.tx_power = self._assign_tx_power(sf_pos)
+                            break
+
+                    if channel_pos >= len(channel_indices):
+                        break
+
+                    channel_idx = channel_indices[channel_pos]
+                    remaining = channel_remaining.get(channel_idx, float("inf"))
+                    if remaining <= load_per_node - 1e-9:
+                        channel_remaining[channel_idx] = 0.0
+                        channel_pos += 1
+                        continue
+
+                    entry, access = queue.popleft()
+                    if sf not in access:
+                        # Recherche du prochain SF accessible pour cet équipement.
+                        promoted_sf = None
+                        for candidate in access:
+                            if candidate >= sf:
+                                promoted_sf = candidate
+                                break
+                        if promoted_sf is None:
+                            fallback_pairs.append(entry)
+                        elif promoted_sf == sf:
+                            queue.appendleft((entry, access))
+                        else:
+                            buckets.setdefault(promoted_sf, deque()).append((entry, access))
+                        continue
+
+                    channel_obj = channel_map.get(channel_idx, channel_map.get(default_channel_index))
+                    node = entry.node
+                    node.sf = sf
+                    if channel_obj is not None:
+                        node.channel = channel_obj
+                    node.tx_power = self._assign_tx_power(sf_order_map.get(sf, len(sfs) - 1))
+                    channel_remaining[channel_idx] = remaining - load_per_node
+                    if channel_remaining[channel_idx] <= 1e-9:
+                        channel_remaining[channel_idx] = 0.0
+                        channel_pos += 1
+
+            for sf in sfs:
+                queue = buckets.get(sf)
+                if not queue:
+                    continue
+                while queue:
+                    entry, _ = queue.popleft()
+                    fallback_pairs.append(entry)
+
+        self._assign_distance_based(fallback_pairs)
 
