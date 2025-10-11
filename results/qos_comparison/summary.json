@@ -1,0 +1,31 @@
+{
+  "gains": {
+    "PDR": -0.07916666666666661,
+    "throughput_bps": -6.526704247433514
+  },
+  "scenarios": {
+    "adr_disabled": {
+      "PDR": 0.8166666666666667,
+      "events": 240,
+      "events_path": "/workspace/LoRaFlexSim-1.0.1/results/qos_comparison/adr_disabled_events.json",
+      "metrics_path": "/workspace/LoRaFlexSim-1.0.1/results/qos_comparison/adr_disabled_metrics.json",
+      "qos_throughput_gini": 0.0,
+      "throughput_bps": 74.41271300153531
+    },
+    "qos_enabled": {
+      "PDR": 0.7375,
+      "events": 240,
+      "events_path": "/workspace/LoRaFlexSim-1.0.1/results/qos_comparison/qos_enabled_events.json",
+      "metrics_path": "/workspace/LoRaFlexSim-1.0.1/results/qos_comparison/qos_enabled_metrics.json",
+      "qos_throughput_gini": 0.13276836158192093,
+      "throughput_bps": 67.8860087541018
+    }
+  },
+  "settings": {
+    "duration_s": null,
+    "num_nodes": 40,
+    "packet_interval": 30.0,
+    "packets_per_node": 6,
+    "seed": 1
+  }
+}
