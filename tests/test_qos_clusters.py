@@ -182,7 +182,23 @@ def test_qos_manager_computes_sf_limits_and_accessible_sets():
         assert manager.node_sf_access[node.id] == expected_access[node.id]
         assert node.qos_accessible_sf == expected_access[node.id]
         assert node.qos_cluster_id == manager.node_clusters[node.id]
+        if expected_access[node.id]:
+            assert node.qos_min_sf == expected_access[node.id][0]
+        else:
+            assert node.qos_min_sf is None
 
     assert simulator.qos_sf_limits == manager.sf_limits
     assert simulator.qos_node_sf_access == manager.node_sf_access
     assert simulator.qos_node_clusters == manager.node_clusters
+    expected_d = {
+        cluster.cluster_id: {sf: 0 for sf in sorted(simulator.REQUIRED_SNR)}
+        for cluster in manager.clusters
+    }
+    for node in nodes:
+        cluster_id = manager.node_clusters[node.id]
+        access = expected_access[node.id]
+        if not access:
+            continue
+        expected_d[cluster_id][access[0]] += 1
+    assert manager.cluster_d_matrix == expected_d
+    assert simulator.qos_d_matrix == expected_d
