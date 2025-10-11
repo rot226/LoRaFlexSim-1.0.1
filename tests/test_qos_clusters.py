@@ -389,6 +389,87 @@ def test_qos_reconfig_triggers_on_node_change_and_pdr_drift():
     assert drift_time is not None and drift_time > node_change_time
 
 
+def test_qos_manager_compute_sf_airtimes_follows_channel_airtime():
+    channel = DummyChannel()
+    simulator = DummySimulator([], [DummyGateway(0.0, 0.0)], channel)
+    manager = QoSManager()
+
+    sfs = [7, 9, 12]
+    airtimes = manager._compute_sf_airtimes(simulator, sfs)
+
+    assert set(airtimes) == set(sfs)
+    for sf in sfs:
+        expected = channel.airtime(sf, simulator.payload_size_bytes)
+        assert airtimes[sf] == pytest.approx(expected)
+
+
+def test_qos_manager_compute_sf_airtimes_handles_invalid_channel():
+    class FaultyChannel(DummyChannel):
+        def airtime(self, sf: int, payload_size: int = 20) -> float:  # pragma: no cover - simple override
+            raise RuntimeError("airtime failure")
+
+    simulator = SimpleNamespace(
+        channel=FaultyChannel(), payload_size_bytes=20, multichannel=None
+    )
+    manager = QoSManager()
+
+    result = manager._compute_sf_airtimes(simulator, [7, 8])
+
+    assert result == {7: 0.0, 8: 0.0}
+
+
+def test_qos_manager_compute_offered_traffic_aggregates_by_channel():
+    manager = QoSManager()
+    cluster_a = Cluster(cluster_id=1, device_share=0.5, arrival_rate=0.2, pdr_target=0.95)
+    cluster_b = Cluster(cluster_id=2, device_share=0.5, arrival_rate=0.4, pdr_target=0.9)
+    manager.clusters = [cluster_a, cluster_b]
+
+    channel0 = DummyChannel(channel_index=0)
+    channel1 = DummyChannel(channel_index=1)
+    node_a = DummyNode(1, 0.0, 0.0, 14.0, channel0)
+    node_b = DummyNode(2, 0.0, 0.0, 14.0, channel1)
+    node_c = DummyNode(3, 0.0, 0.0, 14.0, channel0)
+
+    assignments = {node_a: cluster_a, node_b: cluster_a, node_c: cluster_b}
+    node_sf_access = {1: [7, 8], 2: [7], 3: []}
+    airtimes = {7: 0.5, 8: 0.25}
+
+    offered = manager._compute_offered_traffic(assignments, node_sf_access, airtimes)
+
+    assert offered[1][7][0] == pytest.approx(cluster_a.arrival_rate * airtimes[7])
+    assert offered[1][7][1] == pytest.approx(cluster_a.arrival_rate * airtimes[7])
+    assert offered[1][8] == {}
+    assert offered[2][7] == {}
+    assert offered[2][8] == {}
+
+
+@pytest.mark.parametrize(
+    "pdr, delta",
+    [
+        (0.9, 0.0),
+        (0.99, 0.2),
+        (0.5, 1.5),
+        (0.999999, 0.0),
+    ],
+)
+def test_capacity_from_pdr_stays_non_negative(pdr, delta):
+    capacity = QoSManager._capacity_from_pdr(pdr, delta)
+    assert capacity >= 0.0
+
+
+def test_lambertw_neg1_properties():
+    x = -0.2
+    w = QoSManager._lambertw_neg1(x)
+    assert w <= -1.0
+    assert math.isclose(w * math.exp(w), x, rel_tol=1e-12, abs_tol=1e-12)
+
+    limit = -1.0 / math.e
+    assert QoSManager._lambertw_neg1(limit) == pytest.approx(-1.0)
+
+    with pytest.raises(ValueError):
+        QoSManager._lambertw_neg1(0.0)
+
+
 def test_simulator_metrics_expose_qos_statistics():
     sim = Simulator.__new__(Simulator)
     sim.tx_attempted = 0
