@@ -12,9 +12,16 @@ peuvent être affinées par la suite si un modèle plus précis est nécessaire.
 
 from __future__ import annotations
 
+import importlib.util
 from dataclasses import dataclass
 import math
 from typing import Iterable, Sequence
+
+_SCIPY_SPEC = importlib.util.find_spec("scipy.optimize")
+if _SCIPY_SPEC is not None:
+    from scipy.optimize import minimize  # type: ignore[assignment]
+else:  # pragma: no cover - dépendance optionnelle
+    minimize = None  # type: ignore[assignment]
 
 
 # Mapping lisible pour l'interface utilisateur :
@@ -609,17 +616,423 @@ class QoSManager:
         return w
 
     # --- Implémentations MixRA ---------------------------------------------
-    def _apply_mixra_opt(self, simulator) -> None:
-        pairs = self._sorted_distances(simulator)
-        if not pairs:
+    def _assign_distance_based(self, entries: Sequence[_NodeDistance]) -> None:
+        if not entries:
             return
         sfs = [7, 8, 9, 10, 11, 12]
-        chunk_size = max(1, math.ceil(len(pairs) / len(sfs)))
-        for index, entry in enumerate(pairs):
+        chunk_size = max(1, math.ceil(len(entries) / len(sfs)))
+        for index, entry in enumerate(entries):
             sf_index = min(index // chunk_size, len(sfs) - 1)
             sf = sfs[sf_index]
             entry.node.sf = sf
             entry.node.tx_power = self._assign_tx_power(sf_index)
+
+    @staticmethod
+    def _solve_mixra_greedy(
+        bounds: Sequence[tuple[float, float]],
+        cluster_var_indices: dict[int, list[int]],
+        sf_limits: dict[tuple[int, int], float],
+        var_data: Sequence[dict[str, float | int]],
+        throughput_coeffs: Sequence[float],
+        cluster_caps: dict[int, float],
+        duty_cycle: float | None,
+    ) -> list[float] | None:
+        solution = [0.0] * len(var_data)
+        sf_remaining = {key: limit for key, limit in sf_limits.items()}
+        channel_remaining: dict[int, float] = {}
+        if duty_cycle is not None and duty_cycle > 0.0:
+            for data in var_data:
+                channel_index = int(data["channel"])
+                channel_remaining.setdefault(channel_index, float(duty_cycle))
+        cluster_remaining = {
+            cluster_id: float(capacity) for cluster_id, capacity in cluster_caps.items() if capacity > 0.0
+        }
+
+        for cluster_id, indices in cluster_var_indices.items():
+            remaining_share = 1.0
+            ordered = sorted(indices, key=lambda idx: throughput_coeffs[idx], reverse=True)
+            for idx in ordered:
+                if remaining_share <= 0.0:
+                    break
+                upper = bounds[idx][1]
+                if upper <= 0.0:
+                    continue
+                data = var_data[idx]
+                sf = int(data["sf"])
+                channel_index = int(data["channel"])
+                load_coeff = float(data["load_coeff"])
+                share_limit = min(upper, remaining_share)
+                sf_key = (cluster_id, sf)
+                sf_cap = sf_remaining.get(sf_key)
+                if sf_cap is not None:
+                    share_limit = min(share_limit, sf_cap)
+                if duty_cycle is not None and duty_cycle > 0.0:
+                    channel_cap = channel_remaining.get(channel_index)
+                    if channel_cap is not None and load_coeff > 0.0:
+                        share_limit = min(share_limit, channel_cap / load_coeff)
+                cluster_cap = cluster_remaining.get(cluster_id)
+                if cluster_cap is not None and load_coeff > 0.0:
+                    share_limit = min(share_limit, cluster_cap / load_coeff)
+                if share_limit <= 0.0:
+                    continue
+                solution[idx] = share_limit
+                remaining_share -= share_limit
+                if sf_cap is not None:
+                    sf_remaining[sf_key] = max(0.0, sf_cap - share_limit)
+                if duty_cycle is not None and duty_cycle > 0.0:
+                    channel_cap = channel_remaining.get(channel_index)
+                    if channel_cap is not None and load_coeff > 0.0:
+                        channel_remaining[channel_index] = max(
+                            0.0, channel_cap - share_limit * load_coeff
+                        )
+                if cluster_cap is not None and load_coeff > 0.0:
+                    cluster_remaining[cluster_id] = max(0.0, cluster_cap - share_limit * load_coeff)
+            if remaining_share > 1e-6:
+                return None
+        return solution
+
+    def _apply_mixra_opt(self, simulator) -> None:
+        pairs = self._sorted_distances(simulator)
+        if not pairs:
+            return
+        if not self.clusters or not self.node_sf_access:
+            self._assign_distance_based(pairs)
+            return
+
+        # Recensement des canaux disponibles.
+        channel_map: dict[int, object | None] = {}
+        multichannel = getattr(simulator, "multichannel", None)
+        if multichannel is not None:
+            for index, channel in enumerate(getattr(multichannel, "channels", []) or []):
+                channel_index = getattr(channel, "channel_index", index)
+                channel_map[channel_index] = channel
+        base_channel = getattr(simulator, "channel", None)
+        if base_channel is not None:
+            channel_index = getattr(base_channel, "channel_index", 0)
+            channel_map.setdefault(channel_index, base_channel)
+        if not channel_map:
+            channel_map[0] = base_channel
+        channel_indices = sorted(channel_map)
+
+        # Classement des nœuds par cluster en conservant l'ordre par distance.
+        cluster_nodes: dict[int, list[tuple[_NodeDistance, list[int]]]] = {}
+        fallback_pairs: list[_NodeDistance] = []
+        for entry in pairs:
+            node = entry.node
+            node_id = getattr(node, "id", id(node))
+            cluster_id = self.node_clusters.get(node_id)
+            accessible = self.node_sf_access.get(node_id) or []
+            if cluster_id is None or not accessible:
+                fallback_pairs.append(entry)
+                continue
+            cluster_nodes.setdefault(cluster_id, []).append((entry, accessible))
+
+        if not cluster_nodes:
+            self._assign_distance_based(pairs)
+            return
+
+        # Préparation des paramètres d'optimisation.
+        sfs = sorted({sf for access in self.node_sf_access.values() for sf in access}) or [7, 8, 9, 10, 11, 12]
+        airtimes = self.sf_airtimes or self._compute_sf_airtimes(simulator, sfs)
+        payload_bits = float(getattr(simulator, "payload_size_bytes", 20) * 8)
+        cluster_lookup = {cluster.cluster_id: cluster for cluster in self.clusters}
+        cluster_caps = {
+            cluster_id: cap
+            for cluster_id, cap in self.cluster_capacity_limits.items()
+            if cap is not None and cap > 0.0
+        }
+
+        var_data: list[dict[str, float | int]] = []
+        throughput_coeffs: list[float] = []
+        bounds: list[tuple[float, float]] = []
+        cluster_var_indices: dict[int, list[int]] = {}
+        sf_cluster_indices: dict[tuple[int, int], list[int]] = {}
+        channel_var_indices: dict[int, list[int]] = {}
+        sf_limits: dict[tuple[int, int], float] = {}
+        cluster_sizes: dict[int, int] = {}
+
+        for cluster_id, entries in cluster_nodes.items():
+            cluster = cluster_lookup.get(cluster_id)
+            if cluster is None:
+                fallback_pairs.extend(entry for entry, _ in entries)
+                continue
+            node_count = len(entries)
+            if node_count == 0:
+                fallback_pairs.extend(entry for entry, _ in entries)
+                continue
+            cluster_sizes[cluster_id] = node_count
+            lambda_k = float(cluster.arrival_rate)
+            pdr_k = float(cluster.pdr_target)
+            accessible_counts: dict[int, int] = {sf: 0 for sf in sfs}
+            for _, access in entries:
+                for sf in access:
+                    if sf in accessible_counts:
+                        accessible_counts[sf] += 1
+
+            for sf in sfs:
+                tau = float(airtimes.get(sf, 0.0))
+                access_count = accessible_counts.get(sf, 0)
+                if tau <= 0.0 or access_count <= 0:
+                    continue
+                load_coeff = node_count * lambda_k * tau
+                if load_coeff <= 0.0:
+                    continue
+                max_share = access_count / node_count
+                sf_limits[(cluster_id, sf)] = max_share
+                throughput = node_count * lambda_k * payload_bits * pdr_k
+                if tau > 0.0:
+                    throughput /= tau
+                cap_limit = cluster_caps.get(cluster_id)
+
+                for channel_index in channel_indices:
+                    upper = min(1.0, max_share)
+                    if cap_limit is not None:
+                        upper = min(upper, cap_limit / load_coeff)
+                    if upper <= 0.0:
+                        continue
+                    idx = len(var_data)
+                    var_data.append(
+                        {
+                            "cluster_id": cluster_id,
+                            "sf": sf,
+                            "channel": channel_index,
+                            "load_coeff": load_coeff,
+                        }
+                    )
+                    throughput_coeffs.append(throughput)
+                    bounds.append((0.0, upper))
+                    cluster_var_indices.setdefault(cluster_id, []).append(idx)
+                    sf_cluster_indices.setdefault((cluster_id, sf), []).append(idx)
+                    channel_var_indices.setdefault(channel_index, []).append(idx)
+
+        # Abandon si aucun couple optimisable n'est disponible.
+        if not var_data:
+            self._assign_distance_based(pairs)
+            return
+
+        # Chaque cluster doit pouvoir satisfaire la contrainte de somme.
+        for cluster_id, indices in cluster_var_indices.items():
+            total_capacity = sum(bounds[idx][1] for idx in indices)
+            if total_capacity < 1.0 - 1e-9:
+                self._assign_distance_based(pairs)
+                return
+
+        # Construction d'un point initial respectant les bornes et la contrainte d'égalité.
+        x0 = [0.0] * len(var_data)
+        for cluster_id, indices in cluster_var_indices.items():
+            remaining = 1.0
+            for idx in sorted(indices, key=lambda i: bounds[i][1], reverse=True):
+                upper = bounds[idx][1]
+                value = min(upper, remaining)
+                x0[idx] = value
+                remaining -= value
+                if remaining <= 1e-9:
+                    break
+            if remaining > 1e-6:
+                self._assign_distance_based(pairs)
+                return
+
+        def objective(values):
+            total = 0.0
+            for coeff, value in zip(throughput_coeffs, values):
+                if value <= 0.0:
+                    continue
+                total += coeff * float(value)
+            return -total
+
+        constraints = []
+        for cluster_id, indices in cluster_var_indices.items():
+            idxs = tuple(indices)
+            constraints.append(
+                {
+                    "type": "eq",
+                    "fun": lambda values, idxs=idxs: sum(float(values[i]) for i in idxs) - 1.0,
+                }
+            )
+            cap_limit = cluster_caps.get(cluster_id)
+            if cap_limit is not None:
+                terms = tuple((i, float(var_data[i]["load_coeff"])) for i in idxs)
+                constraints.append(
+                    {
+                        "type": "ineq",
+                        "fun": lambda values, terms=terms, limit=cap_limit: limit
+                        - sum(float(values[i]) * coeff for i, coeff in terms),
+                    }
+                )
+
+        for (cluster_id, sf), indices in sf_cluster_indices.items():
+            limit = sf_limits.get((cluster_id, sf))
+            if limit is None:
+                continue
+            idxs = tuple(indices)
+            constraints.append(
+                {
+                    "type": "ineq",
+                    "fun": lambda values, idxs=idxs, limit=limit: limit
+                    - sum(float(values[i]) for i in idxs),
+                }
+            )
+
+        duty_manager = getattr(simulator, "duty_cycle_manager", None)
+        duty_cycle = getattr(duty_manager, "duty_cycle", None) if duty_manager is not None else None
+        if duty_cycle is not None and duty_cycle > 0.0:
+            for channel_id, indices in channel_var_indices.items():
+                terms = tuple((i, float(var_data[i]["load_coeff"])) for i in indices)
+                constraints.append(
+                    {
+                        "type": "ineq",
+                        "fun": lambda values, terms=terms, limit=duty_cycle: limit
+                        - sum(float(values[i]) * coeff for i, coeff in terms),
+                    }
+                )
+
+        if minimize is None:
+            solution = self._solve_mixra_greedy(
+                bounds,
+                cluster_var_indices,
+                sf_limits,
+                var_data,
+                throughput_coeffs,
+                cluster_caps,
+                duty_cycle,
+            )
+            if solution is None:
+                self._assign_distance_based(pairs)
+                return
+        else:
+            result = minimize(
+                objective,
+                x0,
+                method="SLSQP",
+                bounds=bounds,
+                constraints=constraints,
+                options={"maxiter": 200, "ftol": 1e-9},
+            )
+
+            if not result.success or not result.x.size:
+                self._assign_distance_based(pairs)
+                return
+
+            solution = [max(0.0, min(bounds[idx][1], float(value))) for idx, value in enumerate(result.x)]
+
+        # Normalisation par cluster pour éviter les dérives numériques.
+        for cluster_id, indices in cluster_var_indices.items():
+            total = sum(solution[idx] for idx in indices)
+            if total <= 0.0:
+                continue
+            for idx in indices:
+                solution[idx] /= total
+
+        sf_order = [7, 8, 9, 10, 11, 12]
+        sf_order_map = {sf: position for position, sf in enumerate(sf_order)}
+        default_channel_index = channel_indices[0]
+
+        for cluster_id, entries in cluster_nodes.items():
+            indices = cluster_var_indices.get(cluster_id)
+            if not indices:
+                fallback_pairs.extend(entry for entry, _ in entries)
+                continue
+            node_count = cluster_sizes.get(cluster_id, len(entries))
+            counts: dict[int, int] = {}
+            residuals: list[tuple[float, int]] = []
+            max_nodes_per_index: dict[int, int] = {}
+            for idx in indices:
+                share = solution[idx]
+                target = share * node_count
+                base = math.floor(target)
+                max_nodes = int(math.floor(bounds[idx][1] * node_count + 1e-9))
+                if max_nodes < 0:
+                    max_nodes = 0
+                load_coeff = float(var_data[idx]["load_coeff"])
+                if node_count > 0 and load_coeff > 0.0:
+                    per_node_load = load_coeff / node_count
+                    if duty_cycle is not None and duty_cycle > 0.0:
+                        channel_limit = int(math.floor((duty_cycle + 1e-9) / per_node_load))
+                        if channel_limit < max_nodes:
+                            max_nodes = channel_limit
+                    cluster_cap = cluster_caps.get(cluster_id)
+                    if cluster_cap is not None:
+                        cluster_limit = int(math.floor((cluster_cap + 1e-9) / per_node_load))
+                        if cluster_limit < max_nodes:
+                            max_nodes = cluster_limit
+                if base > max_nodes:
+                    base = max_nodes
+                counts[idx] = int(base)
+                residual = max(target - base, 0.0)
+                residuals.append((residual, idx))
+                max_nodes_per_index[idx] = max_nodes
+            remaining = node_count - sum(counts.values())
+            if remaining > 0:
+                residuals.sort(reverse=True)
+                for _, idx in residuals:
+                    if remaining <= 0:
+                        break
+                    max_nodes = max_nodes_per_index.get(idx, node_count)
+                    if counts[idx] >= max_nodes:
+                        continue
+                    counts[idx] += 1
+                    remaining -= 1
+
+            available = list(entries)
+            assignments: dict[int, list[tuple[_NodeDistance, list[int]]]] = {idx: [] for idx in indices}
+
+            for idx in sorted(indices, key=lambda i: (solution[i], -var_data[i]["sf"]), reverse=True):
+                target = counts.get(idx, 0)
+                if target <= 0:
+                    continue
+                sf = int(var_data[idx]["sf"])
+                for entry, access in list(available):
+                    if sf not in access:
+                        continue
+                    assignments[idx].append((entry, access))
+                    available.remove((entry, access))
+                    if len(assignments[idx]) >= target:
+                        break
+
+            for idx in indices:
+                target = counts.get(idx, 0)
+                allocated = len(assignments.get(idx, []))
+                if allocated >= target:
+                    continue
+                sf = int(var_data[idx]["sf"])
+                for entry, access in list(available):
+                    if sf not in access:
+                        continue
+                    assignments[idx].append((entry, access))
+                    available.remove((entry, access))
+                    allocated += 1
+                    if allocated >= target:
+                        break
+
+            for idx in indices:
+                assigned = assignments.get(idx, [])
+                if not assigned:
+                    continue
+                sf = int(var_data[idx]["sf"])
+                channel_index = int(var_data[idx]["channel"])
+                channel_obj = channel_map.get(channel_index, channel_map.get(default_channel_index))
+                sf_index = sf_order_map.get(sf, len(sf_order) - 1)
+                for entry, _ in assigned:
+                    node = entry.node
+                    node.sf = sf
+                    if channel_obj is not None:
+                        node.channel = channel_obj
+                    node.tx_power = self._assign_tx_power(sf_index)
+
+            for entry, access in available:
+                if not access:
+                    fallback_pairs.append(entry)
+                    continue
+                sf = access[0]
+                channel_obj = channel_map.get(default_channel_index)
+                sf_index = sf_order_map.get(sf, len(sf_order) - 1)
+                node = entry.node
+                node.sf = sf
+                if channel_obj is not None:
+                    node.channel = channel_obj
+                node.tx_power = self._assign_tx_power(sf_index)
+
+        self._assign_distance_based(fallback_pairs)
 
     def _apply_mixra_h(self, simulator) -> None:
         pairs = self._sorted_distances(simulator)
