@@ -66,22 +66,39 @@ def test_qos_manager_configure_clusters():
 
 
 class DummyChannel:
-    def __init__(self):
+    def __init__(self, channel_index=0):
         self.frequency_hz = 868e6
         self.path_loss_exp = 2.0
         self.bandwidth = 125000.0
         self.frontend_filter_bw = 125000.0
         self.receiver_noise_floor_dBm = -174.0
         self.noise_figure_dB = 6.0
+        self.channel_index = channel_index
+        self.low_data_rate_threshold = 11
+        self.coding_rate = 1
+        self.preamble_symbols = 8
+
+    def airtime(self, sf: int, payload_size: int = 20) -> float:
+        rs = self.bandwidth / (2 ** sf)
+        ts = 1.0 / rs
+        de = 1 if sf >= self.low_data_rate_threshold else 0
+        cr_denom = self.coding_rate + 4
+        numerator = 8 * payload_size - 4 * sf + 28 + 16
+        denominator = 4 * (sf - 2 * de)
+        n_payload = max(math.ceil(numerator / denominator), 0) * cr_denom + 8
+        t_preamble = (self.preamble_symbols + 4.25) * ts
+        t_payload = n_payload * ts
+        return t_preamble + t_payload
 
 
 class DummyNode:
-    def __init__(self, node_id, x, y, tx_power):
+    def __init__(self, node_id, x, y, tx_power, channel):
         self.id = node_id
         self.x = x
         self.y = y
         self.tx_power = tx_power
         self.sf = 7
+        self.channel = channel
 
 
 class DummyGateway:
@@ -99,15 +116,16 @@ class DummySimulator:
         self.channel = channel
         self.multichannel = type("MC", (), {"channels": [channel]})()
         self.fixed_tx_power = None
+        self.payload_size_bytes = 20
 
 
 def test_qos_manager_computes_sf_limits_and_accessible_sets():
     channel = DummyChannel()
     nodes = [
-        DummyNode(1, 100.0, 0.0, 14.0),
-        DummyNode(2, 200.0, 0.0, 14.0),
-        DummyNode(3, 250.0, 0.0, 14.0),
-        DummyNode(4, 950.0, 0.0, 14.0),
+        DummyNode(1, 100.0, 0.0, 14.0, channel),
+        DummyNode(2, 200.0, 0.0, 14.0, channel),
+        DummyNode(3, 250.0, 0.0, 14.0, channel),
+        DummyNode(4, 950.0, 0.0, 14.0, channel),
     ]
     gateways = [DummyGateway(0.0, 0.0)]
     simulator = DummySimulator(nodes, gateways, channel)
@@ -202,3 +220,47 @@ def test_qos_manager_computes_sf_limits_and_accessible_sets():
         expected_d[cluster_id][access[0]] += 1
     assert manager.cluster_d_matrix == expected_d
     assert simulator.qos_d_matrix == expected_d
+
+    # --- Vérification du trafic offert et des capacités -------------------
+    airtimes = {
+        sf: channel.airtime(sf, simulator.payload_size_bytes)
+        for sf in sorted(simulator.REQUIRED_SNR)
+    }
+    expected_offered: dict[int, dict[int, dict[int, float]]] = {
+        cluster.cluster_id: {sf: {} for sf in airtimes}
+        for cluster in manager.clusters
+    }
+    for node in nodes:
+        cluster_id = manager.node_clusters[node.id]
+        sf = node.qos_min_sf
+        if sf is None:
+            continue
+        lam = manager.clusters[cluster_id - 1].arrival_rate
+        expected_offered[cluster_id].setdefault(sf, {})
+        expected_offered[cluster_id][sf].setdefault(node.channel.channel_index, 0.0)
+        expected_offered[cluster_id][sf][node.channel.channel_index] += lam * airtimes[sf]
+
+    for cluster in manager.clusters:
+        cluster_id = cluster.cluster_id
+        for sf, channels in expected_offered[cluster_id].items():
+            for chan_idx, value in channels.items():
+                assert manager.cluster_offered_traffic[cluster_id][sf][chan_idx] == pytest.approx(value)
+
+    totals = {
+        cluster_id: sum(sum(channels.values()) for channels in sf_map.values())
+        for cluster_id, sf_map in expected_offered.items()
+    }
+    assert manager.cluster_offered_totals == pytest.approx(totals)
+    total_load = sum(totals.values())
+    for cluster in manager.clusters:
+        cluster_id = cluster.cluster_id
+        interference = max(total_load - totals.get(cluster_id, 0.0), 0.0)
+        expected_capacity = qos_module.QoSManager._capacity_from_pdr(
+            cluster.pdr_target, interference
+        )
+        assert manager.cluster_capacity_limits[cluster_id] == pytest.approx(expected_capacity)
+        assert simulator.qos_capacity_limits[cluster_id] == pytest.approx(expected_capacity)
+
+    assert simulator.qos_offered_traffic == manager.cluster_offered_traffic
+    assert simulator.qos_offered_totals == manager.cluster_offered_totals
+    assert simulator.qos_interference == manager.cluster_interference
