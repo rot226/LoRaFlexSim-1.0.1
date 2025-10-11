@@ -134,9 +134,11 @@ class QoSManager:
         self.capacity_margin: float = 0.1
         self.reconfig_interval_s: float = 60.0
         self.pdr_drift_threshold: float = 0.1
+        self.traffic_drift_threshold: float = 0.25
         self._last_reconfig_time: float | None = None
         self._last_node_ids: set[int] = set()
         self._last_recent_pdr: dict[int, float] = {}
+        self._last_arrival_rates: dict[int, float] = {}
         self._last_assignments: dict[int, tuple[int, int]] = {}
 
     # --- Interface publique -------------------------------------------------
@@ -394,6 +396,12 @@ class QoSManager:
             getattr(node, "id", id(node)): float(getattr(node, "recent_pdr", 0.0) or 0.0)
             for node in nodes
         }
+        self._last_arrival_rates = {}
+        for node in nodes:
+            node_id = getattr(node, "id", id(node))
+            rate = self._node_arrival_rate(node)
+            if rate is not None:
+                self._last_arrival_rates[node_id] = rate
         current_time = getattr(simulator, "current_time", None)
         try:
             time_value = float(current_time)
@@ -424,6 +432,7 @@ class QoSManager:
         setattr(simulator, "qos_clusters_config", {})
         self._last_node_ids = set()
         self._last_recent_pdr = {}
+        self._last_arrival_rates = {}
         self._last_reconfig_time = None
 
     def _should_refresh_context(self, simulator) -> bool:
@@ -451,6 +460,22 @@ class QoSManager:
                     continue
                 if abs(current - previous) >= self.pdr_drift_threshold:
                     return True
+        traffic_threshold = self.traffic_drift_threshold
+        if traffic_threshold > 0.0 and nodes:
+            for node in nodes:
+                node_id = getattr(node, "id", id(node))
+                previous_rate = self._last_arrival_rates.get(node_id)
+                if previous_rate is None:
+                    continue
+                if previous_rate <= 0.0:
+                    continue
+                current_rate = self._node_arrival_rate(node)
+                if current_rate is None:
+                    continue
+                if current_rate <= 0.0:
+                    return True
+                if abs(current_rate - previous_rate) / previous_rate >= traffic_threshold:
+                    return True
         interval = self.reconfig_interval_s
         if interval is None or interval <= 0.0:
             return False
@@ -464,6 +489,28 @@ class QoSManager:
         if time_value < self._last_reconfig_time:
             return True
         return time_value - self._last_reconfig_time >= interval
+
+    @staticmethod
+    def _node_arrival_rate(node) -> float | None:
+        """Calcule le taux d'arrivée empirique associé à ``node``.
+
+        Le calcul s'appuie sur les compteurs ``arrival_interval_sum`` et
+        ``arrival_interval_count`` mis à jour par le simulateur. La valeur
+        retournée est ``None`` si les informations sont indisponibles ou
+        incohérentes.
+        """
+
+        interval_sum = getattr(node, "arrival_interval_sum", None)
+        interval_count = getattr(node, "arrival_interval_count", None)
+        try:
+            sum_value = float(interval_sum)
+            count_value = float(interval_count)
+        except (TypeError, ValueError):
+            return None
+        if count_value <= 0.0 or sum_value <= 0.0:
+            return None
+        rate = count_value / sum_value
+        return rate if math.isfinite(rate) and rate > 0.0 else None
 
     @staticmethod
     def _reference_channel(simulator):
