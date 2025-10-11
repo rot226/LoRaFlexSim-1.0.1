@@ -181,6 +181,13 @@ class NetworkServer:
     def _round_half_away_from_zero(value: float) -> int:
         """Match ``std::round`` semantics used by FLoRa (half away from zero)."""
 
+        if not math.isfinite(value):
+            logger.debug(
+                "_round_half_away_from_zero reçu une valeur non finie %s, retour 0",
+                value,
+            )
+            return 0
+
         return int(math.copysign(math.floor(abs(value) + 0.5), value))
 
     def assign_explora_sf_groups(self) -> None:
