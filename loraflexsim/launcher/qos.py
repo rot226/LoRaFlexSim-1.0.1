@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Iterable
+from typing import Iterable, Sequence
 
 
 # Mapping lisible pour l'interface utilisateur :
@@ -23,6 +23,79 @@ QOS_ALGORITHMS = {
     "MixRA-Opt": "mixra_opt",
     "MixRA-H": "mixra_h",
 }
+
+__all__ = ["Cluster", "build_clusters", "QoSManager"]
+
+
+@dataclass(frozen=True, slots=True)
+class Cluster:
+    r"""Représentation d'un cluster QoS défini par l'utilisateur.
+
+    Chaque cluster regroupe une proportion d'équipements possédant un même
+    profil de trafic (:math:`\lambda_k`) et une cible de fiabilité (``PDR``).
+    """
+
+    cluster_id: int
+    device_share: float
+    arrival_rate: float
+    pdr_target: float
+
+
+def build_clusters(
+    cluster_count: int,
+    *,
+    proportions: Sequence[float],
+    arrival_rates: Sequence[float],
+    pdr_targets: Sequence[float],
+    id_start: int = 1,
+) -> list[Cluster]:
+    r"""Crée ``cluster_count`` instances :class:`Cluster` à partir des paramètres.
+
+    Args:
+        cluster_count: nombre de clusters à instancier.
+        proportions: proportions d'équipements par cluster (somme ≈ 1).
+        arrival_rates: taux d'arrivée :math:`\lambda_k` correspondants.
+        pdr_targets: objectifs de fiabilité ``PDR`` par cluster.
+        id_start: valeur de départ pour l'identifiant (par défaut ``1``).
+
+    Returns:
+        Une liste de :class:`Cluster` validée et normalisée.
+
+    Raises:
+        ValueError: si les longueurs ne correspondent pas, si une valeur est
+            hors borne ou si la somme des proportions diffère significativement
+            de 1.
+    """
+
+    if cluster_count <= 0:
+        raise ValueError("Le nombre de clusters doit être strictement positif")
+    lengths = (len(proportions), len(arrival_rates), len(pdr_targets))
+    if any(length != cluster_count for length in lengths):
+        raise ValueError(
+            "Les longueurs des proportions, taux d'arrivée et cibles PDR doivent "
+            "correspondre au nombre de clusters"
+        )
+    if any(share <= 0.0 for share in proportions):
+        raise ValueError("Chaque proportion doit être strictement positive")
+    total_share = float(sum(proportions))
+    if not math.isclose(total_share, 1.0, rel_tol=1e-6, abs_tol=1e-6):
+        raise ValueError("La somme des proportions doit être égale à 1")
+    if any(rate <= 0.0 for rate in arrival_rates):
+        raise ValueError("Chaque taux d'arrivée doit être strictement positif")
+    if any(not (0.0 < target <= 1.0) for target in pdr_targets):
+        raise ValueError("Chaque cible PDR doit appartenir à l'intervalle ]0, 1]")
+
+    clusters: list[Cluster] = []
+    for index in range(cluster_count):
+        clusters.append(
+            Cluster(
+                cluster_id=id_start + index,
+                device_share=float(proportions[index]),
+                arrival_rate=float(arrival_rates[index]),
+                pdr_target=float(pdr_targets[index]),
+            )
+        )
+    return clusters
 
 
 @dataclass(slots=True)
@@ -38,6 +111,7 @@ class QoSManager:
 
     def __init__(self) -> None:
         self.active_algorithm: str | None = None
+        self.clusters: list[Cluster] = []
 
     # --- Interface publique -------------------------------------------------
     def apply(self, simulator, algorithm: str) -> None:
@@ -62,6 +136,24 @@ class QoSManager:
         method(simulator)
         setattr(simulator, "qos_algorithm", algorithm)
         setattr(simulator, "qos_active", True)
+
+    def configure_clusters(
+        self,
+        cluster_count: int,
+        *,
+        proportions: Sequence[float],
+        arrival_rates: Sequence[float],
+        pdr_targets: Sequence[float],
+    ) -> list[Cluster]:
+        """Initialise ``cluster_count`` clusters à partir des paramètres fournis."""
+
+        self.clusters = build_clusters(
+            cluster_count,
+            proportions=proportions,
+            arrival_rates=arrival_rates,
+            pdr_targets=pdr_targets,
+        )
+        return list(self.clusters)
 
     # --- Utilitaires internes ----------------------------------------------
     @staticmethod
