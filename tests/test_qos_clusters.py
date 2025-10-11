@@ -110,13 +110,20 @@ class DummyGateway:
 class DummySimulator:
     REQUIRED_SNR = Simulator.REQUIRED_SNR
 
-    def __init__(self, nodes, gateways, channel):
+    def __init__(self, nodes, gateways, channel, *, extra_channels=None, duty_cycle=None):
         self.nodes = nodes
         self.gateways = gateways
-        self.channel = channel
-        self.multichannel = type("MC", (), {"channels": [channel]})()
+        channels = [channel]
+        if extra_channels:
+            channels.extend(extra_channels)
+        self.channel = channels[0]
+        self.multichannel = type("MC", (), {"channels": channels})()
         self.fixed_tx_power = None
         self.payload_size_bytes = 20
+        if duty_cycle is not None:
+            self.duty_cycle_manager = type("Duty", (), {"duty_cycle": float(duty_cycle)})()
+        else:
+            self.duty_cycle_manager = None
 
 
 def test_qos_manager_computes_sf_limits_and_accessible_sets():
@@ -264,3 +271,63 @@ def test_qos_manager_computes_sf_limits_and_accessible_sets():
     assert simulator.qos_offered_traffic == manager.cluster_offered_traffic
     assert simulator.qos_offered_totals == manager.cluster_offered_totals
     assert simulator.qos_interference == manager.cluster_interference
+
+
+def test_mixra_opt_respects_duty_cycle_and_capacity():
+    channel0 = DummyChannel(channel_index=0)
+    channel1 = DummyChannel(channel_index=1)
+    nodes = [
+        DummyNode(1, 80.0, 0.0, 14.0, channel0),
+        DummyNode(2, 120.0, 0.0, 14.0, channel0),
+        DummyNode(3, 180.0, 0.0, 14.0, channel0),
+        DummyNode(4, 220.0, 0.0, 14.0, channel0),
+        DummyNode(5, 260.0, 0.0, 14.0, channel0),
+        DummyNode(6, 300.0, 0.0, 14.0, channel0),
+    ]
+    gateways = [DummyGateway(0.0, 0.0)]
+    simulator = DummySimulator(
+        nodes,
+        gateways,
+        channel0,
+        extra_channels=[channel1],
+        duty_cycle=0.01,
+    )
+
+    manager = QoSManager()
+    manager.configure_clusters(
+        1,
+        proportions=[1.0],
+        arrival_rates=[0.05],
+        pdr_targets=[0.9],
+    )
+
+    manager.apply(simulator, "MixRA-Opt")
+
+    # Vérifie que les SF attribués sont compatibles avec les ensembles accessibles
+    for node in nodes:
+        access = manager.node_sf_access.get(node.id, [])
+        if access:
+            assert node.sf in access
+
+    cluster = manager.clusters[0]
+    cluster_id = cluster.cluster_id
+    airtimes = manager.sf_airtimes
+    duty_cycle = simulator.duty_cycle_manager.duty_cycle
+    channel_loads: dict[int, float] = {}
+    for node in nodes:
+        if manager.node_clusters.get(node.id) != cluster_id:
+            continue
+        sf = node.sf
+        tau = airtimes.get(sf, 0.0)
+        channel_index = getattr(getattr(node, "channel", None), "channel_index", 0)
+        channel_loads[channel_index] = channel_loads.get(channel_index, 0.0) + cluster.arrival_rate * tau
+
+    # Le trafic est réparti sur plusieurs canaux et respecte le duty-cycle
+    assert len(channel_loads) >= 2
+    for load in channel_loads.values():
+        assert load <= duty_cycle + 1e-6
+
+    capacity = manager.cluster_capacity_limits.get(cluster_id)
+    if capacity:
+        total_load = sum(channel_loads.values())
+        assert total_load <= capacity + 1e-6
