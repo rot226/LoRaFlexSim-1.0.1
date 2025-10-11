@@ -109,9 +109,14 @@ class _NodeDistance:
 class QoSManager:
     """Applique une stratégie QoS aux nœuds du simulateur."""
 
+    SPEED_OF_LIGHT = 299_792_458.0  # m/s
+
     def __init__(self) -> None:
         self.active_algorithm: str | None = None
         self.clusters: list[Cluster] = []
+        self.sf_limits: dict[int, dict[int, float]] = {}
+        self.node_sf_access: dict[int, list[int]] = {}
+        self.node_clusters: dict[int, int] = {}
 
     # --- Interface publique -------------------------------------------------
     def apply(self, simulator, algorithm: str) -> None:
@@ -126,6 +131,8 @@ class QoSManager:
         method = getattr(self, method_name, None)
         if method is None:
             raise ValueError(f"Implémentation manquante pour {algorithm}")
+        if self.clusters:
+            self._update_qos_context(simulator)
         if not getattr(simulator, "nodes", None):
             # Rien à faire si aucun nœud n'est présent.
             self.active_algorithm = algorithm
@@ -189,6 +196,218 @@ class QoSManager:
         step = 2.0
         power = base + sf_index * step
         return max(2.0, min(20.0, power))
+
+    # --- Calculs QoS -------------------------------------------------------
+    def _update_qos_context(self, simulator) -> None:
+        if not self.clusters:
+            self.sf_limits = {}
+            self.node_sf_access = {}
+            self.node_clusters = {}
+            setattr(simulator, "qos_sf_limits", {})
+            setattr(simulator, "qos_node_sf_access", {})
+            setattr(simulator, "qos_node_clusters", {})
+            return
+
+        channel = self._reference_channel(simulator)
+        if channel is None:
+            self.sf_limits = {}
+            self.node_sf_access = {}
+            self.node_clusters = {}
+            setattr(simulator, "qos_sf_limits", {})
+            setattr(simulator, "qos_node_sf_access", {})
+            setattr(simulator, "qos_node_clusters", {})
+            return
+
+        noise_power_w = self._noise_power_w(channel)
+        if noise_power_w <= 0.0:
+            self.sf_limits = {}
+            self.node_sf_access = {}
+            self.node_clusters = {}
+            setattr(simulator, "qos_sf_limits", {})
+            setattr(simulator, "qos_node_sf_access", {})
+            setattr(simulator, "qos_node_clusters", {})
+            return
+
+        snr_requirements = self._snr_table(simulator)
+        if not snr_requirements:
+            self.sf_limits = {}
+            self.node_sf_access = {}
+            self.node_clusters = {}
+            setattr(simulator, "qos_sf_limits", {})
+            setattr(simulator, "qos_node_sf_access", {})
+            setattr(simulator, "qos_node_clusters", {})
+            return
+
+        alpha = getattr(channel, "path_loss_exp", 2.0)
+        if alpha <= 0.0:
+            alpha = 2.0
+        frequency = getattr(channel, "frequency_hz", 868e6)
+        if frequency <= 0.0:
+            frequency = 868e6
+        wavelength = self.SPEED_OF_LIGHT / frequency
+        factor = wavelength / (4.0 * math.pi)
+
+        nodes = list(getattr(simulator, "nodes", []))
+        reference_tx_dbm = self._reference_tx_power_dbm(simulator, nodes)
+        reference_tx_w = self._dbm_to_w(reference_tx_dbm)
+
+        cluster_limits: dict[int, dict[int, float]] = {}
+        base_logs = {}
+        for cluster in self.clusters:
+            base = self._pdr_log_term(cluster.pdr_target)
+            base_logs[cluster.cluster_id] = base
+            cluster_limits[cluster.cluster_id] = {
+                sf: self._compute_limit(base, reference_tx_w, noise_power_w, q, alpha, factor)
+                for sf, q in snr_requirements.items()
+            }
+
+        self.sf_limits = cluster_limits
+
+        assignments = self._assign_nodes_to_clusters(nodes)
+        node_sf_access: dict[int, list[int]] = {}
+        node_cluster_ids: dict[int, int] = {}
+        for node, cluster in assignments.items():
+            node_cluster_ids[getattr(node, "id", id(node))] = cluster.cluster_id
+            setattr(node, "qos_cluster_id", cluster.cluster_id)
+            base = base_logs.get(cluster.cluster_id, 0.0)
+            node_tx_w = self._dbm_to_w(getattr(node, "tx_power", reference_tx_dbm))
+            distance = self._nearest_gateway_distance(node, getattr(simulator, "gateways", []))
+            accessible: list[int] = []
+            if base > 0.0 and node_tx_w > 0.0:
+                for sf in sorted(snr_requirements):
+                    limit = self._compute_limit(
+                        base,
+                        node_tx_w,
+                        noise_power_w,
+                        snr_requirements[sf],
+                        alpha,
+                        factor,
+                    )
+                    if limit <= 0.0:
+                        continue
+                    if distance <= limit:
+                        accessible.append(sf)
+            node_sf_access[getattr(node, "id", id(node))] = accessible
+            setattr(node, "qos_accessible_sf", accessible)
+
+        self.node_sf_access = node_sf_access
+        self.node_clusters = node_cluster_ids
+        setattr(simulator, "qos_sf_limits", cluster_limits)
+        setattr(simulator, "qos_node_sf_access", node_sf_access)
+        setattr(simulator, "qos_node_clusters", node_cluster_ids)
+
+    @staticmethod
+    def _reference_channel(simulator):
+        channel = getattr(simulator, "channel", None)
+        if channel is not None:
+            return channel
+        multichannel = getattr(simulator, "multichannel", None)
+        if multichannel is None:
+            return None
+        channels = getattr(multichannel, "channels", None)
+        if not channels:
+            return None
+        return channels[0]
+
+    @staticmethod
+    def _noise_power_w(channel) -> float:
+        bandwidth = getattr(channel, "bandwidth", 125000.0)
+        filter_bw = getattr(channel, "frontend_filter_bw", bandwidth)
+        effective_bw = min(bandwidth, filter_bw)
+        if effective_bw <= 0.0:
+            return 0.0
+        base_noise_dbm = getattr(channel, "receiver_noise_floor_dBm", -174.0)
+        noise_figure = getattr(channel, "noise_figure_dB", 6.0)
+        noise_dbm = base_noise_dbm + 10.0 * math.log10(effective_bw) + noise_figure
+        return QoSManager._dbm_to_w(noise_dbm)
+
+    @staticmethod
+    def _snr_table(simulator) -> dict[int, float]:
+        required = getattr(simulator, "REQUIRED_SNR", None)
+        if not required:
+            return {}
+        return {sf: 10.0 ** (snr_db / 10.0) for sf, snr_db in required.items()}
+
+    @staticmethod
+    def _reference_tx_power_dbm(simulator, nodes: list) -> float:
+        fixed = getattr(simulator, "fixed_tx_power", None)
+        if fixed is not None:
+            return float(fixed)
+        if nodes:
+            return float(getattr(nodes[0], "tx_power", 14.0))
+        return 14.0
+
+    @staticmethod
+    def _dbm_to_w(power_dbm: float) -> float:
+        return 0.0 if power_dbm is None else 10.0 ** ((power_dbm - 30.0) / 10.0)
+
+    @staticmethod
+    def _pdr_log_term(pdr: float) -> float:
+        if pdr is None or not (0.0 < pdr < 1.0):
+            return 0.0
+        return -math.log(pdr)
+
+    @staticmethod
+    def _compute_limit(
+        base_log: float,
+        tx_power_w: float,
+        noise_power_w: float,
+        q_value: float,
+        alpha: float,
+        factor: float,
+    ) -> float:
+        if base_log <= 0.0 or tx_power_w <= 0.0 or noise_power_w <= 0.0 or q_value <= 0.0:
+            return 0.0
+        ratio = base_log * tx_power_w / (noise_power_w * q_value)
+        if ratio <= 0.0:
+            return 0.0
+        return (ratio ** (1.0 / alpha)) * factor
+
+    def _assign_nodes_to_clusters(self, nodes: list) -> dict[object, Cluster]:
+        if not nodes or not self.clusters:
+            return {}
+        sorted_nodes = sorted(nodes, key=lambda n: getattr(n, "id", id(n)))
+        total = len(sorted_nodes)
+        quotas: list[int] = []
+        fractions: list[tuple[float, int]] = []
+        assigned = 0
+        for index, cluster in enumerate(self.clusters):
+            expected = cluster.device_share * total
+            base = math.floor(expected)
+            quotas.append(base)
+            fractions.append((expected - base, index))
+            assigned += base
+        remaining = total - assigned
+        if remaining > 0:
+            fractions.sort(key=lambda item: (item[0], -self.clusters[item[1]].cluster_id), reverse=True)
+            for _, idx in fractions:
+                if remaining <= 0:
+                    break
+                quotas[idx] += 1
+                remaining -= 1
+        elif remaining < 0:
+            fractions.sort(key=lambda item: (item[0], self.clusters[item[1]].cluster_id))
+            for _, idx in fractions:
+                if remaining >= 0:
+                    break
+                if quotas[idx] > 0:
+                    quotas[idx] -= 1
+                    remaining += 1
+
+        assignments: dict[object, Cluster] = {}
+        node_index = 0
+        for quota, cluster in zip(quotas, self.clusters):
+            for _ in range(quota):
+                if node_index >= total:
+                    break
+                node = sorted_nodes[node_index]
+                assignments[node] = cluster
+                node_index += 1
+        while node_index < total:
+            node = sorted_nodes[node_index]
+            assignments[node] = self.clusters[-1]
+            node_index += 1
+        return assignments
 
     # --- Implémentations MixRA ---------------------------------------------
     def _apply_mixra_opt(self, simulator) -> None:
