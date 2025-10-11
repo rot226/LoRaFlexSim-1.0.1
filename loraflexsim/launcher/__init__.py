@@ -31,6 +31,7 @@ from . import (
     adr_lite,
     adr_max,
     radr,
+    qos,
 )
 
 # Mapping of ADR strategy names to their implementation modules
@@ -81,6 +82,7 @@ __all__ = [
     "adr_max",
     "radr",
     "ADR_MODULES",
+    "qos",
 ]
 
 for name in __all__:

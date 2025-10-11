@@ -35,6 +35,7 @@ from launcher import (
     radr,
     ADR_MODULES,
 )  # noqa: E402
+from launcher.qos import QoSManager, QOS_ALGORITHMS  # noqa: E402
 
 # --- Initialisation Panel ---
 pn.extension("plotly", raw_css=[
@@ -55,6 +56,8 @@ max_real_time = None
 paused = False
 _DEFAULT_ADR_NAME = next(iter(ADR_MODULES))
 selected_adr_module = ADR_MODULES[_DEFAULT_ADR_NAME]
+last_selected_adr_name = _DEFAULT_ADR_NAME
+qos_manager = QoSManager()
 total_runs = 1
 current_run = 0
 runs_events: list[pd.DataFrame] = []
@@ -222,6 +225,15 @@ position_textarea = pn.widgets.TextAreaInput(
     width=650,
     css_classes=["coord-textarea"],
 )
+
+# --- QoS ---
+qos_toggle = pn.widgets.Toggle(name="QoS", button_type="default", value=False)
+qos_algorithm_select = pn.widgets.RadioButtonGroup(
+    name="Algorithme QoS",
+    options=list(QOS_ALGORITHMS.keys()),
+    value="MixRA-Opt",
+)
+qos_algorithm_select.visible = False
 
 
 # --- Boutons de contrôle ---
@@ -544,8 +556,9 @@ first_packet_input.param.watch(on_first_packet_change, "value")
 
 # --- Sélection du profil ADR ---
 def select_adr(module, name: str) -> None:
-    global selected_adr_module
+    global selected_adr_module, last_selected_adr_name
     selected_adr_module = module
+    last_selected_adr_name = name
     adr_node_checkbox.value = True
     adr_server_checkbox.value = True
     if adr_select.value != name:
@@ -745,8 +758,10 @@ def setup_simulation(seed_offset: int = 0):
                         gw.y = y
                         break
 
-    # Appliquer le profil ADR sélectionné
-    if selected_adr_module:
+    # Appliquer la stratégie QoS ou, à défaut, le profil ADR sélectionné
+    if qos_toggle.value:
+        qos_manager.apply(sim, qos_algorithm_select.value)
+    elif selected_adr_module:
         if selected_adr_module is adr_standard_1:
             selected_adr_module.apply(sim, degrade_channel=True, profile="flora")
         else:
@@ -1199,6 +1214,45 @@ def on_manual_toggle(event):
 
 manual_pos_toggle.param.watch(on_manual_toggle, "value")
 
+# --- Gestion du QoS ---
+def _apply_qos_if_running() -> None:
+    if sim is not None and qos_toggle.value:
+        try:
+            qos_manager.apply(sim, qos_algorithm_select.value)
+        except ValueError as exc:  # pragma: no cover - sécurité supplémentaire
+            export_message.object = f"⚠️ {exc}"
+
+
+def on_qos_toggle(event) -> None:
+    global selected_adr_module
+    if event.new:
+        qos_toggle.button_type = "primary"
+        qos_algorithm_select.visible = True
+        adr_select.disabled = True
+        adr_node_checkbox.disabled = True
+        adr_server_checkbox.disabled = True
+        adr_node_checkbox.value = False
+        adr_server_checkbox.value = False
+        selected_adr_module = None
+        _apply_qos_if_running()
+    else:
+        qos_toggle.button_type = "default"
+        qos_algorithm_select.visible = False
+        adr_select.disabled = False
+        adr_node_checkbox.disabled = False
+        adr_server_checkbox.disabled = False
+        module = ADR_MODULES[last_selected_adr_name]
+        select_adr(module, last_selected_adr_name)
+
+
+def on_qos_algorithm_change(event) -> None:
+    if qos_toggle.value:
+        _apply_qos_if_running()
+
+
+qos_toggle.param.watch(on_qos_toggle, "value")
+qos_algorithm_select.param.watch(on_qos_algorithm_change, "value")
+
 # --- Mode FLoRa complet ---
 def on_flora_toggle(event):
     if event.new:
@@ -1228,6 +1282,9 @@ show_paths_checkbox.param.watch(lambda event: update_map(), "value")
 
 
 def _on_adr_select(event):
+    if qos_toggle.value:
+        adr_select.value = last_selected_adr_name
+        return
     module = ADR_MODULES[event.new]
     if module is not selected_adr_module:
         select_adr(module, event.new)
@@ -1298,7 +1355,13 @@ center_col = pn.Column(
     hist_metric_select,
     sf_hist_pane,
     pn.Row(
-        pn.Column(manual_pos_toggle, position_textarea, width=650),
+        pn.Column(
+            manual_pos_toggle,
+            position_textarea,
+            qos_toggle,
+            qos_algorithm_select,
+            width=650,
+        ),
     ),
     sizing_mode="stretch_width",
 )
