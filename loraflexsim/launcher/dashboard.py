@@ -720,6 +720,7 @@ def setup_simulation(seed_offset: int = 0):
         seed=seed,
         phy_model="flora" if flora_mode_toggle.value else "omnet",
     )
+    setattr(sim, "paused", False)
 
 
     if config_path:
@@ -866,9 +867,12 @@ def on_stop(event):
         paused = False
         pause_button.name = "⏸ Pause"
         fast_forward_button.disabled = True
+        if sim is not None:
+            setattr(sim, "paused", False)
         return
 
     sim.running = False
+    setattr(sim, "paused", False)
     if event is not None:
         auto_fast_forward = False
     if sim_callback:
@@ -1165,6 +1169,8 @@ def on_pause(event=None):
         pause_button.button_type = "success"
         fast_forward_button.disabled = True
         paused = True
+        if sim is not None:
+            setattr(sim, "paused", True)
     else:
         # Resuming the simulation
         if start_time is None:
@@ -1177,6 +1183,8 @@ def on_pause(event=None):
         pause_button.button_type = "primary"
         fast_forward_button.disabled = False
         paused = False
+        if sim is not None:
+            setattr(sim, "paused", False)
 
 
 pause_button.on_click(on_pause)
