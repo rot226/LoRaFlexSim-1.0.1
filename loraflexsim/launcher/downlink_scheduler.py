@@ -16,6 +16,7 @@ class ScheduledDownlink:
     gateway: Any
     data_rate: Optional[int] = None
     tx_power: Optional[float] = None
+    channel: Any | None = None
 
 
 def _identity(t: float) -> float:
@@ -72,9 +73,10 @@ class DownlinkScheduler:
         priority: int = 0,
         data_rate: int | None = None,
         tx_power: float | None = None,
+        channel: Any | None = None,
     ) -> None:
         """Schedule a frame for a given node at ``time`` via ``gateway`` with optional ``priority``."""
-        item = ScheduledDownlink(frame, gateway, data_rate, tx_power)
+        item = ScheduledDownlink(frame, gateway, data_rate, tx_power, channel)
         q_time = self._apply_quantize(time)
         heapq.heappush(
             self.queue.setdefault(node_id, []),
@@ -96,6 +98,7 @@ class DownlinkScheduler:
         priority: int = 0,
         data_rate: int | None = None,
         tx_power: float | None = None,
+        channel: Any | None = None,
     ) -> float:
         """Schedule ``frame`` for ``node`` at its next ping slot."""
         sf = node.sf
@@ -179,6 +182,7 @@ class DownlinkScheduler:
             priority=priority,
             data_rate=dr,
             tx_power=tx_power,
+            channel=channel,
         )
 
         entry_end = start_time + duration
@@ -230,6 +234,7 @@ class DownlinkScheduler:
         priority: int = 0,
         data_rate: int | None = None,
         tx_power: float | None = None,
+        channel: Any | None = None,
     ):
         """Schedule a frame for a Class C node at ``time`` with optional ``priority`` and return the scheduled time."""
         sf = node.sf
@@ -251,6 +256,7 @@ class DownlinkScheduler:
             priority=priority,
             data_rate=data_rate,
             tx_power=tx_power,
+            channel=channel,
         )
         end_time = self._apply_quantize(start_time + duration)
         if end_time < start_time:
@@ -268,6 +274,7 @@ class DownlinkScheduler:
         gateway,
         *,
         priority: int = 0,
+        channel: Any | None = None,
     ) -> float | None:
         """Schedule ``frame`` for a Class A node in the next available window.
 
@@ -292,7 +299,14 @@ class DownlinkScheduler:
             )
             return None
         t = self._apply_quantize(t + self.link_delay)
-        self.schedule(node.id, t, frame, gateway, priority=priority)
+        self.schedule(
+            node.id,
+            t,
+            frame,
+            gateway,
+            priority=priority,
+            channel=channel,
+        )
         end_time = self._apply_quantize(t + duration)
         if end_time < t:
             end_time = t

@@ -489,10 +489,11 @@ class Gateway:
         *,
         data_rate: int | None = None,
         tx_power: float | None = None,
+        channel=None,
     ) -> None:
         """Store a downlink frame for a node until its RX window."""
         self.downlink_buffer.setdefault(node_id, []).append(
-            (frame, data_rate, tx_power)
+            (frame, data_rate, tx_power, channel)
         )
 
     def pop_downlink(self, node_id: int):

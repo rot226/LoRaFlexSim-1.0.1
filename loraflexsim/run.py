@@ -737,7 +737,7 @@ def main(argv=None):
         frame = node.prepare_uplink(b"ping", confirmed=True)
         ns.send_downlink(node, b"ack")
         rx1, _ = node.schedule_receive_windows(0)
-        gw.pop_downlink(node.id)  # illustration (frame, data_rate, tx_power)
+        gw.pop_downlink(node.id)  # illustration (frame, data_rate, tx_power, channel)
         logging.info(f"Exemple LoRaWAN : trame uplink FCnt={frame.fcnt}, RX1={rx1}s")
         sys.exit()
 

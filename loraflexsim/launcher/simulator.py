@@ -200,6 +200,40 @@ class Simulator:
     REQUIRED_SNR = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
     MARGIN_DB = 15.0  # marge d'installation en dB (typiquement 15 dB)
 
+    def channel_index(self, channel) -> int:
+        """Return the simulator-wide index associated with ``channel``."""
+
+        if channel is None:
+            return self.control_channel_index
+        if channel is getattr(self, "control_channel", None):
+            return self.control_channel_index
+        reverse = getattr(self, "_channel_reverse", None)
+        lookup = getattr(self, "_channel_lookup", None)
+        if reverse is None or lookup is None:
+            if lookup is None:
+                lookup = {}
+                self._channel_lookup = lookup
+            if reverse is None:
+                reverse = {}
+                self._channel_reverse = reverse
+        idx = reverse.get(id(channel))
+        if idx is not None:
+            return idx
+        idx = max(lookup.keys(), default=-1) + 1
+        lookup[idx] = channel
+        reverse[id(channel)] = idx
+        return idx
+
+    def get_channel_by_index(self, index: int):
+        """Return the channel object referenced by ``index`` if known."""
+
+        if index == getattr(self, "control_channel_index", None):
+            return getattr(self, "control_channel", None)
+        lookup = getattr(self, "_channel_lookup", None)
+        if lookup is None:
+            return None
+        return lookup.get(index)
+
     def __init__(
         self,
         num_nodes: int = 10,
@@ -639,6 +673,40 @@ class Simulator:
         if non_orth_required:
             self.multichannel.force_non_orthogonal(FLORA_NON_ORTH_DELTA)
 
+        self._channel_lookup: dict[int, Channel] = {}
+        self._channel_reverse: dict[int, int] = {}
+        for index, channel in enumerate(self.multichannel.channels):
+            self._channel_lookup[index] = channel
+            self._channel_reverse[id(channel)] = index
+            if not hasattr(channel, "channel_index") or channel.channel_index == 0:
+                channel.channel_index = index
+
+        base_channel = self.multichannel.channels[0]
+        self.control_channel_index = max(self._channel_lookup.keys(), default=-1) + 1
+        self.control_channel = Channel(
+            frequency_hz=getattr(base_channel, "frequency_hz", 868e6),
+            bandwidth=getattr(base_channel, "bandwidth", 125e3),
+            region=getattr(base_channel, "region", None),
+            detection_threshold_dBm=getattr(
+                base_channel, "detection_threshold_dBm", -float("inf")
+            ),
+            energy_detection_dBm=getattr(
+                base_channel, "energy_detection_dBm", -float("inf")
+            ),
+            channel_index=self.control_channel_index,
+        )
+        self.control_channel.orthogonal_sf = getattr(
+            base_channel, "orthogonal_sf", True
+        )
+        self.control_channel.non_orth_delta = getattr(
+            base_channel, "non_orth_delta", None
+        )
+        self.control_channel.sensitivity_margin_dB = getattr(
+            base_channel, "sensitivity_margin_dB", 0.0
+        )
+        self._channel_lookup[self.control_channel_index] = self.control_channel
+        self._channel_reverse[id(self.control_channel)] = self.control_channel_index
+
         # Compatibilité : premier canal par défaut
         self.channel = self.multichannel.channels[0]
         # Réglages de temporisation inspirés de FLoRa
@@ -764,6 +832,7 @@ class Simulator:
                 ),
             )
             node.simulator = self
+            node.assigned_channel_index = self.channel_index(channel)
             node._warmup_remaining = self.warm_up_intervals
             node._log_after = self.log_mean_after
             # Enregistrer les états initiaux du nœud pour rapport ultérieur
@@ -1495,7 +1564,11 @@ class Simulator:
                 if not downlink:
                     continue
                 delivered = True
-                frame, data_rate, tx_power = downlink
+                if len(downlink) == 4:
+                    frame, data_rate, tx_power, dl_channel = downlink
+                else:
+                    frame, data_rate, tx_power = downlink
+                    dl_channel = None
                 payload_len = 0
                 if hasattr(frame, "payload"):
                     try:
@@ -1512,7 +1585,8 @@ class Simulator:
                     from .lorawan import DR_TO_SF
 
                     sf = DR_TO_SF.get(data_rate, node.sf)
-                duration_dl = node.channel.airtime(sf, payload_len)
+                channel_obj = dl_channel if dl_channel is not None else node.channel
+                duration_dl = channel_obj.airtime(sf, payload_len)
                 tx_power_dl = (
                     tx_power if tx_power is not None else gw.select_downlink_power(node)
                 )
@@ -1730,7 +1804,11 @@ class Simulator:
                 downlink = gw.pop_downlink(node.id)
                 if not downlink:
                     continue
-                frame, data_rate, tx_power = downlink
+                if len(downlink) == 4:
+                    frame, data_rate, tx_power, dl_channel = downlink
+                else:
+                    frame, data_rate, tx_power = downlink
+                    dl_channel = None
                 payload_len = 0
                 if hasattr(frame, "payload"):
                     try:
@@ -1748,7 +1826,8 @@ class Simulator:
                     from .lorawan import DR_TO_SF
 
                     sf = DR_TO_SF.get(effective_dr, node.sf)
-                duration_dl = node.channel.airtime(sf, payload_len)
+                channel_obj = dl_channel if dl_channel is not None else node.channel
+                duration_dl = channel_obj.airtime(sf, payload_len)
                 tx_power_dl = (
                     tx_power if tx_power is not None else gw.select_downlink_power(node)
                 )
