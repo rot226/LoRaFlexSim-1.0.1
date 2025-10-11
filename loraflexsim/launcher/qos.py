@@ -13,8 +13,9 @@ peuvent être affinées par la suite si un modèle plus précis est nécessaire.
 from __future__ import annotations
 
 import importlib.util
-from dataclasses import dataclass
 import math
+import time
+from dataclasses import dataclass
 from typing import Iterable, Sequence
 
 _SCIPY_SPEC = importlib.util.find_spec("scipy.optimize")
@@ -130,6 +131,12 @@ class QoSManager:
         self.cluster_offered_totals: dict[int, float] = {}
         self.cluster_capacity_limits: dict[int, float] = {}
         self.cluster_interference: dict[int, float] = {}
+        self.capacity_margin: float = 0.1
+        self.min_reconfig_interval: float = 30.0
+        self.pdr_drift_threshold: float = 0.05
+        self._last_reconfig_time: float | None = None
+        self._last_node_snapshot: set[int] | None = None
+        self._last_cluster_pdr_snapshot: dict[int, float] = {}
 
     # --- Interface publique -------------------------------------------------
     def apply(self, simulator, algorithm: str) -> None:
@@ -144,7 +151,7 @@ class QoSManager:
         method = getattr(self, method_name, None)
         if method is None:
             raise ValueError(f"Implémentation manquante pour {algorithm}")
-        if self.clusters:
+        if self.clusters and self._should_refresh_context(simulator):
             self._update_qos_context(simulator)
         if not getattr(simulator, "nodes", None):
             # Rien à faire si aucun nœud n'est présent.
@@ -173,6 +180,9 @@ class QoSManager:
             arrival_rates=arrival_rates,
             pdr_targets=pdr_targets,
         )
+        self._last_reconfig_time = None
+        self._last_node_snapshot = None
+        self._last_cluster_pdr_snapshot = {}
         return list(self.clusters)
 
     # --- Utilitaires internes ----------------------------------------------
@@ -210,6 +220,72 @@ class QoSManager:
         power = base + sf_index * step
         return max(2.0, min(20.0, power))
 
+    def _snapshot_node_ids(self, simulator) -> set[int]:
+        nodes = getattr(simulator, "nodes", []) or []
+        return {
+            getattr(node, "id", id(node))
+            for node in nodes
+        }
+
+    def _estimate_cluster_pdr(self, simulator) -> dict[int, float]:
+        if not self.node_clusters:
+            return {}
+        nodes = getattr(simulator, "nodes", []) or []
+        totals: dict[int, float] = {}
+        counts: dict[int, int] = {}
+        for node in nodes:
+            node_id = getattr(node, "id", id(node))
+            cluster_id = self.node_clusters.get(node_id)
+            if cluster_id is None:
+                continue
+            recent = getattr(node, "recent_pdr", None)
+            if recent is None:
+                recent = getattr(node, "pdr", None)
+            if recent is None:
+                continue
+            totals[cluster_id] = totals.get(cluster_id, 0.0) + float(recent)
+            counts[cluster_id] = counts.get(cluster_id, 0) + 1
+        return {
+            cluster_id: totals[cluster_id] / counts[cluster_id]
+            for cluster_id in counts
+            if counts[cluster_id] > 0
+        }
+
+    def _has_significant_pdr_drift(self, simulator) -> bool:
+        if not self.clusters or not self.node_clusters:
+            return False
+        snapshot = self._estimate_cluster_pdr(simulator)
+        if not snapshot:
+            return False
+        for cluster in self.clusters:
+            cluster_id = cluster.cluster_id
+            current = snapshot.get(cluster_id)
+            if current is None:
+                continue
+            if abs(current - cluster.pdr_target) >= self.pdr_drift_threshold:
+                return True
+        return False
+
+    def _should_refresh_context(self, simulator) -> bool:
+        if not self.clusters:
+            return False
+        node_ids = self._snapshot_node_ids(simulator)
+        if self._last_node_snapshot is None:
+            return True
+        if node_ids != self._last_node_snapshot:
+            return True
+        if self._has_significant_pdr_drift(simulator):
+            if self._last_reconfig_time is None:
+                return True
+            now = time.monotonic()
+            return (now - self._last_reconfig_time) >= self.min_reconfig_interval
+        return False
+
+    def _finalise_update(self, simulator) -> None:
+        self._last_node_snapshot = self._snapshot_node_ids(simulator)
+        self._last_cluster_pdr_snapshot = self._estimate_cluster_pdr(simulator)
+        self._last_reconfig_time = time.monotonic()
+
     # --- Calculs QoS -------------------------------------------------------
     def _update_qos_context(self, simulator) -> None:
         if not self.clusters:
@@ -231,6 +307,7 @@ class QoSManager:
             setattr(simulator, "qos_offered_totals", {})
             setattr(simulator, "qos_capacity_limits", {})
             setattr(simulator, "qos_interference", {})
+            self._finalise_update(simulator)
             return
 
         channel = self._reference_channel(simulator)
@@ -253,6 +330,7 @@ class QoSManager:
             setattr(simulator, "qos_offered_totals", {})
             setattr(simulator, "qos_capacity_limits", {})
             setattr(simulator, "qos_interference", {})
+            self._finalise_update(simulator)
             return
 
         noise_power_w = self._noise_power_w(channel)
@@ -275,6 +353,7 @@ class QoSManager:
             setattr(simulator, "qos_offered_totals", {})
             setattr(simulator, "qos_capacity_limits", {})
             setattr(simulator, "qos_interference", {})
+            self._finalise_update(simulator)
             return
 
         snr_requirements = self._snr_table(simulator)
@@ -297,6 +376,7 @@ class QoSManager:
             setattr(simulator, "qos_offered_totals", {})
             setattr(simulator, "qos_capacity_limits", {})
             setattr(simulator, "qos_interference", {})
+            self._finalise_update(simulator)
             return
 
         alpha = getattr(channel, "path_loss_exp", 2.0)
@@ -371,6 +451,8 @@ class QoSManager:
             cluster_id: max(total_load - totals.get(cluster_id, 0.0), 0.0)
             for cluster_id in totals
         }
+        margin = max(0.0, min(self.capacity_margin, 1.0))
+        margin_factor = max(0.0, 1.0 - margin)
         capacities = {
             cluster.cluster_id: self._capacity_from_pdr(
                 cluster.pdr_target,
@@ -378,6 +460,11 @@ class QoSManager:
             )
             for cluster in self.clusters
         }
+        if margin_factor < 1.0:
+            for cluster_id, value in list(capacities.items()):
+                if value is None or value <= 0.0:
+                    continue
+                capacities[cluster_id] = value * margin_factor
         self.sf_airtimes = airtimes
         self.cluster_offered_traffic = offered
         self.cluster_offered_totals = totals
@@ -392,6 +479,7 @@ class QoSManager:
         setattr(simulator, "qos_offered_totals", totals)
         setattr(simulator, "qos_interference", interference)
         setattr(simulator, "qos_capacity_limits", capacities)
+        self._finalise_update(simulator)
 
     @staticmethod
     def _reference_channel(simulator):

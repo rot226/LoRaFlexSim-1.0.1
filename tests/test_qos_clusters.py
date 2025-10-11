@@ -99,6 +99,20 @@ class DummyNode:
         self.tx_power = tx_power
         self.sf = 7
         self.channel = channel
+        self.tx_attempted = 0
+        self.rx_delivered = 0
+        self.history: list[dict] = []
+
+    @property
+    def pdr(self) -> float:
+        return self.rx_delivered / self.tx_attempted if self.tx_attempted > 0 else 0.0
+
+    @property
+    def recent_pdr(self) -> float:
+        if not self.history:
+            return 0.0
+        success = sum(1 for entry in self.history if entry.get("delivered"))
+        return success / len(self.history)
 
 
 class DummyGateway:
@@ -265,6 +279,9 @@ def test_qos_manager_computes_sf_limits_and_accessible_sets():
         expected_capacity = qos_module.QoSManager._capacity_from_pdr(
             cluster.pdr_target, interference
         )
+        margin_factor = 1.0 - manager.capacity_margin
+        if expected_capacity > 0.0:
+            expected_capacity *= margin_factor
         assert manager.cluster_capacity_limits[cluster_id] == pytest.approx(expected_capacity)
         assert simulator.qos_capacity_limits[cluster_id] == pytest.approx(expected_capacity)
 
@@ -331,3 +348,55 @@ def test_mixra_opt_respects_duty_cycle_and_capacity():
     if capacity:
         total_load = sum(channel_loads.values())
         assert total_load <= capacity + 1e-6
+
+
+def test_qos_manager_reconfiguration_policy(monkeypatch):
+    channel = DummyChannel()
+    nodes = [
+        DummyNode(1, 80.0, 0.0, 14.0, channel),
+        DummyNode(2, 120.0, 0.0, 14.0, channel),
+    ]
+    simulator = DummySimulator(nodes, [DummyGateway(0.0, 0.0)], channel)
+
+    manager = QoSManager()
+    manager.configure_clusters(
+        1,
+        proportions=[1.0],
+        arrival_rates=[0.05],
+        pdr_targets=[0.9],
+    )
+    manager.min_reconfig_interval = 8.0
+
+    time_sequence = iter([5.0, 15.0, 25.0, 35.0, 45.0])
+    monkeypatch.setattr(qos_module.time, "monotonic", lambda: next(time_sequence))
+
+    manager.apply(simulator, "MixRA-Opt")
+    first_time = manager._last_reconfig_time
+    assert first_time == pytest.approx(5.0)
+
+    for node in simulator.nodes:
+        node.tx_attempted = 10
+        node.rx_delivered = 9
+        node.history = [{"delivered": True}] * 9 + [{"delivered": False}]
+
+    manager.apply(simulator, "MixRA-Opt")
+    assert manager._last_reconfig_time == pytest.approx(first_time)
+
+    new_node = DummyNode(3, 160.0, 0.0, 14.0, channel)
+    new_node.tx_attempted = 10
+    new_node.rx_delivered = 9
+    new_node.history = [{"delivered": True}] * 9 + [{"delivered": False}]
+    simulator.nodes.append(new_node)
+
+    manager.apply(simulator, "MixRA-Opt")
+    second_time = manager._last_reconfig_time
+    assert second_time == pytest.approx(15.0)
+
+    for node in simulator.nodes:
+        node.tx_attempted = 10
+        node.rx_delivered = 2
+        node.history = [{"delivered": True}] * 2 + [{"delivered": False}] * 8
+
+    manager.apply(simulator, "MixRA-Opt")
+    third_time = manager._last_reconfig_time
+    assert third_time == pytest.approx(35.0)
