@@ -2053,7 +2053,7 @@ class Simulator:
             p = node.tx_power
             tx_power_distribution[p] = tx_power_distribution.get(p, 0) + 1
 
-        return {
+        metrics = {
             "PDR": pdr,
             "tx_attempted": total_sent,
             "delivered": delivered,
@@ -2083,6 +2083,97 @@ class Simulator:
             **{f"energy_class_{ct}_J": energy_by_class[ct] for ct in energy_by_class},
             "retransmissions": self.retransmissions,
         }
+
+        qos_clusters_config = getattr(self, "qos_clusters_config", {}) or {}
+        qos_node_clusters = getattr(self, "qos_node_clusters", {}) or {}
+        if qos_clusters_config:
+            payload_bits = float(self.payload_size_bytes) * 8.0
+            cluster_node_counts: dict[int, int] = {
+                cluster_id: 0 for cluster_id in qos_clusters_config
+            }
+            cluster_attempts: dict[int, int] = {
+                cluster_id: 0 for cluster_id in qos_clusters_config
+            }
+            cluster_delivered: dict[int, int] = {
+                cluster_id: 0 for cluster_id in qos_clusters_config
+            }
+            cluster_sf_channel: dict[int, dict[int, dict[int, int]]] = {
+                cluster_id: {} for cluster_id in qos_clusters_config
+            }
+
+            for node in self.nodes:
+                node_id = getattr(node, "id", None)
+                if node_id is None:
+                    continue
+                cluster_id = qos_node_clusters.get(node_id)
+                if cluster_id is None:
+                    continue
+                cluster_node_counts.setdefault(cluster_id, 0)
+                cluster_attempts.setdefault(cluster_id, 0)
+                cluster_delivered.setdefault(cluster_id, 0)
+                cluster_sf_channel.setdefault(cluster_id, {})
+                cluster_node_counts[cluster_id] += 1
+                cluster_attempts[cluster_id] += getattr(node, "tx_attempted", 0)
+                cluster_delivered[cluster_id] += getattr(node, "rx_delivered", 0)
+                sf_value = int(getattr(node, "sf", 0) or 0)
+                channel_idx = self.channel_index(getattr(node, "channel", None))
+                sf_map = cluster_sf_channel[cluster_id].setdefault(sf_value, {})
+                sf_map[channel_idx] = sf_map.get(channel_idx, 0) + 1
+
+            cluster_pdr: dict[int, float] = {}
+            cluster_targets: dict[int, float] = {}
+            cluster_throughput: dict[int, float] = {}
+
+            for cluster_id, config in qos_clusters_config.items():
+                attempts = cluster_attempts.get(cluster_id, 0)
+                delivered_cluster = cluster_delivered.get(cluster_id, 0)
+                if attempts > 0:
+                    cluster_pdr[cluster_id] = delivered_cluster / attempts
+                else:
+                    cluster_pdr[cluster_id] = 0.0
+                target = config.get("pdr_target", 0.0)
+                cluster_targets[cluster_id] = float(target) if target is not None else 0.0
+                arrival_rate = float(config.get("arrival_rate", 0.0) or 0.0)
+                throughput_value = 0.0
+                if arrival_rate > 0.0 and payload_bits > 0.0:
+                    combos = cluster_sf_channel.get(cluster_id, {})
+                    cluster_pdr_value = cluster_pdr.get(cluster_id, 0.0)
+                    if cluster_pdr_value > 0.0:
+                        for sf_counts in combos.values():
+                            for count in sf_counts.values():
+                                if count <= 0:
+                                    continue
+                                throughput_value += (
+                                    count
+                                    * arrival_rate
+                                    * payload_bits
+                                    * cluster_pdr_value
+                                )
+                cluster_throughput[cluster_id] = throughput_value
+
+            cluster_ids = sorted(qos_clusters_config)
+            throughput_values = [cluster_throughput.get(cid, 0.0) for cid in cluster_ids]
+            total_throughput = sum(throughput_values)
+            gini_index = 0.0
+            if cluster_ids and total_throughput > 0.0:
+                numerator = 0.0
+                for value_i in throughput_values:
+                    for value_j in throughput_values:
+                        numerator += abs(value_i - value_j)
+                gini_index = numerator / (2.0 * len(cluster_ids) * total_throughput)
+
+            metrics["qos_cluster_throughput_bps"] = cluster_throughput
+            metrics["qos_cluster_pdr"] = cluster_pdr
+            metrics["qos_cluster_targets"] = cluster_targets
+            metrics["qos_cluster_node_counts"] = cluster_node_counts
+            metrics["qos_cluster_pdr_gap"] = {
+                cluster_id: cluster_pdr.get(cluster_id, 0.0) - cluster_targets.get(cluster_id, 0.0)
+                for cluster_id in cluster_ids
+            }
+            metrics["qos_cluster_sf_channel"] = cluster_sf_channel
+            metrics["qos_throughput_gini"] = gini_index
+
+        return metrics
 
     def get_events_dataframe(self) -> "pd.DataFrame | None":
         """
