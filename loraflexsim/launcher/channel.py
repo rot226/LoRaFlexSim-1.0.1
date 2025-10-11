@@ -67,6 +67,7 @@ class _CorrelatedValue:
 class Channel:
     """Représente le canal de propagation radio pour LoRa."""
 
+    SPEED_OF_LIGHT = 299_792_458.0
     FLORA_ENERGY_DETECTION_DBM = -90.0
     ENV_PRESETS = {
         "urban": (2.08, 3.57, 127.41, 40.0),
@@ -181,6 +182,7 @@ class Channel:
         phy_model: str = "omnet",
         flora_loss_model: str = "lognorm",
         flora_per_model: str | None = None,
+        qos_path_loss_exp: float | None = None,
         system_loss_dB: float = 0.0,
         rssi_offset_dB: float = 0.0,
         snr_offset_dB: float = 0.0,
@@ -378,7 +380,9 @@ class Channel:
 
         self.rng = rng or np.random.Generator(np.random.MT19937())
         self.frequency_hz = frequency_hz
+        self.wavelength_m = Channel.SPEED_OF_LIGHT / self.frequency_hz
         self.path_loss_exp = path_loss_exp
+        self.qos_path_loss_exp = qos_path_loss_exp or path_loss_exp
         self.shadowing_std = shadowing_std  # σ en dB (ex: 6.0 pour environnement urbain/suburbain)
         if path_loss_d0 is None:
             freq_mhz = self.frequency_hz / 1e6
@@ -512,7 +516,7 @@ class Channel:
         self.capture_window_symbols = int(capture_window_symbols)
         self.orthogonal_sf = orthogonal_sf
         self.last_rssi_dBm = 0.0
-        self.last_noise_dBm = 0.0
+        self.last_noise_dBm = float("nan")
         self.last_filter_att_dB = 0.0
         # Track the effective carrier after oscillator drift.
         self.last_freq_hz = self.frequency_hz
@@ -859,6 +863,56 @@ class Channel:
         self.last_rssi_dBm = rssi
         self.last_filter_att_dB = attenuation
         return rssi, snr
+
+    # ------------------------------------------------------------------
+    def qos_path_gain(self, distance: float) -> float:
+        """Return :math:`g(d)` for the QoS radio model."""
+
+        if distance <= 0.0:
+            raise ValueError("distance must be > 0")
+        base = self.wavelength_m / (4.0 * math.pi * distance)
+        if base <= 0.0:
+            return 0.0
+        return base ** self.qos_path_loss_exp
+
+    # ------------------------------------------------------------------
+    def connection_probability(
+        self,
+        distance: float,
+        sf: int,
+        tx_power_dBm: float,
+        *,
+        noise_dBm: float | None = None,
+        snr_thresholds: dict[int, float] | None = None,
+    ) -> float:
+        """Return the connection probability ``H(d)`` for ``sf``."""
+
+        gain = self.qos_path_gain(distance)
+        if gain == 0.0:
+            return 0.0
+        if noise_dBm is None:
+            if math.isfinite(self.last_noise_dBm):
+                noise_dBm = self.last_noise_dBm
+            else:
+                noise_dBm = self.noise_floor_dBm()
+        if snr_thresholds is None:
+            snr_thresholds = self.SNR_THRESHOLDS
+        if sf not in snr_thresholds:
+            raise ValueError(f"unknown SF {sf} for SNR threshold")
+        snr_linear = 10 ** (snr_thresholds[sf] / 10.0)
+        noise_mw = 10 ** (noise_dBm / 10.0)
+        tx_power_mw = 10 ** (tx_power_dBm / 10.0)
+        exponent = -noise_mw * snr_linear / (tx_power_mw * gain)
+        return math.exp(exponent)
+
+    # ------------------------------------------------------------------
+    def capture_probability(self, nu_j: float, delta: float) -> float:
+        """Return the capture probability ``Q(d)`` of the QoS model."""
+
+        if delta < 0.0:
+            raise ValueError("delta must be >= 0")
+        term = math.exp(-2.0 * nu_j)
+        return term + (2.0 / (delta + 1.0)) * nu_j * term
 
     def packet_error_rate(
         self,
