@@ -485,3 +485,42 @@ def test_simulator_metrics_expose_qos_statistics():
     assert sf_channel[1][9][sim.channel_index(channel0)] == 1
     assert sf_channel[2][8][sim.channel_index(channel1)] == 1
 
+
+def test_compute_limit_guard_clamps_invalid_inputs():
+    compute = qos_module.QoSManager._compute_limit
+
+    assert compute(-1.0, 1.0, 1.0, 1.0, 2.0, 1.0) == 0.0
+    assert compute(1.0, 0.0, 1.0, 1.0, 2.0, 1.0) == 0.0
+    assert compute(1.0, 1.0, 0.0, 1.0, 2.0, 1.0) == 0.0
+    assert compute(1.0, 1.0, 1.0, 0.0, 2.0, 1.0) == 0.0
+    assert compute(1.0, 1.0, 1.0, 1.0, -5.0, 1.0) == 0.0
+    assert compute(1.0, 1.0, 1.0, 1.0, 2.0, -1.0) == 0.0
+
+
+def test_build_d_matrix_counts_minimum_sf_only():
+    manager = QoSManager()
+    manager.clusters = [
+        Cluster(cluster_id=1, device_share=0.5, arrival_rate=0.1, pdr_target=0.95),
+        Cluster(cluster_id=2, device_share=0.5, arrival_rate=0.1, pdr_target=0.9),
+    ]
+
+    class Dummy:
+        pass
+
+    node_a = Dummy()
+    node_a.id = 10
+    node_b = Dummy()
+    node_b.id = 11
+    node_c = Dummy()
+    node_c.id = 12
+
+    assignments = {node_a: manager.clusters[0], node_b: manager.clusters[1], node_c: manager.clusters[1]}
+    node_sf_access = {10: [7, 8, 9], 11: [9], 12: []}
+    sfs = [7, 8, 9]
+
+    matrix = manager._build_d_matrix(assignments, node_sf_access, sfs)
+
+    assert matrix == {
+        1: {7: 1, 8: 0, 9: 0},
+        2: {7: 0, 8: 0, 9: 1},
+    }

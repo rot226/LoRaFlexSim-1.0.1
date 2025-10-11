@@ -525,7 +525,14 @@ class QoSManager:
         alpha: float,
         factor: float,
     ) -> float:
-        if base_log <= 0.0 or tx_power_w <= 0.0 or noise_power_w <= 0.0 or q_value <= 0.0:
+        if (
+            base_log <= 0.0
+            or tx_power_w <= 0.0
+            or noise_power_w <= 0.0
+            or q_value <= 0.0
+            or alpha <= 0.0
+            or factor <= 0.0
+        ):
             return 0.0
         ratio = base_log * tx_power_w / (noise_power_w * q_value)
         if ratio <= 0.0:

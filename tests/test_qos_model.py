@@ -30,6 +30,37 @@ def test_connection_probability_uses_expected_formula():
     )
 
 
+def test_connection_probability_falls_back_to_noise_floor(monkeypatch):
+    channel = Channel(frequency_hz=868e6)
+    distance = 250.0
+    sf = 8
+    tx_power_dBm = 10.0
+    channel.last_noise_dBm = float("nan")
+
+    def fake_noise_floor(freq_offset_hz: float = 0.0) -> float:  # noqa: ARG001
+        return -110.0
+
+    monkeypatch.setattr(channel, "noise_floor_dBm", fake_noise_floor)
+
+    gain = channel.qos_path_gain(distance)
+    noise_lin = 10 ** (-110.0 / 10.0)
+    snr_lin = 10 ** (channel.SNR_THRESHOLDS[sf] / 10.0)
+    tx_lin = 10 ** (tx_power_dBm / 10.0)
+    expected = math.exp(-noise_lin * snr_lin / (tx_lin * gain))
+
+    assert math.isclose(
+        channel.connection_probability(distance, sf, tx_power_dBm),
+        expected,
+        rel_tol=1e-12,
+    )
+
+
+def test_connection_probability_unknown_sf():
+    channel = Channel(frequency_hz=868e6)
+    with pytest.raises(ValueError):
+        channel.connection_probability(100.0, 99, 14.0)
+
+
 def test_capture_probability_matches_reference():
     channel = Channel()
     nu_j = 0.75
