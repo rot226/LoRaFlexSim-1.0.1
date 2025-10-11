@@ -104,6 +104,8 @@ class DummyNode:
         self.sf = 7
         self.channel = channel
         self._recent_pdr = 0.0
+        self.arrival_interval_sum = 0.0
+        self.arrival_interval_count = 0
 
     @property
     def recent_pdr(self) -> float:
@@ -388,6 +390,80 @@ def test_qos_reconfig_triggers_on_node_change_and_pdr_drift():
     drift_time = manager._last_reconfig_time
     assert drift_time is not None and drift_time > node_change_time
 
+
+def test_qos_reconfig_triggers_on_traffic_variation():
+    channel = DummyChannel()
+    nodes = [
+        DummyNode(1, 100.0, 0.0, 14.0, channel),
+        DummyNode(2, 150.0, 0.0, 14.0, channel),
+    ]
+    for node in nodes:
+        node.arrival_interval_sum = 100.0
+        node.arrival_interval_count = 10
+    gateways = [DummyGateway(0.0, 0.0)]
+    simulator = DummySimulator(nodes, gateways, channel)
+
+    manager = QoSManager()
+    manager.configure_clusters(
+        1,
+        proportions=[1.0],
+        arrival_rates=[0.1],
+        pdr_targets=[0.9],
+    )
+    manager.reconfig_interval_s = 1000.0
+    manager.traffic_drift_threshold = 0.1
+
+    simulator.current_time = 0.0
+    manager.apply(simulator, "MixRA-Opt")
+    initial_time = manager._last_reconfig_time
+    assert initial_time is not None
+
+    for node in simulator.nodes:
+        node.arrival_interval_sum = 200.0
+        node.arrival_interval_count = 20
+    simulator.current_time = initial_time + 5.0
+    manager.apply(simulator, "MixRA-Opt")
+    assert manager._last_reconfig_time == initial_time
+
+    for node in simulator.nodes:
+        node.arrival_interval_sum = 120.0
+        node.arrival_interval_count = 30
+    simulator.current_time = initial_time + 10.0
+    manager.apply(simulator, "MixRA-Opt")
+    traffic_time = manager._last_reconfig_time
+    assert traffic_time is not None and traffic_time > initial_time
+
+
+def test_update_qos_context_records_recent_metrics():
+    channel = DummyChannel()
+    nodes = [
+        DummyNode(1, 100.0, 0.0, 14.0, channel),
+        DummyNode(2, 200.0, 0.0, 14.0, channel),
+    ]
+    for index, node in enumerate(nodes, start=1):
+        node.recent_pdr = 0.2 * index
+        node.arrival_interval_sum = 50.0 * index
+        node.arrival_interval_count = 5.0 * index
+    gateways = [DummyGateway(0.0, 0.0)]
+    simulator = DummySimulator(nodes, gateways, channel)
+
+    manager = QoSManager()
+    manager.configure_clusters(
+        1,
+        proportions=[1.0],
+        arrival_rates=[0.2],
+        pdr_targets=[0.95],
+    )
+
+    simulator.current_time = 42.0
+    manager.apply(simulator, "MixRA-Opt")
+
+    assert manager._last_reconfig_time == pytest.approx(42.0)
+    for node in nodes:
+        node_id = node.id
+        assert manager._last_recent_pdr[node_id] == pytest.approx(node.recent_pdr)
+        expected_rate = node.arrival_interval_count / node.arrival_interval_sum
+        assert manager._last_arrival_rates[node_id] == pytest.approx(expected_rate)
 
 def test_qos_manager_compute_sf_airtimes_follows_channel_airtime():
     channel = DummyChannel()
