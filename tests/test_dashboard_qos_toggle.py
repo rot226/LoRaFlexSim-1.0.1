@@ -72,13 +72,19 @@ def reset_dashboard_state():
         dashboard.auto_fast_forward = False
         dashboard.pause_prev_disabled = False
         dashboard.qos_toggle.value = False
+        dashboard._QOS_TOGGLE_GUARD = False
         dashboard.qos_manager.clusters = []
         dashboard.qos_manager.node_sf_access.clear()
         dashboard.qos_manager.node_clusters.clear()
+        dashboard.qos_cluster_count_input.value = dashboard._DEFAULT_QOS_CLUSTER_COUNT
+        dashboard.qos_cluster_proportions_input.value = ""
+        dashboard.qos_cluster_arrival_rates_input.value = ""
+        dashboard.qos_cluster_pdr_targets_input.value = ""
         yield
     finally:
         dashboard._cleanup_callbacks()
         dashboard.qos_toggle.value = False
+        dashboard._QOS_TOGGLE_GUARD = False
         dashboard.qos_algorithm_select.value = default_algorithm
         dashboard.qos_manager.clusters = []
         dashboard.qos_manager.node_sf_access.clear()
@@ -182,6 +188,46 @@ def test_qos_toggle_keeps_pause_and_fast_forward_in_sync():
     while dashboard.sim.step():
         pass
     dashboard.on_stop(None)
+
+
+def test_setup_simulation_configures_qos_clusters_before_apply(monkeypatch):
+    dashboard.packets_input.value = 1
+    dashboard.num_runs_input.value = 1
+    dashboard.qos_toggle.value = True
+    dashboard.qos_cluster_count_input.value = 2
+    dashboard.qos_cluster_proportions_input.value = "0.6,0.4"
+    dashboard.qos_cluster_arrival_rates_input.value = "0.2,0.1"
+    dashboard.qos_cluster_pdr_targets_input.value = "0.95,0.85"
+
+    configured = {}
+
+    def _fake_configure(cluster_count, *, proportions, arrival_rates, pdr_targets):
+        configured["count"] = cluster_count
+        configured["proportions"] = tuple(proportions)
+        configured["arrival_rates"] = tuple(arrival_rates)
+        configured["pdr_targets"] = tuple(pdr_targets)
+        dashboard.qos_manager.clusters = [object()] * cluster_count
+        return list(dashboard.qos_manager.clusters)
+
+    apply_called = {}
+
+    def _fake_apply(simulator, algorithm):  # pragma: no cover - assertion only
+        apply_called["called"] = True
+        assert dashboard.qos_manager.clusters, "Les clusters doivent être définis avant l'application"
+
+    monkeypatch.setattr(dashboard.qos_manager, "configure_clusters", _fake_configure)
+    monkeypatch.setattr(dashboard.qos_manager, "apply", _fake_apply)
+
+    dashboard.setup_simulation()
+
+    assert configured["count"] == 2
+    assert configured["proportions"] == (0.6, 0.4)
+    assert configured["arrival_rates"] == (0.2, 0.1)
+    assert configured["pdr_targets"] == (0.95, 0.85)
+    assert apply_called.get("called") is True
+
+    if dashboard.sim is not None:
+        dashboard.on_stop(None)
 
 
 def test_export_includes_qos_metrics_when_enabled(monkeypatch, tmp_path):
