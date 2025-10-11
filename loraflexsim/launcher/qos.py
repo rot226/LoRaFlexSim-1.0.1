@@ -131,6 +131,12 @@ class QoSManager:
         self.cluster_offered_totals: dict[int, float] = {}
         self.cluster_capacity_limits: dict[int, float] = {}
         self.cluster_interference: dict[int, float] = {}
+        self.capacity_margin: float = 0.1
+        self.reconfig_interval_s: float = 60.0
+        self.pdr_drift_threshold: float = 0.1
+        self._last_reconfig_time: float | None = None
+        self._last_node_ids: set[int] = set()
+        self._last_recent_pdr: dict[int, float] = {}
 
     # --- Interface publique -------------------------------------------------
     def apply(self, simulator, algorithm: str) -> None:
@@ -145,7 +151,7 @@ class QoSManager:
         method = getattr(self, method_name, None)
         if method is None:
             raise ValueError(f"Implémentation manquante pour {algorithm}")
-        if self.clusters:
+        if self.clusters and self._should_refresh_context(simulator):
             self._update_qos_context(simulator)
         if not getattr(simulator, "nodes", None):
             # Rien à faire si aucun nœud n'est présent.
@@ -174,6 +180,9 @@ class QoSManager:
             arrival_rates=arrival_rates,
             pdr_targets=pdr_targets,
         )
+        self._last_reconfig_time = None
+        self._last_node_ids = set()
+        self._last_recent_pdr = {}
         return list(self.clusters)
 
     # --- Utilitaires internes ----------------------------------------------
@@ -214,90 +223,22 @@ class QoSManager:
     # --- Calculs QoS -------------------------------------------------------
     def _update_qos_context(self, simulator) -> None:
         if not self.clusters:
-            self.sf_limits = {}
-            self.node_sf_access = {}
-            self.node_clusters = {}
-            self.cluster_d_matrix = {}
-            self.sf_airtimes = {}
-            self.cluster_offered_traffic = {}
-            self.cluster_offered_totals = {}
-            self.cluster_capacity_limits = {}
-            self.cluster_interference = {}
-            setattr(simulator, "qos_sf_limits", {})
-            setattr(simulator, "qos_node_sf_access", {})
-            setattr(simulator, "qos_node_clusters", {})
-            setattr(simulator, "qos_d_matrix", {})
-            setattr(simulator, "qos_sf_airtimes", {})
-            setattr(simulator, "qos_offered_traffic", {})
-            setattr(simulator, "qos_offered_totals", {})
-            setattr(simulator, "qos_capacity_limits", {})
-            setattr(simulator, "qos_interference", {})
+            self._clear_qos_state(simulator)
             return
 
         channel = self._reference_channel(simulator)
         if channel is None:
-            self.sf_limits = {}
-            self.node_sf_access = {}
-            self.node_clusters = {}
-            self.cluster_d_matrix = {}
-            self.sf_airtimes = {}
-            self.cluster_offered_traffic = {}
-            self.cluster_offered_totals = {}
-            self.cluster_capacity_limits = {}
-            self.cluster_interference = {}
-            setattr(simulator, "qos_sf_limits", {})
-            setattr(simulator, "qos_node_sf_access", {})
-            setattr(simulator, "qos_node_clusters", {})
-            setattr(simulator, "qos_d_matrix", {})
-            setattr(simulator, "qos_sf_airtimes", {})
-            setattr(simulator, "qos_offered_traffic", {})
-            setattr(simulator, "qos_offered_totals", {})
-            setattr(simulator, "qos_capacity_limits", {})
-            setattr(simulator, "qos_interference", {})
+            self._clear_qos_state(simulator)
             return
 
         noise_power_w = self._noise_power_w(channel)
         if noise_power_w <= 0.0:
-            self.sf_limits = {}
-            self.node_sf_access = {}
-            self.node_clusters = {}
-            self.cluster_d_matrix = {}
-            self.sf_airtimes = {}
-            self.cluster_offered_traffic = {}
-            self.cluster_offered_totals = {}
-            self.cluster_capacity_limits = {}
-            self.cluster_interference = {}
-            setattr(simulator, "qos_sf_limits", {})
-            setattr(simulator, "qos_node_sf_access", {})
-            setattr(simulator, "qos_node_clusters", {})
-            setattr(simulator, "qos_d_matrix", {})
-            setattr(simulator, "qos_sf_airtimes", {})
-            setattr(simulator, "qos_offered_traffic", {})
-            setattr(simulator, "qos_offered_totals", {})
-            setattr(simulator, "qos_capacity_limits", {})
-            setattr(simulator, "qos_interference", {})
+            self._clear_qos_state(simulator)
             return
 
         snr_requirements = self._snr_table(simulator)
         if not snr_requirements:
-            self.sf_limits = {}
-            self.node_sf_access = {}
-            self.node_clusters = {}
-            self.cluster_d_matrix = {}
-            self.sf_airtimes = {}
-            self.cluster_offered_traffic = {}
-            self.cluster_offered_totals = {}
-            self.cluster_capacity_limits = {}
-            self.cluster_interference = {}
-            setattr(simulator, "qos_sf_limits", {})
-            setattr(simulator, "qos_node_sf_access", {})
-            setattr(simulator, "qos_node_clusters", {})
-            setattr(simulator, "qos_d_matrix", {})
-            setattr(simulator, "qos_sf_airtimes", {})
-            setattr(simulator, "qos_offered_traffic", {})
-            setattr(simulator, "qos_offered_totals", {})
-            setattr(simulator, "qos_capacity_limits", {})
-            setattr(simulator, "qos_interference", {})
+            self._clear_qos_state(simulator)
             return
 
         alpha = getattr(channel, "path_loss_exp", 2.0)
@@ -372,13 +313,18 @@ class QoSManager:
             cluster_id: max(total_load - totals.get(cluster_id, 0.0), 0.0)
             for cluster_id in totals
         }
-        capacities = {
-            cluster.cluster_id: self._capacity_from_pdr(
+        margin_factor = max(0.0, 1.0 - max(self.capacity_margin, 0.0))
+        capacities = {}
+        for cluster in self.clusters:
+            capacity = self._capacity_from_pdr(
                 cluster.pdr_target,
                 interference.get(cluster.cluster_id, 0.0),
             )
-            for cluster in self.clusters
-        }
+            if capacity > 0.0 and margin_factor > 0.0:
+                capacity *= margin_factor
+            elif margin_factor <= 0.0:
+                capacity = 0.0
+            capacities[cluster.cluster_id] = capacity
         self.sf_airtimes = airtimes
         self.cluster_offered_traffic = offered
         self.cluster_offered_totals = totals
@@ -393,6 +339,82 @@ class QoSManager:
         setattr(simulator, "qos_offered_totals", totals)
         setattr(simulator, "qos_interference", interference)
         setattr(simulator, "qos_capacity_limits", capacities)
+
+        node_ids = {getattr(node, "id", id(node)) for node in nodes}
+        self._last_node_ids = node_ids
+        self._last_recent_pdr = {
+            getattr(node, "id", id(node)): float(getattr(node, "recent_pdr", 0.0) or 0.0)
+            for node in nodes
+        }
+        current_time = getattr(simulator, "current_time", None)
+        try:
+            time_value = float(current_time)
+        except (TypeError, ValueError):
+            time_value = None
+        if time_value is not None and math.isfinite(time_value):
+            self._last_reconfig_time = time_value
+
+    def _clear_qos_state(self, simulator) -> None:
+        self.sf_limits = {}
+        self.node_sf_access = {}
+        self.node_clusters = {}
+        self.cluster_d_matrix = {}
+        self.sf_airtimes = {}
+        self.cluster_offered_traffic = {}
+        self.cluster_offered_totals = {}
+        self.cluster_capacity_limits = {}
+        self.cluster_interference = {}
+        setattr(simulator, "qos_sf_limits", {})
+        setattr(simulator, "qos_node_sf_access", {})
+        setattr(simulator, "qos_node_clusters", {})
+        setattr(simulator, "qos_d_matrix", {})
+        setattr(simulator, "qos_sf_airtimes", {})
+        setattr(simulator, "qos_offered_traffic", {})
+        setattr(simulator, "qos_offered_totals", {})
+        setattr(simulator, "qos_capacity_limits", {})
+        setattr(simulator, "qos_interference", {})
+        self._last_node_ids = set()
+        self._last_recent_pdr = {}
+        self._last_reconfig_time = None
+
+    def _should_refresh_context(self, simulator) -> bool:
+        if not self.clusters:
+            return False
+        if not self.node_sf_access:
+            return True
+        nodes = list(getattr(simulator, "nodes", []) or [])
+        node_ids = {getattr(node, "id", id(node)) for node in nodes}
+        if node_ids != self._last_node_ids:
+            return True
+        if self._last_reconfig_time is None:
+            return True
+        if self.pdr_drift_threshold > 0.0 and nodes:
+            for node in nodes:
+                node_id = getattr(node, "id", id(node))
+                previous = self._last_recent_pdr.get(node_id)
+                if previous is None:
+                    continue
+                try:
+                    current = float(getattr(node, "recent_pdr", None))
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(current):
+                    continue
+                if abs(current - previous) >= self.pdr_drift_threshold:
+                    return True
+        interval = self.reconfig_interval_s
+        if interval is None or interval <= 0.0:
+            return False
+        current_time = getattr(simulator, "current_time", None)
+        try:
+            time_value = float(current_time)
+        except (TypeError, ValueError):
+            return False
+        if not math.isfinite(time_value):
+            return False
+        if time_value < self._last_reconfig_time:
+            return True
+        return time_value - self._last_reconfig_time >= interval
 
     @staticmethod
     def _reference_channel(simulator):

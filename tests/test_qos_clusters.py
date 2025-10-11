@@ -99,6 +99,15 @@ class DummyNode:
         self.tx_power = tx_power
         self.sf = 7
         self.channel = channel
+        self._recent_pdr = 0.0
+
+    @property
+    def recent_pdr(self) -> float:
+        return self._recent_pdr
+
+    @recent_pdr.setter
+    def recent_pdr(self, value: float) -> None:
+        self._recent_pdr = float(value)
 
 
 class DummyGateway:
@@ -120,6 +129,7 @@ class DummySimulator:
         self.multichannel = type("MC", (), {"channels": channels})()
         self.fixed_tx_power = None
         self.payload_size_bytes = 20
+        self.current_time = 0.0
         if duty_cycle is not None:
             self.duty_cycle_manager = type("Duty", (), {"duty_cycle": float(duty_cycle)})()
         else:
@@ -265,6 +275,7 @@ def test_qos_manager_computes_sf_limits_and_accessible_sets():
         expected_capacity = qos_module.QoSManager._capacity_from_pdr(
             cluster.pdr_target, interference
         )
+        expected_capacity *= max(0.0, 1.0 - manager.capacity_margin)
         assert manager.cluster_capacity_limits[cluster_id] == pytest.approx(expected_capacity)
         assert simulator.qos_capacity_limits[cluster_id] == pytest.approx(expected_capacity)
 
@@ -331,3 +342,45 @@ def test_mixra_opt_respects_duty_cycle_and_capacity():
     if capacity:
         total_load = sum(channel_loads.values())
         assert total_load <= capacity + 1e-6
+
+def test_qos_reconfig_triggers_on_node_change_and_pdr_drift():
+    channel = DummyChannel()
+    nodes = [
+        DummyNode(1, 100.0, 0.0, 14.0, channel),
+        DummyNode(2, 150.0, 0.0, 14.0, channel),
+    ]
+    gateways = [DummyGateway(0.0, 0.0)]
+    simulator = DummySimulator(nodes, gateways, channel)
+
+    manager = QoSManager()
+    manager.configure_clusters(
+        1,
+        proportions=[1.0],
+        arrival_rates=[0.1],
+        pdr_targets=[0.9],
+    )
+    manager.reconfig_interval_s = 100.0
+    manager.pdr_drift_threshold = 0.05
+
+    simulator.current_time = 0.0
+    manager.apply(simulator, "MixRA-Opt")
+    initial_time = manager._last_reconfig_time
+    assert initial_time is not None
+
+    simulator.current_time = initial_time + 10.0
+    manager.apply(simulator, "MixRA-Opt")
+    assert manager._last_reconfig_time == initial_time
+
+    simulator.nodes.append(DummyNode(3, 200.0, 0.0, 14.0, channel))
+    simulator.current_time = initial_time + 20.0
+    manager.apply(simulator, "MixRA-Opt")
+    node_change_time = manager._last_reconfig_time
+    assert node_change_time is not None and node_change_time > initial_time
+
+    manager.reconfig_interval_s = 1000.0
+    simulator.nodes[0].recent_pdr = manager.pdr_drift_threshold + 0.1
+    simulator.current_time = node_change_time + 1.0
+    manager.apply(simulator, "MixRA-Opt")
+    drift_time = manager._last_reconfig_time
+    assert drift_time is not None and drift_time > node_change_time
+
