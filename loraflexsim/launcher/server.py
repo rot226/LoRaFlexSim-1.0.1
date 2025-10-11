@@ -309,6 +309,8 @@ class NetworkServer:
         request_ack: bool = False,
         at_time: float | None = None,
         gateway=None,
+        *,
+        channel=None,
     ):
         """Queue a downlink frame for a node via ``gateway`` or the first one."""
         from .lorawan import (
@@ -373,13 +375,19 @@ class NetworkServer:
         previous_pending = getattr(node, "downlink_pending", 0)
         scheduled = False
 
+        def _schedule(method, *args, **kwargs):
+            if channel is None:
+                return method(*args, **kwargs)
+            return method(*args, channel=channel, **kwargs)
+
         if at_time is None:
             if node.class_type.upper() == "B":
                 after = self.simulator.current_time if self.simulator else 0.0
                 beacon_reference = getattr(node, "last_beacon_time", None)
                 if beacon_reference is not None:
                     beacon_reference += getattr(node, "clock_offset", 0.0)
-                scheduled_time = self.scheduler.schedule_class_b(
+                scheduled_time = _schedule(
+                    self.scheduler.schedule_class_b,
                     node,
                     after,
                     frame,
@@ -393,8 +401,13 @@ class NetworkServer:
                 scheduled = True
             elif node.class_type.upper() == "C":
                 after = self.simulator.current_time if self.simulator else 0.0
-                scheduled_time = self.scheduler.schedule_class_c(
-                    node, after, frame, gw, priority=priority
+                scheduled_time = _schedule(
+                    self.scheduler.schedule_class_c,
+                    node,
+                    after,
+                    frame,
+                    gw,
+                    priority=priority,
                 )
                 scheduled = scheduled_time is not None
             else:
@@ -405,7 +418,8 @@ class NetworkServer:
                     after = self.simulator.current_time if self.simulator else 0.0
                     rx1 = compute_rx1(end, node.rx_delay)
                     rx2 = compute_rx2(end, node.rx_delay)
-                    scheduled_time = self.scheduler.schedule_class_a(
+                    scheduled_time = _schedule(
+                        self.scheduler.schedule_class_a,
                         node,
                         after,
                         rx1,
@@ -416,11 +430,12 @@ class NetworkServer:
                     )
                     scheduled = scheduled_time is not None
                 else:
-                    gw.buffer_downlink(node.id, frame)
+                    gw.buffer_downlink(node.id, frame, channel=channel)
                     scheduled = True
         else:
             if node.class_type.upper() == "B":
-                scheduled_time = self.scheduler.schedule_class_b(
+                scheduled_time = _schedule(
+                    self.scheduler.schedule_class_b,
                     node,
                     at_time,
                     frame,
@@ -433,12 +448,24 @@ class NetworkServer:
                 )
                 scheduled = True
             elif node.class_type.upper() == "C":
-                scheduled_time = self.scheduler.schedule_class_c(
-                    node, at_time, frame, gw, priority=priority
+                scheduled_time = _schedule(
+                    self.scheduler.schedule_class_c,
+                    node,
+                    at_time,
+                    frame,
+                    gw,
+                    priority=priority,
                 )
                 scheduled = scheduled_time is not None
             else:
-                self.scheduler.schedule(node.id, at_time, frame, gw, priority=priority)
+                _schedule(
+                    self.scheduler.schedule,
+                    node.id,
+                    at_time,
+                    frame,
+                    gw,
+                    priority=priority,
+                )
                 scheduled_time = at_time
                 scheduled = True
         if not scheduled:
@@ -596,6 +623,7 @@ class NetworkServer:
                     entry.frame,
                     data_rate=entry.data_rate,
                     tx_power=entry.tx_power,
+                    channel=entry.channel,
                 )
         entry = self.scheduler.pop_ready(node_id, current_time)
         while entry:
@@ -604,6 +632,7 @@ class NetworkServer:
                 entry.frame,
                 data_rate=entry.data_rate,
                 tx_power=entry.tx_power,
+                channel=entry.channel,
             )
             entry = self.scheduler.pop_ready(node_id, current_time)
 

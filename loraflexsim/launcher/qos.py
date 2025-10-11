@@ -137,6 +137,7 @@ class QoSManager:
         self._last_reconfig_time: float | None = None
         self._last_node_ids: set[int] = set()
         self._last_recent_pdr: dict[int, float] = {}
+        self._last_assignments: dict[int, tuple[int, int]] = {}
 
     # --- Interface publique -------------------------------------------------
     def apply(self, simulator, algorithm: str) -> None:
@@ -158,11 +159,13 @@ class QoSManager:
             self.active_algorithm = algorithm
             setattr(simulator, "qos_algorithm", algorithm)
             setattr(simulator, "qos_active", True)
+            self._broadcast_control_updates(simulator)
             return
         self.active_algorithm = algorithm
         method(simulator)
         setattr(simulator, "qos_algorithm", algorithm)
         setattr(simulator, "qos_active", True)
+        self._broadcast_control_updates(simulator)
 
     def configure_clusters(
         self,
@@ -183,6 +186,7 @@ class QoSManager:
         self._last_reconfig_time = None
         self._last_node_ids = set()
         self._last_recent_pdr = {}
+        self._last_assignments = {}
         return list(self.clusters)
 
     # --- Utilitaires internes ----------------------------------------------
@@ -206,6 +210,41 @@ class QoSManager:
             ),
             key=lambda entry: entry.distance,
         )
+
+    def _broadcast_control_updates(self, simulator) -> None:
+        server = getattr(simulator, "network_server", None)
+        nodes = getattr(simulator, "nodes", None)
+        if server is None or not nodes:
+            self._last_assignments = {}
+            return
+        updates: list[tuple[object, int, int]] = []
+        for node in nodes:
+            node_id = getattr(node, "id", None)
+            if node_id is None:
+                continue
+            sf_value = int(getattr(node, "sf", 0))
+            channel_obj = getattr(node, "channel", None)
+            channel_index = simulator.channel_index(channel_obj)
+            previous = self._last_assignments.get(node_id)
+            state = (sf_value, channel_index)
+            if previous != state:
+                updates.append((node, sf_value, channel_index))
+            self._last_assignments[node_id] = state
+            node.assigned_channel_index = channel_index
+        if not updates:
+            return
+        control_channel = getattr(simulator, "control_channel", None)
+        current_time = getattr(simulator, "current_time", None)
+        from .lorawan import ControlUpdate
+
+        for node, sf_value, channel_index in updates:
+            payload = ControlUpdate(sf_value, channel_index).to_bytes()
+            server.send_downlink(
+                node,
+                payload=payload,
+                at_time=current_time,
+                channel=control_channel,
+            )
 
     @staticmethod
     def _assign_tx_power(sf_index: int) -> float:

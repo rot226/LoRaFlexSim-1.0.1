@@ -91,6 +91,25 @@ class LinkADRAns:
 
 
 @dataclass
+class ControlUpdate:
+    """Custom control message broadcasting SF and channel allocations."""
+
+    sf: int
+    channel_index: int
+
+    CMD_ID: int = 0xFF
+
+    def to_bytes(self) -> bytes:
+        return bytes([self.CMD_ID, self.sf & 0xFF, self.channel_index & 0xFF])
+
+    @staticmethod
+    def from_bytes(data: bytes) -> "ControlUpdate":
+        if len(data) < 3 or data[0] != ControlUpdate.CMD_ID:
+            raise ValueError("Invalid ControlUpdate")
+        return ControlUpdate(sf=data[1], channel_index=data[2])
+
+
+@dataclass
 class LinkCheckReq:
     """LinkCheckReq MAC command"""
 

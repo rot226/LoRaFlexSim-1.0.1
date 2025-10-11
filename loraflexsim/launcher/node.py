@@ -102,6 +102,7 @@ class Node:
         # Utiliser un canal par défaut si aucun n'est fourni pour éviter
         # des erreurs lors des calculs d'airtime ou de RSSI.
         self.channel = channel or Channel()
+        self.assigned_channel_index = getattr(self.channel, "channel_index", 0)
         # Offsets de fréquence et de synchronisation (corrélés dans le temps)
         from .advanced_channel import _CorrelatedValue
 
@@ -693,6 +694,7 @@ class Node:
             LinkADRAns,
             LinkCheckReq,
             LinkCheckAns,
+            ControlUpdate,
             DeviceTimeReq,
             DeviceTimeAns,
             DutyCycleReq,
@@ -775,6 +777,19 @@ class Node:
                     self.pending_mac_cmd = LinkADRAns().to_bytes()
                 except Exception:
                     pass
+            elif len(payload) >= 3 and payload[0] == ControlUpdate.CMD_ID:
+                try:
+                    update = ControlUpdate.from_bytes(payload[:3])
+                except Exception:
+                    pass
+                else:
+                    self.sf = update.sf or self.sf
+                    simulator = getattr(self, "simulator", None)
+                    if simulator is not None:
+                        channel_obj = simulator.get_channel_by_index(update.channel_index)
+                        if channel_obj is not None:
+                            self.channel = channel_obj
+                    self.assigned_channel_index = update.channel_index
             elif payload == LinkCheckReq().to_bytes():
                 self.pending_mac_cmd = LinkCheckAns(margin=255, gw_cnt=1).to_bytes()
             elif payload == DeviceTimeReq().to_bytes():

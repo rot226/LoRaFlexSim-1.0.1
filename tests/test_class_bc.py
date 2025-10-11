@@ -169,13 +169,13 @@ def test_class_c_multi_gateway_latency_and_metadata():
     assert entry1 and entry1.gateway is gw1 and entry1.data_rate == 4 and entry1.tx_power == 6.0
     gw1.buffer_downlink(node.id, entry1.frame, data_rate=entry1.data_rate, tx_power=entry1.tx_power)
     stored1 = gw1.pop_downlink(node.id)
-    assert stored1 == (frame1, 4, 6.0)
+    assert stored1 == (frame1, 4, 6.0, None)
     next_time = scheduler.next_time(node.id)
     entry2 = scheduler.pop_ready(node.id, next_time)
     assert entry2 and entry2.gateway is gw2 and entry2.data_rate == 3 and entry2.tx_power == 12.0
     gw2.buffer_downlink(node.id, entry2.frame, data_rate=entry2.data_rate, tx_power=entry2.tx_power)
     stored2 = gw2.pop_downlink(node.id)
-    assert stored2 == (frame2, 3, 12.0)
+    assert stored2 == (frame2, 3, 12.0, None)
 
 
 def test_network_server_class_b_uses_node_clock_offset():
