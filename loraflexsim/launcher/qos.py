@@ -117,6 +117,7 @@ class QoSManager:
         self.sf_limits: dict[int, dict[int, float]] = {}
         self.node_sf_access: dict[int, list[int]] = {}
         self.node_clusters: dict[int, int] = {}
+        self.cluster_d_matrix: dict[int, dict[int, int]] = {}
 
     # --- Interface publique -------------------------------------------------
     def apply(self, simulator, algorithm: str) -> None:
@@ -203,9 +204,11 @@ class QoSManager:
             self.sf_limits = {}
             self.node_sf_access = {}
             self.node_clusters = {}
+            self.cluster_d_matrix = {}
             setattr(simulator, "qos_sf_limits", {})
             setattr(simulator, "qos_node_sf_access", {})
             setattr(simulator, "qos_node_clusters", {})
+            setattr(simulator, "qos_d_matrix", {})
             return
 
         channel = self._reference_channel(simulator)
@@ -213,9 +216,11 @@ class QoSManager:
             self.sf_limits = {}
             self.node_sf_access = {}
             self.node_clusters = {}
+            self.cluster_d_matrix = {}
             setattr(simulator, "qos_sf_limits", {})
             setattr(simulator, "qos_node_sf_access", {})
             setattr(simulator, "qos_node_clusters", {})
+            setattr(simulator, "qos_d_matrix", {})
             return
 
         noise_power_w = self._noise_power_w(channel)
@@ -223,9 +228,11 @@ class QoSManager:
             self.sf_limits = {}
             self.node_sf_access = {}
             self.node_clusters = {}
+            self.cluster_d_matrix = {}
             setattr(simulator, "qos_sf_limits", {})
             setattr(simulator, "qos_node_sf_access", {})
             setattr(simulator, "qos_node_clusters", {})
+            setattr(simulator, "qos_d_matrix", {})
             return
 
         snr_requirements = self._snr_table(simulator)
@@ -233,9 +240,11 @@ class QoSManager:
             self.sf_limits = {}
             self.node_sf_access = {}
             self.node_clusters = {}
+            self.cluster_d_matrix = {}
             setattr(simulator, "qos_sf_limits", {})
             setattr(simulator, "qos_node_sf_access", {})
             setattr(simulator, "qos_node_clusters", {})
+            setattr(simulator, "qos_d_matrix", {})
             return
 
         alpha = getattr(channel, "path_loss_exp", 2.0)
@@ -266,6 +275,7 @@ class QoSManager:
         assignments = self._assign_nodes_to_clusters(nodes)
         node_sf_access: dict[int, list[int]] = {}
         node_cluster_ids: dict[int, int] = {}
+        sfs = sorted(snr_requirements)
         for node, cluster in assignments.items():
             node_cluster_ids[getattr(node, "id", id(node))] = cluster.cluster_id
             setattr(node, "qos_cluster_id", cluster.cluster_id)
@@ -274,7 +284,7 @@ class QoSManager:
             distance = self._nearest_gateway_distance(node, getattr(simulator, "gateways", []))
             accessible: list[int] = []
             if base > 0.0 and node_tx_w > 0.0:
-                for sf in sorted(snr_requirements):
+                for sf in sfs:
                     limit = self._compute_limit(
                         base,
                         node_tx_w,
@@ -289,12 +299,19 @@ class QoSManager:
                         accessible.append(sf)
             node_sf_access[getattr(node, "id", id(node))] = accessible
             setattr(node, "qos_accessible_sf", accessible)
+            if accessible:
+                setattr(node, "qos_min_sf", accessible[0])
+            else:
+                setattr(node, "qos_min_sf", None)
 
         self.node_sf_access = node_sf_access
         self.node_clusters = node_cluster_ids
+        d_matrix = self._build_d_matrix(assignments, node_sf_access, sfs)
+        self.cluster_d_matrix = d_matrix
         setattr(simulator, "qos_sf_limits", cluster_limits)
         setattr(simulator, "qos_node_sf_access", node_sf_access)
         setattr(simulator, "qos_node_clusters", node_cluster_ids)
+        setattr(simulator, "qos_d_matrix", d_matrix)
 
     @staticmethod
     def _reference_channel(simulator):
@@ -408,6 +425,30 @@ class QoSManager:
             assignments[node] = self.clusters[-1]
             node_index += 1
         return assignments
+
+    def _build_d_matrix(
+        self,
+        assignments: dict[object, Cluster],
+        node_sf_access: dict[int, list[int]],
+        sfs: Sequence[int],
+    ) -> dict[int, dict[int, int]]:
+        if not assignments:
+            return {}
+
+        matrix: dict[int, dict[int, int]] = {
+            cluster.cluster_id: {sf: 0 for sf in sfs}
+            for cluster in self.clusters
+        }
+
+        for node, cluster in assignments.items():
+            node_id = getattr(node, "id", id(node))
+            accessible = node_sf_access.get(node_id) or []
+            if not accessible:
+                continue
+            min_sf = accessible[0]
+            if min_sf in matrix[cluster.cluster_id]:
+                matrix[cluster.cluster_id][min_sf] += 1
+        return matrix
 
     # --- Implémentations MixRA ---------------------------------------------
     def _apply_mixra_opt(self, simulator) -> None:
