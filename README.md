@@ -1128,6 +1128,11 @@ que `plot_mobility_latency_energy.py` peut visualiser.
 Les utilitaires `analyse_resultats.py` et `analyse_runs.py` aident à traiter les
 fichiers CSV produits par `run.py` ou par le tableau de bord.
 
+Le script `scripts/run_qos_comparison.py` orchestre deux simulations (QoS activé
+vs ADR désactivé) en s'appuyant sur `loraflexsim.scenarios.run_qos_vs_adr`. Il
+produit automatiquement les métriques et journaux correspondants dans
+`results/qos_comparison/` afin de faciliter l'analyse des gains liés au QoS.
+
 ## Guide d'extension du dashboard
 
 Le fichier [docs/extension_guide.md](docs/extension_guide.md) détaille comment
