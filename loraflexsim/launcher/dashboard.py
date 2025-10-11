@@ -58,6 +58,10 @@ _DEFAULT_ADR_NAME = next(iter(ADR_MODULES))
 selected_adr_module = ADR_MODULES[_DEFAULT_ADR_NAME]
 last_selected_adr_name = _DEFAULT_ADR_NAME
 qos_manager = QoSManager()
+_DEFAULT_QOS_CLUSTER_COUNT = 1
+_DEFAULT_QOS_LAMBDA = 0.1
+_DEFAULT_QOS_PDR = 0.9
+_QOS_TOGGLE_GUARD = False
 total_runs = 1
 current_run = 0
 runs_events: list[pd.DataFrame] = []
@@ -117,6 +121,91 @@ def _validate_positive_inputs() -> bool:
         export_message.object = "⚠️ L'intervalle doit être supérieur à 0 !"
         return False
     return True
+
+
+# --- Utilitaires QoS -------------------------------------------------------
+def _parse_cluster_field(
+    raw_value: str,
+    count: int,
+    *,
+    field_label: str,
+    default_factory,
+) -> list[float]:
+    """Analyse un champ numérique pour la configuration des clusters QoS."""
+
+    text = (raw_value or "").strip()
+    if not text:
+        defaults = default_factory()
+        return list(defaults)
+    parts = [
+        chunk.strip()
+        for chunk in text.replace(";", ",").split(",")
+        if chunk.strip()
+    ]
+    if len(parts) != count:
+        raise ValueError(
+            f"{field_label} doit contenir {count} valeur(s) séparée(s) par des virgules."
+        )
+    try:
+        return [float(part) for part in parts]
+    except ValueError as exc:  # pragma: no cover - validation utilisateur
+        raise ValueError(f"Valeurs numériques invalides pour {field_label}.") from exc
+
+
+def _configure_qos_clusters_from_widgets() -> None:
+    """Collecte les paramètres QoS depuis les widgets et configure le gestionnaire."""
+
+    try:
+        cluster_count = int(qos_cluster_count_input.value)
+    except (TypeError, ValueError) as exc:  # pragma: no cover - défense
+        raise ValueError("Le nombre de clusters QoS doit être un entier valide.") from exc
+    if cluster_count <= 0:
+        raise ValueError("Le nombre de clusters QoS doit être supérieur à 0.")
+
+    def _default_proportions() -> list[float]:
+        return [1.0 / cluster_count] * cluster_count
+
+    proportions = _parse_cluster_field(
+        qos_cluster_proportions_input.value,
+        cluster_count,
+        field_label="Les proportions",
+        default_factory=_default_proportions,
+    )
+    if any(p <= 0 for p in proportions):
+        raise ValueError("Les proportions doivent être strictement positives.")
+    if not math.isclose(sum(proportions), 1.0, rel_tol=1e-6, abs_tol=1e-6):
+        raise ValueError("La somme des proportions doit être égale à 1.")
+
+    def _default_lambdas() -> list[float]:
+        return [_DEFAULT_QOS_LAMBDA] * cluster_count
+
+    arrival_rates = _parse_cluster_field(
+        qos_cluster_arrival_rates_input.value,
+        cluster_count,
+        field_label="Les taux d'arrivée",
+        default_factory=_default_lambdas,
+    )
+    if any(rate <= 0 for rate in arrival_rates):
+        raise ValueError("Les taux d'arrivée doivent être strictement positifs.")
+
+    def _default_pdr() -> list[float]:
+        return [_DEFAULT_QOS_PDR] * cluster_count
+
+    pdr_targets = _parse_cluster_field(
+        qos_cluster_pdr_targets_input.value,
+        cluster_count,
+        field_label="Les cibles PDR",
+        default_factory=_default_pdr,
+    )
+    if any(target <= 0 or target > 1 for target in pdr_targets):
+        raise ValueError("Les cibles PDR doivent être comprises entre 0 et 1.")
+
+    qos_manager.configure_clusters(
+        cluster_count,
+        proportions=proportions,
+        arrival_rates=arrival_rates,
+        pdr_targets=pdr_targets,
+    )
 
 
 # --- Widgets de configuration ---
@@ -234,6 +323,27 @@ qos_algorithm_select = pn.widgets.RadioButtonGroup(
     value="MixRA-Opt",
 )
 qos_algorithm_select.visible = False
+qos_cluster_count_input = pn.widgets.IntInput(
+    name="Nombre de clusters QoS",
+    value=_DEFAULT_QOS_CLUSTER_COUNT,
+    step=1,
+    start=1,
+)
+qos_cluster_proportions_input = pn.widgets.TextInput(
+    name="Proportions (séparées par des virgules)",
+    value="",
+    placeholder="1.0",
+)
+qos_cluster_arrival_rates_input = pn.widgets.TextInput(
+    name="Taux d'arrivée λ (par cluster)",
+    value="",
+    placeholder="0.1",
+)
+qos_cluster_pdr_targets_input = pn.widgets.TextInput(
+    name="Cibles PDR (0-1)",
+    value="",
+    placeholder="0.9",
+)
 
 
 # --- Boutons de contrôle ---
@@ -637,6 +747,13 @@ def setup_simulation(seed_offset: int = 0):
     if not _validate_positive_inputs():
         return
 
+    if qos_toggle.value:
+        try:
+            _configure_qos_clusters_from_widgets()
+        except ValueError as exc:
+            export_message.object = f"⚠️ {exc}"
+            return
+
     elapsed_time = 0
 
     if sim_callback:
@@ -761,6 +878,12 @@ def setup_simulation(seed_offset: int = 0):
 
     # Appliquer la stratégie QoS ou, à défaut, le profil ADR sélectionné
     if qos_toggle.value:
+        try:
+            _configure_qos_clusters_from_widgets()
+        except ValueError as exc:
+            export_message.object = f"⚠️ {exc}"
+            on_stop(None)
+            return
         qos_manager.apply(sim, qos_algorithm_select.value)
     elif selected_adr_module:
         if selected_adr_module is adr_standard_1:
@@ -1226,14 +1349,29 @@ manual_pos_toggle.param.watch(on_manual_toggle, "value")
 def _apply_qos_if_running() -> None:
     if sim is not None and qos_toggle.value:
         try:
+            _configure_qos_clusters_from_widgets()
+        except ValueError as exc:
+            export_message.object = f"⚠️ {exc}"
+            return
+        try:
             qos_manager.apply(sim, qos_algorithm_select.value)
         except ValueError as exc:  # pragma: no cover - sécurité supplémentaire
             export_message.object = f"⚠️ {exc}"
 
 
 def on_qos_toggle(event) -> None:
-    global selected_adr_module
+    global selected_adr_module, _QOS_TOGGLE_GUARD
+    if _QOS_TOGGLE_GUARD:
+        return
     if event.new:
+        try:
+            _configure_qos_clusters_from_widgets()
+        except ValueError as exc:
+            export_message.object = f"⚠️ {exc}"
+            _QOS_TOGGLE_GUARD = True
+            qos_toggle.value = False
+            _QOS_TOGGLE_GUARD = False
+            return
         qos_toggle.button_type = "primary"
         qos_algorithm_select.visible = True
         adr_select.disabled = True
@@ -1366,8 +1504,14 @@ center_col = pn.Column(
         pn.Column(
             manual_pos_toggle,
             position_textarea,
+            pn.Spacer(height=10),
+            pn.pane.Markdown("### QoS"),
             qos_toggle,
             qos_algorithm_select,
+            qos_cluster_count_input,
+            qos_cluster_proportions_input,
+            qos_cluster_arrival_rates_input,
+            qos_cluster_pdr_targets_input,
             width=650,
         ),
     ),
