@@ -12,9 +12,15 @@ peuvent être affinées par la suite si un modèle plus précis est nécessaire.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 import math
-from typing import Iterable, Sequence
+from typing import Callable, Iterable, Sequence
+
+try:  # pragma: no cover - SciPy est une dépendance obligatoire à l'exécution
+    from scipy.special import lambertw
+except Exception:  # pragma: no cover - gestion defensive
+    lambertw = None
 
 
 # Mapping lisible pour l'interface utilisateur :
@@ -117,6 +123,7 @@ class QoSManager:
         self.sf_limits: dict[int, dict[int, float]] = {}
         self.node_sf_access: dict[int, list[int]] = {}
         self.node_clusters: dict[int, int] = {}
+        self._last_distribution: dict[int, dict[int, dict[int, float]]] = {}
 
     # --- Interface publique -------------------------------------------------
     def apply(self, simulator, algorithm: str) -> None:
@@ -203,6 +210,7 @@ class QoSManager:
             self.sf_limits = {}
             self.node_sf_access = {}
             self.node_clusters = {}
+            self._last_distribution = {}
             setattr(simulator, "qos_sf_limits", {})
             setattr(simulator, "qos_node_sf_access", {})
             setattr(simulator, "qos_node_clusters", {})
@@ -213,6 +221,7 @@ class QoSManager:
             self.sf_limits = {}
             self.node_sf_access = {}
             self.node_clusters = {}
+            self._last_distribution = {}
             setattr(simulator, "qos_sf_limits", {})
             setattr(simulator, "qos_node_sf_access", {})
             setattr(simulator, "qos_node_clusters", {})
@@ -223,6 +232,7 @@ class QoSManager:
             self.sf_limits = {}
             self.node_sf_access = {}
             self.node_clusters = {}
+            self._last_distribution = {}
             setattr(simulator, "qos_sf_limits", {})
             setattr(simulator, "qos_node_sf_access", {})
             setattr(simulator, "qos_node_clusters", {})
@@ -233,6 +243,7 @@ class QoSManager:
             self.sf_limits = {}
             self.node_sf_access = {}
             self.node_clusters = {}
+            self._last_distribution = {}
             setattr(simulator, "qos_sf_limits", {})
             setattr(simulator, "qos_node_sf_access", {})
             setattr(simulator, "qos_node_clusters", {})
@@ -295,6 +306,7 @@ class QoSManager:
         setattr(simulator, "qos_sf_limits", cluster_limits)
         setattr(simulator, "qos_node_sf_access", node_sf_access)
         setattr(simulator, "qos_node_clusters", node_cluster_ids)
+        self._last_distribution = self._compute_cluster_distribution(simulator)
 
     @staticmethod
     def _reference_channel(simulator):
@@ -308,6 +320,16 @@ class QoSManager:
         if not channels:
             return None
         return channels[0]
+
+    @staticmethod
+    def _channel_list(simulator) -> list:
+        multichannel = getattr(simulator, "multichannel", None)
+        if multichannel is not None:
+            candidates = list(getattr(multichannel, "channels", []) or [])
+            if candidates:
+                return candidates
+        channel = getattr(simulator, "channel", None)
+        return [channel] if channel is not None else []
 
     @staticmethod
     def _noise_power_w(channel) -> float:
@@ -362,6 +384,227 @@ class QoSManager:
         if ratio <= 0.0:
             return 0.0
         return (ratio ** (1.0 / alpha)) * factor
+
+    # --- Trafic offert et capacité ---------------------------------------
+    def _compute_cluster_distribution(
+        self, simulator
+    ) -> dict[int, dict[int, dict[int, float]]]:
+        """Calcule :math:`D_{k,j,f}` (répartition des nœuds par cluster/SF/canal)."""
+
+        nodes = list(getattr(simulator, "nodes", []) or [])
+        if not nodes or not self.clusters:
+            return {}
+
+        channels = self._channel_list(simulator)
+        if not channels:
+            return {}
+        channel_index = {id(ch): idx for idx, ch in enumerate(channels)}
+
+        totals: defaultdict[int, int] = defaultdict(int)
+        counts: defaultdict[int, defaultdict[int, defaultdict[int, int]]]
+        counts = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+
+        for node in nodes:
+            cluster_id = getattr(node, "qos_cluster_id", None)
+            sf = getattr(node, "sf", None)
+            if cluster_id is None or sf is None:
+                continue
+            channel = getattr(node, "channel", None)
+            channel_id = channel_index.get(id(channel), 0)
+            totals[cluster_id] += 1
+            counts[cluster_id][int(sf)][channel_id] += 1
+
+        distribution: dict[int, dict[int, dict[int, float]]] = {}
+        for cluster_id, sf_counts in counts.items():
+            total = totals.get(cluster_id, 0)
+            if total <= 0:
+                continue
+            sf_distribution: dict[int, dict[int, float]] = {}
+            for sf, channel_counts in sf_counts.items():
+                channel_distribution = {
+                    ch_idx: count / total
+                    for ch_idx, count in channel_counts.items()
+                    if count > 0
+                }
+                if channel_distribution:
+                    sf_distribution[sf] = channel_distribution
+            if sf_distribution:
+                distribution[cluster_id] = sf_distribution
+        return distribution
+
+    def cluster_distribution(
+        self, simulator
+    ) -> dict[int, dict[int, dict[int, float]]]:
+        """Retourne la dernière estimation de :math:`D_{k,j,f}`.
+
+        Le dictionnaire retourné est structuré comme suit::
+
+            {cluster_id: {sf: {channel_index: proportion}}}
+
+        Les proportions sont normalisées par rapport au nombre total de nœuds
+        du cluster, ce qui permet un calcul direct du trafic offert.
+        """
+
+        self._last_distribution = self._compute_cluster_distribution(simulator)
+        return self._last_distribution
+
+    def offered_traffic(
+        self,
+        simulator,
+        *,
+        payload_size: int | None = None,
+    ) -> dict[int, dict[int, dict[int, float]]]:
+        r"""Calcule :math:`\nu_{k,j,f}` pour chaque cluster/SF/canal."""
+
+        if not self.clusters:
+            return {}
+
+        reference_channel = self._reference_channel(simulator)
+        if reference_channel is None:
+            return {}
+
+        distribution = self.cluster_distribution(simulator)
+        if not distribution:
+            return {}
+
+        if payload_size is None:
+            payload_size = int(getattr(simulator, "payload_size_bytes", 20))
+
+        tau_cache: dict[int, float] = {}
+        loads: dict[int, dict[int, dict[int, float]]] = {}
+
+        for cluster in self.clusters:
+            cluster_dist = distribution.get(cluster.cluster_id)
+            if not cluster_dist:
+                continue
+            sf_loads: dict[int, dict[int, float]] = {}
+            for sf, channel_dist in cluster_dist.items():
+                tau = tau_cache.setdefault(
+                    sf, reference_channel.airtime(sf, payload_size=payload_size)
+                )
+                offered = {
+                    ch_idx: channel_share * cluster.arrival_rate * tau
+                    for ch_idx, channel_share in channel_dist.items()
+                    if channel_share > 0.0
+                }
+                if offered:
+                    sf_loads[sf] = offered
+            if sf_loads:
+                loads[cluster.cluster_id] = sf_loads
+        return loads
+
+    @staticmethod
+    def approximate_capacity(pdr_target: float, delta: float = 0.0) -> float:
+        r"""Approximation analytique de :math:`\nu_k^{\max}` via Lambert W."""
+
+        if not (0.0 < pdr_target <= 1.0):
+            raise ValueError("La cible PDR doit appartenir à ]0, 1]")
+        if lambertw is None:
+            raise RuntimeError(
+                "SciPy est requis pour calculer la fonction de Lambert W"
+            )
+        xi = float(delta) + 1.0
+        argument = -xi * math.exp(xi) / pdr_target
+        result = lambertw(argument, -1)
+        value = result.real if isinstance(result, complex) else float(result)
+        return max(0.0, -0.5 * value - 0.5 * xi)
+
+    @staticmethod
+    def refine_capacity(
+        approx: float,
+        pdr_target: float,
+        pdr_function: Callable[[float], float] | None,
+        *,
+        max_iter: int = 50,
+        tol: float = 1e-6,
+    ) -> float:
+        r"""Affinement numérique de :math:`\nu_k^{\max}` à partir d'un modèle ``h``."""
+
+        if pdr_function is None or approx < 0.0:
+            return max(0.0, approx)
+
+        def evaluate(load: float) -> float:
+            value = pdr_function(load)
+            if value is None or math.isnan(value):
+                raise ValueError("La fonction PDR doit retourner une valeur réelle")
+            return float(value)
+
+        target = float(pdr_target)
+        if not (0.0 < target <= 1.0):
+            raise ValueError("La cible PDR doit appartenir à ]0, 1]")
+
+        try:
+            approx_value = evaluate(approx)
+        except ValueError:
+            return max(0.0, approx)
+
+        lower = 0.0
+        upper = max(approx, 1e-9)
+
+        try:
+            lower_value = evaluate(lower)
+        except ValueError:
+            lower_value = 1.0
+
+        if lower_value < target:
+            return 0.0
+
+        if approx_value > target:
+            lower = approx
+            lower_value = approx_value
+            upper = max(approx * 2.0, approx + 1e-6)
+            it = 0
+            while True:
+                try:
+                    upper_value = evaluate(upper)
+                except ValueError:
+                    upper_value = 0.0
+                if upper_value <= target or it >= max_iter:
+                    break
+                lower = upper
+                lower_value = upper_value
+                upper *= 2.0
+                it += 1
+        else:
+            upper = approx
+            upper_value = approx_value
+            it = 0
+            while True:
+                mid = upper * 0.5
+                if mid <= 1e-12 or it >= max_iter:
+                    break
+                try:
+                    mid_value = evaluate(mid)
+                except ValueError:
+                    mid_value = 0.0
+                if mid_value >= target:
+                    upper = mid
+                    upper_value = mid_value
+                else:
+                    break
+                it += 1
+
+        try:
+            upper_value
+        except UnboundLocalError:
+            upper_value = evaluate(upper)
+
+        if upper_value > target:
+            return max(0.0, upper)
+
+        for _ in range(max_iter):
+            midpoint = 0.5 * (lower + upper)
+            try:
+                value = evaluate(midpoint)
+            except ValueError:
+                value = 0.0
+            if abs(value - target) <= tol:
+                return max(0.0, midpoint)
+            if value > target:
+                lower = midpoint
+            else:
+                upper = midpoint
+        return max(0.0, 0.5 * (lower + upper))
 
     def _assign_nodes_to_clusters(self, nodes: list) -> dict[object, Cluster]:
         if not nodes or not self.clusters:
