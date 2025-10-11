@@ -618,9 +618,9 @@ def test_simulator_metrics_expose_qos_statistics():
     assert gaps[2] == pytest.approx((4 / 5) - 0.85)
 
     throughputs = metrics["qos_cluster_throughput_bps"]
-    expected_pdr1 = 15 / 18
-    expected_throughput1 = 2 * 0.2 * 160 * expected_pdr1
-    expected_throughput2 = 1 * 0.1 * 160 * (4 / 5)
+    payload_bits = sim.payload_size_bytes * 8
+    expected_throughput1 = 15 * payload_bits / sim.current_time
+    expected_throughput2 = 4 * payload_bits / sim.current_time
     assert throughputs[1] == pytest.approx(expected_throughput1)
     assert throughputs[2] == pytest.approx(expected_throughput2)
 
@@ -641,6 +641,41 @@ def test_simulator_metrics_expose_qos_statistics():
     assert sf_channel[1][7][sim.channel_index(channel0)] == 1
     assert sf_channel[1][9][sim.channel_index(channel0)] == 1
     assert sf_channel[2][8][sim.channel_index(channel1)] == 1
+
+
+def test_simulator_metrics_empty_qos_when_disabled():
+    sim = Simulator.__new__(Simulator)
+    sim.tx_attempted = 0
+    sim.rx_delivered = 0
+    sim.total_delay = 0.0
+    sim.delivered_count = 0
+    sim.current_time = 0.0
+    sim.packets_delivered = 0
+    sim.payload_size_bytes = 20
+    sim.nodes = []
+    sim.gateways = []
+    sim.network_server = SimpleNamespace(duplicate_packets=0, event_gateway={})
+    sim.packets_lost_collision = 0
+    sim.total_energy_J = 0.0
+    sim.energy_nodes_J = 0.0
+    sim.energy_gateways_J = 0.0
+    sim.retransmissions = 0
+    sim.events_log = []
+    sim._events_log_map = {}
+    sim.warm_up_intervals = 0
+    sim.dump_intervals = False
+    sim.qos_clusters_config = {}
+    sim.qos_node_clusters = {}
+
+    metrics = sim.get_metrics()
+
+    assert metrics["qos_cluster_throughput_bps"] == {}
+    assert metrics["qos_cluster_pdr"] == {}
+    assert metrics["qos_cluster_targets"] == {}
+    assert metrics["qos_cluster_node_counts"] == {}
+    assert metrics["qos_cluster_pdr_gap"] == {}
+    assert metrics["qos_cluster_sf_channel"] == {}
+    assert metrics["qos_throughput_gini"] == 0.0
 
 
 def test_compute_limit_guard_clamps_invalid_inputs():

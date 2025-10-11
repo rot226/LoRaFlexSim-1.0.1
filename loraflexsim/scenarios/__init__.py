@@ -14,6 +14,7 @@ from .long_range import (
     create_long_range_channels,
     suggest_parameters,
 )
+from .qos_comparison import run_qos_vs_adr
 
 __all__ = [
     "LONG_RANGE_AREA_SIZE",
@@ -28,4 +29,5 @@ __all__ = [
     "configure_long_range_nodes",
     "create_long_range_channels",
     "suggest_parameters",
+    "run_qos_vs_adr",
 ]

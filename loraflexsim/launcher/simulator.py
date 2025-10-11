@@ -2086,6 +2086,13 @@ class Simulator:
 
         qos_clusters_config = getattr(self, "qos_clusters_config", {}) or {}
         qos_node_clusters = getattr(self, "qos_node_clusters", {}) or {}
+        metrics.setdefault("qos_cluster_throughput_bps", {})
+        metrics.setdefault("qos_cluster_pdr", {})
+        metrics.setdefault("qos_cluster_targets", {})
+        metrics.setdefault("qos_cluster_node_counts", {})
+        metrics.setdefault("qos_cluster_pdr_gap", {})
+        metrics.setdefault("qos_cluster_sf_channel", {})
+        metrics.setdefault("qos_throughput_gini", 0.0)
         if qos_clusters_config:
             payload_bits = float(self.payload_size_bytes) * 8.0
             cluster_node_counts: dict[int, int] = {
@@ -2107,6 +2114,10 @@ class Simulator:
                     continue
                 cluster_id = qos_node_clusters.get(node_id)
                 if cluster_id is None:
+                    cluster_id = getattr(node, "qos_cluster_id", None)
+                if cluster_id is None:
+                    continue
+                if cluster_id not in qos_clusters_config:
                     continue
                 cluster_node_counts.setdefault(cluster_id, 0)
                 cluster_attempts.setdefault(cluster_id, 0)
@@ -2133,22 +2144,12 @@ class Simulator:
                     cluster_pdr[cluster_id] = 0.0
                 target = config.get("pdr_target", 0.0)
                 cluster_targets[cluster_id] = float(target) if target is not None else 0.0
-                arrival_rate = float(config.get("arrival_rate", 0.0) or 0.0)
-                throughput_value = 0.0
-                if arrival_rate > 0.0 and payload_bits > 0.0:
-                    combos = cluster_sf_channel.get(cluster_id, {})
-                    cluster_pdr_value = cluster_pdr.get(cluster_id, 0.0)
-                    if cluster_pdr_value > 0.0:
-                        for sf_counts in combos.values():
-                            for count in sf_counts.values():
-                                if count <= 0:
-                                    continue
-                                throughput_value += (
-                                    count
-                                    * arrival_rate
-                                    * payload_bits
-                                    * cluster_pdr_value
-                                )
+                if sim_time > 0.0 and payload_bits > 0.0:
+                    throughput_value = (
+                        delivered_cluster * payload_bits / sim_time
+                    )
+                else:
+                    throughput_value = 0.0
                 cluster_throughput[cluster_id] = throughput_value
 
             cluster_ids = sorted(qos_clusters_config)
