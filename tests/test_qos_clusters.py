@@ -876,3 +876,145 @@ def test_qos_manager_supports_varied_topologies(
                 and node.qos_min_sf is not None
             )
         )
+
+
+def test_adr_pure_resets_qos_context(monkeypatch):
+    manager = QoSManager()
+    manager.node_sf_access = {1: [7]}
+    manager.sf_limits = {1: {7: 1000.0}}
+    node = SimpleNamespace(id=1, sf=7, channel=None)
+    simulator = SimpleNamespace(
+        nodes=[node],
+        network_server=None,
+        control_channel=None,
+    )
+    simulator.channel_index = lambda channel: 0
+
+    called = {}
+
+    def fake_apply(sim):
+        called["adr"] = True
+
+    monkeypatch.setattr("loraflexsim.launcher.adr_standard_1.apply", fake_apply)
+
+    manager.apply(simulator, "ADR-Pure")
+
+    assert called == {"adr": True}
+    assert manager.node_sf_access == {}
+    assert simulator.qos_node_sf_access == {}
+    assert simulator.qos_active is True
+
+
+def test_apra_like_prioritises_clusters_and_duty_cycle():
+    channel0 = DummyChannel(channel_index=0)
+    channel1 = DummyChannel(channel_index=1)
+    channel2 = DummyChannel(channel_index=2)
+    nodes = [
+        DummyNode(1, 60.0, 0.0, 14.0, channel0),
+        DummyNode(2, 90.0, 0.0, 14.0, channel0),
+        DummyNode(3, 140.0, 0.0, 14.0, channel0),
+        DummyNode(4, 200.0, 0.0, 14.0, channel0),
+        DummyNode(5, 260.0, 0.0, 14.0, channel0),
+        DummyNode(6, 320.0, 0.0, 14.0, channel0),
+    ]
+    gateways = [DummyGateway(0.0, 0.0)]
+    simulator = DummySimulator(
+        nodes,
+        gateways,
+        channel0,
+        extra_channels=[channel1, channel2],
+        duty_cycle=0.18,
+    )
+    simulator.channel_index = lambda ch: getattr(ch, "channel_index", 0)
+
+    manager = QoSManager()
+    manager.configure_clusters(
+        2,
+        proportions=[0.5, 0.5],
+        arrival_rates=[0.3, 0.2],
+        pdr_targets=[0.99, 0.9],
+    )
+
+    manager.apply(simulator, "APRA-like")
+
+    duty_cycle = simulator.duty_cycle_manager.duty_cycle
+    airtimes = manager.sf_airtimes
+    channel_loads: dict[int, float] = {}
+    for node in nodes:
+        cluster_id = manager.node_clusters.get(node.id)
+        if cluster_id is None:
+            continue
+        cluster = next(c for c in manager.clusters if c.cluster_id == cluster_id)
+        load = cluster.arrival_rate * airtimes.get(node.sf, 0.0)
+        channel_id = getattr(getattr(node, "channel", None), "channel_index", 0)
+        channel_loads[channel_id] = channel_loads.get(channel_id, 0.0) + load
+        access = manager.node_sf_access.get(node.id, [])
+        if access:
+            assert node.sf in access
+            assert node.sf >= access[0]
+
+    for load in channel_loads.values():
+        assert load <= duty_cycle + 1e-6
+
+
+def test_aimi_like_partitions_channels_and_avoids_collisions():
+    channel0 = DummyChannel(channel_index=0)
+    channel1 = DummyChannel(channel_index=1)
+    channel2 = DummyChannel(channel_index=2)
+    nodes = [
+        DummyNode(1, 55.0, 0.0, 14.0, channel0),
+        DummyNode(2, 80.0, 0.0, 14.0, channel0),
+        DummyNode(3, 120.0, 0.0, 14.0, channel0),
+        DummyNode(4, 180.0, 0.0, 14.0, channel0),
+        DummyNode(5, 240.0, 0.0, 14.0, channel0),
+        DummyNode(6, 320.0, 0.0, 14.0, channel0),
+    ]
+    gateways = [DummyGateway(0.0, 0.0)]
+    simulator = DummySimulator(
+        nodes,
+        gateways,
+        channel0,
+        extra_channels=[channel1, channel2],
+        duty_cycle=0.2,
+    )
+    simulator.channel_index = lambda ch: getattr(ch, "channel_index", 0)
+
+    manager = QoSManager()
+    manager.configure_clusters(
+        2,
+        proportions=[0.7, 0.3],
+        arrival_rates=[0.15, 0.1],
+        pdr_targets=[0.995, 0.92],
+    )
+
+    manager.apply(simulator, "Aimi-like")
+
+    airtimes = manager.sf_airtimes
+    duty_cycle = simulator.duty_cycle_manager.duty_cycle
+    channels_by_cluster: dict[int, set[int]] = {}
+    channel_loads: dict[int, float] = {}
+    for node in nodes:
+        cluster_id = manager.node_clusters.get(node.id)
+        if cluster_id is None:
+            continue
+        cluster = next(c for c in manager.clusters if c.cluster_id == cluster_id)
+        sf = node.sf
+        load = cluster.arrival_rate * airtimes.get(sf, 0.0)
+        channel_id = getattr(getattr(node, "channel", None), "channel_index", 0)
+        channels_by_cluster.setdefault(cluster_id, set()).add(channel_id)
+        channel_loads[channel_id] = channel_loads.get(channel_id, 0.0) + load
+        access = manager.node_sf_access.get(node.id, [])
+        if access:
+            assert sf in access
+
+    for load in channel_loads.values():
+        assert load <= duty_cycle + 1e-6
+
+    ordered = sorted(manager.clusters, key=lambda c: c.pdr_target, reverse=True)
+    top_cluster = ordered[0].cluster_id
+    low_cluster = ordered[-1].cluster_id
+    top_channels = channels_by_cluster.get(top_cluster, set())
+    low_channels = channels_by_cluster.get(low_cluster, set())
+    assert len(top_channels) >= 2
+    assert len(low_channels) == 1
+    assert top_channels.isdisjoint(low_channels)
