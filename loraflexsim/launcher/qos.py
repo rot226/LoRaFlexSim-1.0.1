@@ -135,6 +135,7 @@ class QoSManager:
         self.cluster_offered_totals: dict[int, float] = {}
         self.cluster_capacity_limits: dict[int, float] = {}
         self.cluster_interference: dict[int, float] = {}
+        self.cluster_sf_channel_capacity: dict[int, dict[int, dict[int, float]]] = {}
         self.capacity_margin: float = 0.1
         self.reconfig_interval_s: float = 60.0
         self.pdr_drift_threshold: float = 0.1
@@ -276,6 +277,22 @@ class QoSManager:
             self._clear_qos_state(simulator)
             return
 
+        channel_map: dict[int, object | None] = {}
+        multichannel = getattr(simulator, "multichannel", None)
+        if multichannel is not None:
+            for index, ch in enumerate(getattr(multichannel, "channels", []) or []):
+                channel_index = getattr(ch, "channel_index", index)
+                channel_map[channel_index] = ch
+        base_channel = getattr(simulator, "channel", None)
+        if base_channel is not None:
+            base_index = getattr(base_channel, "channel_index", 0)
+            channel_map.setdefault(base_index, base_channel)
+        if not channel_map:
+            channel_map[0] = channel
+        channel_indices = sorted(channel_map)
+        if not channel_indices:
+            channel_indices = [0]
+
         noise_power_w = self._noise_power_w(channel)
         if noise_power_w <= 0.0:
             self._clear_qos_state(simulator)
@@ -370,11 +387,41 @@ class QoSManager:
             elif margin_factor <= 0.0:
                 capacity = 0.0
             capacities[cluster.cluster_id] = capacity
+
+        channel_totals: dict[int, float] = {}
+        for cluster_map in offered.values():
+            for sf_map in cluster_map.values():
+                for channel_index, value in sf_map.items():
+                    channel_totals[channel_index] = channel_totals.get(channel_index, 0.0) + value
+
+        sf_channel_capacity: dict[int, dict[int, dict[int, float]]] = {}
+        for cluster in self.clusters:
+            cluster_id = cluster.cluster_id
+            per_sf: dict[int, dict[int, float]] = {}
+            cluster_offered = offered.get(cluster_id, {})
+            for sf in sfs:
+                per_channel: dict[int, float] = {}
+                sf_offered = cluster_offered.get(sf, {})
+                for channel_index in channel_indices:
+                    other_load = channel_totals.get(channel_index, 0.0) - sf_offered.get(channel_index, 0.0)
+                    if other_load < 0.0:
+                        other_load = 0.0
+                    limit = self._capacity_from_pdr(cluster.pdr_target, other_load)
+                    if limit > 0.0 and margin_factor > 0.0:
+                        limit *= margin_factor
+                    elif margin_factor <= 0.0:
+                        limit = 0.0
+                    per_channel[channel_index] = float(limit)
+                if per_channel:
+                    per_sf[sf] = per_channel
+            if per_sf:
+                sf_channel_capacity[cluster_id] = per_sf
         self.sf_airtimes = airtimes
         self.cluster_offered_traffic = offered
         self.cluster_offered_totals = totals
         self.cluster_interference = interference
         self.cluster_capacity_limits = capacities
+        self.cluster_sf_channel_capacity = sf_channel_capacity
         cluster_config = {
             cluster.cluster_id: {
                 "arrival_rate": float(cluster.arrival_rate),
@@ -392,6 +439,7 @@ class QoSManager:
         setattr(simulator, "qos_offered_totals", totals)
         setattr(simulator, "qos_interference", interference)
         setattr(simulator, "qos_capacity_limits", capacities)
+        setattr(simulator, "qos_sf_channel_capacity", sf_channel_capacity)
         setattr(simulator, "qos_clusters_config", cluster_config)
 
         node_ids = {getattr(node, "id", id(node)) for node in nodes}
@@ -424,6 +472,7 @@ class QoSManager:
         self.cluster_offered_totals = {}
         self.cluster_capacity_limits = {}
         self.cluster_interference = {}
+        self.cluster_sf_channel_capacity = {}
         setattr(simulator, "qos_sf_limits", {})
         setattr(simulator, "qos_node_sf_access", {})
         setattr(simulator, "qos_node_clusters", {})
@@ -433,6 +482,7 @@ class QoSManager:
         setattr(simulator, "qos_offered_totals", {})
         setattr(simulator, "qos_capacity_limits", {})
         setattr(simulator, "qos_interference", {})
+        setattr(simulator, "qos_sf_channel_capacity", {})
         setattr(simulator, "qos_clusters_config", {})
         self._last_node_ids = set()
         self._last_recent_pdr = {}
@@ -808,6 +858,7 @@ class QoSManager:
             sfs = [7, 8, 9, 10, 11, 12]
         sf_order_map = {sf: position for position, sf in enumerate(sfs)}
         airtimes = self.sf_airtimes or self._compute_sf_airtimes(simulator, sfs)
+        sf_channel_caps = self.cluster_sf_channel_capacity
 
         duty_manager = getattr(simulator, "duty_cycle_manager", None)
         duty_cycle = float(getattr(duty_manager, "duty_cycle", 0.0)) if duty_manager is not None else 0.0
@@ -910,6 +961,7 @@ class QoSManager:
             sfs = [7, 8, 9, 10, 11, 12]
         sf_order_map = {sf: position for position, sf in enumerate(sfs)}
         airtimes = self.sf_airtimes or self._compute_sf_airtimes(simulator, sfs)
+        sf_channel_caps = self.cluster_sf_channel_capacity
 
         duty_manager = getattr(simulator, "duty_cycle_manager", None)
         duty_cycle = float(getattr(duty_manager, "duty_cycle", 0.0)) if duty_manager is not None else 0.0
@@ -1051,6 +1103,7 @@ class QoSManager:
         var_data: Sequence[dict[str, float | int]],
         throughput_coeffs: Sequence[float],
         cluster_caps: dict[int, float],
+        sf_channel_caps: dict[int, dict[int, dict[int, float]]],
         duty_cycle: float | None,
     ) -> list[float] | None:
         solution = [0.0] * len(var_data)
@@ -1062,6 +1115,12 @@ class QoSManager:
                 channel_remaining.setdefault(channel_index, float(duty_cycle))
         cluster_remaining = {
             cluster_id: float(capacity) for cluster_id, capacity in cluster_caps.items() if capacity > 0.0
+        }
+        combo_remaining: dict[tuple[int, int, int], float] = {
+            (cluster_id, sf, channel_index): float(cap)
+            for cluster_id, sf_map in sf_channel_caps.items()
+            for sf, channel_map in sf_map.items()
+            for channel_index, cap in channel_map.items()
         }
 
         for cluster_id, indices in cluster_var_indices.items():
@@ -1086,6 +1145,12 @@ class QoSManager:
                     channel_cap = channel_remaining.get(channel_index)
                     if channel_cap is not None and load_coeff > 0.0:
                         share_limit = min(share_limit, channel_cap / load_coeff)
+                combo_cap = combo_remaining.get((cluster_id, sf, channel_index))
+                if combo_cap is not None:
+                    if combo_cap <= 0.0:
+                        continue
+                    if load_coeff > 0.0:
+                        share_limit = min(share_limit, combo_cap / load_coeff)
                 cluster_cap = cluster_remaining.get(cluster_id)
                 if cluster_cap is not None and load_coeff > 0.0:
                     share_limit = min(share_limit, cluster_cap / load_coeff)
@@ -1101,6 +1166,10 @@ class QoSManager:
                         channel_remaining[channel_index] = max(
                             0.0, channel_cap - share_limit * load_coeff
                         )
+                if combo_cap is not None and load_coeff > 0.0:
+                    combo_remaining[(cluster_id, sf, channel_index)] = max(
+                        0.0, combo_cap - share_limit * load_coeff
+                    )
                 if cluster_cap is not None and load_coeff > 0.0:
                     cluster_remaining[cluster_id] = max(0.0, cluster_cap - share_limit * load_coeff)
             if remaining_share > 1e-6:
@@ -1157,6 +1226,7 @@ class QoSManager:
             for cluster_id, cap in self.cluster_capacity_limits.items()
             if cap is not None and cap > 0.0
         }
+        sf_channel_caps = self.cluster_sf_channel_capacity
 
         var_data: list[dict[str, float | int]] = []
         throughput_coeffs: list[float] = []
@@ -1204,6 +1274,16 @@ class QoSManager:
                     upper = min(1.0, max_share)
                     if cap_limit is not None:
                         upper = min(upper, cap_limit / load_coeff)
+                    combo_cap = (
+                        sf_channel_caps.get(cluster_id, {})
+                        .get(sf, {})
+                        .get(channel_index)
+                    )
+                    if combo_cap is not None:
+                        if combo_cap <= 0.0:
+                            continue
+                        if load_coeff > 0.0:
+                            upper = min(upper, combo_cap / load_coeff)
                     if upper <= 0.0:
                         continue
                     idx = len(var_data)
@@ -1310,6 +1390,7 @@ class QoSManager:
                 var_data,
                 throughput_coeffs,
                 cluster_caps,
+                self.cluster_sf_channel_capacity,
                 duty_cycle,
             )
             if solution is None:
@@ -1371,6 +1452,15 @@ class QoSManager:
                         cluster_limit = int(math.floor((cluster_cap + 1e-9) / per_node_load))
                         if cluster_limit < max_nodes:
                             max_nodes = cluster_limit
+                    combo_cap = (
+                        sf_channel_caps.get(cluster_id, {})
+                        .get(sf, {})
+                        .get(channel_index)
+                    )
+                    if combo_cap is not None:
+                        combo_limit = int(math.floor((combo_cap + 1e-9) / per_node_load))
+                        if combo_limit < max_nodes:
+                            max_nodes = combo_limit
                 if base > max_nodes:
                     base = max_nodes
                 counts[idx] = int(base)
@@ -1391,6 +1481,19 @@ class QoSManager:
 
             available = list(entries)
             assignments: dict[int, list[tuple[_NodeDistance, list[int]]]] = {idx: [] for idx in indices}
+            combo_remaining_load: dict[tuple[int, int], float] = {}
+            for idx in indices:
+                sf_val = int(var_data[idx]["sf"])
+                channel_val = int(var_data[idx]["channel"])
+                cap_val = (
+                    sf_channel_caps.get(cluster_id, {})
+                    .get(sf_val, {})
+                    .get(channel_val)
+                )
+                if cap_val is None:
+                    combo_remaining_load[(sf_val, channel_val)] = float("inf")
+                else:
+                    combo_remaining_load[(sf_val, channel_val)] = float(max(cap_val, 0.0))
 
             for idx in sorted(indices, key=lambda i: (solution[i], -var_data[i]["sf"]), reverse=True):
                 target = counts.get(idx, 0)
@@ -1428,12 +1531,21 @@ class QoSManager:
                 channel_index = int(var_data[idx]["channel"])
                 channel_obj = channel_map.get(channel_index, channel_map.get(default_channel_index))
                 sf_index = sf_order_map.get(sf, len(sf_order) - 1)
+                load_coeff = float(var_data[idx]["load_coeff"])
+                per_node_load = load_coeff / node_count if node_count > 0 else 0.0
                 for entry, _ in assigned:
+                    remaining_cap = combo_remaining_load.get((sf, channel_index), float("inf"))
+                    if per_node_load > 0.0 and remaining_cap < per_node_load - 1e-9:
+                        break
                     node = entry.node
                     node.sf = sf
                     if channel_obj is not None:
                         node.channel = channel_obj
                     node.tx_power = self._assign_tx_power(sf_index)
+                    if per_node_load > 0.0:
+                        combo_remaining_load[(sf, channel_index)] = max(
+                            0.0, remaining_cap - per_node_load
+                        )
 
             for entry, access in available:
                 if not access:
@@ -1479,6 +1591,7 @@ class QoSManager:
         sf_order_map = {sf: position for position, sf in enumerate(sfs)}
 
         airtimes = self.sf_airtimes or self._compute_sf_airtimes(simulator, sfs)
+        sf_channel_caps = self.cluster_sf_channel_capacity
 
         cluster_nodes: dict[int, dict[int, deque[tuple[_NodeDistance, list[int]]]]] = {}
         fallback_pairs: list[_NodeDistance] = []
@@ -1517,6 +1630,11 @@ class QoSManager:
             channel_remaining = {idx: per_channel_capacity for idx in channel_indices}
             channel_pos = 0
             cluster_exhausted = False
+            combo_remaining = {
+                (sf_key, channel_idx): float(max(cap, 0.0))
+                for sf_key, channel_map in sf_channel_caps.get(cluster_id, {}).items()
+                for channel_idx, cap in channel_map.items()
+            }
 
             for sf_index, sf in enumerate(sfs):
                 queue = buckets.get(sf)
@@ -1574,9 +1692,13 @@ class QoSManager:
 
                     channel_idx = channel_indices[channel_pos]
                     remaining = channel_remaining.get(channel_idx, float("inf"))
-                    effective_remaining = min(remaining, cluster_remaining)
+                    combo_key = (sf, channel_idx)
+                    combo_cap = combo_remaining.get(combo_key, float("inf"))
+                    effective_remaining = min(remaining, cluster_remaining, combo_cap)
                     if effective_remaining <= load_per_node - 1e-9:
-                        channel_remaining[channel_idx] = 0.0
+                        if combo_key in combo_remaining:
+                            combo_remaining[combo_key] = max(0.0, combo_cap)
+                        channel_remaining[channel_idx] = max(0.0, remaining)
                         channel_pos += 1
                         continue
 
@@ -1603,9 +1725,15 @@ class QoSManager:
                         node.channel = channel_obj
                     node.tx_power = self._assign_tx_power(sf_order_map.get(sf, len(sfs) - 1))
                     channel_remaining[channel_idx] = max(0.0, remaining - load_per_node)
+                    if combo_key in combo_remaining:
+                        combo_remaining[combo_key] = max(0.0, combo_cap - load_per_node)
                     cluster_remaining = max(0.0, cluster_remaining - load_per_node)
-                    if channel_remaining[channel_idx] <= 1e-9:
-                        channel_remaining[channel_idx] = 0.0
+                    if channel_remaining[channel_idx] <= 1e-9 or (
+                        combo_key in combo_remaining and combo_remaining[combo_key] <= 1e-9
+                    ):
+                        channel_remaining[channel_idx] = max(0.0, channel_remaining[channel_idx])
+                        if combo_key in combo_remaining:
+                            combo_remaining[combo_key] = max(0.0, combo_remaining[combo_key])
                         channel_pos += 1
                     if cluster_remaining <= 1e-9:
                         cluster_remaining = 0.0

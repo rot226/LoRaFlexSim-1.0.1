@@ -296,6 +296,32 @@ def test_qos_manager_computes_sf_limits_and_accessible_sets():
         assert manager.cluster_capacity_limits[cluster_id] == pytest.approx(expected_capacity)
         assert simulator.qos_capacity_limits[cluster_id] == pytest.approx(expected_capacity)
 
+    margin_factor = max(0.0, 1.0 - manager.capacity_margin)
+    available_channels = {channel.channel_index}
+    channel_totals = {
+        chan_idx: sum(
+            expected_offered[cluster.cluster_id][sf].get(chan_idx, 0.0)
+            for cluster in manager.clusters
+            for sf in expected_offered[cluster.cluster_id]
+        )
+        for chan_idx in available_channels
+    }
+    for cluster in manager.clusters:
+        cluster_id = cluster.cluster_id
+        for sf in sorted(simulator.REQUIRED_SNR):
+            for chan_idx in available_channels:
+                other_load = channel_totals.get(chan_idx, 0.0) - expected_offered[cluster_id][sf].get(chan_idx, 0.0)
+                if other_load < 0.0:
+                    other_load = 0.0
+                expected_cap = qos_module.QoSManager._capacity_from_pdr(cluster.pdr_target, other_load)
+                if expected_cap > 0.0:
+                    expected_cap *= margin_factor
+                else:
+                    expected_cap = 0.0
+                assert manager.cluster_sf_channel_capacity[cluster_id][sf][chan_idx] == pytest.approx(expected_cap)
+
+    assert simulator.qos_sf_channel_capacity == manager.cluster_sf_channel_capacity
+
     assert simulator.qos_offered_traffic == manager.cluster_offered_traffic
     assert simulator.qos_offered_totals == manager.cluster_offered_totals
     assert simulator.qos_interference == manager.cluster_interference
@@ -342,6 +368,7 @@ def test_mixra_opt_respects_duty_cycle_and_capacity():
     airtimes = manager.sf_airtimes
     duty_cycle = simulator.duty_cycle_manager.duty_cycle
     channel_loads: dict[int, float] = {}
+    combo_loads: dict[tuple[int, int], float] = {}
     for node in nodes:
         if manager.node_clusters.get(node.id) != cluster_id:
             continue
@@ -349,6 +376,7 @@ def test_mixra_opt_respects_duty_cycle_and_capacity():
         tau = airtimes.get(sf, 0.0)
         channel_index = getattr(getattr(node, "channel", None), "channel_index", 0)
         channel_loads[channel_index] = channel_loads.get(channel_index, 0.0) + cluster.arrival_rate * tau
+        combo_loads[(sf, channel_index)] = combo_loads.get((sf, channel_index), 0.0) + cluster.arrival_rate * tau
 
     # Le trafic est réparti sur plusieurs canaux et respecte le duty-cycle
     assert len(channel_loads) >= 2
@@ -359,6 +387,14 @@ def test_mixra_opt_respects_duty_cycle_and_capacity():
     if capacity:
         total_load = sum(channel_loads.values())
         assert total_load <= capacity + 1e-6
+
+    sf_channel_caps = manager.cluster_sf_channel_capacity.get(cluster_id, {})
+    for (sf, chan_idx), load in combo_loads.items():
+        cap = sf_channel_caps.get(sf, {}).get(chan_idx)
+        if cap is not None:
+            assert load <= cap + 1e-6
+
+    assert simulator.qos_sf_channel_capacity == manager.cluster_sf_channel_capacity
 
 
 def test_mixra_h_respects_cluster_capacity_limit():
@@ -395,6 +431,7 @@ def test_mixra_h_respects_cluster_capacity_limit():
     cluster_id = cluster.cluster_id
     airtimes = manager.sf_airtimes
     channel_loads: dict[int, float] = {}
+    combo_loads: dict[tuple[int, int], float] = {}
     for node in nodes:
         if manager.node_clusters.get(node.id) != cluster_id:
             continue
@@ -402,12 +439,21 @@ def test_mixra_h_respects_cluster_capacity_limit():
         tau = airtimes.get(sf, 0.0)
         channel_index = getattr(getattr(node, "channel", None), "channel_index", 0)
         channel_loads[channel_index] = channel_loads.get(channel_index, 0.0) + cluster.arrival_rate * tau
+        combo_loads[(sf, channel_index)] = combo_loads.get((sf, channel_index), 0.0) + cluster.arrival_rate * tau
 
     assert channel_loads
     total_load = sum(channel_loads.values())
     capacity = manager.cluster_capacity_limits.get(cluster_id)
     if capacity is not None:
         assert total_load <= capacity + 1e-6
+
+    sf_channel_caps = manager.cluster_sf_channel_capacity.get(cluster_id, {})
+    for (sf, chan_idx), load in combo_loads.items():
+        cap = sf_channel_caps.get(sf, {}).get(chan_idx)
+        if cap is not None:
+            assert load <= cap + 1e-6
+
+    assert simulator.qos_sf_channel_capacity == manager.cluster_sf_channel_capacity
 
 
 def test_qos_reconfig_triggers_on_node_change_and_pdr_drift():
