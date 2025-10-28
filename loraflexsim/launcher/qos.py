@@ -13,6 +13,7 @@ peuvent être affinées par la suite si un modèle plus précis est nécessaire.
 from __future__ import annotations
 
 import importlib.util
+from importlib import import_module
 from collections import deque
 from dataclasses import dataclass
 import math
@@ -28,6 +29,9 @@ else:  # pragma: no cover - dépendance optionnelle
 # Mapping lisible pour l'interface utilisateur :
 # clé (affichage) -> suffixe de méthode interne.
 QOS_ALGORITHMS = {
+    "ADR-Pure": "adr_pure",
+    "APRA-like": "apra_like",
+    "Aimi-like": "aimi_like",
     "MixRA-Opt": "mixra_opt",
     "MixRA-H": "mixra_h",
 }
@@ -740,6 +744,292 @@ class QoSManager:
                 return w_next
             w = w_next
         return w
+
+    # --- Lignes de base ADR/APRA/AIMI -------------------------------------
+    def _apply_adr_pure(self, simulator) -> None:
+        self._clear_qos_state(simulator)
+        setattr(simulator, "qos_active", False)
+        setattr(simulator, "qos_algorithm", None)
+
+        candidates = (
+            "loraflexsim.launcher.adr_standard_1",
+            "loraflexsim.launcher.adr_max",
+        )
+
+        last_error: Exception | None = None
+        for module_name in candidates:
+            try:
+                module = import_module(module_name)
+            except ImportError:
+                continue
+            apply_fn = getattr(module, "apply", None)
+            if callable(apply_fn):
+                try:
+                    apply_fn(simulator)
+                except Exception as exc:  # pragma: no cover - délégation externe
+                    last_error = exc
+                    continue
+                return
+
+        if last_error is not None:
+            raise RuntimeError("Échec de l'initialisation ADR pour ADR-Pure") from last_error
+        raise RuntimeError(
+            "Aucun module ADR compatible (adr_standard_1/adr_max) n'est disponible pour ADR-Pure"
+        )
+
+    def _apply_apra_like(self, simulator) -> None:
+        pairs = self._sorted_distances(simulator)
+        if not pairs:
+            return
+        if not self.clusters or not self.node_sf_access:
+            self._assign_distance_based(pairs)
+            return
+
+        channel_map: dict[int, object | None] = {}
+        multichannel = getattr(simulator, "multichannel", None)
+        if multichannel is not None:
+            for index, channel in enumerate(getattr(multichannel, "channels", []) or []):
+                channel_index = getattr(channel, "channel_index", index)
+                channel_map[channel_index] = channel
+        base_channel = getattr(simulator, "channel", None)
+        if base_channel is not None:
+            channel_index = getattr(base_channel, "channel_index", 0)
+            channel_map.setdefault(channel_index, base_channel)
+        if not channel_map:
+            channel_map[0] = base_channel
+        channel_indices = sorted(channel_map)
+        if not channel_indices:
+            self._assign_distance_based(pairs)
+            return
+        default_channel_index = channel_indices[0]
+
+        sfs = sorted({sf for access in self.node_sf_access.values() for sf in access})
+        if not sfs:
+            sfs = [7, 8, 9, 10, 11, 12]
+        sf_order_map = {sf: position for position, sf in enumerate(sfs)}
+        airtimes = self.sf_airtimes or self._compute_sf_airtimes(simulator, sfs)
+
+        duty_manager = getattr(simulator, "duty_cycle_manager", None)
+        duty_cycle = float(getattr(duty_manager, "duty_cycle", 0.0)) if duty_manager is not None else 0.0
+        duty_limit = duty_cycle if duty_cycle > 0.0 else float("inf")
+        channel_remaining = {idx: duty_limit for idx in channel_indices}
+
+        cluster_nodes: dict[int, list[tuple[_NodeDistance, list[int]]]] = {}
+        fallback_pairs: list[_NodeDistance] = []
+        for entry in pairs:
+            node = entry.node
+            node_id = getattr(node, "id", id(node))
+            cluster_id = self.node_clusters.get(node_id)
+            accessible = self.node_sf_access.get(node_id) or []
+            if cluster_id is None or not accessible:
+                fallback_pairs.append(entry)
+                continue
+            cluster_nodes.setdefault(cluster_id, []).append((entry, accessible))
+
+        if not cluster_nodes:
+            self._assign_distance_based(pairs)
+            return
+
+        ordered_clusters = sorted(self.clusters, key=lambda c: c.pdr_target, reverse=True)
+        channel_pos = 0
+
+        for cluster in ordered_clusters:
+            entries = cluster_nodes.get(cluster.cluster_id)
+            if not entries:
+                continue
+            cap_limit = self.cluster_capacity_limits.get(cluster.cluster_id)
+            if cap_limit is None or cap_limit <= 0.0:
+                cluster_remaining = float("inf")
+            else:
+                cluster_remaining = float(cap_limit)
+            for entry, accessible in entries:
+                if not accessible:
+                    fallback_pairs.append(entry)
+                    continue
+                assigned = False
+                for sf in accessible:
+                    airtime = airtimes.get(sf, 0.0)
+                    load = cluster.arrival_rate * airtime
+                    if load < 0.0:
+                        load = 0.0
+                    if cluster_remaining < load - 1e-12:
+                        continue
+                    for offset in range(len(channel_indices)):
+                        idx = channel_indices[(channel_pos + offset) % len(channel_indices)]
+                        remaining = channel_remaining.get(idx, float("inf"))
+                        if load <= remaining + 1e-12:
+                            channel_pos = (channel_pos + offset + 1) % len(channel_indices)
+                            node = entry.node
+                            node.sf = sf
+                            channel_obj = channel_map.get(idx, channel_map.get(default_channel_index))
+                            if channel_obj is not None:
+                                node.channel = channel_obj
+                            sf_index = sf_order_map.get(sf, len(sfs) - 1)
+                            node.tx_power = self._assign_tx_power(sf_index)
+                            if load > 0.0:
+                                channel_remaining[idx] = max(0.0, remaining - load)
+                                if cluster_remaining < float("inf"):
+                                    cluster_remaining = max(0.0, cluster_remaining - load)
+                            assigned = True
+                            break
+                    if assigned:
+                        break
+                if not assigned:
+                    fallback_pairs.append(entry)
+
+        self._assign_distance_based(fallback_pairs)
+
+    def _apply_aimi_like(self, simulator) -> None:
+        pairs = self._sorted_distances(simulator)
+        if not pairs:
+            return
+        if not self.clusters or not self.node_sf_access:
+            self._assign_distance_based(pairs)
+            return
+
+        channel_map: dict[int, object | None] = {}
+        multichannel = getattr(simulator, "multichannel", None)
+        if multichannel is not None:
+            for index, channel in enumerate(getattr(multichannel, "channels", []) or []):
+                channel_index = getattr(channel, "channel_index", index)
+                channel_map[channel_index] = channel
+        base_channel = getattr(simulator, "channel", None)
+        if base_channel is not None:
+            channel_index = getattr(base_channel, "channel_index", 0)
+            channel_map.setdefault(channel_index, base_channel)
+        if not channel_map:
+            channel_map[0] = base_channel
+        channel_indices = sorted(channel_map)
+        if not channel_indices:
+            self._assign_distance_based(pairs)
+            return
+        default_channel_index = channel_indices[0]
+
+        sfs = sorted({sf for access in self.node_sf_access.values() for sf in access})
+        if not sfs:
+            sfs = [7, 8, 9, 10, 11, 12]
+        sf_order_map = {sf: position for position, sf in enumerate(sfs)}
+        airtimes = self.sf_airtimes or self._compute_sf_airtimes(simulator, sfs)
+
+        duty_manager = getattr(simulator, "duty_cycle_manager", None)
+        duty_cycle = float(getattr(duty_manager, "duty_cycle", 0.0)) if duty_manager is not None else 0.0
+        duty_limit = duty_cycle if duty_cycle > 0.0 else float("inf")
+
+        cluster_nodes: dict[int, list[tuple[_NodeDistance, list[int]]]] = {}
+        fallback_pairs: list[_NodeDistance] = []
+        for entry in pairs:
+            node = entry.node
+            node_id = getattr(node, "id", id(node))
+            cluster_id = self.node_clusters.get(node_id)
+            accessible = self.node_sf_access.get(node_id) or []
+            if cluster_id is None or not accessible:
+                fallback_pairs.append(entry)
+                continue
+            cluster_nodes.setdefault(cluster_id, []).append((entry, accessible))
+
+        if not cluster_nodes:
+            self._assign_distance_based(pairs)
+            return
+
+        ordered_clusters = sorted(self.clusters, key=lambda c: c.pdr_target, reverse=True)
+        channel_count = len(channel_indices)
+        allocations: dict[int, int] = {cluster.cluster_id: 0 for cluster in ordered_clusters}
+        remaining = channel_count
+        for cluster in ordered_clusters:
+            if remaining <= 0:
+                break
+            allocations[cluster.cluster_id] += 1
+            remaining -= 1
+        if remaining > 0 and ordered_clusters:
+            total_share = sum(cluster.device_share for cluster in ordered_clusters)
+            fractional: list[tuple[float, int]] = []
+            if total_share > 0.0:
+                for cluster in ordered_clusters:
+                    share = cluster.device_share / total_share
+                    extra = share * remaining
+                    base = math.floor(extra)
+                    allocations[cluster.cluster_id] += base
+                    fractional.append((extra - base, cluster.cluster_id))
+            else:
+                even = remaining / len(ordered_clusters)
+                for cluster in ordered_clusters:
+                    extra = even
+                    base = math.floor(extra)
+                    allocations[cluster.cluster_id] += base
+                    fractional.append((extra - base, cluster.cluster_id))
+            allocated = sum(allocations.values())
+            leftover = channel_count - allocated
+            if leftover > 0:
+                fractional.sort(reverse=True)
+                for _, cluster_id in fractional:
+                    if leftover <= 0:
+                        break
+                    allocations[cluster_id] += 1
+                    leftover -= 1
+
+        channel_partitions: dict[int, list[int]] = {}
+        position = 0
+        for cluster in ordered_clusters:
+            count = allocations.get(cluster.cluster_id, 0)
+            if count < 0:
+                count = 0
+            assigned = channel_indices[position : position + count]
+            channel_partitions[cluster.cluster_id] = list(assigned)
+            position += len(assigned)
+        if position < channel_count and ordered_clusters:
+            extra_indices = channel_indices[position:]
+            if extra_indices:
+                first_id = ordered_clusters[0].cluster_id
+                channel_partitions.setdefault(first_id, []).extend(extra_indices)
+
+        for cluster in ordered_clusters:
+            entries = cluster_nodes.get(cluster.cluster_id)
+            if not entries:
+                continue
+            reserved = channel_partitions.get(cluster.cluster_id) or [channel_indices[-1]]
+            per_channel_remaining = {idx: duty_limit for idx in reserved}
+            cap_limit = self.cluster_capacity_limits.get(cluster.cluster_id)
+            if cap_limit is None or cap_limit <= 0.0:
+                cluster_remaining = float("inf")
+            else:
+                cluster_remaining = float(cap_limit)
+            channel_pos = 0
+            for entry, accessible in entries:
+                if not accessible:
+                    fallback_pairs.append(entry)
+                    continue
+                assigned = False
+                for sf in accessible:
+                    airtime = airtimes.get(sf, 0.0)
+                    load = cluster.arrival_rate * airtime
+                    if load < 0.0:
+                        load = 0.0
+                    if cluster_remaining < load - 1e-12:
+                        continue
+                    for offset in range(len(reserved)):
+                        idx = reserved[(channel_pos + offset) % len(reserved)]
+                        remaining = per_channel_remaining.get(idx, float("inf"))
+                        if load <= remaining + 1e-12:
+                            channel_pos = (channel_pos + offset + 1) % len(reserved)
+                            node = entry.node
+                            node.sf = sf
+                            channel_obj = channel_map.get(idx, channel_map.get(default_channel_index))
+                            if channel_obj is not None:
+                                node.channel = channel_obj
+                            sf_index = sf_order_map.get(sf, len(sfs) - 1)
+                            node.tx_power = self._assign_tx_power(sf_index)
+                            if load > 0.0:
+                                per_channel_remaining[idx] = max(0.0, remaining - load)
+                                if cluster_remaining < float("inf"):
+                                    cluster_remaining = max(0.0, cluster_remaining - load)
+                            assigned = True
+                            break
+                    if assigned:
+                        break
+                if not assigned:
+                    fallback_pairs.append(entry)
+
+        self._assign_distance_based(fallback_pairs)
 
     # --- Implémentations MixRA ---------------------------------------------
     def _assign_distance_based(self, entries: Sequence[_NodeDistance]) -> None:
