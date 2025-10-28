@@ -15,6 +15,7 @@ from .long_range import (
     suggest_parameters,
 )
 from .qos_comparison import run_qos_vs_adr
+from .qos_cluster_bench import run_bench
 
 __all__ = [
     "LONG_RANGE_AREA_SIZE",
@@ -30,4 +31,5 @@ __all__ = [
     "create_long_range_channels",
     "suggest_parameters",
     "run_qos_vs_adr",
+    "run_bench",
 ]
