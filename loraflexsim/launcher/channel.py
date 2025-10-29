@@ -6,6 +6,8 @@ import warnings
 
 import numpy as np
 
+from traffic.numpy_compat import create_generator
+
 from .obstacle_loss import ObstacleLoss
 from .omnet_model import OmnetModel
 from .propagation_cache import PropagationCache
@@ -56,7 +58,7 @@ class _CorrelatedValue:
         self.std = std
         self.corr = correlation
         self.value = mean
-        self.rng = rng or np.random.Generator(np.random.MT19937())
+        self.rng = rng or create_generator()
 
     def sample(self) -> float:
         self.value = self.corr * self.value + (1.0 - self.corr) * self.mean
@@ -155,7 +157,7 @@ class Channel:
         self,
         frequency_hz: float = 868e6,
         path_loss_exp: float = 2.08,
-        shadowing_std: float = 6.0,
+        shadowing_std: float | None = None,
         path_loss_d0: float | None = None,
         reference_distance: float = 1.0,
         hata_k1: float = 127.5,
@@ -345,13 +347,15 @@ class Channel:
 
         self.energy_detection_dBm = energy_detection_dBm
 
+        user_shadowing_std = shadowing_std
+        env_shadowing_std: float | None = None
         if environment is not None:
             env = environment.lower()
             if env not in self.ENV_PRESETS:
                 raise ValueError(f"Unknown environment preset: {environment}")
             (
                 path_loss_exp,
-                shadowing_std,
+                env_shadowing_std,
                 path_loss_d0,
                 reference_distance,
             ) = self.ENV_PRESETS[env]
@@ -378,12 +382,23 @@ class Channel:
             self.region = None
             self.channel_index = channel_index
 
-        self.rng = rng or np.random.Generator(np.random.MT19937())
+        self.rng = rng or create_generator()
         self.frequency_hz = frequency_hz
         self.wavelength_m = Channel.SPEED_OF_LIGHT / self.frequency_hz
         self.path_loss_exp = path_loss_exp
         self.qos_path_loss_exp = qos_path_loss_exp or path_loss_exp
-        self.shadowing_std = shadowing_std  # σ en dB (ex: 6.0 pour environnement urbain/suburbain)
+        if user_shadowing_std is None:
+            # If the environment preset provided a value use it, otherwise fall
+            # back to the historical default of ``6.0`` dB.  Passing
+            # ``shadowing_std`` explicitly must always take precedence over the
+            # preset so that callers can disable randomness when comparing with
+            # reference traces.
+            env_shadowing = env_shadowing_std
+            if env_shadowing is None:
+                env_shadowing = 6.0
+            self.shadowing_std = env_shadowing
+        else:
+            self.shadowing_std = float(user_shadowing_std)
         if path_loss_d0 is None:
             freq_mhz = self.frequency_hz / 1e6
             path_loss_d0 = 32.45 + 20 * math.log10(freq_mhz) - 60.0

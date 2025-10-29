@@ -3,6 +3,8 @@ from typing import Iterable
 import math
 import numpy as np
 
+from traffic.numpy_compat import create_generator
+
 from .waypoint_planner import WaypointPlanner3D
 from .map_loader import load_map
 
@@ -33,7 +35,7 @@ class PlannedRandomWaypoint:
             elevation = load_map(elevation)
         if obstacle_height_map is not None and isinstance(obstacle_height_map, (str, Path)):
             obstacle_height_map = load_map(obstacle_height_map)
-        self.rng = rng or np.random.Generator(np.random.MT19937())
+        self.rng = rng or create_generator()
         self.planner = WaypointPlanner3D(
             area_size,
             terrain,

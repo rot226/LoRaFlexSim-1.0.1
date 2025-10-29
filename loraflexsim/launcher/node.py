@@ -6,6 +6,7 @@ from .energy_profiles import EnergyProfile, FLORA_PROFILE, EnergyAccumulator
 from .channel import Channel
 from .lorawan import default_downlink_datarate
 from traffic.exponential import sample_interval
+from traffic.numpy_compat import is_mt19937_rng
 
 # Default energy profile used by all nodes (based on the FLoRa model)
 DEFAULT_ENERGY_PROFILE = FLORA_PROFILE
@@ -561,10 +562,7 @@ class Node:
         """
         if rng is None:
             rng = self.rng
-        if not (
-            isinstance(rng, np.random.Generator)
-            and isinstance(rng.bit_generator, np.random.MT19937)
-        ):
+        if not is_mt19937_rng(rng):
             raise TypeError("rng must be numpy.random.Generator using MT19937")
         if not (isinstance(mean_interval, float) and mean_interval > 0):
             raise ValueError("mean_interval must be positive float")

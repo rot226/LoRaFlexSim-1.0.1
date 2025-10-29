@@ -10,6 +10,8 @@ from typing import Dict, Tuple
 
 import numpy as np
 
+from .numpy_compat import create_generator
+
 try:
     _np_generator_module = importlib.import_module("numpy.random._generator")
 except Exception:  # pragma: no cover - optional dependency
@@ -36,7 +38,7 @@ class RngManager:
             digest = hashlib.sha256(stream_name.encode()).digest()
             stream_hash = int.from_bytes(digest[:8], "little")
             seed = (self.master_seed ^ stream_hash ^ node_id) & 0xFFFFFFFF
-            gen = np.random.Generator(np.random.MT19937(seed))
+            gen = create_generator(seed)
             register_stream(gen)
             self._streams[key] = gen
         return self._streams[key]
