@@ -74,6 +74,15 @@ python -m loraflexsim.run --long-range-demo flora_hata --seed 3 --output long_ra
 - Ajoutez `--seed` pour répéter exactement un run et `--runs <n>` pour calculer
   automatiquement la moyenne des métriques.【F:loraflexsim/run.py†L352-L735】
 
+### Banc QoS par clusters
+
+Le scénario de validation QoS multi-algorithmes est automatisé via les scripts
+`scripts/run_qos_cluster_bench.py` (simulations) et
+`scripts/run_qos_cluster_pipeline.py` (simulations + figures). Consultez
+[`docs/qos_cluster_validation_pipeline.md`](docs/qos_cluster_validation_pipeline.md)
+pour les commandes complètes, les préréglages (rapide, intermédiaire, complet)
+et la checklist de vérification.【F:scripts/run_qos_cluster_bench.py†L1-L119】【F:scripts/run_qos_cluster_pipeline.py†L1-L153】【F:docs/qos_cluster_validation_pipeline.md†L1-L142】
+
 ### API FastAPI + WebSocket
 
 ```bash

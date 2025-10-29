@@ -10,11 +10,20 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping
 
-import matplotlib.pyplot as plt
+try:  # pragma: no cover - dépend de l'environnement de test
+    import matplotlib.pyplot as plt  # type: ignore
+except Exception:  # pragma: no cover - permet une dégradation élégante sans numpy réel
+    plt = None  # type: ignore
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "qos_clusters"
 DEFAULT_FIGURES_DIR = ROOT_DIR / "figures" / "qos_clusters"
+
+__all__ = [
+    "generate_plots",
+    "DEFAULT_RESULTS_DIR",
+    "DEFAULT_FIGURES_DIR",
+]
 
 
 def _parse_float(value: str | None, default: float = 0.0) -> float:
@@ -293,6 +302,37 @@ def _plot_heatmap(records: List[Dict[str, Any]], figures_dir: Path) -> None:
         plt.close(fig)
 
 
+def generate_plots(results_dir: Path, figures_dir: Path, *, quiet: bool = False) -> bool:
+    """Génère l'ensemble des figures à partir des CSV du banc QoS.
+
+    Retourne ``True`` si au moins une figure a été produite.
+    """
+
+    if plt is None:
+        if not quiet:
+            print(
+                "Matplotlib ou NumPy manquant : impossible de générer les graphiques. "
+                "Installez les dépendances complètes pour activer cette étape."
+            )
+        return False
+
+    records = _load_records(results_dir)
+    if not records:
+        if not quiet:
+            print("Aucun résultat trouvé, aucune figure générée.")
+        return False
+    _plot_pdr_clusters(records, figures_dir)
+    _plot_metric_vs_nodes(records, "DER", "DER", "der", figures_dir)
+    _plot_metric_vs_nodes(records, "throughput_bps", "Débit (bps)", "throughput", figures_dir)
+    _plot_metric_vs_nodes(records, "avg_energy_per_node_J", "Énergie moyenne (J)", "energy", figures_dir)
+    _plot_snr_cdf(records, figures_dir)
+    _plot_sf_histogram(records, figures_dir)
+    _plot_heatmap(records, figures_dir)
+    if not quiet:
+        print(f"Figures enregistrées dans {figures_dir}")
+    return True
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -307,24 +347,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_FIGURES_DIR,
         help="Dossier de sortie des figures",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="N'affiche pas les messages de progression",
+    )
     return parser
 
 
 def main(argv: List[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
-    records = _load_records(args.results_dir)
-    if not records:
-        print("Aucun résultat trouvé, aucune figure générée.")
-        return
-    _plot_pdr_clusters(records, args.figures_dir)
-    _plot_metric_vs_nodes(records, "DER", "DER", "der", args.figures_dir)
-    _plot_metric_vs_nodes(records, "throughput_bps", "Débit (bps)", "throughput", args.figures_dir)
-    _plot_metric_vs_nodes(records, "avg_energy_per_node_J", "Énergie moyenne (J)", "energy", args.figures_dir)
-    _plot_snr_cdf(records, args.figures_dir)
-    _plot_sf_histogram(records, args.figures_dir)
-    _plot_heatmap(records, args.figures_dir)
-    print(f"Figures enregistrées dans {args.figures_dir}")
+    generate_plots(args.results_dir, args.figures_dir, quiet=args.quiet)
 
 
 if __name__ == "__main__":
