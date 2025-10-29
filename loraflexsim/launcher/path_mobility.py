@@ -2,6 +2,8 @@ import json
 import math
 import numpy as np
 
+from traffic.numpy_compat import create_generator
+
 from pathlib import Path
 from typing import List, Tuple, Iterable
 
@@ -55,7 +57,7 @@ class PathMobility:
             data = Path(dynamic_obstacles).read_text()
             dynamic_obstacles = json.loads(data)
         self.dynamic_obstacles = [dict(o) for o in (dynamic_obstacles or [])]
-        self.rng = rng or np.random.Generator(np.random.MT19937())
+        self.rng = rng or create_generator()
         self._last_obs_update = 0.0
 
     # ------------------------------------------------------------------

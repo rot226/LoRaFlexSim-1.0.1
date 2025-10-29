@@ -2,6 +2,8 @@
 
 from . import random
 
+from datetime import datetime, timedelta
+
 __all__ = [
     "random",
     "array",
@@ -12,6 +14,8 @@ __all__ = [
     "isscalar",
     "asarray",
     "ndarray",
+    "datetime64",
+    "timedelta64",
 ]
 
 
@@ -78,3 +82,39 @@ def isscalar(obj) -> bool:
 
 # Alias used by ``pytest`` when checking for numpy booleans.
 bool_ = bool
+
+
+class _Datetime64(datetime):
+    """Very small shim used by :mod:`pandas` during tests."""
+
+    def __new__(cls, value):
+        if isinstance(value, datetime):
+            return datetime.__new__(cls, value.year, value.month, value.day, value.hour, value.minute, value.second, value.microsecond)
+        if isinstance(value, str):
+            dt = datetime.fromisoformat(value)
+            return datetime.__new__(cls, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond)
+        if isinstance(value, (int, float)):
+            # Interpret numbers as seconds since epoch for the purposes of the tests.
+            dt = datetime.fromtimestamp(value)
+            return datetime.__new__(cls, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond)
+        raise TypeError("Unsupported datetime64 input")
+
+
+def datetime64(value, _unit=None):  # pragma: no cover - exercised indirectly
+    return _Datetime64(value)
+
+
+class _Timedelta64(timedelta):
+    pass
+
+
+def timedelta64(value, unit="s"):
+    if isinstance(value, timedelta):
+        return _Timedelta64(seconds=value.total_seconds())
+    if unit == "s":
+        return _Timedelta64(seconds=float(value))
+    if unit == "ms":
+        return _Timedelta64(milliseconds=float(value))
+    if unit == "us":
+        return _Timedelta64(microseconds=float(value))
+    raise ValueError("Unsupported timedelta unit")

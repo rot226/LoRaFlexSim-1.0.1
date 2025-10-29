@@ -1,6 +1,8 @@
 # Path planner using A* over a terrain map with optional elevation and 3D obstacles.
 import math
 import numpy as np
+
+from traffic.numpy_compat import create_generator
 from typing import List, Tuple
 
 
@@ -38,7 +40,7 @@ class WaypointPlanner3D:
             self.h_rows = self.h_cols = 0
         self.slope_scale = slope_scale
         self.slope_limit = slope_limit
-        self.rng = rng or np.random.Generator(np.random.MT19937())
+        self.rng = rng or create_generator()
 
     # --------------------------------------------------------------
     def _terrain_factor_cell(self, cx: int, cy: int) -> float | None:

@@ -1,6 +1,8 @@
 import math
 import numpy as np
 
+from traffic.numpy_compat import create_generator
+
 
 class RandomWaypoint:
     """Modèle de mobilité aléatoire (Random Waypoint simplifié) pour les nœuds.
@@ -66,7 +68,7 @@ class RandomWaypoint:
             self.e_rows = 0
             self.e_cols = 0
         self.dynamic_obstacles = [dict(o) for o in (dynamic_obstacles or [])]
-        self.rng = rng or np.random.Generator(np.random.MT19937())
+        self.rng = rng or create_generator()
         self._last_obs_update = 0.0
 
     # ------------------------------------------------------------------

@@ -1,5 +1,7 @@
 import math
 import numpy as np
+
+from traffic.numpy_compat import create_generator
 from typing import List, Tuple
 
 
@@ -41,7 +43,7 @@ class TerrainMapMobility:
             self.h_cols = len(obstacle_height_map[0]) if self.h_rows else 0
         else:
             self.h_rows = self.h_cols = 0
-        self.rng = rng or np.random.Generator(np.random.MT19937())
+        self.rng = rng or create_generator()
 
     # ------------------------------------------------------------------
     def _speed_factor_cell(self, cx: int, cy: int) -> float:

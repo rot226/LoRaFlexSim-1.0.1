@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 import numpy as np
 
+from traffic.numpy_compat import create_generator
+
 
 class _CorrelatedFading:
     """Temporal correlation for Rayleigh/Rician/Nakagami fading."""
@@ -24,7 +26,7 @@ class _CorrelatedFading:
         self.i = [0.0] * self.paths
         self.q = [0.0] * self.paths
         self.amp = 1.0
-        self.rng = rng or np.random.Generator(np.random.MT19937())
+        self.rng = rng or create_generator()
 
     def sample_db(self) -> float:
         if self.kind not in {"rayleigh", "rician", "nakagami"}:
@@ -66,7 +68,7 @@ class _CorrelatedValue:
         self.std = std
         self.corr = correlation
         self.value = mean
-        self.rng = rng or np.random.Generator(np.random.MT19937())
+        self.rng = rng or create_generator()
 
     def sample(self) -> float:
         self.value = self.corr * self.value + (1.0 - self.corr) * self.mean
@@ -228,7 +230,7 @@ class AdvancedChannel:
 
         from .channel import Channel
 
-        self.rng = rng or np.random.Generator(np.random.MT19937())
+        self.rng = rng or create_generator()
         self.base = Channel(
             fine_fading_std=fine_fading_std,
             fading_correlation=fading_correlation,

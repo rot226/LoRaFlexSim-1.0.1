@@ -1,6 +1,8 @@
 import math
 import numpy as np
 
+from traffic.numpy_compat import create_generator
+
 
 def bezier_point(p0, p1, p2, p3, t):
     """Return point of cubic Bezier curve for parameter t."""
@@ -35,7 +37,7 @@ class SmoothMobility:
         self.min_speed = min_speed
         self.max_speed = max_speed
         self.step = step
-        self.rng = rng or np.random.Generator(np.random.MT19937())
+        self.rng = rng or create_generator()
 
     def assign(self, node):
         """Initialize path and speed for a node."""

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import math
 import numbers
+
 import numpy as np
+
+from .numpy_compat import is_mt19937_rng
 
 
 def sample_interval(mean: float, rng: np.random.Generator) -> float:
@@ -17,9 +20,7 @@ def sample_interval(mean: float, rng: np.random.Generator) -> float:
     ``numpy.random.Generator`` based on ``MT19937`` to match the algorithm
     used by OMNeT++.
     """
-    if not isinstance(rng, np.random.Generator) or not isinstance(
-        rng.bit_generator, np.random.MT19937
-    ):
+    if not is_mt19937_rng(rng):
         raise TypeError("rng must be numpy.random.Generator using MT19937")
 
     # ``numpy`` exposes its own floating types which are not instances of
@@ -49,9 +50,7 @@ def sample_exp(mu_send: float, rng: np.random.Generator) -> float:
     generator. Any other types or non-positive value result in a
     :class:`ValueError`.
     """
-    if not isinstance(rng, np.random.Generator) or not isinstance(
-        rng.bit_generator, np.random.MT19937
-    ):
+    if not is_mt19937_rng(rng):
         raise TypeError("rng must be numpy.random.Generator using MT19937")
     if not (
         isinstance(mu_send, numbers.Real)
