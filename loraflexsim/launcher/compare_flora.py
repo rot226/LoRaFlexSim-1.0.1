@@ -488,20 +488,34 @@ def replay_flora_txconfig(
     }
 
 
+def _summarise_rows(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """Compute aggregate statistics from iterable *rows*."""
+
+    rssi_values = [float(row["rssi"]) for row in rows if "rssi" in row]
+    snr_values = [float(row["snr"]) for row in rows if "snr" in row]
+    collision_values = [int(row["collisions"]) for row in rows if "collisions" in row]
+
+    rssi = sum(rssi_values) / len(rssi_values) if rssi_values else 0.0
+    snr = sum(snr_values) / len(snr_values) if snr_values else 0.0
+    collisions = sum(collision_values) if collision_values else 0
+    return {"rssi": rssi, "snr": snr, "collisions": collisions}
+
+
 def load_flora_rx_stats(path: str | Path) -> dict[str, Any]:
     """Load average RSSI/SNR and collisions from a FLoRa export."""
-    if pd is None:
-        raise RuntimeError("pandas is required for this function")
+
     path = Path(path)
     if path.is_dir():
         rows = [_parse_sca_file(p) for p in sorted(path.glob("*.sca"))]
-        df = pd.DataFrame(rows)
     elif path.suffix.lower() == ".sca":
-        df = pd.DataFrame([_parse_sca_file(path)])
+        rows = [_parse_sca_file(path)]
     else:
-        df = pd.read_csv(path)
+        with open(path, newline="") as f:
+            reader = csv.DictReader(f)
+            rows = [dict(row) for row in reader]
 
-    rssi = float(df["rssi"].mean()) if "rssi" in df.columns else 0.0
-    snr = float(df["snr"].mean()) if "snr" in df.columns else 0.0
-    collisions = int(df["collisions"].sum()) if "collisions" in df.columns else 0
-    return {"rssi": rssi, "snr": snr, "collisions": collisions}
+    if pd is not None:
+        df = pd.DataFrame(rows)
+        return _summarise_rows(df.to_dict("records"))
+
+    return _summarise_rows(rows)
