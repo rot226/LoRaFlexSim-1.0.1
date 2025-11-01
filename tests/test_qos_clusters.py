@@ -13,6 +13,16 @@ from loraflexsim.launcher.qos import Cluster, QoSManager, build_clusters
 from loraflexsim.launcher.simulator import Simulator
 
 
+def _cluster_min_sf_map(manager: QoSManager) -> dict[int, int]:
+    result: dict[int, int] = {}
+    for cluster_id, sf_counts in manager.cluster_d_matrix.items():
+        for sf in sorted(sf_counts):
+            if sf_counts[sf] > 0:
+                result[cluster_id] = sf
+                break
+    return result
+
+
 def test_build_clusters_returns_normalised_instances():
     clusters = build_clusters(
         2,
@@ -456,6 +466,140 @@ def test_mixra_h_respects_cluster_capacity_limit():
     assert simulator.qos_sf_channel_capacity == manager.cluster_sf_channel_capacity
 
 
+def test_set_mixra_cluster_limits_validates_values():
+    manager = QoSManager()
+    manager.set_mixra_cluster_limits(channel_cluster_limit=2, sf_cluster_limit=3)
+    assert manager.max_clusters_per_channel == 2
+    assert manager.max_clusters_per_min_sf == 3
+
+    manager.set_mixra_cluster_limits(channel_cluster_limit=None, sf_cluster_limit=None)
+    assert manager.max_clusters_per_channel is None
+    assert manager.max_clusters_per_min_sf is None
+
+    with pytest.raises(ValueError):
+        manager.set_mixra_cluster_limits(channel_cluster_limit=-1)
+    with pytest.raises(ValueError):
+        manager.set_mixra_cluster_limits(sf_cluster_limit=-2)
+
+
+def test_mixra_opt_enforces_channel_cluster_limit():
+    channel0 = DummyChannel(channel_index=0)
+    channel1 = DummyChannel(channel_index=1)
+    nodes = [
+        DummyNode(1, 60.0, 0.0, 14.0, channel0),
+        DummyNode(2, 80.0, 0.0, 14.0, channel0),
+        DummyNode(3, 100.0, 0.0, 14.0, channel0),
+        DummyNode(4, 120.0, 0.0, 14.0, channel0),
+        DummyNode(5, 140.0, 0.0, 14.0, channel0),
+        DummyNode(6, 160.0, 0.0, 14.0, channel0),
+    ]
+    gateways = [DummyGateway(0.0, 0.0)]
+    simulator = DummySimulator(
+        nodes,
+        gateways,
+        channel0,
+        extra_channels=[channel1],
+        duty_cycle=0.1,
+    )
+
+    manager = QoSManager()
+    manager.configure_clusters(
+        2,
+        proportions=[0.5, 0.5],
+        arrival_rates=[0.05, 0.05],
+        pdr_targets=[0.95, 0.9],
+    )
+    manager.set_mixra_cluster_limits(channel_cluster_limit=1)
+
+    manager.apply(simulator, "MixRA-Opt")
+
+    cluster_min_sf = _cluster_min_sf_map(manager)
+    channel_clusters: dict[int, set[int]] = {}
+    for node in nodes:
+        cluster_id = manager.node_clusters.get(node.id)
+        if cluster_id is None:
+            continue
+        channel = getattr(node, "channel", None)
+        channel_index = getattr(channel, "channel_index", None)
+        if channel_index is None:
+            continue
+        min_sf = cluster_min_sf.get(cluster_id)
+        if min_sf is None:
+            continue
+        channel_clusters.setdefault(channel_index, set()).add(cluster_id)
+
+    blocked_clusters: set[int] = set()
+    for node in nodes:
+        cluster_id = manager.node_clusters.get(node.id)
+        if cluster_id is None:
+            continue
+        channel = getattr(node, "channel", None)
+        if getattr(channel, "channel_index", None) is None:
+            blocked_clusters.add(cluster_id)
+
+    assert channel_clusters or blocked_clusters
+    for clusters in channel_clusters.values():
+        assert len(clusters) <= 1
+    if len(channel_clusters) < 2:
+        assert blocked_clusters
+
+
+def test_mixra_h_enforces_min_sf_limit():
+    channel0 = DummyChannel(channel_index=0)
+    channel1 = DummyChannel(channel_index=1)
+    nodes = [
+        DummyNode(1, 70.0, 0.0, 14.0, channel0),
+        DummyNode(2, 75.0, 0.0, 14.0, channel0),
+        DummyNode(3, 80.0, 0.0, 14.0, channel0),
+        DummyNode(4, 2000.0, 0.0, 14.0, channel0),  # forcera la mise en fallback
+        DummyNode(5, 90.0, 0.0, 14.0, channel0),
+        DummyNode(6, 95.0, 0.0, 14.0, channel0),
+        DummyNode(7, 100.0, 0.0, 14.0, channel0),
+    ]
+    gateways = [DummyGateway(0.0, 0.0)]
+    simulator = DummySimulator(
+        nodes,
+        gateways,
+        channel0,
+        extra_channels=[channel1],
+    )
+
+    manager = QoSManager()
+    manager.configure_clusters(
+        2,
+        proportions=[0.5, 0.5],
+        arrival_rates=[0.05, 0.05],
+        pdr_targets=[0.98, 0.95],
+    )
+    manager.set_mixra_cluster_limits(sf_cluster_limit=1)
+
+    manager.apply(simulator, "MixRA-H")
+
+    cluster_min_sf = _cluster_min_sf_map(manager)
+    cluster_actual_min_sf: dict[int, int] = {}
+    for node in nodes:
+        cluster_id = manager.node_clusters.get(node.id)
+        if cluster_id is None:
+            continue
+        sf = getattr(node, "sf", None)
+        if sf is None:
+            continue
+        current = cluster_actual_min_sf.get(cluster_id)
+        if current is None or sf < current:
+            cluster_actual_min_sf[cluster_id] = sf
+
+    assert cluster_actual_min_sf
+    for cluster_id, min_sf in cluster_min_sf.items():
+        if cluster_id not in cluster_actual_min_sf:
+            continue
+        assert cluster_actual_min_sf[cluster_id] >= min_sf
+
+    sf_clusters: dict[int, set[int]] = {}
+    for cluster_id, sf in cluster_actual_min_sf.items():
+        sf_clusters.setdefault(sf, set()).add(cluster_id)
+
+    for clusters in sf_clusters.values():
+        assert len(clusters) <= 1
 def test_qos_reconfig_triggers_on_node_change_and_pdr_drift():
     channel = DummyChannel()
     nodes = [

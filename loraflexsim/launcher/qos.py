@@ -14,13 +14,18 @@ from __future__ import annotations
 
 import importlib.util
 from importlib import import_module
-from collections import deque
+from collections import deque, defaultdict
 from dataclasses import dataclass
 import math
 from types import ModuleType
 from typing import Iterable, Sequence
 
-from . import ADR_MODULES, adr_max, adr_standard_1
+try:  # pragma: no cover - gestion de l'import partiel lors des tests unitaires
+    from . import ADR_MODULES, adr_max, adr_standard_1
+except ImportError:  # pragma: no cover - fallback pour les imports partiels
+    ADR_MODULES = {}
+    adr_max = None
+    adr_standard_1 = None
 
 _SCIPY_SPEC = importlib.util.find_spec("scipy.optimize")
 if _SCIPY_SPEC is not None:
@@ -143,6 +148,8 @@ class QoSManager:
         self.reconfig_interval_s: float = 60.0
         self.pdr_drift_threshold: float = 0.1
         self.traffic_drift_threshold: float = 0.25
+        self.max_clusters_per_channel: int | None = None
+        self.max_clusters_per_min_sf: int | None = None
         self._last_reconfig_time: float | None = None
         self._last_node_ids: set[int] = set()
         self._last_recent_pdr: dict[int, float] = {}
@@ -198,6 +205,28 @@ class QoSManager:
         self._last_recent_pdr = {}
         self._last_assignments = {}
         return list(self.clusters)
+
+    def set_mixra_cluster_limits(
+        self,
+        *,
+        channel_cluster_limit: int | None = None,
+        sf_cluster_limit: int | None = None,
+    ) -> None:
+        """Définit les bornes MixRA ``D`` (canaux) et ``F`` (SF minimaux)."""
+
+        if channel_cluster_limit is not None:
+            if channel_cluster_limit < 0:
+                raise ValueError("La borne D doit être positive ou nulle.")
+            self.max_clusters_per_channel = int(channel_cluster_limit)
+        else:
+            self.max_clusters_per_channel = None
+
+        if sf_cluster_limit is not None:
+            if sf_cluster_limit < 0:
+                raise ValueError("La borne F doit être positive ou nulle.")
+            self.max_clusters_per_min_sf = int(sf_cluster_limit)
+        else:
+            self.max_clusters_per_min_sf = None
 
     # --- Utilitaires internes ----------------------------------------------
     @staticmethod
@@ -1121,8 +1150,19 @@ class QoSManager:
         for index, entry in enumerate(entries):
             sf_index = min(index // chunk_size, len(sfs) - 1)
             sf = sfs[sf_index]
+            blocked_min_sf = getattr(entry.node, "_qos_blocked_min_sf", None)
+            if blocked_min_sf is not None:
+                for candidate in sfs[sf_index:]:
+                    if candidate > blocked_min_sf:
+                        sf = candidate
+                        break
+                else:
+                    sf = sfs[-1]
+                sf_index = sfs.index(sf)
             entry.node.sf = sf
             entry.node.tx_power = self._assign_tx_power(sf_index)
+            if getattr(entry.node, "_qos_blocked_channel", False):
+                entry.node.channel = None
 
     @staticmethod
     def _solve_mixra_greedy(
@@ -1228,6 +1268,18 @@ class QoSManager:
             channel_map[0] = base_channel
         channel_indices = sorted(channel_map)
 
+        channel_cluster_limit = self.max_clusters_per_channel
+        sf_cluster_limit = self.max_clusters_per_min_sf
+        channel_cluster_usage: dict[int, set[int]] = {idx: set() for idx in channel_indices}
+        sf_cluster_usage: dict[int, set[int]] = defaultdict(set)
+
+        cluster_min_sf_map: dict[int, int] = {}
+        for cluster_id, sf_counts in self.cluster_d_matrix.items():
+            for sf in sorted(sf_counts):
+                if sf_counts[sf] > 0:
+                    cluster_min_sf_map[cluster_id] = sf
+                    break
+
         # Classement des nœuds par cluster en conservant l'ordre par distance.
         cluster_nodes: dict[int, list[tuple[_NodeDistance, list[int]]]] = {}
         fallback_pairs: list[_NodeDistance] = []
@@ -1275,6 +1327,17 @@ class QoSManager:
             if node_count == 0:
                 fallback_pairs.extend(entry for entry, _ in entries)
                 continue
+
+            min_sf = cluster_min_sf_map.get(cluster_id)
+            if sf_cluster_limit is not None and min_sf is not None:
+                sf_set = sf_cluster_usage[min_sf]
+                if cluster_id not in sf_set and len(sf_set) >= sf_cluster_limit:
+                    for entry, _ in entries:
+                        setattr(entry.node, "_qos_blocked_min_sf", min_sf)
+                        setattr(entry.node, "_qos_blocked_channel", True)
+                        entry.node.channel = None
+                    fallback_pairs.extend(entry for entry, _ in entries)
+                    continue
             cluster_sizes[cluster_id] = node_count
             lambda_k = float(cluster.arrival_rate)
             pdr_k = float(cluster.pdr_target)
@@ -1462,6 +1525,7 @@ class QoSManager:
             counts: dict[int, int] = {}
             residuals: list[tuple[float, int]] = []
             max_nodes_per_index: dict[int, int] = {}
+            min_sf = cluster_min_sf_map.get(cluster_id)
             for idx in indices:
                 share = solution[idx]
                 target = share * node_count
@@ -1558,10 +1622,21 @@ class QoSManager:
                     continue
                 sf = int(var_data[idx]["sf"])
                 channel_index = int(var_data[idx]["channel"])
+                if channel_cluster_limit is not None:
+                    channel_set = channel_cluster_usage.setdefault(channel_index, set())
+                    if cluster_id not in channel_set and len(channel_set) >= channel_cluster_limit:
+                        for entry, _ in assigned:
+                            setattr(entry.node, "_qos_blocked_channel", True)
+                            entry.node.channel = None
+                            fallback_pairs.append(entry)
+                        continue
+                if sf_cluster_limit is not None and min_sf is not None and cluster_id not in sf_cluster_usage[min_sf]:
+                    sf_cluster_usage[min_sf].add(cluster_id)
                 channel_obj = channel_map.get(channel_index, channel_map.get(default_channel_index))
                 sf_index = sf_order_map.get(sf, len(sf_order) - 1)
                 load_coeff = float(var_data[idx]["load_coeff"])
                 per_node_load = load_coeff / node_count if node_count > 0 else 0.0
+                channel_cluster_usage.setdefault(channel_index, set()).add(cluster_id)
                 for entry, _ in assigned:
                     remaining_cap = combo_remaining_load.get((sf, channel_index), float("inf"))
                     if per_node_load > 0.0 and remaining_cap < per_node_load - 1e-9:
@@ -1614,6 +1689,11 @@ class QoSManager:
         channel_indices = sorted(channel_map)
         default_channel_index = channel_indices[0]
 
+        channel_cluster_limit = self.max_clusters_per_channel
+        sf_cluster_limit = self.max_clusters_per_min_sf
+        channel_cluster_usage: dict[int, set[int]] = {idx: set() for idx in channel_indices}
+        sf_cluster_usage: dict[int, set[int]] = defaultdict(set)
+
         sfs = sorted({sf for access in self.node_sf_access.values() for sf in access})
         if not sfs:
             sfs = [7, 8, 9, 10, 11, 12]
@@ -1621,6 +1701,13 @@ class QoSManager:
 
         airtimes = self.sf_airtimes or self._compute_sf_airtimes(simulator, sfs)
         sf_channel_caps = self.cluster_sf_channel_capacity
+
+        cluster_min_sf_map: dict[int, int] = {}
+        for cluster_id, sf_counts in self.cluster_d_matrix.items():
+            for sf in sorted(sf_counts):
+                if sf_counts[sf] > 0:
+                    cluster_min_sf_map[cluster_id] = sf
+                    break
 
         cluster_nodes: dict[int, dict[int, deque[tuple[_NodeDistance, list[int]]]]] = {}
         fallback_pairs: list[_NodeDistance] = []
@@ -1649,6 +1736,18 @@ class QoSManager:
             buckets = cluster_nodes.get(cluster_id)
             if not buckets:
                 continue
+            min_sf = cluster_min_sf_map.get(cluster_id)
+            if sf_cluster_limit is not None and min_sf is not None:
+                sf_set = sf_cluster_usage[min_sf]
+                if cluster_id not in sf_set and len(sf_set) >= sf_cluster_limit:
+                    for queue in buckets.values():
+                        while queue:
+                            entry, _ = queue.popleft()
+                            setattr(entry.node, "_qos_blocked_min_sf", min_sf)
+                            setattr(entry.node, "_qos_blocked_channel", True)
+                            entry.node.channel = None
+                            fallback_pairs.append(entry)
+                    continue
             capacity_limit = self.cluster_capacity_limits.get(cluster_id)
             if capacity_limit is None or capacity_limit <= 0.0:
                 per_channel_capacity = float("inf")
@@ -1697,11 +1796,11 @@ class QoSManager:
                                 if next_sf in access:
                                     next_queue.append((entry, access))
                                 else:
+                                    setattr(entry.node, "_qos_blocked_channel", True)
+                                    entry.node.channel = None
                                     fallback_pairs.append(entry)
                             break
                         else:
-                            channel_idx = channel_indices[-1]
-                            channel_obj = channel_map.get(channel_idx, channel_map.get(default_channel_index))
                             while queue:
                                 entry, access = queue.popleft()
                                 if not access:
@@ -1711,15 +1810,21 @@ class QoSManager:
                                 sf_pos = sf_order_map.get(chosen_sf, len(sfs) - 1)
                                 node = entry.node
                                 node.sf = chosen_sf
-                                if channel_obj is not None:
-                                    node.channel = channel_obj
                                 node.tx_power = self._assign_tx_power(sf_pos)
+                                setattr(node, "_qos_blocked_channel", True)
+                                node.channel = None
+                                fallback_pairs.append(entry)
                             break
 
                     if channel_pos >= len(channel_indices):
                         break
 
                     channel_idx = channel_indices[channel_pos]
+                    if channel_cluster_limit is not None:
+                        channel_set = channel_cluster_usage.setdefault(channel_idx, set())
+                        if cluster_id not in channel_set and len(channel_set) >= channel_cluster_limit:
+                            channel_pos += 1
+                            continue
                     remaining = channel_remaining.get(channel_idx, float("inf"))
                     combo_key = (sf, channel_idx)
                     combo_cap = combo_remaining.get(combo_key, float("inf"))
@@ -1753,6 +1858,9 @@ class QoSManager:
                     if channel_obj is not None:
                         node.channel = channel_obj
                     node.tx_power = self._assign_tx_power(sf_order_map.get(sf, len(sfs) - 1))
+                    if min_sf is not None and sf_cluster_limit is not None:
+                        sf_cluster_usage[min_sf].add(cluster_id)
+                    channel_cluster_usage.setdefault(channel_idx, set()).add(cluster_id)
                     channel_remaining[channel_idx] = max(0.0, remaining - load_per_node)
                     if combo_key in combo_remaining:
                         combo_remaining[combo_key] = max(0.0, combo_cap - load_per_node)
@@ -1778,6 +1886,8 @@ class QoSManager:
                     continue
                 while queue:
                     entry, _ = queue.popleft()
+                    setattr(entry.node, "_qos_blocked_channel", True)
+                    entry.node.channel = None
                     fallback_pairs.append(entry)
 
         self._assign_distance_based(fallback_pairs)
