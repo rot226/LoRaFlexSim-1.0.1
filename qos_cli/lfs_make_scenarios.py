@@ -11,57 +11,107 @@ import yaml
 
 DEFAULT_PATH = Path(__file__).with_name("scenarios.yaml")
 
-# Structure par défaut alignée avec le fichier scenarios.yaml historique.
+_CLUSTER_TEMPLATE: Dict[str, Any] = {
+    "cluster_low": {
+        "share": 0.10,
+        "target_pdr": 0.90,
+        "nu_max": {
+            "SF7": {"CH0": 0.28, "CH1": 0.28, "CH2": 0.28},
+            "SF8": {"CH0": 0.24, "CH1": 0.24, "CH2": 0.24},
+            "SF9": {"CH0": 0.20, "CH1": 0.20, "CH2": 0.20},
+            "SF10": {"CH0": 0.16, "CH1": 0.16, "CH2": 0.16},
+            "SF11": {"CH0": 0.12, "CH1": 0.12, "CH2": 0.12},
+            "SF12": {"CH0": 0.10, "CH1": 0.10, "CH2": 0.10},
+        },
+    },
+    "cluster_mid": {
+        "share": 0.30,
+        "target_pdr": 0.80,
+        "nu_max": {
+            "SF7": {"CH0": 0.20, "CH1": 0.20, "CH2": 0.20},
+            "SF8": {"CH0": 0.18, "CH1": 0.18, "CH2": 0.18},
+            "SF9": {"CH0": 0.14, "CH1": 0.14, "CH2": 0.14},
+            "SF10": {"CH0": 0.10, "CH1": 0.10, "CH2": 0.10},
+            "SF11": {"CH0": 0.07, "CH1": 0.07, "CH2": 0.07},
+            "SF12": {"CH0": 0.05, "CH1": 0.05, "CH2": 0.05},
+        },
+    },
+    "cluster_high": {
+        "share": 0.60,
+        "target_pdr": 0.70,
+        "nu_max": {
+            "SF7": {"CH0": 0.12, "CH1": 0.12, "CH2": 0.12},
+            "SF8": {"CH0": 0.10, "CH1": 0.10, "CH2": 0.10},
+            "SF9": {"CH0": 0.08, "CH1": 0.08, "CH2": 0.08},
+            "SF10": {"CH0": 0.06, "CH1": 0.06, "CH2": 0.06},
+            "SF11": {"CH0": 0.04, "CH1": 0.04, "CH2": 0.04},
+            "SF12": {"CH0": 0.03, "CH1": 0.03, "CH2": 0.03},
+        },
+    },
+}
+
+_METHODS_DEFAULT: Dict[str, Any] = {
+    "available": ["ADR", "APRA_like", "MixRA_H", "MixRA_Opt"],
+    "fallback": "Greedy",
+}
+
+
+def _make_scenario(label: str, description: str, N: int, period: int) -> Dict[str, Any]:
+    return {
+        "label": label,
+        "description": description,
+        "N": N,
+        "period": period,
+        "clusters": copy.deepcopy(_CLUSTER_TEMPLATE),
+        "methods": copy.deepcopy(_METHODS_DEFAULT),
+    }
+
+
 DEFAULT_SCENARIOS: Dict[str, Any] = {
     "common": {
-        "simulation_time_s": 3600,
-        "payload_size_bytes": 12,
-        "frequency_hz": 868_100_000,
-        "coding_rate": "4/5",
-        "bandwidth_hz": 125_000,
+        "gateway": {
+            "id": "GW0",
+            "position_m": [0.0, 0.0, 15.0],
+            "antennas": 1,
+        },
+        "channels": {
+            "CH0": {"frequency_hz": 868_100_000, "bandwidth_hz": 125_000},
+            "CH1": {"frequency_hz": 868_300_000, "bandwidth_hz": 125_000},
+            "CH2": {"frequency_hz": 868_500_000, "bandwidth_hz": 125_000},
+        },
+        "spreading_factors": [7, 8, 9, 10, 11, 12],
+        "propagation": {
+            "fading": "Rayleigh",
+            "capture_threshold_db": 1.0,
+        },
+        "payload_size_bytes": 20,
         "duty_cycle": 0.01,
-        "acknowledgements": False,
-        # TODO: Étendre avec les paramètres radio supplémentaires requis par LoRaFlexSim.
     },
     "scenarios": {
-        "S0": {
-            "label": "Baseline faibles trafics",
-            "description": "Un seul périphérique transmet périodiquement avec un débit faible.",
-            "device_count": 1,
-            "send_interval_s": 600,
-            "spreading_factor": 7,
-            "tx_power_dbm": 14,
-            # TODO: Ajouter la prise en charge des pertes de propagation si nécessaire.
-        },
-        "S1": {
-            "label": "Densité modérée",
-            "description": "Un réseau de taille moyenne avec trafic périodique synchronisé.",
-            "device_count": 50,
-            "send_interval_s": 300,
-            "spreading_factor": 8,
-            "tx_power_dbm": 14,
-        },
-        "S2": {
-            "label": "Déploiement massif",
-            "description": "Grand nombre de nœuds avec trafic périodique aléatoire.",
-            "device_count": 500,
-            "send_interval_s": [120, 900],
-            "spreading_factor": 9,
-            "tx_power_dbm": 16,
-            "random_seed": 42,
-            # TODO: Clarifier le format attendu pour les intervalles aléatoires.
-        },
-        "S3": {
-            "label": "Scénario critique QoS",
-            "description": "Applications critiques avec redondance et contraintes de délai.",
-            "device_count": 20,
-            "send_interval_s": 120,
-            "spreading_factor": 10,
-            "tx_power_dbm": 18,
-            "redundancy": 2,
-            "latency_budget_s": 30,
-            # TODO: Confirmer la gestion des contraintes QoS spécifiques dans LoRaFlexSim.
-        },
+        "S0": _make_scenario(
+            label="Charge très faible",
+            description="Réseau clairsemé avec trafic ponctuel.",
+            N=60,
+            period=900,
+        ),
+        "S1": _make_scenario(
+            label="Charge modérée",
+            description="Réseau équilibré avec trafic planifié.",
+            N=120,
+            period=600,
+        ),
+        "S2": _make_scenario(
+            label="Charge élevée",
+            description="Densité importante avec trafic périodique serré.",
+            N=300,
+            period=300,
+        ),
+        "S3": _make_scenario(
+            label="Charge critique",
+            description="Applications sensibles nécessitant une forte disponibilité.",
+            N=180,
+            period=120,
+        ),
     },
 }
 
