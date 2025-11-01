@@ -17,7 +17,10 @@ from importlib import import_module
 from collections import deque
 from dataclasses import dataclass
 import math
+from types import ModuleType
 from typing import Iterable, Sequence
+
+from . import ADR_MODULES, adr_max, adr_standard_1
 
 _SCIPY_SPEC = importlib.util.find_spec("scipy.optimize")
 if _SCIPY_SPEC is not None:
@@ -801,17 +804,43 @@ class QoSManager:
         setattr(simulator, "qos_active", False)
         setattr(simulator, "qos_algorithm", None)
 
-        candidates = (
+        candidates: list[ModuleType] = []
+        seen_names: set[str] = set()
+
+        def add_candidate(module: ModuleType | None) -> None:
+            if module is None:
+                return
+            name = getattr(module, "__name__", None)
+            if not name or name in seen_names:
+                return
+            seen_names.add(name)
+            candidates.append(module)
+
+        # Import direct par le package courant pour éviter les ImportError
+        add_candidate(adr_standard_1)
+        add_candidate(adr_max)
+
+        # Modules référencés dans ADR_MODULES (déjà importés au niveau package)
+        add_candidate(ADR_MODULES.get("ADR 1"))
+        add_candidate(ADR_MODULES.get("ADR-Max"))
+
+        # En dernier recours, tentative d'import fully-qualified
+        fallback_names = (
             "loraflexsim.launcher.adr_standard_1",
             "loraflexsim.launcher.adr_max",
         )
 
         last_error: Exception | None = None
-        for module_name in candidates:
+        for module_name in fallback_names:
+            if module_name in seen_names:
+                continue
             try:
                 module = import_module(module_name)
             except ImportError:
                 continue
+            add_candidate(module)
+
+        for module in candidates:
             apply_fn = getattr(module, "apply", None)
             if callable(apply_fn):
                 try:
