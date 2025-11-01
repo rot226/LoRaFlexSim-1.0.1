@@ -83,6 +83,16 @@ Le scénario de validation QoS multi-algorithmes est automatisé via les scripts
 pour les commandes complètes, les préréglages (rapide, intermédiaire, complet)
 et la checklist de vérification.【F:scripts/run_qos_cluster_bench.py†L1-L119】【F:scripts/run_qos_cluster_pipeline.py†L1-L153】【F:docs/qos_cluster_validation_pipeline.md†L1-L142】
 
+Pour générer manuellement les figures QoS à partir d'un dossier de résultats,
+utilisez la CLI dédiée :
+
+```bash
+python -m qos_cli.lfs_plots --in results/qos --config qos_cli/config.yaml --out figures/qos
+```
+
+> `qos_cli/lfs_plots.py` peut également être exécuté directement (`python qos_cli/lfs_plots.py`),
+> mais l'exécution en tant que module est recommandée pour garantir des imports cohérents.
+
 ### API FastAPI + WebSocket
 
 ```bash
