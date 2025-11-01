@@ -1,0 +1,49 @@
+{
+  "mode": "validation",
+  "metadata": {
+    "description": "Valeurs extraites des figures de validation QoS (MixRA). Mise à jour requise après recalibrage.",
+    "tolerance_hint": 0.05
+  },
+  "entries": [
+    {
+      "algorithm": "MixRA-Opt",
+      "num_nodes": 5000,
+      "packet_interval_s": 300.0,
+      "der_normalized": 1.0,
+      "throughput_normalized": 0.92,
+      "gap_normalized": 0.96
+    },
+    {
+      "algorithm": "MixRA-H",
+      "num_nodes": 5000,
+      "packet_interval_s": 300.0,
+      "der_normalized": 0.94,
+      "throughput_normalized": 0.88,
+      "gap_normalized": 0.90
+    },
+    {
+      "algorithm": "Aimi-like",
+      "num_nodes": 5000,
+      "packet_interval_s": 300.0,
+      "der_normalized": 0.89,
+      "throughput_normalized": 0.84,
+      "gap_normalized": 0.82
+    },
+    {
+      "algorithm": "APRA-like",
+      "num_nodes": 5000,
+      "packet_interval_s": 300.0,
+      "der_normalized": 0.83,
+      "throughput_normalized": 0.80,
+      "gap_normalized": 0.78
+    },
+    {
+      "algorithm": "ADR pur",
+      "num_nodes": 5000,
+      "packet_interval_s": 300.0,
+      "der_normalized": 0.75,
+      "throughput_normalized": 0.76,
+      "gap_normalized": 0.70
+    }
+  ]
+}
