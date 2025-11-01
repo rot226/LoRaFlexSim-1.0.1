@@ -9,11 +9,18 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 
-from .lfs_metrics import (
-    MethodScenarioMetrics,
-    load_all_metrics,
-    load_yaml_config,
-)
+try:  # pragma: no cover - dépend du mode d'exécution
+    from .lfs_metrics import (
+        MethodScenarioMetrics,
+        load_all_metrics,
+        load_yaml_config,
+    )
+except ImportError:  # pragma: no cover - fallback pour exécution directe
+    from lfs_metrics import (
+        MethodScenarioMetrics,
+        load_all_metrics,
+        load_yaml_config,
+    )
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
