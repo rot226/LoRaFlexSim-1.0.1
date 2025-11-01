@@ -26,3 +26,33 @@ Le simulateur déclenche désormais automatiquement la réallocation QoS dès qu
 
 Les mises à jour de PDR récentes déclenchent aussi cette routine : chaque traitement d'uplink compare la variation de `recent_pdr` aux seuils `pdr_drift_threshold` et `traffic_drift_threshold` avant de rappeler `QoSManager.apply` si nécessaire.【F:loraflexsim/launcher/simulator.py†L1495-L1503】【F:loraflexsim/launcher/qos.py†L479-L563】 Enfin, le serveur réseau notifie le simulateur lors des acceptations OTAA ou activations internes afin de recalculer immédiatement les ressources après l'arrivée d'un nœud.【F:loraflexsim/launcher/server.py†L522-L532】【F:loraflexsim/launcher/server.py†L713-L731】【F:loraflexsim/launcher/server.py†L880-L890】
 
+## Mode « validation » du banc QoS
+
+Le banc `loraflexsim.scenarios.qos_cluster_bench` expose un mode `validation` qui force l'utilisation des couples de charges et de périodes décrits dans les figures de référence. Ce mode calcule et exporte un fichier `validation_normalized_metrics.json` contenant les DER, débits et écarts aux cibles normalisés par rapport aux maxima observés ainsi que les ratios PDR/objectif pour chaque cluster.【F:loraflexsim/scenarios/qos_cluster_bench.py†L18-L647】 Pour lancer la campagne complète :
+
+```
+python -m scripts.run_qos_cluster_bench --mode validation --seed 1 --quiet
+```
+
+Le chemin du fichier normalisé est rappelé à la fin de l'exécution.【F:scripts/run_qos_cluster_bench.py†L13-L120】 Les références officielles sont stockées dans `docs/qos_validation_reference.json` et peuvent être remplacées lorsque de nouvelles métriques sont validées publiquement.【F:docs/qos_validation_reference.json†L1-L38】
+
+## Comparaison automatique avec les références
+
+Le script `scripts/validate_qos_against_reference.py` charge les séries normalisées produites par le mode `validation`, les confronte aux valeurs de référence et échoue si un écart dépasse la tolérance configurée ou si un cluster passe sous sa cible PDR (après prise en compte de la tolérance).【F:scripts/validate_qos_against_reference.py†L1-L173】 Un test automatisé (`tests/test_qos_validation_script.py`) couvre le chemin nominal et vérifie qu'une dérive volontaire des ratios de PDR déclenche bien une erreur.【F:tests/test_qos_validation_script.py†L1-L54】
+
+Exemple d'exécution :
+
+```
+python -m scripts.validate_qos_against_reference \
+    --series results/qos_clusters/validation/validation_normalized_metrics.json \
+    --reference docs/qos_validation_reference.json \
+    --tolerance 0.05
+```
+
+## Mise à jour des valeurs de référence
+
+1. Exécuter le banc en mode `validation` avec les seeds et solveurs retenus pour la publication et vérifier que les objectifs de clusters sont atteints.
+2. Inspecter `validation_normalized_metrics.json`, copier les métriques normalisées souhaitées (par exemple celles utilisées dans les figures) puis mettre à jour `docs/qos_validation_reference.json` en conservant l'ordre des algorithmes pour limiter les conflits de fusion.
+3. Documenter le changement et valider la suite de tests ; le test `test_validate_qos_against_reference_detects_cluster_gap` garantit que la tolérance ne masque pas une baisse de DER cluster.【F:tests/test_qos_validation_script.py†L24-L54】
+4. Lorsque la tolérance doit évoluer (nouvelle figure, métriques plus volatiles), ajuster le paramètre `--tolerance` des jobs CI ou du script manuel, puis mettre à jour la valeur indicative `tolerance_hint` dans le fichier de référence.【F:scripts/validate_qos_against_reference.py†L129-L173】【F:docs/qos_validation_reference.json†L1-L38】
+

@@ -71,6 +71,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Force l'utilisation du solveur SciPy (auto) ou du proxy glouton (greedy) pour MixRA-Opt",
     )
     parser.add_argument(
+        "--mode",
+        choices=["benchmark", "validation"],
+        default="benchmark",
+        help="Active le mode validation pour reproduire les figures du papier",
+    )
+    parser.add_argument(
         "--quiet",
         action="store_true",
         help="Réduit les impressions de progression",
@@ -139,6 +145,7 @@ def main(
         mixra_solver=args.mixra_solver,
         quiet=args.quiet,
         progress_callback=None if args.quiet else _progress,
+        mode=args.mode,
     )
     if not args.quiet:
         if preset_label:
@@ -159,6 +166,10 @@ def main(
             print(f"Rapport Markdown : {report_path}")
         if summary_path:
             print(f"Résumé JSON : {summary_path}")
+        validation_section = summary.get("validation", {})
+        validation_path = validation_section.get("normalized_metrics_path")
+        if validation_path:
+            print(f"Séries normalisées : {validation_path}")
     return summary
 
 

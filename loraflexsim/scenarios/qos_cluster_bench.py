@@ -24,6 +24,10 @@ PAYLOAD_BYTES = 20
 DEFAULT_NODE_COUNTS: Sequence[int] = (1000, 5000, 10000, 13000, 15000)
 DEFAULT_TX_PERIODS: Sequence[float] = (600.0, 300.0, 150.0)
 DEFAULT_SIMULATION_DURATION_S = 24.0 * 3600.0
+VALIDATION_NODE_COUNTS: Sequence[int] = (1000, 5000, 10000)
+VALIDATION_TX_PERIODS: Sequence[float] = (600.0, 300.0, 150.0)
+VALIDATION_PDR_TARGETS: Sequence[float] = (0.9, 0.8, 0.7)
+VALIDATION_MODE = "validation"
 SF_ORDER = [7, 8, 9, 10, 11, 12]
 FREQUENCIES_HZ = [
     868_100_000.0,
@@ -183,13 +187,19 @@ def _apply_mixra_opt(simulator: Simulator, manager: QoSManager, solver_mode: str
         setattr(simulator, "qos_mixra_solver", solver_used)
 
 
-def _configure_clusters(manager: QoSManager, packet_interval: float) -> None:
+def _configure_clusters(
+    manager: QoSManager,
+    packet_interval: float,
+    *,
+    pdr_targets: Sequence[float] | None = None,
+) -> None:
     rate = 1.0 / packet_interval if packet_interval > 0 else 0.0
+    targets = list(pdr_targets) if pdr_targets is not None else [0.90, 0.80, 0.70]
     manager.configure_clusters(
         3,
         proportions=[0.1, 0.3, 0.6],
         arrival_rates=[rate, rate, rate],
-        pdr_targets=[0.90, 0.80, 0.70],
+        pdr_targets=targets,
     )
 
 
@@ -564,22 +574,34 @@ def run_bench(
     mixra_solver: str = "auto",
     quiet: bool = False,
     progress_callback: Callable[[int, int, Dict[str, Any]], None] | None = None,
+    mode: str = "benchmark",
 ) -> Dict[str, Any]:
     """Exécute le banc QoS pour toutes les combinaisons et exporte les résultats."""
 
     if simulation_duration_s is None:
         simulation_duration_s = DEFAULT_SIMULATION_DURATION_S
+    validation_mode = mode == VALIDATION_MODE
     if output_dir is None:
-        output_root = DEFAULT_RESULTS_DIR
+        if validation_mode:
+            output_root = DEFAULT_RESULTS_DIR / VALIDATION_MODE
+        else:
+            output_root = DEFAULT_RESULTS_DIR
     else:
         output_root = Path(output_dir)
     output_root.mkdir(parents=True, exist_ok=True)
     report_path = DEFAULT_REPORT_PATH
+    if validation_mode:
+        node_counts = tuple(VALIDATION_NODE_COUNTS)
+        tx_periods = tuple(VALIDATION_TX_PERIODS)
+        cluster_targets_override: Sequence[float] | None = VALIDATION_PDR_TARGETS
+    else:
+        cluster_targets_override = None
 
     combos = [(n, p) for n in node_counts for p in tx_periods]
     total_runs = len(combos) * len(ALGORITHMS)
     records_by_algorithm: Dict[str, List[RunRecord]] = {spec.label: [] for spec in ALGORITHMS}
     run_index = 0
+    validation_entries: List[Dict[str, Any]] = [] if validation_mode else []
 
     for combo_index, (num_nodes, packet_interval) in enumerate(combos):
         combo_seed = seed + combo_index
@@ -601,7 +623,11 @@ def run_bench(
             simulator = _create_simulator(num_nodes, packet_interval, combo_seed)
             manager = QoSManager()
             if spec.requires_qos:
-                _configure_clusters(manager, packet_interval)
+                _configure_clusters(
+                    manager,
+                    packet_interval,
+                    pdr_targets=cluster_targets_override,
+                )
             try:
                 spec.apply(simulator, manager, mixra_solver)
             except Exception:
@@ -628,6 +654,39 @@ def run_bench(
                 targets_met=_targets_met(enriched),
             )
             records_by_algorithm[spec.label].append(run_record)
+
+            if validation_mode:
+                cluster_pdr = {
+                    str(key): float(value)
+                    for key, value in (enriched.get("qos_cluster_pdr", {}) or {}).items()
+                }
+                cluster_targets = {
+                    str(key): float(value)
+                    for key, value in (enriched.get("qos_cluster_targets", {}) or {}).items()
+                }
+                cluster_gaps = {
+                    str(key): float(value)
+                    for key, value in (enriched.get("qos_cluster_pdr_gap", {}) or {}).items()
+                }
+                cluster_throughput = {
+                    str(key): float(value)
+                    for key, value in (enriched.get("qos_cluster_throughput_bps", {}) or {}).items()
+                }
+                mean_abs_gap = _mean(abs(value) for value in cluster_gaps.values())
+                validation_entries.append(
+                    {
+                        "algorithm": spec.label,
+                        "num_nodes": num_nodes,
+                        "packet_interval_s": float(packet_interval),
+                        "DER": float(enriched.get("DER", 0.0) or 0.0),
+                        "throughput_bps": float(enriched.get("throughput_bps", 0.0) or 0.0),
+                        "gap_mean_abs": float(mean_abs_gap),
+                        "cluster_pdr": cluster_pdr,
+                        "cluster_targets": cluster_targets,
+                        "cluster_gaps": cluster_gaps,
+                        "cluster_throughput_bps": cluster_throughput,
+                    }
+                )
 
     algorithms_summary: Dict[str, Any] = {}
     for spec in ALGORITHMS:
@@ -663,11 +722,63 @@ def run_bench(
             "mixra_solver": mixra_solver,
             "capture_delta_db": 1.0,
             "output_dir": _relative_path(output_root),
+            "mode": mode,
         },
         "algorithms": algorithms_summary,
         "total_runs": total_runs,
         "report_path": _relative_path(report_path),
     }
+
+    if validation_mode and validation_entries:
+        max_der = max((entry["DER"] for entry in validation_entries), default=0.0)
+        max_throughput = max(
+            (entry["throughput_bps"] for entry in validation_entries),
+            default=0.0,
+        )
+        max_gap = max((entry["gap_mean_abs"] for entry in validation_entries), default=0.0)
+        for entry in validation_entries:
+            entry["der_normalized"] = (
+                entry["DER"] / max_der if max_der > 0 else 0.0
+            )
+            entry["throughput_normalized"] = (
+                entry["throughput_bps"] / max_throughput if max_throughput > 0 else 0.0
+            )
+            if max_gap > 0:
+                normalized_gap = 1.0 - entry["gap_mean_abs"] / max_gap
+            else:
+                normalized_gap = 1.0
+            entry["gap_normalized"] = max(0.0, min(1.0, normalized_gap))
+            cluster_ratio: Dict[str, float] = {}
+            for cluster_id, target in entry["cluster_targets"].items():
+                if target > 0:
+                    cluster_ratio[cluster_id] = entry["cluster_pdr"].get(cluster_id, 0.0) / target
+                else:
+                    cluster_ratio[cluster_id] = 0.0
+            entry["cluster_der_ratio"] = cluster_ratio
+            entry["cluster_gap_abs"] = {
+                cluster_id: abs(value)
+                for cluster_id, value in entry["cluster_gaps"].items()
+            }
+        validation_payload = {
+            "mode": VALIDATION_MODE,
+            "targets": list(cluster_targets_override or VALIDATION_PDR_TARGETS),
+            "entries": [_sanitize_for_json(entry) for entry in validation_entries],
+            "metadata": {
+                "node_counts": list(node_counts),
+                "tx_periods": list(tx_periods),
+                "metrics": ["DER", "throughput_bps", "gap_mean_abs"],
+            },
+        }
+        validation_path = output_root / "validation_normalized_metrics.json"
+        validation_path.write_text(
+            json.dumps(validation_payload, indent=2, ensure_ascii=False, sort_keys=True),
+            encoding="utf8",
+        )
+        summary_payload["validation"] = {
+            "mode": VALIDATION_MODE,
+            "normalized_metrics_path": _relative_path(validation_path),
+            "targets": list(cluster_targets_override or VALIDATION_PDR_TARGETS),
+        }
 
     summary_path = output_root / "summary.json"
     summary_path.write_text(
