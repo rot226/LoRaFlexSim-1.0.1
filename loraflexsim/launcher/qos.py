@@ -171,18 +171,25 @@ class QoSManager:
             raise ValueError(f"Implémentation manquante pour {algorithm}")
         if self.clusters and self._should_refresh_context(simulator):
             self._update_qos_context(simulator)
+        setattr(simulator, "qos_manager", self)
         if not getattr(simulator, "nodes", None):
             # Rien à faire si aucun nœud n'est présent.
             self.active_algorithm = algorithm
             setattr(simulator, "qos_algorithm", algorithm)
             setattr(simulator, "qos_active", True)
             self._broadcast_control_updates(simulator)
+            hook = getattr(simulator, "_on_qos_applied", None)
+            if callable(hook):
+                hook(self)
             return
         self.active_algorithm = algorithm
         method(simulator)
         setattr(simulator, "qos_algorithm", algorithm)
         setattr(simulator, "qos_active", True)
         self._broadcast_control_updates(simulator)
+        hook = getattr(simulator, "_on_qos_applied", None)
+        if callable(hook):
+            hook(self)
 
     def configure_clusters(
         self,

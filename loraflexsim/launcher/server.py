@@ -519,6 +519,18 @@ class NetworkServer:
 
         return derive_session_keys(appkey, devnonce, appnonce, self.net_id)
 
+    def _trigger_qos_refresh(self, reason: str) -> None:
+        simulator = getattr(self, "simulator", None)
+        if simulator is None:
+            return
+        hook = getattr(simulator, "request_qos_refresh", None)
+        if not callable(hook):
+            return
+        try:
+            hook(reason=reason)
+        except Exception:  # pragma: no cover - robust logging
+            logger.exception("Échec du déclenchement QoS (%s).", reason)
+
     # ------------------------------------------------------------------
     # Event scheduling helpers
     # ------------------------------------------------------------------
@@ -713,7 +725,10 @@ class NetworkServer:
             frame.mic = mic
         node.nwkskey = nwk_skey
         node.appskey = app_skey
+        node.devaddr = devaddr
+        node.activated = True
         self.send_downlink(node, frame, gateway=gateway)
+        self._trigger_qos_refresh("otaa-activate")
 
     def receive(
         self,
@@ -872,6 +887,7 @@ class NetworkServer:
             node.devaddr = accept.dev_addr
             node.activated = True
             self.send_downlink(node, accept, gateway=gw)
+            self._trigger_qos_refresh("join-accept")
             return
 
         if node and frame is not None and node.security_enabled:

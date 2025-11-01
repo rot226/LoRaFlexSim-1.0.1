@@ -45,6 +45,7 @@ class EventType(IntEnum):
     PING_SLOT = 5
     SERVER_RX = 6
     SERVER_PROCESS = 7
+    QOS_RECONFIG = 8
 
 
 @dataclass(order=True, slots=True)
@@ -874,6 +875,11 @@ class Simulator:
         self.current_time = 0.0
         self.event_id_counter = 0
 
+        # Gestion automatique du rafraîchissement QoS
+        self.qos_manager = None
+        self.qos_algorithm = None
+        self._next_qos_reconfig_time: float | None = None
+
         # Statistiques cumulatives
         self.packets_sent = 0
         self.packets_delivered = 0
@@ -1004,6 +1010,75 @@ class Simulator:
         self._push_event(scheduled_time, EventType.RX_WINDOW, eid, node_id)
         self._class_c_polling_nodes.add(node_id)
 
+    # ------------------------------------------------------------------
+    # Gestion du rafraîchissement QoS
+    # ------------------------------------------------------------------
+    def _cancel_qos_reconfigure_event(self) -> None:
+        if not self.event_queue:
+            return
+        kept = [evt for evt in self.event_queue if evt.type != EventType.QOS_RECONFIG]
+        if len(kept) != len(self.event_queue):
+            heapq.heapify(kept)
+            self.event_queue = kept
+        self._next_qos_reconfig_time = None
+
+    def _schedule_qos_reconfigure_event(self, when: float) -> None:
+        self._cancel_qos_reconfigure_event()
+        ticks = self._quantize(when)
+        event_id = self.event_id_counter
+        self.event_id_counter += 1
+        self._push_event(ticks, EventType.QOS_RECONFIG, event_id, 0)
+        self._next_qos_reconfig_time = when
+
+    def _handle_qos_reconfigure_event(self) -> None:
+        manager = getattr(self, "qos_manager", None)
+        if manager is None:
+            self._cancel_qos_reconfigure_event()
+            return
+        if not getattr(self, "qos_active", False):
+            self._cancel_qos_reconfigure_event()
+            return
+        algorithm = getattr(self, "qos_algorithm", None)
+        if not algorithm:
+            self._cancel_qos_reconfigure_event()
+            return
+        self.request_qos_refresh(reason="periodic")
+
+    def _on_qos_applied(self, manager) -> None:
+        self.qos_manager = manager
+        interval = getattr(manager, "reconfig_interval_s", None)
+        if interval is None or interval <= 0.0:
+            self._cancel_qos_reconfigure_event()
+            return
+        base_time = self.current_time if self.running else 0.0
+        self._schedule_qos_reconfigure_event(base_time + float(interval))
+
+    def request_qos_refresh(self, *, reason: str = "unspecified") -> None:
+        manager = getattr(self, "qos_manager", None)
+        if manager is None or not getattr(self, "qos_active", False):
+            return
+        algorithm = getattr(self, "qos_algorithm", None)
+        if not algorithm:
+            return
+        if not manager.clusters:
+            return
+        try:
+            needs_refresh = manager._should_refresh_context(self)
+        except Exception:  # pragma: no cover - robust logging
+            logger.exception("Échec de l'évaluation du rafraîchissement QoS (%s).", reason)
+            return
+        if not needs_refresh:
+            return
+        diag_logger.debug("Déclenchement QoS (%s) à t=%.3fs", reason, self.current_time)
+        manager.apply(self, algorithm)
+
+    def _notify_qos_metrics_update(self, node: Node) -> None:
+        if getattr(self, "qos_manager", None) is None:
+            return
+        if not getattr(self, "qos_active", False):
+            return
+        self.request_qos_refresh(reason="metrics")
+
     def _apply_rx_window_energy(self, node: "Node", window_time: float) -> tuple[str, float, float]:
         """Account for the energy spent during an RX window."""
 
@@ -1126,7 +1201,7 @@ class Simulator:
         priority = event.type
         event_id = event.id
         node = self.node_map.get(event.node_id)
-        if node is None and priority != EventType.BEACON:
+        if node is None and priority not in {EventType.BEACON, EventType.QOS_RECONFIG}:
             return True
         # Avancer le temps de simulation et mettre à jour l'état PHY
         delta = time - self.current_time
@@ -1419,6 +1494,7 @@ class Simulator:
             )
             if len(node.history) > 20:
                 node.history.pop(0)
+            self._notify_qos_metrics_update(node)
 
             # Gestion Adaptive Data Rate (ADR)
             if self.adr_node:
@@ -1909,6 +1985,10 @@ class Simulator:
 
         elif priority == EventType.SERVER_PROCESS:
             self.network_server._process_scheduled(event_id)
+            return True
+
+        elif priority == EventType.QOS_RECONFIG:
+            self._handle_qos_reconfigure_event()
             return True
 
         elif priority == EventType.MOBILITY:
