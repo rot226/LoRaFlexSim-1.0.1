@@ -20,3 +20,9 @@ Ces scénarios sont couverts par de nouveaux tests unitaires qui valident l'abse
 
 Depuis le banc d'essai ou les scripts d'expérience, il suffit d'instancier un `QoSManager` puis d'appeler `manager.apply(simulateur, "ADR-Pure")`, `manager.apply(simulateur, "APRA-like")` ou `manager.apply(simulateur, "Aimi-like")` après la configuration des clusters pour sélectionner la ligne de base désirée.【F:loraflexsim/launcher/qos.py†L149-L174】【F:loraflexsim/launcher/qos.py†L748-L1032】
 
+## Rafraîchissement automatique du contexte QoS
+
+Le simulateur déclenche désormais automatiquement la réallocation QoS dès qu'une dérive mesurée dépasse les seuils configurés ou qu'un nouveau nœud rejoint le réseau. Un événement périodique (`EventType.QOS_RECONFIG`) est planifié après chaque application de l'algorithme, selon l'intervalle `reconfig_interval_s`; lorsque le délai est atteint, `Simulator.request_qos_refresh` réévalue la nécessité de recalculer le contexte en respectant `_should_refresh_context`.【F:loraflexsim/launcher/simulator.py†L40-L48】【F:loraflexsim/launcher/simulator.py†L1014-L1073】【F:loraflexsim/launcher/qos.py†L160-L192】
+
+Les mises à jour de PDR récentes déclenchent aussi cette routine : chaque traitement d'uplink compare la variation de `recent_pdr` aux seuils `pdr_drift_threshold` et `traffic_drift_threshold` avant de rappeler `QoSManager.apply` si nécessaire.【F:loraflexsim/launcher/simulator.py†L1495-L1503】【F:loraflexsim/launcher/qos.py†L479-L563】 Enfin, le serveur réseau notifie le simulateur lors des acceptations OTAA ou activations internes afin de recalculer immédiatement les ressources après l'arrivée d'un nœud.【F:loraflexsim/launcher/server.py†L522-L532】【F:loraflexsim/launcher/server.py†L713-L731】【F:loraflexsim/launcher/server.py†L880-L890】
+
