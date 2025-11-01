@@ -1,53 +1,419 @@
-# Définition des scénarios de QoS pour l'interface CLI.
-# Hypothèse : chaque scénario s'appuie sur les paramètres communs ci-dessous, qui devront être
-# réconciliés avec les valeurs par défaut de LoRaFlexSim lors de l'intégration finale.
-# TODO: Vérifier la correspondance des champs avec la configuration interne de LoRaFlexSim.
 common:
-  simulation_time_s: 3600  # Hypothèse : simulation d'une heure.
-  payload_size_bytes: 12   # Hypothèse : taille de trame LoRaWAN classe A typique.
-  frequency_hz: 868100000  # Hypothèse : fréquence EU868 canal 1.
-  coding_rate: "4/5"       # Hypothèse : valeur par défaut de LoRaFlexSim.
-  bandwidth_hz: 125000     # Hypothèse : bande passante classique pour EU868.
-  duty_cycle: 0.01         # Hypothèse : limite réglementaire 1%.
-  acknowledgements: false  # Hypothèse : scénarios uplink sans ACK.
-  # TODO: Ajouter les paramètres radio additionnels requis par LoRaFlexSim (sensibilité, bruit, etc.).
-
+  gateway:
+    id: GW0
+    position_m:
+    - 0.0
+    - 0.0
+    - 15.0
+    antennas: 1
+  channels:
+    CH0:
+      frequency_hz: 868100000
+      bandwidth_hz: 125000
+    CH1:
+      frequency_hz: 868300000
+      bandwidth_hz: 125000
+    CH2:
+      frequency_hz: 868500000
+      bandwidth_hz: 125000
+  spreading_factors:
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  propagation:
+    fading: Rayleigh
+    capture_threshold_db: 1.0
+  payload_size_bytes: 20
+  duty_cycle: 0.01
 scenarios:
   S0:
-    label: "Baseline faibles trafics"
-    description: "Un seul périphérique transmet périodiquement avec un débit faible."
-    device_count: 1
-    send_interval_s: 600    # Hypothèse : 1 message toutes les 10 minutes.
-    spreading_factor: 7
-    tx_power_dbm: 14
-    # TODO: vérifier si les pertes de propagation doivent être explicitement renseignées.
-
+    label: Charge très faible
+    description: Réseau clairsemé avec trafic ponctuel.
+    N: 60
+    period: 900
+    clusters:
+      cluster_low:
+        share: 0.1
+        target_pdr: 0.9
+        nu_max:
+          SF7:
+            CH0: 0.28
+            CH1: 0.28
+            CH2: 0.28
+          SF8:
+            CH0: 0.24
+            CH1: 0.24
+            CH2: 0.24
+          SF9:
+            CH0: 0.2
+            CH1: 0.2
+            CH2: 0.2
+          SF10:
+            CH0: 0.16
+            CH1: 0.16
+            CH2: 0.16
+          SF11:
+            CH0: 0.12
+            CH1: 0.12
+            CH2: 0.12
+          SF12:
+            CH0: 0.1
+            CH1: 0.1
+            CH2: 0.1
+      cluster_mid:
+        share: 0.3
+        target_pdr: 0.8
+        nu_max:
+          SF7:
+            CH0: 0.2
+            CH1: 0.2
+            CH2: 0.2
+          SF8:
+            CH0: 0.18
+            CH1: 0.18
+            CH2: 0.18
+          SF9:
+            CH0: 0.14
+            CH1: 0.14
+            CH2: 0.14
+          SF10:
+            CH0: 0.1
+            CH1: 0.1
+            CH2: 0.1
+          SF11:
+            CH0: 0.07
+            CH1: 0.07
+            CH2: 0.07
+          SF12:
+            CH0: 0.05
+            CH1: 0.05
+            CH2: 0.05
+      cluster_high:
+        share: 0.6
+        target_pdr: 0.7
+        nu_max:
+          SF7:
+            CH0: 0.12
+            CH1: 0.12
+            CH2: 0.12
+          SF8:
+            CH0: 0.1
+            CH1: 0.1
+            CH2: 0.1
+          SF9:
+            CH0: 0.08
+            CH1: 0.08
+            CH2: 0.08
+          SF10:
+            CH0: 0.06
+            CH1: 0.06
+            CH2: 0.06
+          SF11:
+            CH0: 0.04
+            CH1: 0.04
+            CH2: 0.04
+          SF12:
+            CH0: 0.03
+            CH1: 0.03
+            CH2: 0.03
+    methods:
+      available:
+      - ADR
+      - APRA_like
+      - MixRA_H
+      - MixRA_Opt
+      fallback: Greedy
   S1:
-    label: "Densité modérée"
-    description: "Un réseau de taille moyenne avec trafic périodique synchronisé."
-    device_count: 50
-    send_interval_s: 300    # Hypothèse : 1 message toutes les 5 minutes.
-    spreading_factor: 8
-    tx_power_dbm: 14
-    # Hypothèse : les collisions seront gérées par la simulation.
-
+    label: Charge modérée
+    description: Réseau équilibré avec trafic planifié.
+    N: 120
+    period: 600
+    clusters:
+      cluster_low:
+        share: 0.1
+        target_pdr: 0.9
+        nu_max:
+          SF7:
+            CH0: 0.28
+            CH1: 0.28
+            CH2: 0.28
+          SF8:
+            CH0: 0.24
+            CH1: 0.24
+            CH2: 0.24
+          SF9:
+            CH0: 0.2
+            CH1: 0.2
+            CH2: 0.2
+          SF10:
+            CH0: 0.16
+            CH1: 0.16
+            CH2: 0.16
+          SF11:
+            CH0: 0.12
+            CH1: 0.12
+            CH2: 0.12
+          SF12:
+            CH0: 0.1
+            CH1: 0.1
+            CH2: 0.1
+      cluster_mid:
+        share: 0.3
+        target_pdr: 0.8
+        nu_max:
+          SF7:
+            CH0: 0.2
+            CH1: 0.2
+            CH2: 0.2
+          SF8:
+            CH0: 0.18
+            CH1: 0.18
+            CH2: 0.18
+          SF9:
+            CH0: 0.14
+            CH1: 0.14
+            CH2: 0.14
+          SF10:
+            CH0: 0.1
+            CH1: 0.1
+            CH2: 0.1
+          SF11:
+            CH0: 0.07
+            CH1: 0.07
+            CH2: 0.07
+          SF12:
+            CH0: 0.05
+            CH1: 0.05
+            CH2: 0.05
+      cluster_high:
+        share: 0.6
+        target_pdr: 0.7
+        nu_max:
+          SF7:
+            CH0: 0.12
+            CH1: 0.12
+            CH2: 0.12
+          SF8:
+            CH0: 0.1
+            CH1: 0.1
+            CH2: 0.1
+          SF9:
+            CH0: 0.08
+            CH1: 0.08
+            CH2: 0.08
+          SF10:
+            CH0: 0.06
+            CH1: 0.06
+            CH2: 0.06
+          SF11:
+            CH0: 0.04
+            CH1: 0.04
+            CH2: 0.04
+          SF12:
+            CH0: 0.03
+            CH1: 0.03
+            CH2: 0.03
+    methods:
+      available:
+      - ADR
+      - APRA_like
+      - MixRA_H
+      - MixRA_Opt
+      fallback: Greedy
   S2:
-    label: "Déploiement massif"
-    description: "Grand nombre de nœuds avec trafic périodique aléatoire."
-    device_count: 500
-    send_interval_s: [120, 900]  # Hypothèse : intervalle uniforme pour refléter un trafic dispersé.
-    spreading_factor: 9
-    tx_power_dbm: 16
-    random_seed: 42
-    # TODO: confirmer le format d'intervalle aléatoire attendu par LoRaFlexSim.
-
+    label: Charge élevée
+    description: Densité importante avec trafic périodique serré.
+    N: 300
+    period: 300
+    clusters:
+      cluster_low:
+        share: 0.1
+        target_pdr: 0.9
+        nu_max:
+          SF7:
+            CH0: 0.28
+            CH1: 0.28
+            CH2: 0.28
+          SF8:
+            CH0: 0.24
+            CH1: 0.24
+            CH2: 0.24
+          SF9:
+            CH0: 0.2
+            CH1: 0.2
+            CH2: 0.2
+          SF10:
+            CH0: 0.16
+            CH1: 0.16
+            CH2: 0.16
+          SF11:
+            CH0: 0.12
+            CH1: 0.12
+            CH2: 0.12
+          SF12:
+            CH0: 0.1
+            CH1: 0.1
+            CH2: 0.1
+      cluster_mid:
+        share: 0.3
+        target_pdr: 0.8
+        nu_max:
+          SF7:
+            CH0: 0.2
+            CH1: 0.2
+            CH2: 0.2
+          SF8:
+            CH0: 0.18
+            CH1: 0.18
+            CH2: 0.18
+          SF9:
+            CH0: 0.14
+            CH1: 0.14
+            CH2: 0.14
+          SF10:
+            CH0: 0.1
+            CH1: 0.1
+            CH2: 0.1
+          SF11:
+            CH0: 0.07
+            CH1: 0.07
+            CH2: 0.07
+          SF12:
+            CH0: 0.05
+            CH1: 0.05
+            CH2: 0.05
+      cluster_high:
+        share: 0.6
+        target_pdr: 0.7
+        nu_max:
+          SF7:
+            CH0: 0.12
+            CH1: 0.12
+            CH2: 0.12
+          SF8:
+            CH0: 0.1
+            CH1: 0.1
+            CH2: 0.1
+          SF9:
+            CH0: 0.08
+            CH1: 0.08
+            CH2: 0.08
+          SF10:
+            CH0: 0.06
+            CH1: 0.06
+            CH2: 0.06
+          SF11:
+            CH0: 0.04
+            CH1: 0.04
+            CH2: 0.04
+          SF12:
+            CH0: 0.03
+            CH1: 0.03
+            CH2: 0.03
+    methods:
+      available:
+      - ADR
+      - APRA_like
+      - MixRA_H
+      - MixRA_Opt
+      fallback: Greedy
   S3:
-    label: "Scénario critique QoS"
-    description: "Applications critiques avec redondance et contraintes de délai." 
-    device_count: 20
-    send_interval_s: 120     # Hypothèse : 1 message toutes les 2 minutes.
-    spreading_factor: 10
-    tx_power_dbm: 18
-    redundancy: 2            # Hypothèse : double émission pour fiabilité.
-    latency_budget_s: 30     # TODO: valider la prise en charge de cette contrainte dans LoRaFlexSim.
-    # Hypothèse : LoRaFlexSim permettra d'exprimer des exigences QoS spécifiques.
+    label: Charge critique
+    description: Applications sensibles nécessitant une forte disponibilité.
+    N: 180
+    period: 120
+    clusters:
+      cluster_low:
+        share: 0.1
+        target_pdr: 0.9
+        nu_max:
+          SF7:
+            CH0: 0.28
+            CH1: 0.28
+            CH2: 0.28
+          SF8:
+            CH0: 0.24
+            CH1: 0.24
+            CH2: 0.24
+          SF9:
+            CH0: 0.2
+            CH1: 0.2
+            CH2: 0.2
+          SF10:
+            CH0: 0.16
+            CH1: 0.16
+            CH2: 0.16
+          SF11:
+            CH0: 0.12
+            CH1: 0.12
+            CH2: 0.12
+          SF12:
+            CH0: 0.1
+            CH1: 0.1
+            CH2: 0.1
+      cluster_mid:
+        share: 0.3
+        target_pdr: 0.8
+        nu_max:
+          SF7:
+            CH0: 0.2
+            CH1: 0.2
+            CH2: 0.2
+          SF8:
+            CH0: 0.18
+            CH1: 0.18
+            CH2: 0.18
+          SF9:
+            CH0: 0.14
+            CH1: 0.14
+            CH2: 0.14
+          SF10:
+            CH0: 0.1
+            CH1: 0.1
+            CH2: 0.1
+          SF11:
+            CH0: 0.07
+            CH1: 0.07
+            CH2: 0.07
+          SF12:
+            CH0: 0.05
+            CH1: 0.05
+            CH2: 0.05
+      cluster_high:
+        share: 0.6
+        target_pdr: 0.7
+        nu_max:
+          SF7:
+            CH0: 0.12
+            CH1: 0.12
+            CH2: 0.12
+          SF8:
+            CH0: 0.1
+            CH1: 0.1
+            CH2: 0.1
+          SF9:
+            CH0: 0.08
+            CH1: 0.08
+            CH2: 0.08
+          SF10:
+            CH0: 0.06
+            CH1: 0.06
+            CH2: 0.06
+          SF11:
+            CH0: 0.04
+            CH1: 0.04
+            CH2: 0.04
+          SF12:
+            CH0: 0.03
+            CH1: 0.03
+            CH2: 0.03
+    methods:
+      available:
+      - ADR
+      - APRA_like
+      - MixRA_H
+      - MixRA_Opt
+      fallback: Greedy
