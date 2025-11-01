@@ -1,0 +1,2 @@
+=== Résumé des résultats QoS ===
+Ce fichier sera alimenté automatiquement par l'outil `lfs_metrics.py` après l'exécution des scénarios.
