@@ -1,12 +1,1 @@
-=== Résumé des résultats QoS ===
-
-Scenario article_a – Verdict : INCONNU
-  • Aucune donnée MixRA trouvée – vérifiez le nom du dossier.
-    - mne3sd: PDR=N/A | DER=N/A | Collisions=N/A | Jain=N/A | Energie=N/A | SFmin=N/A
-
-Scenario article_b – Verdict : INCONNU
-  • Aucune donnée MixRA trouvée – vérifiez le nom du dossier.
-    - mne3sd: PDR=N/A | DER=N/A | Collisions=N/A | Jain=N/A | Energie=N/A | SFmin=N/A
-
-TODO: Ajouter les métriques de latence et de jitter dès qu'elles sont exportées.
-TODO: Étendre le résumé avec une visualisation des CDF SNIR par cluster si nécessaire.
+Résumé non généré – exécuter lfs_metrics.py
