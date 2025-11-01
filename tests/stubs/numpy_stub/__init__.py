@@ -16,6 +16,7 @@ __all__ = [
     "ndarray",
     "datetime64",
     "timedelta64",
+    "integer",
 ]
 
 
@@ -83,25 +84,34 @@ def isscalar(obj) -> bool:
 # Alias used by ``pytest`` when checking for numpy booleans.
 bool_ = bool
 
+# Alias used by ``param`` to validate integer inputs when numpy is available.
+integer = int
 
-class _Datetime64(datetime):
+
+class datetime64(datetime):
     """Very small shim used by :mod:`pandas` during tests."""
 
-    def __new__(cls, value):
+    def __new__(cls, value, _unit=None):  # pragma: no cover - exercised indirectly
         if isinstance(value, datetime):
-            return datetime.__new__(cls, value.year, value.month, value.day, value.hour, value.minute, value.second, value.microsecond)
-        if isinstance(value, str):
-            dt = datetime.fromisoformat(value)
-            return datetime.__new__(cls, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond)
-        if isinstance(value, (int, float)):
+            base = value
+        elif isinstance(value, str):
+            base = datetime.fromisoformat(value)
+        elif isinstance(value, (int, float)):
             # Interpret numbers as seconds since epoch for the purposes of the tests.
-            dt = datetime.fromtimestamp(value)
-            return datetime.__new__(cls, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond)
-        raise TypeError("Unsupported datetime64 input")
+            base = datetime.fromtimestamp(value)
+        else:
+            raise TypeError("Unsupported datetime64 input")
 
-
-def datetime64(value, _unit=None):  # pragma: no cover - exercised indirectly
-    return _Datetime64(value)
+        return datetime.__new__(
+            cls,
+            base.year,
+            base.month,
+            base.day,
+            base.hour,
+            base.minute,
+            base.second,
+            base.microsecond,
+        )
 
 
 class _Timedelta64(timedelta):

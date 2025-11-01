@@ -15,21 +15,33 @@ if str(ROOT_DIR) not in sys.path:
 from loraflexsim.launcher import Simulator
 from loraflexsim.launcher.adr_standard_1 import apply as adr1
 
+
+# Module-level reference to the most recently executed simulation.
+#
+# Les tests chargent ce module via :func:`runpy.run_path` et s'attendent à
+# retrouver un objet ``sim`` dans l'espace global, ce qui n'était pas le cas
+# précédemment.  Nous initialisons donc ce nom avec ``None`` et le mettons à
+# jour lors de l'exécution.
+sim: Simulator | None = None
+
 CONFIG = "flora-master/simulations/examples/n100-gw1.ini"
 
 
 def run_example(*, steps: int = 1000, quiet: bool = False) -> Mapping[str, Any]:
     """Exécute le scénario FLoRa de référence et retourne les métriques."""
 
-    sim = Simulator(
+    sim_instance = Simulator(
         flora_mode=True,
         config_file=CONFIG,
         seed=1,
         adr_method="avg",
     )
-    adr1(sim, degrade_channel=True, profile="flora", capture_mode="flora")
-    sim.run(steps)
-    metrics = sim.get_metrics()
+    adr1(sim_instance, degrade_channel=True, profile="flora", capture_mode="flora")
+    sim_instance.run(steps)
+    metrics = sim_instance.get_metrics()
+    # Expose the simulation instance for introspection by les tests.
+    global sim
+    sim = sim_instance
     if not quiet:
         print(metrics)
     return metrics
