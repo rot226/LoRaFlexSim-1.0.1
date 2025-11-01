@@ -200,11 +200,33 @@ def _configure_qos_clusters_from_widgets() -> None:
     if any(target <= 0 or target > 1 for target in pdr_targets):
         raise ValueError("Les cibles PDR doivent être comprises entre 0 et 1.")
 
+    try:
+        raw_channel_limit = qos_cluster_channel_limit_input.value
+        channel_limit_value = int(raw_channel_limit) if raw_channel_limit is not None else 0
+    except (TypeError, ValueError) as exc:  # pragma: no cover - validation utilisateur
+        raise ValueError("La borne D doit être un entier valide.") from exc
+    if channel_limit_value < 0:
+        raise ValueError("La borne D doit être positive ou nulle.")
+    channel_limit = channel_limit_value if channel_limit_value > 0 else None
+
+    try:
+        raw_sf_limit = qos_cluster_min_sf_limit_input.value
+        sf_limit_value = int(raw_sf_limit) if raw_sf_limit is not None else 0
+    except (TypeError, ValueError) as exc:  # pragma: no cover - validation utilisateur
+        raise ValueError("La borne F doit être un entier valide.") from exc
+    if sf_limit_value < 0:
+        raise ValueError("La borne F doit être positive ou nulle.")
+    sf_limit = sf_limit_value if sf_limit_value > 0 else None
+
     qos_manager.configure_clusters(
         cluster_count,
         proportions=proportions,
         arrival_rates=arrival_rates,
         pdr_targets=pdr_targets,
+    )
+    qos_manager.set_mixra_cluster_limits(
+        channel_cluster_limit=channel_limit,
+        sf_cluster_limit=sf_limit,
     )
 
 
@@ -343,6 +365,18 @@ qos_cluster_pdr_targets_input = pn.widgets.TextInput(
     name="Cibles PDR (0-1)",
     value="",
     placeholder="0.9",
+)
+qos_cluster_channel_limit_input = pn.widgets.IntInput(
+    name="Limite D (clusters par canal)",
+    value=0,
+    step=1,
+    start=0,
+)
+qos_cluster_min_sf_limit_input = pn.widgets.IntInput(
+    name="Limite F (clusters par SF minimal)",
+    value=0,
+    step=1,
+    start=0,
 )
 
 
@@ -1512,6 +1546,8 @@ center_col = pn.Column(
             qos_cluster_proportions_input,
             qos_cluster_arrival_rates_input,
             qos_cluster_pdr_targets_input,
+            qos_cluster_channel_limit_input,
+            qos_cluster_min_sf_limit_input,
             width=650,
         ),
     ),
