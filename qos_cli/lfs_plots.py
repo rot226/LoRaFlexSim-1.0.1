@@ -176,7 +176,14 @@ def plot_cluster_pdr(
         )
         cluster_styles = _style_mapping(clusters)
         if not clusters:
-            ax.text(0.5, 0.5, "Aucune donnée PDR par cluster", ha="center", va="center", transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "No cluster PDR data",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
             ax.set_ylabel("PDR")
             ax.set_ylim(0.0, 1.0)
             continue
@@ -197,21 +204,28 @@ def plot_cluster_pdr(
             )
         ax.set_ylabel("PDR")
         ax.set_ylim(0.0, 1.0)
-        ax.set_title(f"Méthode : {method}")
+        ax.set_title(f"Method: {method}")
         ax.grid(True, axis="y", linestyle="--", alpha=0.4)
         handles, labels = ax.get_legend_handles_labels()
         if handles:
             ax.legend(loc="best", fontsize="small")
         else:
-            ax.text(0.5, 0.5, "Clusters indisponibles", ha="center", va="center", transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "Clusters unavailable",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
     for ax, method in zip(axes, methods):
         color, _ = method_styles[method]
         ax.spines["left"].set_color(color)
         ax.spines["left"].set_linewidth(1.2)
 
     axes[-1].set_xticks(x_positions, scenarios)
-    axes[-1].set_xlabel("Scénario")
-    fig.suptitle("PDR par cluster en fonction des scénarios")
+    axes[-1].set_xlabel("Scenario")
+    fig.suptitle("Cluster PDR across scenarios")
     fig.tight_layout(rect=(0, 0, 1, 0.96))
 
     output_path = out_dir / "pdr_clusters_vs_scenarios.png"
@@ -245,15 +259,22 @@ def plot_der(
         plotted = True
 
     ax.set_xticks(x_positions, scenarios)
-    ax.set_xlabel("Scénario")
-    ax.set_ylabel("DER globale")
+    ax.set_xlabel("Scenario")
+    ax.set_ylabel("Global DER")
     ax.set_ylim(0.0, 1.0)
-    ax.set_title("DER globale par scénario")
+    ax.set_title("Global DER per scenario")
     ax.grid(True, axis="y", linestyle="--", alpha=0.4)
     if plotted:
         ax.legend(loc="best")
     else:
-        ax.text(0.5, 0.5, "DER indisponible", ha="center", va="center", transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "DER unavailable",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
     fig.tight_layout()
 
     output_path = out_dir / "der_global_vs_scenarios.png"
@@ -285,15 +306,22 @@ def plot_pdr(
         plotted = True
 
     ax.set_xticks(x_positions, scenarios)
-    ax.set_xlabel("Scénario")
-    ax.set_ylabel("PDR globale")
+    ax.set_xlabel("Scenario")
+    ax.set_ylabel("Global PDR")
     ax.set_ylim(0.0, 1.0)
-    ax.set_title("PDR globale par scénario")
+    ax.set_title("Global PDR per scenario")
     ax.grid(True, axis="y", linestyle="--", alpha=0.4)
     if plotted:
         ax.legend(loc="best")
     else:
-        ax.text(0.5, 0.5, "PDR indisponible", ha="center", va="center", transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "PDR unavailable",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
     fig.tight_layout()
 
     output_path = out_dir / "pdr_global_vs_scenarios.png"
@@ -325,15 +353,22 @@ def plot_collisions(
         plotted = True
 
     ax.set_xticks(x_positions, scenarios)
-    ax.set_xlabel("Scénario")
-    ax.set_ylabel("Collisions montantes")
-    ax.set_title("Collisions montantes par scénario")
+    ax.set_xlabel("Scenario")
+    ax.set_ylabel("Uplink collisions")
+    ax.set_title("Uplink collisions per scenario")
     ax.grid(True, axis="y", linestyle="--", alpha=0.4)
     ax.set_ylim(bottom=0.0)
     if plotted:
         ax.legend(loc="best")
     else:
-        ax.text(0.5, 0.5, "Collisions indisponibles", ha="center", va="center", transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "Collision data unavailable",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
     fig.tight_layout()
 
     output_path = out_dir / "collisions_vs_scenarios.png"
@@ -365,15 +400,22 @@ def plot_energy(
         plotted = True
 
     ax.set_xticks(x_positions, scenarios)
-    ax.set_xlabel("Scénario")
-    ax.set_ylabel("Énergie totale (J)")
-    ax.set_title("Énergie consommée par scénario")
+    ax.set_xlabel("Scenario")
+    ax.set_ylabel("Total energy (J)")
+    ax.set_title("Energy consumption per scenario")
     ax.grid(True, axis="y", linestyle="--", alpha=0.4)
     ax.set_ylim(bottom=0.0)
     if plotted:
         ax.legend(loc="best")
     else:
-        ax.text(0.5, 0.5, "Énergie indisponible", ha="center", va="center", transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "Energy data unavailable",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
     fig.tight_layout()
 
     output_path = out_dir / "energy_total_vs_scenarios.png"
@@ -405,15 +447,22 @@ def plot_jain_index(
         plotted = True
 
     ax.set_xticks(x_positions, scenarios)
-    ax.set_xlabel("Scénario")
-    ax.set_ylabel("Indice de Jain")
+    ax.set_xlabel("Scenario")
+    ax.set_ylabel("Jain index")
     ax.set_ylim(0.0, 1.0)
-    ax.set_title("Équité (indice de Jain) par scénario")
+    ax.set_title("Fairness (Jain index) per scenario")
     ax.grid(True, axis="y", linestyle="--", alpha=0.4)
     if plotted:
         ax.legend(loc="best")
     else:
-        ax.text(0.5, 0.5, "Indice de Jain indisponible", ha="center", va="center", transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "Jain index unavailable",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
     fig.tight_layout()
 
     output_path = out_dir / "jain_index_vs_scenarios.png"
@@ -445,15 +494,22 @@ def plot_min_sf_share(
         plotted = True
 
     ax.set_xticks(x_positions, scenarios)
-    ax.set_xlabel("Scénario")
-    ax.set_ylabel("Part du SF minimal")
+    ax.set_xlabel("Scenario")
+    ax.set_ylabel("Minimum SF share")
     ax.set_ylim(0.0, 1.0)
-    ax.set_title("Part de nœuds au SF minimal par scénario")
+    ax.set_title("Share of nodes at minimum SF per scenario")
     ax.grid(True, axis="y", linestyle="--", alpha=0.4)
     if plotted:
         ax.legend(loc="best")
     else:
-        ax.text(0.5, 0.5, "Répartition SF indisponible", ha="center", va="center", transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "SF distribution unavailable",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
     fig.tight_layout()
 
     output_path = out_dir / "min_sf_share_vs_scenarios.png"
@@ -490,12 +546,19 @@ def plot_snir_cdf(
             color, _ = method_styles[method]
             ax.step(xs, ys, where="post", label=method, color=color)
         if not has_data:
-            ax.text(0.5, 0.5, "Données SNIR indisponibles", ha="center", va="center", transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "SNIR data unavailable",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
         ax.set_xlabel("SNIR (dB)")
         ax.set_ylabel("CDF")
         ax.set_ylim(0.0, 1.0)
         ax.set_xlim(auto=True)
-        ax.set_title(f"CDF SNIR – scénario {scenario}")
+        ax.set_title(f"SNIR CDF – scenario {scenario}")
         ax.grid(True, linestyle="--", alpha=0.4)
         handles, labels = ax.get_legend_handles_labels()
         if handles:

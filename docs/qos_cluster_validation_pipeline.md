@@ -108,7 +108,7 @@ Après chaque campagne :
 2. Contrôler `results/qos_clusters/<preset>/summary.json` pour confirmer les
    PDR cibles par cluster et identifier le point de rupture.
 3. Examiner les figures produites :
-   - PDR par cluster (`pdr_clusters_tx_*.png`)
+   - Cluster PDR (`pdr_clusters_tx_*.png`)
    - DER, débit et énergie (`der_*.png`, `throughput_*.png`, `energy_*.png`)
    - Histogrammes SNIR et SF (`snr_cdf_max_load.png`, `sf_histogram_max_load.png`)
    - Heatmap SF×canal (`heatmap_sf_channel_*.png`)
