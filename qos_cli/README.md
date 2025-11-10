@@ -1,8 +1,8 @@
 # Interface CLI QoS
 
 Ce répertoire centralise les fichiers nécessaires pour piloter les scénarios QoS via la future CLI.
-Les scripts fournis (préfixés `lfs_`) ne lancent **jamais** LoRaFlexSim automatiquement :
-il est de la responsabilité de l'utilisateur d'exécuter la simulation manuellement entre les étapes.
+Les scripts fournis (préfixés `lfs_`) orchestrent la préparation des données et l'analyse des résultats.
+La commande `python -m qos_cli.lfs_run` exécute directement une simulation LoRaFlexSim pour un scénario donné.
 
 ## Flux de travail proposé
 
@@ -15,11 +15,12 @@ il est de la responsabilité de l'utilisateur d'exécuter la simulation manuelle
 
 2. **Générer et examiner `commands.txt`**
    ```bash
-   python qos_cli/lfs_print_commands.py > commands.txt
+   python qos_cli/lfs_print_commands.py --config qos_cli/scenarios.yaml > commands.txt
    ```
-   Cette commande crée le fichier `commands.txt` listant toutes les exécutions LoRaFlexSim à réaliser.
-   Vérifiez ensuite le contenu, ajustez-le si nécessaire puis lancez manuellement chaque commande
-   LoRaFlexSim en vous référant à la documentation du projet.
+   Le fichier `commands.txt` contient désormais les appels prêts à l'emploi vers la CLI dédiée :
+   `python -m qos_cli.lfs_run --scenario … --method … --out …`. Vérifiez la liste, adaptez les
+   paramètres au besoin puis exécutez chaque ligne pour lancer automatiquement LoRaFlexSim avec la
+   configuration correspondante.
 
 3. **Collecter les métriques**
    Une fois toutes les simulations terminées et les résultats disponibles dans `results/`, exécutez :
@@ -46,8 +47,8 @@ il est de la responsabilité de l'utilisateur d'exécuter la simulation manuelle
 ## Récapitulatif rapide
 
 - Création/maintenance des scénarios : `python qos_cli/lfs_make_scenarios.py --new`
-- Génération des commandes à exécuter : `python qos_cli/lfs_print_commands.py > commands.txt`
-- Lancement manuel des commandes LoRaFlexSim listées dans `commands.txt`
+- Génération des commandes à exécuter : `python qos_cli/lfs_print_commands.py --config qos_cli/scenarios.yaml > commands.txt`
+- Lancement des simulations : exécuter chaque ligne `python -m qos_cli.lfs_run …` listée dans `commands.txt`
 - Agrégation des métriques : `python qos_cli/lfs_metrics.py --in results/ --config qos_cli/scenarios.yaml`
 - Production des graphiques : `python qos_cli/lfs_plots.py --in results/ --config qos_cli/scenarios.yaml`
 - Génération du rapport : `python qos_cli/lfs_report.py --in results/ --summary qos_cli/SUMMARY.txt`
