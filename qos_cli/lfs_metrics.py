@@ -33,7 +33,8 @@ import argparse
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import yaml
@@ -356,6 +357,20 @@ def load_all_metrics(root: Path) -> Dict[Tuple[str, str], MethodScenarioMetrics]
     return metrics
 
 
+def _cluster_targets_from_clusters(scenario_cfg: Mapping[str, object]) -> Dict[str, object]:
+    clusters_cfg = scenario_cfg.get("clusters")
+    if not isinstance(clusters_cfg, Mapping):
+        return {}
+
+    targets: Dict[str, object] = {}
+    for cluster_name, cluster_cfg in clusters_cfg.items():
+        if not isinstance(cluster_cfg, Mapping):
+            continue
+        if "target_pdr" in cluster_cfg:
+            targets[str(cluster_name)] = cluster_cfg["target_pdr"]
+    return targets
+
+
 def evaluate_pass_fail(
     scenario_id: str,
     scenario_cfg: Mapping[str, object],
@@ -366,7 +381,15 @@ def evaluate_pass_fail(
     evaluation_cfg = scenario_cfg.get("evaluation", {}) if isinstance(scenario_cfg, Mapping) else {}
     mixra_method = evaluation_cfg.get("mixra_method", "MixRA")
     baselines = evaluation_cfg.get("baselines", [])
-    cluster_targets = evaluation_cfg.get("cluster_targets", {})
+    if "cluster_targets" in evaluation_cfg:
+        raw_cluster_targets = evaluation_cfg.get("cluster_targets", {})
+        cluster_targets = (
+            {str(cluster): target for cluster, target in raw_cluster_targets.items()}
+            if isinstance(raw_cluster_targets, Mapping)
+            else {}
+        )
+    else:
+        cluster_targets = _cluster_targets_from_clusters(scenario_cfg)
 
     comments: List[str] = []
     verdict = "INCONNU"

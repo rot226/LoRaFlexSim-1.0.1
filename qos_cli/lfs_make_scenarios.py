@@ -4,7 +4,8 @@ from __future__ import annotations
 import argparse
 import copy
 from pathlib import Path
-from typing import Any, Dict, Iterable, Tuple
+from collections.abc import Iterable, Mapping
+from typing import Any, Dict, Tuple
 
 import yaml
 
@@ -56,14 +57,48 @@ _METHODS_DEFAULT: Dict[str, Any] = {
 }
 
 
+def _build_evaluation(clusters: Mapping[str, Any], methods: Mapping[str, Any]) -> Dict[str, Any]:
+    """Construit la configuration d'évaluation pour un scénario donné."""
+
+    available_methods = []
+    if isinstance(methods, Mapping):
+        raw_available = methods.get("available", [])
+        if isinstance(raw_available, Iterable) and not isinstance(raw_available, (str, bytes)):
+            available_methods = [str(method) for method in raw_available]
+
+    preferred_mixra = "MixRA_Opt"
+    if preferred_mixra not in available_methods and available_methods:
+        preferred_mixra = available_methods[0]
+
+    cluster_targets: Dict[str, Any] = {}
+    if isinstance(clusters, Mapping):
+        for cluster_name, cluster_cfg in clusters.items():
+            if not isinstance(cluster_cfg, Mapping):
+                continue
+            if "target_pdr" in cluster_cfg:
+                cluster_targets[str(cluster_name)] = cluster_cfg["target_pdr"]
+
+    baselines = [method for method in available_methods if method != preferred_mixra]
+
+    return {
+        "mixra_method": preferred_mixra,
+        "baselines": baselines,
+        "cluster_targets": cluster_targets,
+    }
+
+
 def _make_scenario(label: str, description: str, N: int, period: int) -> Dict[str, Any]:
+    clusters = copy.deepcopy(_CLUSTER_TEMPLATE)
+    methods = copy.deepcopy(_METHODS_DEFAULT)
+    evaluation = _build_evaluation(clusters, methods)
     return {
         "label": label,
         "description": description,
         "N": N,
         "period": period,
-        "clusters": copy.deepcopy(_CLUSTER_TEMPLATE),
-        "methods": copy.deepcopy(_METHODS_DEFAULT),
+        "clusters": clusters,
+        "methods": methods,
+        "evaluation": evaluation,
     }
 
 
@@ -166,6 +201,33 @@ def _ensure_nested_container(container: Dict[str, Any], key: str) -> Dict[str, A
     )
 
 
+def _propagate_cluster_target(
+    data: Dict[str, Any], scenario_id: str, cluster_id: str, target_value: Any
+) -> None:
+    """Maintient la synchronisation entre clusters.*.target_pdr et evaluation.cluster_targets."""
+
+    scenarios = data.get("scenarios")
+    if not isinstance(scenarios, dict):
+        return
+    scenario_cfg = scenarios.get(scenario_id)
+    if not isinstance(scenario_cfg, dict):
+        return
+
+    evaluation = scenario_cfg.get("evaluation")
+    if not isinstance(evaluation, dict):
+        clusters = scenario_cfg.get("clusters", {}) if isinstance(scenario_cfg, dict) else {}
+        methods = scenario_cfg.get("methods", {}) if isinstance(scenario_cfg, dict) else {}
+        evaluation = _build_evaluation(clusters, methods)
+        scenario_cfg["evaluation"] = evaluation
+
+    cluster_targets = evaluation.get("cluster_targets")
+    if not isinstance(cluster_targets, dict):
+        cluster_targets = {}
+        evaluation["cluster_targets"] = cluster_targets
+
+    cluster_targets[str(cluster_id)] = target_value
+
+
 def apply_update(data: Dict[str, Any], dotted_key: str, value: Any) -> None:
     """Applique une mise à jour à l'aide d'une clé en notation pointée."""
     segments = [segment.strip() for segment in dotted_key.split(".") if segment.strip()]
@@ -177,6 +239,14 @@ def apply_update(data: Dict[str, Any], dotted_key: str, value: Any) -> None:
         current = _ensure_nested_container(current, segment)
 
     current[segments[-1]] = value
+    if (
+        len(segments) >= 5
+        and segments[0] == "scenarios"
+        and segments[2] == "clusters"
+        and segments[-1] == "target_pdr"
+    ):
+        scenario_id, cluster_id = segments[1], segments[3]
+        _propagate_cluster_target(data, scenario_id, cluster_id, value)
     # TODO: Ajouter des validations métier sur les valeurs assignées (plages, types, etc.).
 
 
