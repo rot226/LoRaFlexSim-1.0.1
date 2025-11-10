@@ -204,7 +204,6 @@ def plot_cluster_pdr(
             )
         ax.set_ylabel("PDR")
         ax.set_ylim(0.0, 1.0)
-        ax.set_title(f"Method: {method}")
         ax.grid(True, axis="y", linestyle="--", alpha=0.4)
         handles, labels = ax.get_legend_handles_labels()
         if handles:
@@ -225,8 +224,7 @@ def plot_cluster_pdr(
 
     axes[-1].set_xticks(x_positions, scenarios)
     axes[-1].set_xlabel("Scenario")
-    fig.suptitle("Cluster PDR across scenarios")
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.tight_layout()
 
     output_path = out_dir / "pdr_clusters_vs_scenarios.png"
     fig.savefig(output_path, dpi=150)
@@ -262,7 +260,6 @@ def plot_der(
     ax.set_xlabel("Scenario")
     ax.set_ylabel("Global DER")
     ax.set_ylim(0.0, 1.0)
-    ax.set_title("Global DER per scenario")
     ax.grid(True, axis="y", linestyle="--", alpha=0.4)
     if plotted:
         ax.legend(loc="best")
@@ -309,7 +306,6 @@ def plot_pdr(
     ax.set_xlabel("Scenario")
     ax.set_ylabel("Global PDR")
     ax.set_ylim(0.0, 1.0)
-    ax.set_title("Global PDR per scenario")
     ax.grid(True, axis="y", linestyle="--", alpha=0.4)
     if plotted:
         ax.legend(loc="best")
@@ -355,7 +351,6 @@ def plot_collisions(
     ax.set_xticks(x_positions, scenarios)
     ax.set_xlabel("Scenario")
     ax.set_ylabel("Uplink collisions")
-    ax.set_title("Uplink collisions per scenario")
     ax.grid(True, axis="y", linestyle="--", alpha=0.4)
     ax.set_ylim(bottom=0.0)
     if plotted:
@@ -402,7 +397,6 @@ def plot_energy(
     ax.set_xticks(x_positions, scenarios)
     ax.set_xlabel("Scenario")
     ax.set_ylabel("Total energy (J)")
-    ax.set_title("Energy consumption per scenario")
     ax.grid(True, axis="y", linestyle="--", alpha=0.4)
     ax.set_ylim(bottom=0.0)
     if plotted:
@@ -450,7 +444,6 @@ def plot_jain_index(
     ax.set_xlabel("Scenario")
     ax.set_ylabel("Jain index")
     ax.set_ylim(0.0, 1.0)
-    ax.set_title("Fairness (Jain index) per scenario")
     ax.grid(True, axis="y", linestyle="--", alpha=0.4)
     if plotted:
         ax.legend(loc="best")
@@ -497,7 +490,6 @@ def plot_min_sf_share(
     ax.set_xlabel("Scenario")
     ax.set_ylabel("Minimum SF share")
     ax.set_ylim(0.0, 1.0)
-    ax.set_title("Share of nodes at minimum SF per scenario")
     ax.grid(True, axis="y", linestyle="--", alpha=0.4)
     if plotted:
         ax.legend(loc="best")
@@ -558,7 +550,6 @@ def plot_snir_cdf(
         ax.set_ylabel("CDF")
         ax.set_ylim(0.0, 1.0)
         ax.set_xlim(auto=True)
-        ax.set_title(f"SNIR CDF – scenario {scenario}")
         ax.grid(True, linestyle="--", alpha=0.4)
         handles, labels = ax.get_legend_handles_labels()
         if handles:
