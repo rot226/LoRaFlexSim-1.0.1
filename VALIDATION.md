@@ -119,6 +119,15 @@ df.plot.bar(x="scenario", y=["pdr_sim", "pdr_ref"], rot=45)
 
 Cette représentation permet d’identifier rapidement les scénarios qui s’écartent des métriques FLoRa et de suivre l’évolution au fil des versions.【F:results/validation_matrix.csv†L1-L6】
 
+Le pipeline QoS fournit également un jeu de figures prêtes à l’emploi via `python qos_cli/lfs_plots.py --in results/ --config qos_cli/scenarios.yaml` :
+
+- `pdr_clusters_vs_scenarios.png` illustre la performance par cluster.
+- `pdr_global_vs_scenarios.png` et `der_global_vs_scenarios.png` synthétisent les ratios de réussite montante/descendante.
+- `collisions_vs_scenarios.png` et `snir_cdf_<scénario>.png` mettent en évidence la dynamique radio.
+- `energy_total_vs_scenarios.png`, `jain_index_vs_scenarios.png` et `min_sf_share_vs_scenarios.png` facilitent respectivement l’analyse énergétique, l’équité de service et la répartition des facteurs d’étalement.
+
+Ces PNG sont générés automatiquement dans `qos_cli/figures/` et complètent la lecture du CSV en offrant une vue transversale par méthode/scénario.
+
 ## Channel
 
 ### Fonctions clés
