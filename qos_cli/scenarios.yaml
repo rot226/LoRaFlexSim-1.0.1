@@ -126,6 +126,16 @@ scenarios:
       - MixRA_H
       - MixRA_Opt
       fallback: Greedy
+    evaluation:
+      mixra_method: MixRA_Opt
+      baselines:
+      - ADR
+      - APRA_like
+      - MixRA_H
+      cluster_targets:
+        cluster_low: 0.9
+        cluster_mid: 0.8
+        cluster_high: 0.7
   S1:
     label: Charge modérée
     description: Réseau équilibré avec trafic planifié.
@@ -223,6 +233,16 @@ scenarios:
       - MixRA_H
       - MixRA_Opt
       fallback: Greedy
+    evaluation:
+      mixra_method: MixRA_Opt
+      baselines:
+      - ADR
+      - APRA_like
+      - MixRA_H
+      cluster_targets:
+        cluster_low: 0.9
+        cluster_mid: 0.8
+        cluster_high: 0.7
   S2:
     label: Charge élevée
     description: Densité importante avec trafic périodique serré.
@@ -320,6 +340,16 @@ scenarios:
       - MixRA_H
       - MixRA_Opt
       fallback: Greedy
+    evaluation:
+      mixra_method: MixRA_Opt
+      baselines:
+      - ADR
+      - APRA_like
+      - MixRA_H
+      cluster_targets:
+        cluster_low: 0.9
+        cluster_mid: 0.8
+        cluster_high: 0.7
   S3:
     label: Charge critique
     description: Applications sensibles nécessitant une forte disponibilité.
@@ -417,3 +447,13 @@ scenarios:
       - MixRA_H
       - MixRA_Opt
       fallback: Greedy
+    evaluation:
+      mixra_method: MixRA_Opt
+      baselines:
+      - ADR
+      - APRA_like
+      - MixRA_H
+      cluster_targets:
+        cluster_low: 0.9
+        cluster_mid: 0.8
+        cluster_high: 0.7
