@@ -33,7 +33,15 @@ La commande `python -m qos_cli.lfs_run` exécute directement une simulation LoRa
    ```bash
    python qos_cli/lfs_plots.py --in results/ --config qos_cli/scenarios.yaml
    ```
-   Cette étape exploite les métriques précédemment calculées pour générer les figures.
+   Cette étape exploite les métriques précédemment calculées pour générer les figures suivantes (dans `qos_cli/figures/` par défaut) :
+   - `pdr_clusters_vs_scenarios.png` : PDR détaillé par cluster pour chaque méthode.
+   - `pdr_global_vs_scenarios.png` : PDR global (livraisons ÷ tentatives) par scénario et par méthode.
+   - `der_global_vs_scenarios.png` : taux de livraison descendant (DER) par scénario.
+   - `collisions_vs_scenarios.png` : nombre total de collisions montantes observées par scénario.
+   - `energy_total_vs_scenarios.png` : énergie totale consommée par les nœuds (somme en joules) par scénario.
+   - `jain_index_vs_scenarios.png` : indice de Jain pour qualifier l’équité de la distribution de trafic.
+   - `min_sf_share_vs_scenarios.png` : part de nœuds utilisant le facteur d’étalement minimal.
+   - `snir_cdf_<scénario>.png` : courbes CDF du SNIR pour chaque scénario (une image par scénario).
 
 5. **Générer le rapport**
    ```bash
