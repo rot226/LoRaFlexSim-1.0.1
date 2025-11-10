@@ -94,14 +94,20 @@ def load_scenarios(path: Path) -> dict:
 def format_commands(
     scenarios: dict,
     methods: Iterable[str],
+    *,
+    config: Path,
 ) -> List[str]:
     """Retourne la liste des commandes à exécuter pour chaque scénario et méthode."""
     commands: List[str] = []
     for scenario_name in scenarios:
         for method in methods:
             commands.append(
-                "python lora_flex_sim.py --scenario {scenario} --method {method} "
+                "python -m qos_cli.lfs_run "
+                "--config {config} "
+                "--scenario {scenario} "
+                "--method {method} "
                 "--out results/{method}/{scenario}/".format(
+                    config=config,
                     scenario=scenario_name,
                     method=method,
                 )
@@ -137,7 +143,11 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"# Scénarios disponibles: {', '.join(scenario_names)}")
 
-    commands = format_commands({name: scenarios[name] for name in scenario_names}, methods)
+    commands = format_commands(
+        {name: scenarios[name] for name in scenario_names},
+        methods,
+        config=args.config,
+    )
 
     if args.dry_run:
         print("# Mode dry-run: les commandes suivantes ne sont pas exécutées.")
