@@ -43,6 +43,12 @@ La commande `python -m qos_cli.lfs_run` exécute directement une simulation LoRa
    - `min_sf_share_vs_scenarios.png` : part de nœuds utilisant le facteur d’étalement minimal.
    - `snir_cdf_<scénario>.png` : courbes CDF du SNIR pour chaque scénario (une image par scénario).
 
+   Pour compléter ces courbes par une visualisation surfacique des performances (nombre de nœuds × période), utilisez la CLI dédiée :
+   ```bash
+   python -m qos_cli.lfs_plots_surfaces --in results/ --config qos_cli/scenarios.yaml --out qos_cli/figures
+   ```
+   Le script crée, pour chaque méthode, des heatmaps du PDR global, du DER et de l’écart à la cible dans le dossier de sortie (fichiers `pdr_heatmap_<méthode>.png`, `der_heatmap_<méthode>.png`, `target_gap_heatmap_<méthode>.png`).
+
 5. **Générer le rapport**
    ```bash
    python qos_cli/lfs_report.py --in results/ --summary qos_cli/SUMMARY.txt
@@ -59,4 +65,5 @@ La commande `python -m qos_cli.lfs_run` exécute directement une simulation LoRa
 - Lancement des simulations : exécuter chaque ligne `python -m qos_cli.lfs_run …` listée dans `commands.txt`
 - Agrégation des métriques : `python qos_cli/lfs_metrics.py --in results/ --config qos_cli/scenarios.yaml`
 - Production des graphiques : `python qos_cli/lfs_plots.py --in results/ --config qos_cli/scenarios.yaml`
+- Cartes de chaleur des performances : `python -m qos_cli.lfs_plots_surfaces --in results/ --config qos_cli/scenarios.yaml --out qos_cli/figures`
 - Génération du rapport : `python qos_cli/lfs_report.py --in results/ --summary qos_cli/SUMMARY.txt`
