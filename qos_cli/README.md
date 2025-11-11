@@ -13,6 +13,36 @@ La commande `python -m qos_cli.lfs_run` exécute directement une simulation LoRa
    Ce script prépare le fichier `qos_cli/scenarios.yaml`, mais **ne** génère **pas** `commands.txt`.
    Pour obtenir les commandes prêtes à l'emploi, il faut poursuivre avec l'étape suivante.
 
+   ### Balayer automatiquement les valeurs (`--sweep`)
+
+   Il est désormais possible de générer une grille complète de scénarios supplémentaires sans modifier le
+   fichier principal. Les options `--sweep` décrivent chaque dimension à explorer et la combinaison
+   cartésienne est automatiquement transformée en un nouveau fichier `qos_cli/scenarios_sweep.yaml`
+   (modifiable via `--sweep-out`).
+
+   ```bash
+   python qos_cli/lfs_make_scenarios.py \
+       --sweep N=60,120,180 \
+       --sweep period=120,300,600
+   ```
+
+   Chaque combinaison produit un identifiant unique (`S_N60_T600`, etc.) issu du gabarit interne
+   `_make_scenario`. Les valeurs de `evaluation.cluster_targets` sont recalculées automatiquement de sorte
+   à rester cohérentes avec les cibles de chaque cluster. La console récapitule systématiquement les
+   paramètres retenus ainsi que le chemin d'écriture.
+
+   Pour injecter une table de combinaisons personnalisée (par exemple issue d'Excel), utilisez un CSV dont
+   les en-têtes correspondent aux champs du scénario :
+
+   ```bash
+   python qos_cli/lfs_make_scenarios.py --sweep-csv docs/mes_scenarios.csv
+   ```
+
+   Les valeurs sont analysées via YAML, ce qui permet d'indiquer des booléens ou des nombres flottants. Les
+   fichiers générés peuvent ensuite être utilisés directement avec les scripts de post-traitement (`lfs_print_commands.py`,
+   `lfs_metrics.py`, `lfs_plots.py`, `lfs_plots_surfaces.py`, `lfs_plots_scatter.py`, etc.) en spécifiant le
+   chemin du YAML de balayage via l'option `--config`.
+
 2. **Générer et examiner `commands.txt`**
    ```bash
    python qos_cli/lfs_print_commands.py --config qos_cli/scenarios.yaml > commands.txt
@@ -68,6 +98,7 @@ La commande `python -m qos_cli.lfs_run` exécute directement une simulation LoRa
 ## Récapitulatif rapide
 
 - Création/maintenance des scénarios : `python qos_cli/lfs_make_scenarios.py --new`
+- Génération d'une grille de balayage : `python qos_cli/lfs_make_scenarios.py --sweep … --sweep-out …`
 - Génération des commandes à exécuter : `python qos_cli/lfs_print_commands.py --config qos_cli/scenarios.yaml > commands.txt`
 - Lancement des simulations : exécuter chaque ligne `python -m qos_cli.lfs_run …` listée dans `commands.txt`
 - Agrégation des métriques : `python qos_cli/lfs_metrics.py --in results/ --config qos_cli/scenarios.yaml`

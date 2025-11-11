@@ -3,14 +3,20 @@ from __future__ import annotations
 
 import argparse
 import copy
+import csv
+import itertools
 from pathlib import Path
-from collections.abc import Iterable, Mapping
-from typing import Any, Dict, Tuple
+from collections import OrderedDict
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any, Dict, Iterable as TypingIterable, Tuple
 
 import yaml
 
 
 DEFAULT_PATH = Path(__file__).with_name("scenarios.yaml")
+DEFAULT_SWEEP_PATH = DEFAULT_PATH.with_name("scenarios_sweep.yaml")
+
+_SWEEP_KEY_ALIASES = {"period": "T"}
 
 _CLUSTER_TEMPLATE: Dict[str, Any] = {
     "cluster_low": {
@@ -188,6 +194,186 @@ def parse_set_option(option: str) -> Tuple[str, Any]:
     return key, value
 
 
+def parse_sweep_option(option: str) -> Tuple[str, list[Any]]:
+    """Analyse une option --sweep clé=valeur1,valeur2,..."""
+
+    if "=" not in option:
+        raise ValueError(
+            f"Format invalide pour --sweep: '{option}' (clé=valeur1,valeur2,... attendu)"
+        )
+
+    raw_key, raw_values = option.split("=", 1)
+    key = raw_key.strip()
+    if not key:
+        raise ValueError(f"La clé fournie est vide dans l'option de balayage: '{option}'")
+
+    values: list[Any] = []
+    for raw_value in raw_values.split(","):
+        cleaned = raw_value.strip()
+        if not cleaned:
+            continue
+        try:
+            parsed_value = yaml.safe_load(cleaned)
+        except yaml.YAMLError as exc:
+            raise ValueError(
+                f"Valeur YAML invalide pour l'option de balayage '{option}': {exc}"
+            ) from exc
+        values.append(parsed_value)
+
+    if not values:
+        raise ValueError(
+            f"Aucune valeur exploitable trouvée pour l'option de balayage: '{option}'"
+        )
+
+    return key, values
+
+
+def load_sweep_csv(path: Path) -> list[OrderedDict[str, Any]]:
+    """Charge des combinaisons de balayage depuis un fichier CSV."""
+
+    if not path.exists():
+        raise ValueError(f"Fichier CSV introuvable: {path}")
+
+    rows: list[OrderedDict[str, Any]] = []
+    with path.open("r", encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream)
+        if not reader.fieldnames:
+            raise ValueError(
+                f"Le fichier CSV '{path}' ne contient pas d'en-têtes exploitables."
+            )
+
+        ordered_fields = list(reader.fieldnames)
+        for csv_row in reader:
+            if not any(csv_row.values()):
+                continue
+            ordered = OrderedDict()
+            for field in ordered_fields:
+                if field is None:
+                    continue
+                raw_value = (csv_row.get(field) or "").strip()
+                if raw_value == "":
+                    raise ValueError(
+                        f"La colonne '{field}' contient une valeur vide dans le fichier '{path}'."
+                    )
+                try:
+                    parsed_value = yaml.safe_load(raw_value)
+                except yaml.YAMLError as exc:
+                    raise ValueError(
+                        f"Valeur YAML invalide dans le fichier '{path}' pour la colonne '{field}': {exc}"
+                    ) from exc
+                ordered[field] = parsed_value
+            rows.append(ordered)
+
+    if not rows:
+        raise ValueError(f"Aucune combinaison n'a été trouvée dans '{path}'.")
+
+    return rows
+
+
+def _format_sweep_identifier(key: str, value: Any) -> str:
+    alias = _SWEEP_KEY_ALIASES.get(key, key[:1] or key)
+    safe_alias = alias.upper()
+    safe_value = str(value).replace(" ", "").replace("/", "-")
+    safe_value = safe_value.replace(".", "p")
+    return f"{safe_alias}{safe_value}"
+
+
+def build_sweep_identifier(parameters: Sequence[Tuple[str, Any]]) -> str:
+    """Construit un identifiant stable pour une combinaison de balayage."""
+
+    segments = [
+        _format_sweep_identifier(key, value)
+        for key, value in parameters
+    ]
+    return "S_" + "_".join(segments)
+
+
+def _coerce_int(value: Any, key: str) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"La valeur '{value}' pour '{key}' ne peut être convertie en entier.") from exc
+
+
+def _compose_sweep_label(parameters: Sequence[Tuple[str, Any]]) -> str:
+    couples = ", ".join(f"{key}={value}" for key, value in parameters)
+    return f"Balayage ({couples})"
+
+
+def _compose_sweep_description(parameters: Sequence[Tuple[str, Any]]) -> str:
+    couples = ", ".join(f"{key}={value}" for key, value in parameters)
+    return (
+        "Scénario généré automatiquement à partir d'une combinaison de balayage "
+        f"avec {couples}."
+    )
+
+
+def generate_sweep_scenarios(
+    combinations: TypingIterable[OrderedDict[str, Any]],
+) -> Dict[str, Any]:
+    """Génère des scénarios à partir des combinaisons de balayage fournies."""
+
+    sweep_scenarios: Dict[str, Any] = {}
+    for combo in combinations:
+        if not combo:
+            continue
+        ordered_items = list(combo.items())
+        if "N" not in combo:
+            raise ValueError(
+                "Chaque combinaison de balayage doit définir une valeur pour 'N'."
+            )
+        if "period" not in combo:
+            raise ValueError(
+                "Chaque combinaison de balayage doit définir une valeur pour 'period'."
+            )
+
+        scenario_id = build_sweep_identifier(ordered_items)
+        label = _compose_sweep_label(ordered_items)
+        description = _compose_sweep_description(ordered_items)
+
+        scenario = _make_scenario(
+            label=label,
+            description=description,
+            N=_coerce_int(combo["N"], "N"),
+            period=_coerce_int(combo["period"], "period"),
+        )
+
+        for key, value in combo.items():
+            if key in {"label", "description", "evaluation"}:
+                continue
+            if key not in {"N", "period"}:
+                scenario[key] = value
+
+        scenario["evaluation"] = _build_evaluation(
+            scenario.get("clusters", {}), scenario.get("methods", {})
+        )
+
+        sweep_scenarios[scenario_id] = scenario
+
+    if not sweep_scenarios:
+        raise ValueError("Aucun scénario de balayage valide n'a été généré.")
+
+    return sweep_scenarios
+
+
+def build_sweep_combinations(
+    sweep_options: Sequence[Tuple[str, list[Any]]]
+) -> list[OrderedDict[str, Any]]:
+    """Produit les combinaisons cartésiennes à partir des options --sweep."""
+
+    if not sweep_options:
+        return []
+
+    keys = [key for key, _ in sweep_options]
+    values_list = [values for _, values in sweep_options]
+
+    combinations: list[OrderedDict[str, Any]] = []
+    for product_values in itertools.product(*values_list):
+        combinations.append(OrderedDict(zip(keys, product_values)))
+
+    return combinations
+
+
 def _ensure_nested_container(container: Dict[str, Any], key: str) -> Dict[str, Any]:
     """Retourne un sous-dictionnaire existant ou en crée un nouveau."""
     value = container.get(key)
@@ -284,6 +470,31 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="clé=valeur",
         help="Définit ou met à jour dynamiquement des paramètres (notation imbriquée supportée).",
     )
+    parser.add_argument(
+        "--sweep",
+        action="append",
+        default=[],
+        metavar="clé=valeurs",
+        help=(
+            "Décrit une dimension de balayage, par exemple --sweep N=60,120. "
+            "Peut être répété pour créer une grille cartésienne."
+        ),
+    )
+    parser.add_argument(
+        "--sweep-csv",
+        action="append",
+        type=Path,
+        default=[],
+        metavar="fichier",
+        help="Charge des combinaisons explicites depuis un fichier CSV (en-têtes requis).",
+    )
+    parser.add_argument(
+        "--sweep-out",
+        type=Path,
+        help=(
+            "Chemin de sortie pour les scénarios de balayage générés (par défaut: qos_cli/scenarios_sweep.yaml)."
+        ),
+    )
     return parser
 
 
@@ -310,6 +521,56 @@ def main(args: Iterable[str] | None = None) -> None:
 
     write_scenarios(scenarios, target_path)
     print(f"Scénarios écrits dans {target_path.resolve()}")
+
+    sweep_options: list[Tuple[str, list[Any]]] = []
+    for option in parsed.sweep:
+        try:
+            sweep_options.append(parse_sweep_option(option))
+        except ValueError as exc:
+            parser.error(str(exc))
+
+    sweep_combinations = build_sweep_combinations(sweep_options)
+
+    csv_combinations: list[OrderedDict[str, Any]] = []
+    for csv_path in parsed.sweep_csv:
+        try:
+            csv_combinations.extend(load_sweep_csv(csv_path))
+        except ValueError as exc:
+            parser.error(str(exc))
+
+    all_combinations: list[OrderedDict[str, Any]] = []
+    if sweep_combinations:
+        all_combinations.extend(sweep_combinations)
+    if csv_combinations:
+        all_combinations.extend(csv_combinations)
+
+    if all_combinations:
+        try:
+            sweep_scenarios = generate_sweep_scenarios(all_combinations)
+        except ValueError as exc:
+            parser.error(str(exc))
+
+        base_common = {}
+        if isinstance(scenarios, Mapping):
+            raw_common = scenarios.get("common")
+            if isinstance(raw_common, Mapping):
+                base_common = copy.deepcopy(raw_common)
+
+        sweep_data = {
+            "common": base_common,
+            "scenarios": sweep_scenarios,
+        }
+
+        sweep_path = parsed.sweep_out or DEFAULT_SWEEP_PATH
+        write_scenarios(sweep_data, sweep_path)
+
+        print("Balayage généré avec les combinaisons suivantes :")
+        for combo in all_combinations:
+            ordered_items = list(combo.items())
+            scenario_id = build_sweep_identifier(ordered_items)
+            summary = ", ".join(f"{key}={value}" for key, value in ordered_items)
+            print(f"  - {scenario_id}: {summary}")
+        print(f"Scénarios de balayage écrits dans {sweep_path.resolve()}")
 
 
 if __name__ == "__main__":  # pragma: no cover - exécution CLI directe
