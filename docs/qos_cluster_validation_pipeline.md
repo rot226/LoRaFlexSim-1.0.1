@@ -112,11 +112,49 @@ Après chaque campagne :
    - DER, débit et énergie (`der_*.png`, `throughput_*.png`, `energy_*.png`)
    - Histogrammes SNIR et SF (`snr_cdf_max_load.png`, `sf_histogram_max_load.png`)
    - Heatmap SF×canal (`heatmap_sf_channel_*.png`)
+   - Nuages de points corrélés (`scatter_*.png` si généré via `lfs_plots_scatter.py`)
 4. Comparer MixRA-H et MixRA-Opt ; consigner toute violation de PDR dans le
    rapport Markdown.
 
 En cas d'écart, relancer le scénario incriminé en réduisant le preset ou en
 utilisant `--node-counts`/`--tx-periods` pour isoler la combinaison fautive.
+
+## 7. Corrélations QoS (nuages de points)
+
+Les métriques agrégées exposent désormais plusieurs indicateurs dérivés :
+
+- **`pdr_gap_by_cluster`** : écart entre le PDR mesuré et la cible déclarée pour chaque cluster.
+- **`collision_rate`** : collisions montantes normalisées par le nombre total de tentatives (`collisions ÷ attempted`).
+- **`energy_per_delivery`** et **`energy_per_attempt`** : coût énergétique moyen par paquet délivré ou tenté.
+- **`loss_rate`** : proportion de transmissions perdues (1 − DER global).
+
+Le module `qos_cli/lfs_plots_scatter.py` exploite ces valeurs pour générer des
+nuages de points et courbes paramétriques. Exemple :
+
+```bash
+python -m qos_cli.lfs_plots_scatter --in results/qos_clusters/baseline \
+    --config qos_cli/scenarios.yaml --x energy_per_delivery --y pdr_global \
+    --color collision_rate --connect --annotate
+```
+
+### Lecture rapide
+
+- **Axes en anglais** : la CLI normalise les libellés pour un usage direct dans
+  les rapports ou présentations bilingues.
+- **Lignes de tolérance** : une ligne rouge est ajoutée aux axes PDR/DER (cible
+  minimale détectée) ainsi qu'aux taux de collision/perte (repères 5 % et 10 %).
+- **Couleur optionnelle** : le paramètre `--color` ajoute une échelle continue
+  (ex. `collision_rate`). Les valeurs manquantes restent tracées mais un
+  message `[WARN]` est affiché dans la console.
+- **Paramétrisation** : `--connect` relie les scénarios d'une même méthode dans
+  l'ordre défini par `scenarios.yaml`, `--annotate` ajoute l'identifiant du
+  scénario à proximité de chaque point.
+
+Interprétez ces graphiques en recherchant des points combinant un PDR élevé
+et un coût énergétique réduit. Les points situés sous la ligne `Gap = 0`
+(métrique `pdr_gap_by_cluster:<id>`) signalent des clusters en défaut de QoS et
+doivent déclencher une enquête ciblée (paramètres radio, taux de collisions,
+équité entre nœuds).
 
 ---
 

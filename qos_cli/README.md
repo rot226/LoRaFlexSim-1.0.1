@@ -49,6 +49,13 @@ La commande `python -m qos_cli.lfs_run` exécute directement une simulation LoRa
    ```
    Le script crée, pour chaque méthode, des heatmaps du PDR global, du DER et de l’écart à la cible dans le dossier de sortie (fichiers `pdr_heatmap_<méthode>.png`, `der_heatmap_<méthode>.png`, `target_gap_heatmap_<méthode>.png`).
 
+   Pour explorer les corrélations entre métriques (ex. énergie vs PDR, collisions vs indice de Jain), un nouveau module permet de générer des nuages de points paramétrables :
+   ```bash
+   python -m qos_cli.lfs_plots_scatter --in results/ --config qos_cli/scenarios.yaml \
+       --x energy_per_delivery --y pdr_global --color collision_rate --connect --annotate
+   ```
+   Les options `--x`, `--y` et `--color` acceptent toute métrique numérique (y compris `cluster_pdr:<id>` ou `pdr_gap_by_cluster:<id>`). Les lignes de tolérance sont automatiquement ajoutées pour les axes PDR et collision, et des avertissements `[WARN]` signalent les données manquantes.
+
 5. **Générer le rapport**
    ```bash
    python qos_cli/lfs_report.py --in results/ --summary qos_cli/SUMMARY.txt
@@ -66,4 +73,5 @@ La commande `python -m qos_cli.lfs_run` exécute directement une simulation LoRa
 - Agrégation des métriques : `python qos_cli/lfs_metrics.py --in results/ --config qos_cli/scenarios.yaml`
 - Production des graphiques : `python qos_cli/lfs_plots.py --in results/ --config qos_cli/scenarios.yaml`
 - Cartes de chaleur des performances : `python -m qos_cli.lfs_plots_surfaces --in results/ --config qos_cli/scenarios.yaml --out qos_cli/figures`
+- Nuages de points corrélés : `python -m qos_cli.lfs_plots_scatter --in results/ --config qos_cli/scenarios.yaml --x … --y …`
 - Génération du rapport : `python qos_cli/lfs_report.py --in results/ --summary qos_cli/SUMMARY.txt`
