@@ -579,7 +579,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             raise FileNotFoundError(f"Fichier de configuration introuvable : {config_path}")
         scenarios_cfg = load_yaml_config(config_path)
 
-    all_metrics = load_all_metrics(metrics_root)
+    all_metrics = load_all_metrics(metrics_root, scenarios_cfg)
     if not all_metrics:
         raise RuntimeError("Aucune métrique détectée – vérifiez la structure des résultats.")
 

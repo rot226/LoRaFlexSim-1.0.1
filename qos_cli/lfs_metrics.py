@@ -34,7 +34,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, MutableMapping, Optional, Tuple
 
 import pandas as pd
 import yaml
@@ -49,13 +49,19 @@ class MethodScenarioMetrics:
     delivered: int
     attempted: int
     cluster_pdr: Dict[str, float]
+    cluster_targets: Dict[str, float]
+    pdr_gap_by_cluster: Dict[str, float]
     pdr_global: Optional[float]
     der_global: Optional[float]
     collisions: Optional[int]
+    collision_rate: Optional[float]
     snir_cdf: List[Tuple[float, float]]
     energy_j: Optional[float]
+    energy_per_delivery: Optional[float]
+    energy_per_attempt: Optional[float]
     jain_index: Optional[float]
     min_sf_share: Optional[float]
+    loss_rate: Optional[float]
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -320,7 +326,27 @@ def compute_min_sf_share(nodes_df: Optional[pd.DataFrame]) -> Optional[float]:
     return float(share)
 
 
-def load_metrics_for_method_scenario(root: Path, method: str, scenario: str) -> MethodScenarioMetrics:
+def _format_cluster_targets(
+    cluster_targets: Optional[Mapping[str, object]]
+) -> Dict[str, float]:
+    formatted: Dict[str, float] = {}
+    if not isinstance(cluster_targets, Mapping):
+        return formatted
+    for cluster, target in cluster_targets.items():
+        try:
+            formatted[str(cluster)] = float(target)
+        except (TypeError, ValueError):
+            continue
+    return formatted
+
+
+def load_metrics_for_method_scenario(
+    root: Path,
+    method: str,
+    scenario: str,
+    *,
+    cluster_targets: Optional[Mapping[str, object]] = None,
+) -> MethodScenarioMetrics:
     scenario_dir = root / method / scenario
     packets_df = read_dataframe(scenario_dir / "packets.csv")
     nodes_df = read_dataframe(scenario_dir / "nodes.csv")
@@ -333,27 +359,68 @@ def load_metrics_for_method_scenario(root: Path, method: str, scenario: str) -> 
     jain_index = compute_jain_index(packets_df)
     min_sf_share = compute_min_sf_share(nodes_df)
 
+    formatted_targets = _format_cluster_targets(cluster_targets)
+    pdr_gap_by_cluster: Dict[str, float] = {}
+    for cluster, target in formatted_targets.items():
+        actual = cluster_pdr.get(cluster)
+        if actual is None or math.isnan(actual):
+            continue
+        pdr_gap_by_cluster[cluster] = float(actual - target)
+
+    collision_rate: Optional[float] = None
+    if collisions is not None and attempted > 0:
+        collision_rate = float(collisions / attempted)
+
+    energy_per_delivery: Optional[float] = None
+    if energy_j is not None and delivered > 0:
+        energy_per_delivery = float(energy_j / delivered)
+
+    energy_per_attempt: Optional[float] = None
+    if energy_j is not None and attempted > 0:
+        energy_per_attempt = float(energy_j / attempted)
+
+    loss_rate: Optional[float] = None
+    if der_global is not None:
+        loss_rate = float(max(0.0, 1.0 - der_global))
+
     return MethodScenarioMetrics(
         method=method,
         scenario=scenario,
         delivered=delivered,
         attempted=attempted,
         cluster_pdr=cluster_pdr,
+        cluster_targets=formatted_targets,
+        pdr_gap_by_cluster=pdr_gap_by_cluster,
         pdr_global=pdr_global,
         der_global=der_global,
         collisions=collisions,
+        collision_rate=collision_rate,
         snir_cdf=snir_cdf,
         energy_j=energy_j,
+        energy_per_delivery=energy_per_delivery,
+        energy_per_attempt=energy_per_attempt,
         jain_index=jain_index,
         min_sf_share=min_sf_share,
+        loss_rate=loss_rate,
     )
 
 
-def load_all_metrics(root: Path) -> Dict[Tuple[str, str], MethodScenarioMetrics]:
+def load_all_metrics(
+    root: Path,
+    scenarios_cfg: Optional[Mapping[str, Mapping[str, object]]] = None,
+) -> Dict[Tuple[str, str], MethodScenarioMetrics]:
     metrics: Dict[Tuple[str, str], MethodScenarioMetrics] = {}
     for method in discover_methods(root):
         for scenario in discover_scenarios_for_method(root, method):
-            metrics[(method, scenario)] = load_metrics_for_method_scenario(root, method, scenario)
+            scenario_cfg: Optional[Mapping[str, object]] = None
+            if scenarios_cfg is not None:
+                scenario_cfg = scenarios_cfg.get(scenario)
+            metrics[(method, scenario)] = load_metrics_for_method_scenario(
+                root,
+                method,
+                scenario,
+                cluster_targets=cluster_targets_from_config(scenario_cfg),
+            )
     return metrics
 
 
@@ -371,6 +438,35 @@ def _cluster_targets_from_clusters(scenario_cfg: Mapping[str, object]) -> Dict[s
     return targets
 
 
+def cluster_targets_from_config(
+    scenario_cfg: Optional[Mapping[str, object]]
+) -> Dict[str, float]:
+    """Extrait les cibles PDR associées à un scénario de configuration."""
+
+    if not isinstance(scenario_cfg, Mapping):
+        return {}
+
+    evaluation_cfg = scenario_cfg.get("evaluation")
+    cluster_targets: MutableMapping[str, float] = {}
+    if isinstance(evaluation_cfg, Mapping):
+        raw_cluster_targets = evaluation_cfg.get("cluster_targets")
+        if isinstance(raw_cluster_targets, Mapping):
+            for cluster, target in raw_cluster_targets.items():
+                try:
+                    cluster_targets[str(cluster)] = float(target)
+                except (TypeError, ValueError):
+                    continue
+
+    if not cluster_targets:
+        for cluster, target in _cluster_targets_from_clusters(scenario_cfg).items():
+            try:
+                cluster_targets[str(cluster)] = float(target)
+            except (TypeError, ValueError):
+                continue
+
+    return dict(cluster_targets)
+
+
 def evaluate_pass_fail(
     scenario_id: str,
     scenario_cfg: Mapping[str, object],
@@ -381,15 +477,7 @@ def evaluate_pass_fail(
     evaluation_cfg = scenario_cfg.get("evaluation", {}) if isinstance(scenario_cfg, Mapping) else {}
     mixra_method = evaluation_cfg.get("mixra_method", "MixRA")
     baselines = evaluation_cfg.get("baselines", [])
-    if "cluster_targets" in evaluation_cfg:
-        raw_cluster_targets = evaluation_cfg.get("cluster_targets", {})
-        cluster_targets = (
-            {str(cluster): target for cluster, target in raw_cluster_targets.items()}
-            if isinstance(raw_cluster_targets, Mapping)
-            else {}
-        )
-    else:
-        cluster_targets = _cluster_targets_from_clusters(scenario_cfg)
+    cluster_targets = cluster_targets_from_config(scenario_cfg)
 
     comments: List[str] = []
     verdict = "INCONNU"
@@ -483,10 +571,20 @@ def format_metrics(metrics: MethodScenarioMetrics) -> str:
     )
     energy = "N/A" if metrics.energy_j is None else f"{metrics.energy_j:.3f} J"
     collision = "N/A" if metrics.collisions is None else str(metrics.collisions)
+    collision_rate = fmt(metrics.collision_rate)
+    energy_per_delivery = (
+        "N/A" if metrics.energy_per_delivery is None else f"{metrics.energy_per_delivery:.3f} J/msg"
+    )
+    gap_min = (
+        "N/A"
+        if not metrics.pdr_gap_by_cluster
+        else f"{min(metrics.pdr_gap_by_cluster.values()):+.3f}"
+    )
 
     return (
         f"PDR={fmt(metrics.pdr_global)} | DER={fmt(metrics.der_global)} | "
-        f"Collisions={collision} | Jain={fmt(metrics.jain_index)} | Energie={energy} | "
+        f"Collisions={collision} (rate={collision_rate}) | Jain={fmt(metrics.jain_index)} | "
+        f"Energie={energy} (per delivery={energy_per_delivery}) | GapMin={gap_min} | "
         f"SFmin={sf_percentage}"
     )
 
@@ -531,7 +629,7 @@ def write_summary(
 def main(argv: Optional[Sequence[str]] = None) -> None:
     args = parse_args(argv)
     scenarios_cfg = load_yaml_config(args.config)
-    all_metrics = load_all_metrics(args.root)
+    all_metrics = load_all_metrics(args.root, scenarios_cfg)
     write_summary(args.summary, scenarios_cfg, all_metrics)
 
 

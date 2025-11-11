@@ -6,7 +6,7 @@ import argparse
 import math
 import re
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,12 +14,14 @@ import numpy as np
 try:  # pragma: no cover - dépend du mode d'exécution
     from .lfs_metrics import (
         MethodScenarioMetrics,
+        cluster_targets_from_config,
         load_all_metrics,
         load_yaml_config,
     )
 except ImportError:  # pragma: no cover - fallback pour exécution directe
     from lfs_metrics import (  # type: ignore
         MethodScenarioMetrics,
+        cluster_targets_from_config,
         load_all_metrics,
         load_yaml_config,
     )
@@ -88,39 +90,33 @@ def _scenario_parameters(
             params[scenario] = scenario_params
     return params
 
-
-def _cluster_targets_from_config(scenario_cfg: Mapping[str, object]) -> Dict[str, float]:
-    evaluation = scenario_cfg.get("evaluation") if isinstance(scenario_cfg, Mapping) else None
-    cluster_targets: MutableMapping[str, float] = {}
-    if isinstance(evaluation, Mapping):
-        raw_targets = evaluation.get("cluster_targets")
-        if isinstance(raw_targets, Mapping):
-            for cluster, value in raw_targets.items():
-                if isinstance(value, (int, float)):
-                    cluster_targets[str(cluster)] = float(value)
-    clusters = scenario_cfg.get("clusters") if isinstance(scenario_cfg, Mapping) else None
-    if isinstance(clusters, Mapping):
-        for cluster, cluster_cfg in clusters.items():
-            if not isinstance(cluster_cfg, Mapping):
-                continue
-            target = cluster_cfg.get("target_pdr")
-            if isinstance(target, (int, float)):
-                cluster_targets.setdefault(str(cluster), float(target))
-    return dict(cluster_targets)
-
-
 def _target_gap(
     metrics: MethodScenarioMetrics,
     scenario_cfg: Optional[Mapping[str, object]],
 ) -> float:
+    if metrics.pdr_gap_by_cluster:
+        return min(metrics.pdr_gap_by_cluster.values())
+
+    if metrics.cluster_targets:
+        gaps: List[float] = []
+        for cluster, target in metrics.cluster_targets.items():
+            actual = metrics.cluster_pdr.get(cluster)
+            if actual is None:
+                continue
+            gaps.append(float(actual) - target)
+        if gaps:
+            return min(gaps)
+
     if scenario_cfg is None:
         return float("nan")
-    cluster_targets = _cluster_targets_from_config(scenario_cfg)
+
+    cluster_targets = cluster_targets_from_config(scenario_cfg)
     if not cluster_targets:
         return float("nan")
+
     gaps: List[float] = []
     for cluster, target in cluster_targets.items():
-        actual = metrics.cluster_pdr.get(str(cluster))
+        actual = metrics.cluster_pdr.get(cluster)
         if actual is None:
             continue
         gaps.append(float(actual) - target)
@@ -250,7 +246,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     args.out.mkdir(parents=True, exist_ok=True)
 
     scenarios_cfg = load_yaml_config(args.config)
-    all_metrics = load_all_metrics(args.root)
+    all_metrics = load_all_metrics(args.root, scenarios_cfg)
     metrics_by_method = _group_metrics_by_method(all_metrics)
 
     available_scenarios = {scenario for _, scenario in all_metrics.keys()}
