@@ -1,3 +1,48 @@
+# ===============================================================
+# Guide d'exécution manuelle des scénarios MixRA pour Windows.
+#
+# 1. Ouvrir PowerShell ou CMD dans le répertoire racine du projet.
+# 2. Copier-coller les commandes ci-dessous, une par une, pour lancer
+#    les simulations manuellement : aucune ligne n'est exécutée automatiquement.
+# 3. Pour automatiser, recopier ces lignes dans un fichier .bat ou .ps1,
+#    puis exécuter ce script selon vos besoins.
+# 4. Adapter les chemins si nécessaire (par exemple créer le dossier results).
+#
+# Commandes prêtes à l'emploi regroupées par scénario :
+# Scénario S_N50_T300 :
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N50_T300 --method MixRA_Opt --seed 42 --duration 86400 --out results/MixRA_Opt/S_N50_T300/
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N50_T300 --method MixRA_H --seed 42 --duration 86400 --out results/MixRA_H/S_N50_T300/
+#
+# Scénario S_N50_T60 :
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N50_T60 --method MixRA_Opt --seed 42 --duration 86400 --out results/MixRA_Opt/S_N50_T60/
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N50_T60 --method MixRA_H --seed 42 --duration 86400 --out results/MixRA_H/S_N50_T60/
+#
+# Scénario S_N100_T300 :
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N100_T300 --method MixRA_Opt --seed 42 --duration 86400 --out results/MixRA_Opt/S_N100_T300/
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N100_T300 --method MixRA_H --seed 42 --duration 86400 --out results/MixRA_H/S_N100_T300/
+#
+# Scénario S_N100_T60 :
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N100_T60 --method MixRA_Opt --seed 42 --duration 86400 --out results/MixRA_Opt/S_N100_T60/
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N100_T60 --method MixRA_H --seed 42 --duration 86400 --out results/MixRA_H/S_N100_T60/
+#
+# Scénario S_N150_T300 :
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N150_T300 --method MixRA_Opt --seed 42 --duration 86400 --out results/MixRA_Opt/S_N150_T300/
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N150_T300 --method MixRA_H --seed 42 --duration 86400 --out results/MixRA_H/S_N150_T300/
+#
+# Scénario S_N150_T60 :
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N150_T60 --method MixRA_Opt --seed 42 --duration 86400 --out results/MixRA_Opt/S_N150_T60/
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N150_T60 --method MixRA_H --seed 42 --duration 86400 --out results/MixRA_H/S_N150_T60/
+#
+# Scénario S_N200_T300 :
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N200_T300 --method MixRA_Opt --seed 42 --duration 86400 --out results/MixRA_Opt/S_N200_T300/
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N200_T300 --method MixRA_H --seed 42 --duration 86400 --out results/MixRA_H/S_N200_T300/
+#
+# Scénario S_N200_T60 :
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N200_T60 --method MixRA_Opt --seed 42 --duration 86400 --out results/MixRA_Opt/S_N200_T60/
+#   python -m qos_cli.lfs_run --config qos_cli/scenarios_small.yaml --scenario S_N200_T60 --method MixRA_H --seed 42 --duration 86400 --out results/MixRA_H/S_N200_T60/
+#
+# ===============================================================
+
 common:
   gateway:
     id: GW0
