@@ -157,10 +157,21 @@ class QoSManager:
         self._last_assignments: dict[int, tuple[int, int]] = {}
 
     # --- Interface publique -------------------------------------------------
-    def apply(self, simulator, algorithm: str) -> None:
+    def apply(
+        self,
+        simulator,
+        algorithm: str,
+        *,
+        use_snir: bool | None = None,
+        inter_sf_coupling: float | None = None,
+        capture_thresholds: Sequence[float] | None = None,
+    ) -> None:
         """Active ``algorithm`` sur ``simulator``.
 
         ``algorithm`` doit correspondre à une clé de :data:`QOS_ALGORITHMS`.
+        Les paramètres optionnels permettent d'ajuster le modèle radio (SNIR,
+        couplage inter-SF, seuils de capture) sans modifier le reste du
+        simulateur.
         """
 
         if algorithm not in QOS_ALGORITHMS:
@@ -171,6 +182,12 @@ class QoSManager:
             raise ValueError(f"Implémentation manquante pour {algorithm}")
         if self.clusters and self._should_refresh_context(simulator):
             self._update_qos_context(simulator)
+        self._configure_radio_model(
+            simulator,
+            use_snir=use_snir,
+            inter_sf_coupling=inter_sf_coupling,
+            capture_thresholds=capture_thresholds,
+        )
         setattr(simulator, "qos_manager", self)
         if not getattr(simulator, "nodes", None):
             # Rien à faire si aucun nœud n'est présent.
@@ -304,6 +321,55 @@ class QoSManager:
         step = 2.0
         power = base + sf_index * step
         return max(2.0, min(20.0, power))
+
+    @staticmethod
+    def _normalize_capture_thresholds(
+        capture_thresholds: Sequence[float] | None,
+    ) -> float | dict[int, float] | None:
+        if capture_thresholds is None:
+            return None
+        values = [float(value) for value in capture_thresholds if value is not None]
+        if not values:
+            return None
+        if any(not math.isfinite(value) for value in values):
+            raise ValueError("Les seuils de capture doivent être finis.")
+        if len(values) == 1:
+            return values[0]
+        return {sf: values[idx] for idx, sf in enumerate(range(7, 7 + len(values)))}
+
+    def _configure_radio_model(
+        self,
+        simulator,
+        *,
+        use_snir: bool | None,
+        inter_sf_coupling: float | None,
+        capture_thresholds: Sequence[float] | None,
+    ) -> None:
+        if simulator is None:
+            return
+        channels: list[object] = []
+        base_channel = getattr(simulator, "channel", None)
+        if base_channel is not None:
+            channels.append(base_channel)
+        multichannel = getattr(simulator, "multichannel", None)
+        if multichannel is not None:
+            channels.extend(getattr(multichannel, "channels", []) or [])
+        if not channels:
+            return
+
+        threshold_value = self._normalize_capture_thresholds(capture_thresholds)
+        for channel in channels:
+            if use_snir is not None:
+                channel.use_snir = bool(use_snir)
+            if inter_sf_coupling is not None:
+                coupling = float(inter_sf_coupling)
+                channel.alpha_isf = coupling
+                channel.orthogonal_sf = coupling <= 0.0
+            if threshold_value is not None:
+                if isinstance(threshold_value, dict) and str(getattr(channel, "phy_model", "")).startswith("omnet"):
+                    channel.capture_threshold_dB = float(next(iter(threshold_value.values())))
+                else:
+                    channel.capture_threshold_dB = threshold_value
 
     # --- Calculs QoS -------------------------------------------------------
     def _update_qos_context(self, simulator) -> None:
