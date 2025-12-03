@@ -15,6 +15,12 @@ définies dans la classe `SimulatorUI`.
 2. Passez la valeur au constructeur de `Simulator` dans `launch_sim`.
 3. Mettez à jour `update_metrics` pour afficher la métrique associée.
 
+Les paramètres radio QoS (activation SNIR, couplage inter-SF, seuils de capture)
+suivent déjà cette logique : ils sont instanciés dans `dashboard.py` mais
+restent masqués et ignorés tant que le toggle `qos_toggle` est désactivé pour
+préserver le modèle ADR historique. Une fois le QoS activé, ces valeurs sont
+transmises à `qos_manager.apply`. 【F:loraflexsim/launcher/dashboard.py†L229-L764】【F:loraflexsim/launcher/dashboard.py†L1467-L1537】
+
 Les fonctions existantes illustrent chaque étape en détail.
 
 ## Intégrer un module personnalisé
