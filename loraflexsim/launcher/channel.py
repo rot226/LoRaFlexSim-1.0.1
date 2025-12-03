@@ -212,6 +212,7 @@ class Channel:
         impulsive_noise_prob: float = 0.0,
         impulsive_noise_dB: float = 0.0,
         adjacent_interference_dB: float = 0.0,
+        use_snir: bool = True,
         use_flora_curves: bool = False,
         tx_current_a: float = 0.0,
         rx_current_a: float = 0.0,
@@ -328,6 +329,9 @@ class Channel:
         :param impulsive_noise_dB: Amplitude du bruit impulsif ajouté (dB).
         :param adjacent_interference_dB: Pénalité appliquée aux brouilleurs sur
             un canal adjacent (dB).
+        :param use_snir: Si ``True``, applique le calcul SNIR en tenant compte
+            des interférences explicites. Sinon, le calcul SNR historique est
+            conservé.
         :param environment: Chaîne optionnelle pour charger un preset
             ("urban", "suburban", "rural", "rural_long_range", "flora",
             "flora_hata" ou "flora_oulu").
@@ -503,6 +507,7 @@ class Channel:
         self.advanced_capture = advanced_capture
         self.flora_capture = flora_capture
         self.phy_model = phy_model
+        self.use_snir = use_snir
         if (
             self.energy_detection_dBm == -float("inf")
             and (
@@ -533,6 +538,7 @@ class Channel:
         self.last_rssi_dBm = 0.0
         self.last_noise_dBm = float("nan")
         self.last_filter_att_dB = 0.0
+        self.last_interference_mW = 0.0
         # Track the effective carrier after oscillator drift.
         self.last_freq_hz = self.frequency_hz
 
@@ -878,6 +884,52 @@ class Channel:
         self.last_rssi_dBm = rssi
         self.last_filter_att_dB = attenuation
         return rssi, snr
+
+    def compute_snir(
+        self,
+        tx_power_dBm: float,
+        distance: float,
+        sf: int | None,
+        interferers_mW: float | list[float] | tuple[float, ...] | np.ndarray,
+        *,
+        rssi_dBm: float | None = None,
+        snr_dB: float | None = None,
+        noise_dBm: float | None = None,
+        **kwargs,
+    ) -> tuple[float, float, float, float]:
+        """Calcule RSSI, SNR, SNIR et bruit pour un lien.
+
+        ``interferers_mW`` peut être un scalaire ou une collection; seules les
+        valeurs positives sont prises en compte. Lorsque ``rssi_dBm`` et
+        ``snr_dB`` sont fournis, le RSSI/SNR n'est pas recalculé et ``kwargs``
+        est ignoré, ce qui permet de réutiliser un calcul préalable.
+        """
+
+        interference_mW: float
+        if isinstance(interferers_mW, (list, tuple, np.ndarray)):
+            interference_mW = float(sum(max(v, 0.0) for v in interferers_mW))
+        else:
+            interference_mW = max(float(interferers_mW), 0.0)
+
+        if rssi_dBm is None or snr_dB is None or noise_dBm is None:
+            rssi_dBm, snr_dB = self.compute_rssi(
+                tx_power_dBm, distance, sf, **kwargs,
+            )
+            noise_dBm = self.last_noise_dBm
+        else:
+            self.last_rssi_dBm = rssi_dBm
+            self.last_noise_dBm = noise_dBm
+
+        self.last_interference_mW = interference_mW
+        noise_mW = 10 ** (noise_dBm / 10.0)
+        signal_mW = 10 ** (rssi_dBm / 10.0)
+        total_noise = noise_mW + interference_mW
+        if total_noise <= 0.0:
+            snir_dB = float("inf")
+        else:
+            snir_dB = 10 * math.log10(signal_mW / total_noise)
+
+        return rssi_dBm, snr_dB, snir_dB, noise_dBm
 
     # ------------------------------------------------------------------
     def qos_path_gain(self, distance: float) -> float:
