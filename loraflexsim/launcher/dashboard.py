@@ -256,12 +256,32 @@ def _parse_capture_thresholds(raw_value: str) -> list[float] | None:
 def _qos_radio_kwargs() -> dict:
     """Construit les options radio à transmettre au gestionnaire QoS."""
 
-    capture_thresholds = _parse_capture_thresholds(qos_capture_thresholds)
+    try:
+        capture_thresholds = _parse_capture_thresholds(qos_capture_thresholds)
+    except ValueError as exc:  # pragma: no cover - validation utilisateur
+        export_message.object = f"⚠️ {exc}"
+        raise
     return {
         "use_snir": bool(qos_snir_enabled),
         "inter_sf_coupling": float(qos_inter_sf_coupling),
         "capture_thresholds": capture_thresholds,
     }
+
+
+def _restore_default_radio_model() -> None:
+    """Désactive le modèle SNIR/captures pour revenir au profil ADR standard."""
+
+    if sim is None:
+        return
+
+    qos_manager._configure_radio_model(  # type: ignore[attr-defined]
+        sim,
+        use_snir=False,
+        inter_sf_coupling=0.0,
+        capture_thresholds=[6.0],
+    )
+    setattr(sim, "qos_active", False)
+    setattr(sim, "qos_algorithm", None)
 
 
 # --- Widgets de configuration ---
@@ -1432,7 +1452,10 @@ manual_pos_toggle.param.watch(on_manual_toggle, "value")
 
 # --- Gestion du QoS ---
 def _apply_qos_if_running() -> None:
-    if sim is not None and qos_toggle.value:
+    if sim is None:
+        return
+
+    if qos_toggle.value:
         try:
             _configure_qos_clusters_from_widgets()
             qos_kwargs = _qos_radio_kwargs()
@@ -1443,6 +1466,8 @@ def _apply_qos_if_running() -> None:
             qos_manager.apply(sim, qos_algorithm_select.value, **qos_kwargs)
         except ValueError as exc:  # pragma: no cover - sécurité supplémentaire
             export_message.object = f"⚠️ {exc}"
+    else:
+        _restore_default_radio_model()
 
 
 def on_qos_toggle(event) -> None:
@@ -1476,6 +1501,7 @@ def on_qos_toggle(event) -> None:
         adr_select.disabled = False
         adr_node_checkbox.disabled = False
         adr_server_checkbox.disabled = False
+        _apply_qos_if_running()
         module = ADR_MODULES[last_selected_adr_name]
         select_adr(module, last_selected_adr_name)
         qos_snir_toggle.visible = False
