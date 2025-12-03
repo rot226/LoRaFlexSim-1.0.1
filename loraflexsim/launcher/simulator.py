@@ -1266,6 +1266,7 @@ class Simulator:
             best_rssi = None
             # Propagation du paquet vers chaque passerelle
             best_snr = None
+            best_snir = None
             for gw in self.gateways:
                 distance = node.distance_to(gw)
                 kwargs = {
@@ -1308,10 +1309,24 @@ class Simulator:
                 )
                 if avg_noise <= 0.0:
                     avg_noise = noise_lin
-                signal_lin = 10 ** (rssi / 10.0)
-                snr = 10 * math.log10(signal_lin / avg_noise)
+                interference_mw = max(avg_noise - noise_lin, 0.0)
+                node.channel.last_interference_mW = interference_mw
+                if node.channel.use_snir:
+                    rssi, snr, snir, noise_dBm = node.channel.compute_snir(
+                        tx_power,
+                        distance,
+                        sf,
+                        interference_mw,
+                        rssi_dBm=rssi,
+                        snr_dB=snr,
+                        noise_dBm=noise_dBm,
+                        **kwargs,
+                    )
+                    snr_effective = snir
+                else:
+                    snr_effective = snr
                 rssi += getattr(gw, "rx_gain_dB", 0.0)
-                snr += getattr(gw, "rx_gain_dB", 0.0)
+                snr_effective += getattr(gw, "rx_gain_dB", 0.0)
                 energy_threshold = max(
                     node.channel.energy_detection_dBm,
                     getattr(gw, "energy_detection_dBm", -float("inf")),
@@ -1334,13 +1349,15 @@ class Simulator:
                         node.channel.sensitivity_dBm.get(sf, -float("inf"))
                         - noise_dBm
                     )
-                    if snr < snr_threshold:
+                    if snr_effective < snr_threshold:
                         continue  # signal trop faible pour être reçu
                 heard_by_any = True
                 if best_rssi is None or rssi > best_rssi:
                     best_rssi = rssi
                 if best_snr is None or snr > best_snr:
                     best_snr = snr
+                if best_snir is None or snr_effective > best_snir:
+                    best_snir = snr_effective
                 # Démarrer la réception à la passerelle (gestion des collisions et capture)
                 if self.capture_mode is not None:
                     capture_mode = self.capture_mode
@@ -1384,7 +1401,8 @@ class Simulator:
 
             # Retenir le meilleur RSSI/SNR mesuré pour cette transmission
             node.last_rssi = best_rssi if heard_by_any else None
-            node.last_snr = best_snr if heard_by_any else None
+            quality_metric = best_snir if best_snir is not None else best_snr
+            node.last_snr = quality_metric if heard_by_any else None
             # Planifier l'événement de fin de transmission correspondant
             end_time = self._quantize(end_time)
             self._push_event(end_time, EventType.TX_END, event_id, node.id)
@@ -1411,6 +1429,7 @@ class Simulator:
                 "heard": heard_by_any,
                 "rssi_dBm": best_rssi,
                 "snr_dB": best_snr,
+                "snir_dB": best_snir,
                 "result": None,
                 "gateway_id": None,
             }

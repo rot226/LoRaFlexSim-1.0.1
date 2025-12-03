@@ -46,13 +46,25 @@ class LoRaPHY:
         """
 
         distance = self.node.distance_to(dest)
-        rssi, snr = self.channel.compute_rssi(
-            self.node.tx_power,
-            distance,
-            self.node.sf,
-            freq_offset_hz=self.node.current_freq_offset,
-            sync_offset_s=self.node.current_sync_offset,
-        )
+        if getattr(self.channel, "use_snir", False):
+            rssi, snr, snir, _ = self.channel.compute_snir(
+                self.node.tx_power,
+                distance,
+                self.node.sf,
+                0.0,
+                freq_offset_hz=self.node.current_freq_offset,
+                sync_offset_s=self.node.current_sync_offset,
+            )
+            snr_metric = snir
+        else:
+            rssi, snr = self.channel.compute_rssi(
+                self.node.tx_power,
+                distance,
+                self.node.sf,
+                freq_offset_hz=self.node.current_freq_offset,
+                sync_offset_s=self.node.current_sync_offset,
+            )
+            snr_metric = snr
         channel = self.channel
         flora_phy = getattr(channel, "flora_phy", None)
         per = None
@@ -70,20 +82,20 @@ class LoRaPHY:
                 if per_model is not None:
                     per_kwargs["per_model"] = per_model
             per = flora_phy.packet_error_rate(
-                snr,
+                snr_metric,
                 self.node.sf,
                 payload_bytes=payload_size,
                 **per_kwargs,
             )
         if per is None and hasattr(channel, "packet_error_rate"):
             per = channel.packet_error_rate(
-                snr, self.node.sf, payload_bytes=payload_size
+                snr_metric, self.node.sf, payload_bytes=payload_size
             )
         if per is None:
             per = 0.0
         rand = rng.random() if rng is not None else random.random()
         success = per < 1.0 and rand >= per
-        return rssi, snr, self.airtime(payload_size), success
+        return rssi, snr_metric, self.airtime(payload_size), success
 
 
 __all__ = ["LoRaPHY"]
