@@ -126,6 +126,7 @@ class Gateway:
         sync_offset: float = 0.0,
         bandwidth: float = 125e3,
         noise_floor: float | None = None,
+        snir: float | None = None,
         capture_mode: str = "basic",
         flora_phy=None,
         orthogonal_sf: bool = True,
@@ -146,6 +147,7 @@ class Gateway:
             transmissions qui ne se chevauchent pas plus longtemps que cette
             valeur ne sont pas considérées comme en collision.
         :param noise_floor: Niveau de bruit pour le calcul du SNR (mode avancé).
+        :param snir: SNIR déjà calculé pour ce paquet (optionnel).
         :param capture_mode: "basic" pour l'ancien comportement, "advanced" pour
             un calcul basé sur le SNR.
         :param flora_phy: Instance ``FloraPHY`` lorsque ``capture_mode`` vaut
@@ -166,6 +168,15 @@ class Gateway:
                 rssi,
             )
             return
+
+        if callable(capture_threshold):
+            threshold_fn = lambda sf_val: float(capture_threshold(sf_val))
+        elif isinstance(capture_threshold, dict):
+            threshold_fn = lambda sf_val: float(
+                capture_threshold.get(sf_val, capture_threshold.get("default", 0.0))
+            )
+        else:
+            threshold_fn = lambda _sf: float(capture_threshold)
 
         key = (sf, frequency)
         symbol_duration = (2 ** sf) / bandwidth
@@ -210,9 +221,10 @@ class Gateway:
             'bandwidth': bandwidth,
             'symbol_duration': symbol_duration,
             'lost_flag': False,
-            'snir': None,
+            'snir': snir,
+            'collision_reason': None,
         }
-        if noise_floor is not None:
+        if new_transmission['snir'] is None and noise_floor is not None:
             new_transmission['snir'] = rssi - noise_floor
         colliders.append(new_transmission)
 
@@ -374,10 +386,11 @@ class Gateway:
         if capture_mode != "flora" and not flora_mode:
             capture = True
             matrix = non_orth_delta if non_orth_delta is not None else FLORA_NON_ORTH_DELTA
+            snir_failure = False
             for t, metric in zip(colliders, metrics):
                 if t is strongest:
                     continue
-                threshold = capture_threshold
+                threshold = threshold_fn(strongest.get('sf', sf))
                 if not orthogonal_sf and matrix is not None:
                     sf_w = strongest.get('sf', sf)
                     sf_i = t.get('sf', sf)
@@ -392,6 +405,18 @@ class Gateway:
                     break
             if capture and not _enough_preamble(strongest, colliders):
                 capture = False
+
+        strongest_snir = strongest.get('snir')
+        if strongest_snir is None and noise_floor is not None:
+            strongest_snir = strongest.get('rssi')
+            if strongest_snir is not None:
+                strongest_snir -= noise_floor
+
+        snir_threshold = threshold_fn(strongest.get('sf', sf))
+        snir_failure = False
+        if strongest_snir is not None and strongest_snir < snir_threshold:
+            snir_failure = True
+            capture = False
 
         if capture:
             # Apply preamble rule: the winning packet must have started
@@ -437,6 +462,8 @@ class Gateway:
             # Aucun signal ne peut être décodé (collision totale)
             for t in colliders:
                 t['lost_flag'] = True
+                if snir_failure:
+                    t['collision_reason'] = "snir_below_threshold"
             # Conserver la nouvelle transmission marquée comme perdue pour bloquer le canal
             self.active_map.setdefault(key, []).append(new_transmission)
             self.active_by_event[event_id] = (key, new_transmission)
@@ -475,6 +502,8 @@ class Gateway:
                     f"Gateway {self.id}: successfully received event {event_id} from node {node_id}."
                 )
             else:
+                if t.get('collision_reason'):
+                    network_server.register_collision_reason(event_id, t['collision_reason'])
                 logger.debug(
                     f"Gateway {self.id}: event {event_id} from node {node_id} was lost and not received."
                 )

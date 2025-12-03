@@ -142,6 +142,7 @@ class Node:
         self.packets_sent = 0
         self.packets_success = 0
         self.packets_collision = 0
+        self.packets_collision_snir = 0
         # Counters used for PDR calculation
         self.tx_attempted = 0
         self.rx_delivered = 0
@@ -373,6 +374,7 @@ class Node:
             "packets_sent": self.packets_sent,
             "packets_success": self.packets_success,
             "packets_collision": self.packets_collision,
+            "packets_collision_snir": self.packets_collision_snir,
             "tx_attempted": self.tx_attempted,
             "rx_delivered": self.rx_delivered,
             "downlink_pending": self.downlink_pending,
@@ -392,9 +394,12 @@ class Node:
         self.packets_success += 1
         self.rx_delivered += 1
 
-    def increment_collision(self):
+    def increment_collision(self, *, snir_limit: bool = False):
         """Incrémente le compteur de paquets perdus en collision."""
+
         self.packets_collision += 1
+        if snir_limit:
+            self.packets_collision_snir += 1
 
     # ------------------------------------------------------------------
     # PDR utilities
