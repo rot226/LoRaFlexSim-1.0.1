@@ -59,6 +59,7 @@ class NetworkServer:
         self.event_gateway = {}
         self.event_snir: dict[int, float] = {}
         self.event_rssi: dict[int, float] = {}
+        self.collision_reasons: dict[int, str] = {}
         # Compteur de paquets reçus
         self.packets_received = 0
         # Nombre de doublons ignorés
@@ -530,6 +531,12 @@ class NetworkServer:
             hook(reason=reason)
         except Exception:  # pragma: no cover - robust logging
             logger.exception("Échec du déclenchement QoS (%s).", reason)
+
+    def register_collision_reason(self, event_id: int, reason: str | None) -> None:
+        """Mémorise la cause d'une collision pour un paquet donné."""
+
+        if reason:
+            self.collision_reasons[event_id] = reason
 
     # ------------------------------------------------------------------
     # Event scheduling helpers

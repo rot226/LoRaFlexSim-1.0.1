@@ -97,6 +97,7 @@ class _PowerTimeline:
         *,
         target_sf: int | None = None,
         alpha_isf: float = 0.0,
+        exclude_event_id: int | None = None,
     ) -> float:
         if end <= start:
             return base_power
@@ -104,7 +105,9 @@ class _PowerTimeline:
         if base_power != 0.0:
             events[start] = events.get(start, 0.0) + base_power
             events[end] = events.get(end, 0.0) - base_power
-        for s, e, p, sf in self._entries.values():
+        for eid, (s, e, p, sf) in self._entries.items():
+            if exclude_event_id is not None and eid == exclude_event_id:
+                continue
             overlap_start = max(start, s)
             overlap_end = min(end, e)
             if overlap_end <= overlap_start:
@@ -129,6 +132,27 @@ class _PowerTimeline:
         if duration <= 0.0:
             return base_power
         return energy / duration
+
+    def total_power(
+        self,
+        start: float,
+        end: float,
+        base_power: float = 0.0,
+        *,
+        target_sf: int | None = None,
+        alpha_isf: float = 0.0,
+        exclude_event_id: int | None = None,
+    ) -> float:
+        """Retourne la puissance moyenne totale sur l'intervalle demandé."""
+
+        return self.average_power(
+            start,
+            end,
+            base_power,
+            target_sf=target_sf,
+            alpha_isf=alpha_isf,
+            exclude_event_id=exclude_event_id,
+        )
 
     def power_changes(
         self,
@@ -204,6 +228,40 @@ class InterferenceTracker:
             target_sf=sf,
             alpha_isf=alpha_isf,
         )
+
+    def total_interference(
+        self,
+        gateway_id: int,
+        frequency: float,
+        sf: int | None,
+        start_time: float,
+        end_time: float,
+        *,
+        base_noise_mW: float = 0.0,
+        alpha_isf: float = 0.0,
+        exclude_event_id: int | None = None,
+    ) -> float:
+        """Calcule l'interférence moyenne (hors bruit) sur l'intervalle donné."""
+
+        key = (gateway_id, frequency)
+        timeline = self.active.get(key)
+        if timeline is None:
+            return 0.0
+
+        timeline.prune(start_time)
+        if timeline.is_empty():
+            self.active.pop(key, None)
+            return 0.0
+
+        total_power = timeline.total_power(
+            start_time,
+            end_time,
+            base_power=base_noise_mW,
+            target_sf=sf,
+            alpha_isf=alpha_isf,
+            exclude_event_id=exclude_event_id,
+        )
+        return max(total_power - base_noise_mW, 0.0)
 
     def power_changes(
         self,
@@ -928,6 +986,7 @@ class Simulator:
         self.packets_sent = 0
         self.packets_delivered = 0
         self.packets_lost_collision = 0
+        self.packets_lost_snir = 0
         self.packets_lost_no_signal = 0
         self.total_energy_J = 0.0
         self.energy_nodes_J = 0.0
@@ -1344,7 +1403,7 @@ class Simulator:
                 noise_dBm = node.channel.last_noise_dBm
                 noise_lin = 10 ** (noise_dBm / 10.0)
                 freq_hz = getattr(node.channel, "last_freq_hz", node.channel.frequency_hz)
-                avg_noise = self._interference_tracker.average_power(
+                interference_mw = self._interference_tracker.total_interference(
                     gw.id,
                     freq_hz,
                     sf,
@@ -1353,27 +1412,16 @@ class Simulator:
                     base_noise_mW=noise_lin,
                     alpha_isf=getattr(node.channel, "alpha_isf", 0.0),
                 )
-                if avg_noise <= 0.0:
-                    avg_noise = noise_lin
-                interference_mw = max(avg_noise - noise_lin, 0.0)
+                if interference_mw < 0.0:
+                    interference_mw = 0.0
+                total_noise_mw = noise_lin + interference_mw
                 node.channel.last_interference_mW = interference_mw
                 node.channel.current_interference_mW = interference_mw
-                if node.channel.use_snir:
-                    rssi, snr, snir, noise_dBm = node.channel.compute_snir(
-                        tx_power,
-                        distance,
-                        sf,
-                        interference_mw,
-                        rssi_dBm=rssi,
-                        snr_dB=snr,
-                        noise_dBm=noise_dBm,
-                        **kwargs,
-                    )
-                    snr_effective = snir
-                else:
-                    snr_effective = snr
-                rssi += getattr(gw, "rx_gain_dB", 0.0)
-                snr_effective += getattr(gw, "rx_gain_dB", 0.0)
+                gain_dB = getattr(gw, "rx_gain_dB", 0.0)
+                gain_lin = 10 ** (gain_dB / 10.0)
+                rssi += gain_dB
+                total_noise_mw *= gain_lin
+                snr_effective = rssi - 10 * math.log10(total_noise_mw)
                 energy_threshold = max(
                     node.channel.energy_detection_dBm,
                     getattr(gw, "energy_detection_dBm", -float("inf")),
@@ -1436,6 +1484,7 @@ class Simulator:
                     sync_offset=getattr(node, "current_sync_offset", 0.0),
                     bandwidth=node.channel.bandwidth,
                     noise_floor=noise_dBm,
+                    snir=snr_effective,
                     capture_mode=capture_mode,
                     flora_phy=(
                         node.channel.flora_phy
@@ -1516,7 +1565,10 @@ class Simulator:
                 heard = log_entry["heard"]
                 if heard:
                     self.packets_lost_collision += 1
-                    node.increment_collision()
+                    reason = self.network_server.collision_reasons.get(event_id)
+                    if reason == "snir_below_threshold":
+                        self.packets_lost_snir += 1
+                    node.increment_collision(snir_limit=reason == "snir_below_threshold")
                 else:
                     self.packets_lost_no_signal += 1
             # Mettre à jour le résultat et la passerelle du log de l'événement
@@ -2206,6 +2258,7 @@ class Simulator:
             "tx_attempted": total_sent,
             "delivered": delivered,
             "collisions": self.packets_lost_collision,
+            "collisions_snir": self.packets_lost_snir,
             "duplicates": self.network_server.duplicate_packets,
             "energy_J": self.total_energy_J,
             "energy_nodes_J": self.energy_nodes_J,
@@ -2355,6 +2408,9 @@ class Simulator:
         )
         df["packets_collision"] = df["node_id"].apply(
             lambda nid: node_dict[nid].packets_collision
+        )
+        df["packets_collision_snir"] = df["node_id"].apply(
+            lambda nid: node_dict[nid].packets_collision_snir
         )
         df["tx_attempted"] = df["node_id"].apply(
             lambda nid: node_dict[nid].tx_attempted
