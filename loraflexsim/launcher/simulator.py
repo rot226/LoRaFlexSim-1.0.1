@@ -64,18 +64,25 @@ class _PowerTimeline:
     """Track start/end times of interfering transmissions in linear power."""
 
     def __init__(self) -> None:
-        self._entries: dict[int, tuple[float, float, float]] = {}
+        self._entries: dict[int, tuple[float, float, float, int | None]] = {}
 
-    def add(self, event_id: int, start: float, end: float, power_mw: float) -> None:
+    def add(
+        self,
+        event_id: int,
+        start: float,
+        end: float,
+        power_mw: float,
+        sf: int | None,
+    ) -> None:
         if end <= start:
             return
-        self._entries[event_id] = (start, end, power_mw)
+        self._entries[event_id] = (start, end, power_mw, sf)
 
     def remove(self, event_id: int) -> None:
         self._entries.pop(event_id, None)
 
     def prune(self, time: float) -> None:
-        finished = [eid for eid, (_, end, _) in self._entries.items() if end <= time]
+        finished = [eid for eid, (_, end, _, _) in self._entries.items() if end <= time]
         for eid in finished:
             self._entries.pop(eid, None)
 
@@ -83,7 +90,13 @@ class _PowerTimeline:
         return not self._entries
 
     def average_power(
-        self, start: float, end: float, base_power: float = 0.0
+        self,
+        start: float,
+        end: float,
+        base_power: float = 0.0,
+        *,
+        target_sf: int | None = None,
+        alpha_isf: float = 0.0,
     ) -> float:
         if end <= start:
             return base_power
@@ -91,13 +104,17 @@ class _PowerTimeline:
         if base_power != 0.0:
             events[start] = events.get(start, 0.0) + base_power
             events[end] = events.get(end, 0.0) - base_power
-        for s, e, p in self._entries.values():
+        for s, e, p, sf in self._entries.values():
             overlap_start = max(start, s)
             overlap_end = min(end, e)
             if overlap_end <= overlap_start:
                 continue
-            events[overlap_start] = events.get(overlap_start, 0.0) + p
-            events[overlap_end] = events.get(overlap_end, 0.0) - p
+            factor = 1.0 if target_sf is None or sf == target_sf else alpha_isf
+            if factor == 0.0:
+                continue
+            weighted = p * factor
+            events[overlap_start] = events.get(overlap_start, 0.0) + weighted
+            events[overlap_end] = events.get(overlap_end, 0.0) - weighted
         if not events:
             return base_power
         energy = 0.0
@@ -114,24 +131,34 @@ class _PowerTimeline:
         return energy / duration
 
     def power_changes(
-        self, start: float, end: float, base_power: float = 0.0
+        self,
+        start: float,
+        end: float,
+        base_power: float = 0.0,
+        *,
+        target_sf: int | None = None,
+        alpha_isf: float = 0.0,
     ) -> dict[float, float]:
         events: dict[float, float] = {}
         if base_power != 0.0:
             events[start] = events.get(start, 0.0) + base_power
             events[end] = events.get(end, 0.0) - base_power
-        for s, e, p in self._entries.values():
+        for s, e, p, sf in self._entries.values():
             overlap_start = max(start, s)
             overlap_end = min(end, e)
             if overlap_end <= overlap_start:
                 continue
-            events[overlap_start] = events.get(overlap_start, 0.0) + p
-            events[overlap_end] = events.get(overlap_end, 0.0) - p
+            factor = 1.0 if target_sf is None or sf == target_sf else alpha_isf
+            if factor == 0.0:
+                continue
+            weighted = p * factor
+            events[overlap_start] = events.get(overlap_start, 0.0) + weighted
+            events[overlap_end] = events.get(overlap_end, 0.0) - weighted
         return dict(sorted(events.items()))
 
 
-class _TxManager:
-    """Track ongoing transmissions per gateway and frequency."""
+class InterferenceTracker:
+    """Suivi des transmissions actives par passerelle, fréquence et SF."""
 
     def __init__(self) -> None:
         self.active: dict[tuple[int, float], _PowerTimeline] = {}
@@ -140,6 +167,7 @@ class _TxManager:
         self,
         gateway_id: int,
         frequency: float,
+        sf: int | None,
         rssi_dBm: float,
         end_time: float,
         event_id: int,
@@ -148,16 +176,18 @@ class _TxManager:
     ) -> None:
         key = (gateway_id, frequency)
         timeline = self.active.setdefault(key, _PowerTimeline())
-        timeline.add(event_id, start_time, end_time, 10 ** (rssi_dBm / 10.0))
+        timeline.add(event_id, start_time, end_time, 10 ** (rssi_dBm / 10.0), sf)
 
     def average_power(
         self,
         gateway_id: int,
         frequency: float,
+        sf: int | None,
         current_time: float,
         end_time: float,
         *,
         base_noise_mW: float = 0.0,
+        alpha_isf: float = 0.0,
     ) -> float:
         key = (gateway_id, frequency)
         timeline = self.active.get(key)
@@ -167,16 +197,24 @@ class _TxManager:
         if timeline.is_empty():
             self.active.pop(key, None)
             return base_noise_mW
-        return timeline.average_power(current_time, end_time, base_noise_mW)
+        return timeline.average_power(
+            current_time,
+            end_time,
+            base_noise_mW,
+            target_sf=sf,
+            alpha_isf=alpha_isf,
+        )
 
     def power_changes(
         self,
         gateway_id: int,
         frequency: float,
+        sf: int | None,
         start: float,
         end: float,
         *,
         base_noise_mW: float = 0.0,
+        alpha_isf: float = 0.0,
     ) -> dict[float, float]:
         key = (gateway_id, frequency)
         timeline = self.active.get(key)
@@ -184,7 +222,13 @@ class _TxManager:
             if base_noise_mW == 0.0:
                 return {}
             return {start: base_noise_mW, end: -base_noise_mW}
-        return timeline.power_changes(start, end, base_noise_mW)
+        return timeline.power_changes(
+            start,
+            end,
+            base_noise_mW,
+            target_sf=sf,
+            alpha_isf=alpha_isf,
+        )
 
     def remove(self, event_id: int) -> None:
         for key in list(self.active.keys()):
@@ -896,7 +940,7 @@ class Simulator:
         self.retransmissions = 0
 
         # Gestion des transmissions simultanées pour calculer l'interférence
-        self._tx_manager = _TxManager()
+        self._interference_tracker = InterferenceTracker()
 
         # Journal des événements (pour export CSV)
         self.events_log: list[dict] = []
@@ -1300,17 +1344,20 @@ class Simulator:
                 noise_dBm = node.channel.last_noise_dBm
                 noise_lin = 10 ** (noise_dBm / 10.0)
                 freq_hz = getattr(node.channel, "last_freq_hz", node.channel.frequency_hz)
-                avg_noise = self._tx_manager.average_power(
+                avg_noise = self._interference_tracker.average_power(
                     gw.id,
                     freq_hz,
+                    sf,
                     time,
                     end_time,
                     base_noise_mW=noise_lin,
+                    alpha_isf=getattr(node.channel, "alpha_isf", 0.0),
                 )
                 if avg_noise <= 0.0:
                     avg_noise = noise_lin
                 interference_mw = max(avg_noise - noise_lin, 0.0)
                 node.channel.last_interference_mW = interference_mw
+                node.channel.current_interference_mW = interference_mw
                 if node.channel.use_snir:
                     rssi, snr, snir, noise_dBm = node.channel.compute_snir(
                         tx_power,
@@ -1334,9 +1381,10 @@ class Simulator:
                 if rssi < energy_threshold:
                     continue
                 # Enregistrer la transmission pour l'interférence future
-                self._tx_manager.add(
+                self._interference_tracker.add(
                     gw.id,
                     freq_hz,
+                    sf,
                     rssi,
                     end_time,
                     event_id,
@@ -1439,7 +1487,7 @@ class Simulator:
 
         elif priority == EventType.TX_END:
             # Fin d'une transmission – traitement de la réception/perte
-            self._tx_manager.remove(event_id)
+            self._interference_tracker.remove(event_id)
             node_id = node.id
             # Marquer la fin de transmission du nœud
             if getattr(node.channel, "omnet_phy", None):
@@ -1447,6 +1495,7 @@ class Simulator:
             node.in_transmission = False
             node.current_end_time = None
             node.state = "rx" if node.class_type.upper() == "C" else "processing"
+            node.channel.current_interference_mW = 0.0
             # Notifier chaque passerelle de la fin de réception
             for gw in self.gateways:
                 gw.end_reception(event_id, self.network_server, node_id)
