@@ -925,6 +925,7 @@ def setup_simulation(seed_offset: int = 0):
                 variable_noise_std=float(noise_std_input.value),
                 phy_model="flora" if flora_mode_toggle.value else "omnet",
                 use_flora_curves=flora_mode_toggle.value,
+                use_snir=bool(qos_toggle.value),
             )
             for i in range(num_channels_input.value)
         ],
@@ -990,11 +991,22 @@ def setup_simulation(seed_offset: int = 0):
             on_stop(None)
             return
         qos_manager.apply(sim, qos_algorithm_select.value, **qos_kwargs)
-    elif selected_adr_module:
-        if selected_adr_module is adr_standard_1:
-            selected_adr_module.apply(sim, degrade_channel=True, profile="flora")
-        else:
-            selected_adr_module.apply(sim)
+    else:
+        _restore_default_radio_model()
+        if selected_adr_module:
+            if selected_adr_module is adr_standard_1:
+                selected_adr_module.apply(sim, degrade_channel=True, profile="flora")
+            else:
+                selected_adr_module.apply(sim)
+        channels = []
+        base_channel = getattr(sim, "channel", None)
+        if base_channel is not None:
+            channels.append(base_channel)
+        multichannel = getattr(sim, "multichannel", None)
+        if multichannel is not None:
+            channels.extend(getattr(multichannel, "channels", []) or [])
+        for channel in channels:
+            channel.use_snir = False
 
     # La mobilité est désormais gérée directement par le simulateur
     start_time = time.time()

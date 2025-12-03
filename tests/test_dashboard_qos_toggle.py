@@ -125,6 +125,20 @@ def _run_single_simulation(*, qos_enabled: bool) -> None:
     dashboard.on_stop(None)
 
 
+def _get_first_channel(simulator):
+    """Retourne le premier canal instancié par le simulateur."""
+
+    channel = getattr(simulator, "channel", None)
+    if channel is not None:
+        return channel
+    multichannel = getattr(simulator, "multichannel", None)
+    if multichannel is not None:
+        channels = getattr(multichannel, "channels", []) or []
+        if channels:
+            return channels[0]
+    return None
+
+
 def test_qos_toggle_preserves_button_states():
     dashboard.packets_input.value = 1
     dashboard.num_runs_input.value = 1
@@ -184,6 +198,34 @@ def test_qos_toggle_keeps_pause_and_fast_forward_in_sync():
     assert dashboard.paused is False
     assert getattr(dashboard.sim, "paused", False) is False
     assert dashboard.fast_forward_button.disabled == (dashboard.sim.packets_to_send <= 0)
+
+    while dashboard.sim.step():
+        pass
+    dashboard.on_stop(None)
+
+
+def test_snir_controls_hidden_and_inactive_when_qos_disabled():
+    dashboard.qos_toggle.value = True
+    dashboard.qos_snir_toggle.value = True
+    dashboard.qos_inter_sf_coupling_input.value = 1.0
+    dashboard.qos_capture_thresholds_input.value = "7, 8"
+
+    dashboard.qos_toggle.value = False
+
+    assert dashboard.qos_snir_toggle.visible is False
+    assert dashboard.qos_inter_sf_coupling_input.visible is False
+    assert dashboard.qos_capture_thresholds_input.visible is False
+
+    dashboard.packets_input.value = 1
+    dashboard.num_runs_input.value = 1
+    dashboard.setup_simulation()
+
+    assert dashboard.sim is not None
+    channel = _get_first_channel(dashboard.sim)
+    assert channel is not None
+    assert getattr(channel, "use_snir", None) is False
+    assert getattr(dashboard.sim, "qos_active", None) is False
+    assert getattr(dashboard.sim, "qos_algorithm", None) is None
 
     while dashboard.sim.step():
         pass
