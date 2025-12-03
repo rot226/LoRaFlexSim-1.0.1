@@ -238,6 +238,7 @@ class Channel:
         region: str | None = None,
         channel_index: int = 0,
         orthogonal_sf: bool = True,
+        alpha_isf: float = 0.0,
         rng: np.random.Generator | None = None,
     ):
         """
@@ -342,6 +343,9 @@ class Channel:
             région choisie.
         :param orthogonal_sf: Si ``True``, les transmissions de SF différents
             n'interfèrent pas entre elles.
+        :param alpha_isf: Coefficient appliqué aux interférences inter-SF lorsque
+            ``orthogonal_sf`` est désactivé (0 signifie SF parfaitement
+            orthogonaux).
         :param flora_noise_path: Chemin vers un fichier ``LoRaAnalogModel.cc``
             pour charger la table de bruit FLoRa.
         :param obstacle_map: Chemin vers une carte d'obstacles (GeoJSON ou raster)
@@ -535,10 +539,12 @@ class Channel:
         self.capture_threshold_dB = capture_threshold_dB
         self.capture_window_symbols = int(capture_window_symbols)
         self.orthogonal_sf = orthogonal_sf
+        self.alpha_isf = float(alpha_isf)
         self.last_rssi_dBm = 0.0
         self.last_noise_dBm = float("nan")
         self.last_filter_att_dB = 0.0
         self.last_interference_mW = 0.0
+        self.current_interference_mW = 0.0
         # Track the effective carrier after oscillator drift.
         self.last_freq_hz = self.frequency_hz
 
