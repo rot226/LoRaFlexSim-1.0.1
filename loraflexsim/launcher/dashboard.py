@@ -62,6 +62,9 @@ _DEFAULT_QOS_CLUSTER_COUNT = 1
 _DEFAULT_QOS_LAMBDA = 0.1
 _DEFAULT_QOS_PDR = 0.9
 _QOS_TOGGLE_GUARD = False
+qos_snir_enabled = False
+qos_inter_sf_coupling = 0.0
+qos_capture_thresholds = ""
 total_runs = 1
 current_run = 0
 runs_events: list[pd.DataFrame] = []
@@ -345,6 +348,22 @@ qos_algorithm_select = pn.widgets.RadioButtonGroup(
     value="MixRA-Opt",
 )
 qos_algorithm_select.visible = False
+qos_snir_toggle = pn.widgets.Toggle(
+    name="Activer SNIR", button_type="default", value=False, visible=False
+)
+qos_inter_sf_coupling_input = pn.widgets.FloatInput(
+    name="Couplage inter-SF (α)",
+    value=0.0,
+    step=0.1,
+    start=0.0,
+    visible=False,
+)
+qos_capture_thresholds_input = pn.widgets.TextInput(
+    name="Seuils de capture SNIR (dB)",
+    value="",
+    placeholder="Ex.: 6, 6, 6",
+    visible=False,
+)
 qos_cluster_count_input = pn.widgets.IntInput(
     name="Nombre de clusters QoS",
     value=_DEFAULT_QOS_CLUSTER_COUNT,
@@ -1408,6 +1427,9 @@ def on_qos_toggle(event) -> None:
             return
         qos_toggle.button_type = "primary"
         qos_algorithm_select.visible = True
+        qos_snir_toggle.visible = True
+        qos_inter_sf_coupling_input.visible = True
+        qos_capture_thresholds_input.visible = True
         adr_select.disabled = True
         adr_node_checkbox.disabled = True
         adr_server_checkbox.disabled = True
@@ -1423,6 +1445,9 @@ def on_qos_toggle(event) -> None:
         adr_server_checkbox.disabled = False
         module = ADR_MODULES[last_selected_adr_name]
         select_adr(module, last_selected_adr_name)
+        qos_snir_toggle.visible = False
+        qos_inter_sf_coupling_input.visible = False
+        qos_capture_thresholds_input.visible = False
 
 
 def on_qos_algorithm_change(event) -> None:
@@ -1432,6 +1457,15 @@ def on_qos_algorithm_change(event) -> None:
 
 qos_toggle.param.watch(on_qos_toggle, "value")
 qos_algorithm_select.param.watch(on_qos_algorithm_change, "value")
+qos_snir_toggle.param.watch(
+    lambda event: globals().update(qos_snir_enabled=bool(event.new)), "value"
+)
+qos_inter_sf_coupling_input.param.watch(
+    lambda event: globals().update(qos_inter_sf_coupling=float(event.new)), "value"
+)
+qos_capture_thresholds_input.param.watch(
+    lambda event: globals().update(qos_capture_thresholds=event.new or ""), "value"
+)
 
 # --- Mode FLoRa complet ---
 def on_flora_toggle(event):
@@ -1542,6 +1576,9 @@ center_col = pn.Column(
             pn.pane.Markdown("### QoS"),
             qos_toggle,
             qos_algorithm_select,
+            qos_snir_toggle,
+            qos_inter_sf_coupling_input,
+            qos_capture_thresholds_input,
             qos_cluster_count_input,
             qos_cluster_proportions_input,
             qos_cluster_arrival_rates_input,
