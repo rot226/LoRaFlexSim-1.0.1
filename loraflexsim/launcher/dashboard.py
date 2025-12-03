@@ -233,6 +233,37 @@ def _configure_qos_clusters_from_widgets() -> None:
     )
 
 
+def _parse_capture_thresholds(raw_value: str) -> list[float] | None:
+    """Interprète les seuils de capture SNIR saisis par l'utilisateur."""
+
+    if not raw_value:
+        return None
+    parts = [part.strip() for part in raw_value.split(",") if part.strip()]
+    if not parts:
+        return None
+    thresholds: list[float] = []
+    for part in parts:
+        try:
+            value = float(part)
+        except ValueError as exc:  # pragma: no cover - validation utilisateur
+            raise ValueError("Les seuils de capture doivent être numériques.") from exc
+        if not math.isfinite(value):
+            raise ValueError("Les seuils de capture doivent être finis.")
+        thresholds.append(value)
+    return thresholds or None
+
+
+def _qos_radio_kwargs() -> dict:
+    """Construit les options radio à transmettre au gestionnaire QoS."""
+
+    capture_thresholds = _parse_capture_thresholds(qos_capture_thresholds)
+    return {
+        "use_snir": bool(qos_snir_enabled),
+        "inter_sf_coupling": float(qos_inter_sf_coupling),
+        "capture_thresholds": capture_thresholds,
+    }
+
+
 # --- Widgets de configuration ---
 num_nodes_input = pn.widgets.IntInput(name="Nombre de nœuds", value=2, step=1, start=1)
 num_gateways_input = pn.widgets.IntInput(name="Nombre de passerelles", value=1, step=1, start=1)
@@ -933,11 +964,12 @@ def setup_simulation(seed_offset: int = 0):
     if qos_toggle.value:
         try:
             _configure_qos_clusters_from_widgets()
+            qos_kwargs = _qos_radio_kwargs()
         except ValueError as exc:
             export_message.object = f"⚠️ {exc}"
             on_stop(None)
             return
-        qos_manager.apply(sim, qos_algorithm_select.value)
+        qos_manager.apply(sim, qos_algorithm_select.value, **qos_kwargs)
     elif selected_adr_module:
         if selected_adr_module is adr_standard_1:
             selected_adr_module.apply(sim, degrade_channel=True, profile="flora")
@@ -1403,11 +1435,12 @@ def _apply_qos_if_running() -> None:
     if sim is not None and qos_toggle.value:
         try:
             _configure_qos_clusters_from_widgets()
+            qos_kwargs = _qos_radio_kwargs()
         except ValueError as exc:
             export_message.object = f"⚠️ {exc}"
             return
         try:
-            qos_manager.apply(sim, qos_algorithm_select.value)
+            qos_manager.apply(sim, qos_algorithm_select.value, **qos_kwargs)
         except ValueError as exc:  # pragma: no cover - sécurité supplémentaire
             export_message.object = f"⚠️ {exc}"
 
