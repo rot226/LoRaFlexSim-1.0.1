@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping
+from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 try:  # pragma: no cover - dépend de l'environnement de test
     import matplotlib.pyplot as plt  # type: ignore
@@ -19,6 +20,7 @@ DEFAULT_FIGURES_DIR = ROOT_DIR / "figures"
 __all__ = ["generate_step1_figures", "DEFAULT_RESULTS_DIR", "DEFAULT_FIGURES_DIR"]
 
 STATE_LABELS = {True: "snir_on", False: "snir_off", None: "snir_unknown"}
+SNIR_COLORS = {"snir_on": "#1f77b4", "snir_off": "#ff7f0e", "snir_unknown": "#7f7f7f"}
 
 
 def _parse_float(value: str | None, default: float = 0.0) -> float:
@@ -101,6 +103,46 @@ def _load_step1_records(results_dir: Path) -> List[Dict[str, Any]]:
     return records
 
 
+def _load_summary_records(summary_path: Path) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    if not summary_path.exists():
+        return records
+
+    with summary_path.open("r", encoding="utf8") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            record: Dict[str, Any] = {"summary_path": summary_path}
+            for key, value in row.items():
+                if key in {"algorithm", "snir_state"}:
+                    record[key] = value
+                elif key in {"num_nodes"}:
+                    record[key] = int(float(value or 0))
+                elif key in {"packet_interval_s"}:
+                    record[key] = float(value or 0)
+                else:
+                    record[key] = _parse_float(value)
+            records.append(record)
+    return records
+
+
+def _load_raw_samples(raw_path: Path, fallback_dir: Path) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    if raw_path.exists():
+        with raw_path.open("r", encoding="utf8") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                record: Dict[str, Any] = {
+                    "algorithm": row.get("algorithm"),
+                    "snir_state": row.get("snir_state", "snir_unknown"),
+                    "packet_interval_s": _parse_float(row.get("packet_interval_s")),
+                    "DER": _parse_float(row.get("DER")),
+                }
+                records.append(record)
+    else:
+        records = _load_step1_records(fallback_dir)
+    return records
+
+
 def _plot_global_metric(
     records: List[Dict[str, Any]],
     metric: str,
@@ -144,6 +186,119 @@ def _plot_global_metric(
             fig.tight_layout()
             fig.savefig(output, dpi=150)
             plt.close(fig)
+
+
+def _plot_summary_bars(records: List[Dict[str, Any]], figures_dir: Path) -> None:
+    if not records or plt is None:
+        return
+
+    metrics = {
+        "PDR": "PDR global",
+        "DER": "DER global",
+        "collisions": "Collisions",
+        "jain_index": "Indice de Jain",
+        "throughput_bps": "Débit agrégé (bps)",
+    }
+
+    periods = sorted({r.get("packet_interval_s") for r in records})
+    snir_states = [state for state in ("snir_on", "snir_off", "snir_unknown") if state in {r.get("snir_state") for r in records}]
+    if not snir_states:
+        return
+
+    for period in periods:
+        filtered = [r for r in records if r.get("packet_interval_s") == period]
+        if not filtered:
+            continue
+        combinations = sorted({(r.get("num_nodes"), r.get("algorithm")) for r in filtered})
+        if not combinations:
+            continue
+
+        for metric, ylabel in metrics.items():
+            fig, ax = plt.subplots(figsize=(10, 5))
+            positions = list(range(len(combinations)))
+            width = 0.2 if len(snir_states) > 0 else 0.4
+
+            for idx, state in enumerate(snir_states):
+                offsets = [p + (idx - (len(snir_states) - 1) / 2) * width for p in positions]
+                values: List[float] = []
+                errors: List[float] = []
+                for combo in combinations:
+                    num_nodes, algorithm = combo
+                    match = next(
+                        (
+                            r
+                            for r in filtered
+                            if r.get("num_nodes") == num_nodes
+                            and r.get("algorithm") == algorithm
+                            and r.get("snir_state") == state
+                        ),
+                        None,
+                    )
+                    values.append(match.get(f"{metric}_mean", 0.0) if match else 0.0)
+                    errors.append(match.get(f"{metric}_std", 0.0) if match else 0.0)
+
+                ax.bar(
+                    offsets,
+                    values,
+                    width=width,
+                    yerr=errors,
+                    label="SNIR activé" if state == "snir_on" else "SNIR désactivé" if state == "snir_off" else "SNIR inconnu",
+                    color=SNIR_COLORS.get(state, "#7f7f7f"),
+                    capsize=4,
+                    edgecolor="black",
+                    linewidth=0.5,
+                )
+
+            ax.set_xticks(positions)
+            ax.set_xticklabels([f"{algo}\n{nodes} nœuds" for nodes, algo in combinations], rotation=0)
+            ax.set_ylabel(ylabel)
+            period_label = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
+            ax.set_title(f"{ylabel} – période {period_label} s")
+            ax.grid(True, axis="y", linestyle=":", alpha=0.5)
+            if ax.get_legend_handles_labels()[0]:
+                ax.legend()
+
+            figures_dir.mkdir(parents=True, exist_ok=True)
+            output = figures_dir / f"summary_{metric.lower()}_tx_{period_label}.png"
+            fig.tight_layout()
+            fig.savefig(output, dpi=150)
+            plt.close(fig)
+
+
+def _plot_cdf(records: Sequence[Mapping[str, Any]], figures_dir: Path) -> None:
+    if not records or plt is None:
+        return
+
+    by_algorithm: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
+    for record in records:
+        algo = str(record.get("algorithm") or "unknown")
+        state = str(record.get("snir_state") or "snir_unknown")
+        der = _parse_float(record.get("DER"))
+        by_algorithm[algo][state].append(der)
+
+    for algorithm, state_values in sorted(by_algorithm.items()):
+        fig, ax = plt.subplots(figsize=(7, 5))
+        for state in ("snir_on", "snir_off", "snir_unknown"):
+            values = state_values.get(state, [])
+            if not values:
+                continue
+            sorted_values = sorted(values)
+            n = len(sorted_values)
+            y = [i / n for i in range(1, n + 1)]
+            label = "SNIR activé" if state == "snir_on" else "SNIR désactivé" if state == "snir_off" else "SNIR inconnu"
+            ax.step(sorted_values, y, where="post", label=label, color=SNIR_COLORS.get(state, "#7f7f7f"))
+
+        ax.set_xlabel("DER")
+        ax.set_ylabel("F(x)")
+        ax.set_title(f"CDF DER – {algorithm}")
+        ax.grid(True, linestyle=":", alpha=0.5)
+        if ax.get_legend_handles_labels()[0]:
+            ax.legend()
+        figures_dir.mkdir(parents=True, exist_ok=True)
+        output = figures_dir / f"cdf_der_{algorithm}.png"
+        fig.tight_layout()
+        fig.savefig(output, dpi=150)
+        plt.close(fig)
 
 
 def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
@@ -208,21 +363,42 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
             plt.close(fig)
 
 
-def generate_step1_figures(results_dir: Path, figures_dir: Path) -> None:
+def generate_step1_figures(
+    results_dir: Path, figures_dir: Path, use_summary: bool = False, plot_cdf: bool = False
+) -> None:
     if plt is None:
         print("matplotlib n'est pas disponible ; aucune figure générée.")
         return
-    records = _load_step1_records(results_dir)
-    if not records:
-        print(f"Aucun CSV trouvé dans {results_dir} ; rien à tracer.")
-        return
+
     output_dir = figures_dir / "step1"
-    _plot_cluster_pdr(records, output_dir)
-    _plot_global_metric(records, "PDR", "PDR global", "pdr_global", output_dir)
-    _plot_global_metric(records, "DER", "DER global", "der_global", output_dir)
-    _plot_global_metric(records, "collisions", "Collisions", "collisions", output_dir)
-    _plot_global_metric(records, "jain_index", "Indice de Jain", "jain_index", output_dir)
-    _plot_global_metric(records, "throughput_bps", "Débit agrégé (bps)", "throughput", output_dir)
+    extended_dir = output_dir / "extended"
+
+    if use_summary:
+        summary_path = results_dir / "summary.csv"
+        summary_records = _load_summary_records(summary_path)
+        if not summary_records:
+            print(f"Aucun summary.csv trouvé dans {summary_path}; aucune barre générée.")
+        else:
+            _plot_summary_bars(summary_records, extended_dir)
+    else:
+        records = _load_step1_records(results_dir)
+        if not records:
+            print(f"Aucun CSV trouvé dans {results_dir} ; rien à tracer.")
+            return
+        _plot_cluster_pdr(records, output_dir)
+        _plot_global_metric(records, "PDR", "PDR global", "pdr_global", output_dir)
+        _plot_global_metric(records, "DER", "DER global", "der_global", output_dir)
+        _plot_global_metric(records, "collisions", "Collisions", "collisions", output_dir)
+        _plot_global_metric(records, "jain_index", "Indice de Jain", "jain_index", output_dir)
+        _plot_global_metric(records, "throughput_bps", "Débit agrégé (bps)", "throughput", output_dir)
+
+    if plot_cdf:
+        raw_path = results_dir / "raw_index.csv"
+        raw_records = _load_raw_samples(raw_path, results_dir)
+        if not raw_records:
+            print(f"Aucun échantillon brut trouvé dans {raw_path} ni dans {results_dir}.")
+        else:
+            _plot_cdf(raw_records, extended_dir)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -239,13 +415,23 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_FIGURES_DIR,
         help="Répertoire racine de sortie pour les figures",
     )
+    parser.add_argument(
+        "--use-summary",
+        action="store_true",
+        help="Utilise summary.csv pour tracer des barres avec intervalles de confiance",
+    )
+    parser.add_argument(
+        "--plot-cdf",
+        action="store_true",
+        help="Active le tracé des CDF à partir de raw_index.csv ou des CSV bruts",
+    )
     return parser
 
 
 def main(argv: List[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    generate_step1_figures(args.results_dir, args.figures_dir)
+    generate_step1_figures(args.results_dir, args.figures_dir, args.use_summary, args.plot_cdf)
 
 
 if __name__ == "__main__":
