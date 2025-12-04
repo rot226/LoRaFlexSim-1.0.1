@@ -92,6 +92,20 @@ Le script `scripts/run_step1_matrix_windows.ps1` active le venv (par défaut
 python scripts/run_step1_matrix.py --algos adr apra mixra_h mixra_opt --with-snir true false --seeds 1 2 3 --nodes 1000 5000 --packet-intervals 300 600
 ```
 
+Après l'exécution de la matrice, agrégerez les CSV présents dans
+`results/step1/**/*.csv` afin d'obtenir les statistiques nécessaires aux CDF
+et aux courbes d'erreur :
+
+```bash
+python scripts/aggregate_step1_results.py
+```
+
+Le script détecte automatiquement l'état SNIR et génère
+`results/step1/summary.csv` (moyennes/écarts-types) ainsi que
+`results/step1/raw_index.csv` (index des runs bruts). Ajoutez
+`--strict-snir-detection` si vous souhaitez échouer lorsque l'état SNIR ne
+peut pas être déduit implicitement.
+
 ### Banc QoS par clusters
 
 Le scénario de validation QoS multi-algorithmes est automatisé via les scripts
