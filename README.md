@@ -74,6 +74,24 @@ python -m loraflexsim.run --long-range-demo flora_hata --seed 3 --output long_ra
 - Ajoutez `--seed` pour répéter exactement un run et `--runs <n>` pour calculer
   automatiquement la moyenne des métriques.【F:loraflexsim/run.py†L352-L735】
 
+### Matrice Step 1 sous Windows
+
+Depuis la racine du projet, vous pouvez générer la matrice Step 1 utilisée dans
+`scripts/run_step1_matrix.py` (CSV rangés dans
+`results/step1/<snir_state>/seed_<seed>/`). Sous Windows 11, créez/activez
+votre environnement virtuel puis lancez :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_step1_matrix_windows.ps1
+```
+
+Le script `scripts/run_step1_matrix_windows.ps1` active le venv (par défaut
+`.\env`) puis exécute la commande équivalente à :
+
+```powershell
+python scripts/run_step1_matrix.py --algos adr apra mixra_h mixra_opt --with-snir true false --seeds 1 2 3 --nodes 1000 5000 --packet-intervals 300 600
+```
+
 ### Banc QoS par clusters
 
 Le scénario de validation QoS multi-algorithmes est automatisé via les scripts
