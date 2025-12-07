@@ -73,7 +73,7 @@ class _PowerTimeline:
         start: float,
         end: float,
         power_mw: float,
-        sf: int | None,
+        sf: int | None = None,
     ) -> None:
         if end <= start:
             return
@@ -1001,6 +1001,9 @@ class Simulator:
 
         # Gestion des transmissions simultanées pour calculer l'interférence
         self._interference_tracker = InterferenceTracker()
+        # Alias rétrocompatible utilisé par certains tests pour intercepter les
+        # enregistrements de transmissions et les mesures d'interférence.
+        self._tx_manager = self._interference_tracker
 
         # Journal des événements (pour export CSV)
         self.events_log: list[dict] = []
@@ -2291,7 +2294,7 @@ class Simulator:
             "tx_attempted": total_sent,
             "delivered": delivered,
             "collisions": self.packets_lost_collision,
-            "collisions_snir": self.packets_lost_snir,
+            "collisions_snir": getattr(self, "packets_lost_snir", 0),
             "duplicates": self.network_server.duplicate_packets,
             "energy_J": self.total_energy_J,
             "energy_nodes_J": self.energy_nodes_J,
