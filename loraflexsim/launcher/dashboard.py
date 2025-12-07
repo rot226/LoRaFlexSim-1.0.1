@@ -1,3 +1,4 @@
+import inspect
 import os
 import sys
 import math
@@ -261,11 +262,18 @@ def _qos_radio_kwargs() -> dict:
     except ValueError as exc:  # pragma: no cover - validation utilisateur
         export_message.object = f"⚠️ {exc}"
         raise
-    return {
-        "use_snir": bool(qos_snir_enabled),
-        "inter_sf_coupling": float(qos_inter_sf_coupling),
-        "capture_thresholds": capture_thresholds,
-    }
+    qos_kwargs: dict[str, float | bool | Sequence[float] | None] = {}
+
+    # N'inclure que les paramètres effectivement activés pour éviter de
+    # passer des arguments superflus lors de l'application de la stratégie.
+    if qos_snir_enabled:
+        qos_kwargs["use_snir"] = True
+    if qos_inter_sf_coupling:
+        qos_kwargs["inter_sf_coupling"] = float(qos_inter_sf_coupling)
+    if capture_thresholds:
+        qos_kwargs["capture_thresholds"] = capture_thresholds
+
+    return qos_kwargs
 
 
 def _restore_default_radio_model() -> None:
@@ -990,7 +998,9 @@ def setup_simulation(seed_offset: int = 0):
             export_message.object = f"⚠️ {exc}"
             on_stop(None)
             return
-        qos_manager.apply(sim, qos_algorithm_select.value, **qos_kwargs)
+        apply_sig = inspect.signature(qos_manager.apply)
+        accepted_kwargs = {k: v for k, v in qos_kwargs.items() if k in apply_sig.parameters}
+        qos_manager.apply(sim, qos_algorithm_select.value, **accepted_kwargs)
     else:
         _restore_default_radio_model()
         if selected_adr_module:
