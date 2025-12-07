@@ -5,6 +5,7 @@ import logging
 import math
 import random
 import numpy as np
+from collections import deque
 
 from traffic.exponential import sample_interval
 from traffic.rng_manager import RngManager
@@ -1007,6 +1008,7 @@ class Simulator:
         self._events_log_map: dict[int, dict] = {}
         # Nœuds de classe C actuellement maintenus en écoute périodique
         self._class_c_polling_nodes: set[int] = set()
+        self.out_of_service_queue: deque[tuple[int, str, float]] = deque()
 
         # Planifier le premier envoi de chaque nœud
         for node in self.nodes:
@@ -1204,9 +1206,24 @@ class Simulator:
             node.state = "sleep"
         return state, current, duration
 
+    def _mark_out_of_service(self, node: Node, reason: str) -> None:
+        if getattr(node, "out_of_service", False):
+            return
+        node.out_of_service = True
+        self.out_of_service_queue.append((node.id, reason, self.current_time))
+        diag_logger.info(
+            "Nœud %s mis hors service (%s) à t=%.3fs", node.id, reason, self.current_time
+        )
+
     def schedule_event(self, node: Node, time: float, *, reason: str = "poisson"):
         """Planifie un événement de transmission pour un nœud."""
         if not node.alive:
+            return
+        if getattr(node, "out_of_service", False):
+            self._mark_out_of_service(node, "already_out_of_service")
+            return
+        if getattr(node, "_qos_blocked_channel", False):
+            self._mark_out_of_service(node, "blocked_channel")
             return
         requested_time = time
         if (
@@ -1224,7 +1241,11 @@ class Simulator:
                 time = enforced
                 reason = "duty_cycle"
         time = self._quantize(time)
-        node.channel = self.multichannel.select_mask(getattr(node, "chmask", 0xFFFF))
+        if node.channel is None:
+            node.channel = self.multichannel.select_mask(getattr(node, "chmask", 0xFFFF))
+        if node.channel is None:
+            self._mark_out_of_service(node, "missing_channel")
+            return
         node.channel.detection_threshold_dBm = Channel.flora_detection_threshold(
             node.sf, node.channel.bandwidth
         ) + node.channel.sensitivity_margin_dB
@@ -1326,6 +1347,18 @@ class Simulator:
         if priority == EventType.TX_START:
             # Début d'une transmission émise par 'node'
             node_id = node.id
+            if node.channel is None:
+                fallback = self.multichannel.channels[0] if self.multichannel.channels else None
+                if fallback is None or getattr(node, "_qos_blocked_channel", False):
+                    diag_logger.info(
+                        "Exclusion du nœud %s sans canal au début de TX_START", node_id
+                    )
+                    self._mark_out_of_service(node, "tx_start_no_channel")
+                    return True
+                node.channel = fallback
+                diag_logger.info(
+                    "Affectation de secours du nœud %s sur le canal %s", node_id, fallback
+                )
             node.last_tx_time = time
             if node._nb_trans_left <= 0:
                 node._nb_trans_left = max(1, node.nb_trans)

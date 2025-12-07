@@ -155,6 +155,7 @@ class QoSManager:
         self._last_recent_pdr: dict[int, float] = {}
         self._last_arrival_rates: dict[int, float] = {}
         self._last_assignments: dict[int, tuple[int, int]] = {}
+        self.out_of_service_queue: deque[tuple[int, str]] = deque()
 
     # --- Interface publique -------------------------------------------------
     def apply(
@@ -180,6 +181,9 @@ class QoSManager:
         method = getattr(self, method_name, None)
         if method is None:
             raise ValueError(f"Implémentation manquante pour {algorithm}")
+        shared_queue = getattr(simulator, "out_of_service_queue", None)
+        if shared_queue is not None:
+            self.out_of_service_queue = shared_queue
         if self.clusters and self._should_refresh_context(simulator):
             self._update_qos_context(simulator)
         self._configure_radio_model(
@@ -1236,6 +1240,13 @@ class QoSManager:
             entry.node.tx_power = self._assign_tx_power(sf_index)
             if getattr(entry.node, "_qos_blocked_channel", False):
                 entry.node.channel = None
+                self._flag_out_of_service(entry.node, "blocked_channel")
+
+    def _flag_out_of_service(self, node, reason: str) -> None:
+        if getattr(node, "out_of_service", False):
+            return
+        setattr(node, "out_of_service", True)
+        self.out_of_service_queue.append((node.id, reason))
 
     @staticmethod
     def _solve_mixra_greedy(
@@ -1409,6 +1420,7 @@ class QoSManager:
                         setattr(entry.node, "_qos_blocked_min_sf", min_sf)
                         setattr(entry.node, "_qos_blocked_channel", True)
                         entry.node.channel = None
+                        self._flag_out_of_service(entry.node, "sf_cluster_limit")
                     fallback_pairs.extend(entry for entry, _ in entries)
                     continue
             cluster_sizes[cluster_id] = node_count
@@ -1701,6 +1713,7 @@ class QoSManager:
                         for entry, _ in assigned:
                             setattr(entry.node, "_qos_blocked_channel", True)
                             entry.node.channel = None
+                            self._flag_out_of_service(entry.node, "channel_cluster_limit")
                             fallback_pairs.append(entry)
                         continue
                 if sf_cluster_limit is not None and min_sf is not None and cluster_id not in sf_cluster_usage[min_sf]:
@@ -1819,6 +1832,7 @@ class QoSManager:
                             setattr(entry.node, "_qos_blocked_min_sf", min_sf)
                             setattr(entry.node, "_qos_blocked_channel", True)
                             entry.node.channel = None
+                            self._flag_out_of_service(entry.node, "sf_cluster_limit")
                             fallback_pairs.append(entry)
                     continue
             capacity_limit = self.cluster_capacity_limits.get(cluster_id)
@@ -1871,6 +1885,7 @@ class QoSManager:
                                 else:
                                     setattr(entry.node, "_qos_blocked_channel", True)
                                     entry.node.channel = None
+                                    self._flag_out_of_service(entry.node, "channel_exhausted")
                                     fallback_pairs.append(entry)
                             break
                         else:
@@ -1886,6 +1901,7 @@ class QoSManager:
                                 node.tx_power = self._assign_tx_power(sf_pos)
                                 setattr(node, "_qos_blocked_channel", True)
                                 node.channel = None
+                                self._flag_out_of_service(node, "channel_exhausted")
                                 fallback_pairs.append(entry)
                             break
 
@@ -1961,6 +1977,7 @@ class QoSManager:
                     entry, _ = queue.popleft()
                     setattr(entry.node, "_qos_blocked_channel", True)
                     entry.node.channel = None
+                    self._flag_out_of_service(entry.node, "capacity_exhausted")
                     fallback_pairs.append(entry)
 
         self._assign_distance_based(fallback_pairs)
