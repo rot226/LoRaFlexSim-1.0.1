@@ -104,6 +104,7 @@ class Node:
         # des erreurs lors des calculs d'airtime ou de RSSI.
         self.channel = channel or Channel()
         self.assigned_channel_index = getattr(self.channel, "channel_index", 0)
+        self.out_of_service = False
         # Offsets de fréquence et de synchronisation (corrélés dans le temps)
         from .advanced_channel import _CorrelatedValue
 
