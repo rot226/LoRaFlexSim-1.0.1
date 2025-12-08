@@ -21,10 +21,17 @@ class RunMetrics:
     pdr_global: float
     der_global: float
     collisions: int
+    delivered: int
+    attempted: int
+    failures_collision: int
+    failures_no_signal: int
+    pdr_ci95: float
+    der_ci95: float
     cluster_pdr: Dict[str, float]
     cluster_targets: Dict[str, float]
     cluster_gaps: Dict[str, float]
     snir_values: List[float]
+    snir_by_result: List[Tuple[float, str]]
     snir_cdf: List[Tuple[float, float]]
     mixra_solver: str | None
 
@@ -38,6 +45,12 @@ class RunMetrics:
             "period_s": self.period_s,
             "pdr_global": self.pdr_global,
             "der_global": self.der_global,
+            "delivered": self.delivered,
+            "tx_attempted": self.attempted,
+            "failures_collision": self.failures_collision,
+            "failures_no_signal": self.failures_no_signal,
+            "pdr_ci95": self.pdr_ci95,
+            "der_ci95": self.der_ci95,
             "collisions": self.collisions,
             "mixra_solver": self.mixra_solver or "",
             "cluster_pdr_json": json.dumps(self.cluster_pdr, ensure_ascii=False, sort_keys=True),
@@ -71,6 +84,16 @@ def _format_cluster_mapping(mapping: Mapping[int | str, Number]) -> Dict[str, fl
     return formatted
 
 
+def _binomial_ci_half_width(successes: Number, total: Number, alpha: float = 0.05) -> float:
+    """Retourne une estimation de l'intervalle de confiance (normal approx)."""
+
+    if total <= 0:
+        return 0.0
+    p_hat = float(successes) / float(total)
+    z = 1.96 if abs(alpha - 0.05) < 1e-9 else 1.96
+    return z * (p_hat * (1.0 - p_hat) / float(total)) ** 0.5
+
+
 def compute_run_metrics(
     *,
     scenario: str,
@@ -81,9 +104,9 @@ def compute_run_metrics(
     """Construit la structure :class:`RunMetrics` à partir du simulateur."""
 
     pdr_global = float(base_metrics.get("PDR", 0.0) or 0.0)
-    delivered = float(base_metrics.get("delivered", 0.0) or 0.0)
-    attempted = float(base_metrics.get("tx_attempted", 0.0) or 0.0)
-    der_global = delivered / attempted if attempted > 0.0 else 0.0
+    delivered = int(float(base_metrics.get("delivered", 0.0) or 0.0))
+    attempted = int(float(base_metrics.get("tx_attempted", 0.0) or 0.0))
+    der_global = delivered / attempted if attempted > 0 else 0.0
     collisions = int(base_metrics.get("collisions", 0) or 0)
     cluster_pdr_raw = base_metrics.get("qos_cluster_pdr", {}) or {}
     cluster_targets_raw = base_metrics.get("qos_cluster_targets", {}) or {}
@@ -93,7 +116,11 @@ def compute_run_metrics(
     cluster_targets = _format_cluster_mapping(cluster_targets_raw)
     cluster_gaps = _format_cluster_mapping(cluster_gaps_raw)
 
+    failures_collision = collisions
+    failures_no_signal = int(base_metrics.get("packets_lost_no_signal", 0) or 0)
+
     snir_values: List[float] = []
+    snir_by_result: List[Tuple[float, str]] = []
     snir_keys = ("snir_dB", "snir_db", "snr_dB", "snr_db", "snir", "snr")
     for event in events:
         snir_value = None
@@ -102,12 +129,27 @@ def compute_run_metrics(
             if candidate is not None:
                 snir_value = candidate
                 break
-        if snir_value is None:
+        result_str = str(event.get("result", "")).strip()
+        if snir_value is None and not result_str:
             continue
         try:
-            snir_values.append(float(snir_value))
+            snir_float = float(snir_value) if snir_value is not None else float("nan")
         except (TypeError, ValueError):
-            continue
+            snir_float = float("nan")
+        if snir_float == snir_float:
+            snir_values.append(snir_float)
+            if result_str:
+                snir_by_result.append((snir_float, result_str))
+
+        if result_str:
+            lowered = result_str.lower()
+            if lowered.startswith("success"):
+                delivered += 1
+            elif "collision" in lowered:
+                failures_collision += 1
+            elif "nocoverage" in lowered or "no_coverage" in lowered:
+                failures_no_signal += 1
+            attempted += 1
     snir_cdf = _compute_cdf(snir_values)
 
     mixra_solver = base_metrics.get("mixra_solver")
@@ -116,6 +158,16 @@ def compute_run_metrics(
     else:
         mixra_solver_str = None
 
+    attempted = max(attempted, int(float(base_metrics.get("tx_attempted", 0.0) or 0.0)))
+    delivered = min(delivered, attempted)
+    failures_collision = min(failures_collision, attempted - delivered)
+    failures_no_signal = max(0, attempted - delivered - failures_collision)
+
+    pdr_global = delivered / attempted if attempted > 0 else pdr_global
+    der_global = delivered / attempted if attempted > 0 else der_global
+    pdr_ci95 = _binomial_ci_half_width(delivered, attempted)
+    der_ci95 = _binomial_ci_half_width(delivered, attempted)
+
     result = RunMetrics(
         scenario=scenario,
         algorithm=algorithm,
@@ -123,11 +175,18 @@ def compute_run_metrics(
         period_s=float(base_metrics.get("packet_interval_s", 0.0) or 0.0),
         pdr_global=pdr_global,
         der_global=der_global,
+        delivered=delivered,
+        attempted=attempted,
+        failures_collision=failures_collision,
+        failures_no_signal=failures_no_signal,
+        pdr_ci95=pdr_ci95,
+        der_ci95=der_ci95,
         collisions=collisions,
         cluster_pdr=cluster_pdr,
         cluster_targets=cluster_targets,
         cluster_gaps=cluster_gaps,
         snir_values=snir_values,
+        snir_by_result=snir_by_result,
         snir_cdf=snir_cdf,
         mixra_solver=mixra_solver_str,
     )
