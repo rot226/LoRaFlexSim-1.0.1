@@ -1619,11 +1619,22 @@ class Simulator:
                 if delivered
                 else None
             )
-            if delivered:
-                if event_id in self.network_server.event_rssi:
-                    entry["rssi_dBm"] = self.network_server.event_rssi[event_id]
-                if event_id in self.network_server.event_snir:
-                    entry["snr_dB"] = self.network_server.event_snir[event_id]
+
+            snr_value = entry.get("snr_dB")
+            rssi_value = entry.get("rssi_dBm")
+
+            if event_id in self.network_server.event_snir:
+                snr_value = self.network_server.event_snir[event_id]
+            if event_id in self.network_server.event_rssi:
+                rssi_value = self.network_server.event_rssi[event_id]
+
+            if snr_value is None:
+                snr_value = float("nan")
+            if rssi_value is None:
+                rssi_value = float("nan")
+
+            entry["snr_dB"] = snr_value
+            entry["rssi_dBm"] = rssi_value
 
             if self.debug_rx:
                 if delivered:
