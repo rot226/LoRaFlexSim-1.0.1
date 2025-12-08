@@ -239,9 +239,9 @@ def compute_snir_cdf(df: Optional[pd.DataFrame]) -> List[Tuple[float, float]]:
     snir_column = _find_column(
         df.columns,
         [
-            "snir",
-            "snir_db",
             "snir_dB",
+            "snir_db",
+            "snir",
             "snr",
             "snr_db",
             "snr_dB",
@@ -249,13 +249,19 @@ def compute_snir_cdf(df: Optional[pd.DataFrame]) -> List[Tuple[float, float]]:
     )
     if snir_column is None:
         return []
-    values = pd.to_numeric(df[snir_column], errors="coerce").dropna().to_list()
+    raw_series = df[snir_column]
+    available_mask = raw_series.notna() & raw_series.astype(str).str.strip().ne("")
+    numeric_series = pd.to_numeric(raw_series, errors="coerce")
+    values = numeric_series[available_mask & numeric_series.notna()].to_list()
     if not values:
+        return []
+    total_attempts = len(df.index)
+    if total_attempts <= 0:
         return []
     minimum = math.floor(min(values))
     maximum = math.ceil(max(values))
     if minimum == maximum:
-        return [(float(minimum), 1.0)]
+        return [(float(minimum), len(values) / total_attempts)]
     bin_width = 1.0
     bin_edges = [minimum + i * bin_width for i in range(int((maximum - minimum) / bin_width) + 1)]
     bin_edges.append(maximum)
@@ -263,13 +269,12 @@ def compute_snir_cdf(df: Optional[pd.DataFrame]) -> List[Tuple[float, float]]:
     for value in values:
         index = min(int((value - minimum) / bin_width), len(counts) - 1)
         counts[index] += 1
-    total = sum(counts)
     cdf: List[Tuple[float, float]] = []
     cumulative = 0
     for edge_index, count in enumerate(counts):
         cumulative += count
         upper = bin_edges[edge_index + 1]
-        cdf.append((float(upper), cumulative / total if total else 0.0))
+        cdf.append((float(upper), cumulative / total_attempts if total_attempts else 0.0))
     return cdf
 
 
