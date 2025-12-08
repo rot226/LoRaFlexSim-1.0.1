@@ -94,12 +94,18 @@ def compute_run_metrics(
     cluster_gaps = _format_cluster_mapping(cluster_gaps_raw)
 
     snir_values: List[float] = []
+    snir_keys = ("snir_dB", "snir_db", "snr_dB", "snr_db", "snir", "snr")
     for event in events:
-        snr = event.get("snr_dB")
-        if snr is None:
+        snir_value = None
+        for key in snir_keys:
+            candidate = event.get(key)
+            if candidate is not None:
+                snir_value = candidate
+                break
+        if snir_value is None:
             continue
         try:
-            snir_values.append(float(snr))
+            snir_values.append(float(snir_value))
         except (TypeError, ValueError):
             continue
     snir_cdf = _compute_cdf(snir_values)
