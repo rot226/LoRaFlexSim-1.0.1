@@ -122,6 +122,11 @@ utilisez la CLI dédiée :
 python -m qos_cli.lfs_plots --in results/qos --config qos_cli/config.yaml --out figures/qos
 ```
 
+Les figures générées incluent désormais des barres d'erreur sur le PDR/DER,
+un découpage succès/collisions/sans-signal, ainsi que des vues SNIR
+(histogramme+CDF, PDR par bin de SNIR) et une dispersion collision vs charge,
+avec une légende globale harmonisée par méthode.
+
 > `qos_cli/lfs_plots.py` peut également être exécuté directement (`python qos_cli/lfs_plots.py`),
 > mais l'exécution en tant que module est recommandée pour garantir des imports cohérents.
 
