@@ -544,6 +544,77 @@ def test_mixra_opt_enforces_channel_cluster_limit():
         assert blocked_clusters
 
 
+def test_mixra_opt_respects_sf_channel_capacity_limits():
+    channel0 = DummyChannel(channel_index=0)
+    channel1 = DummyChannel(channel_index=1)
+    nodes = [
+        DummyNode(1, 60.0, 0.0, 14.0, channel0),
+        DummyNode(2, 80.0, 0.0, 14.0, channel0),
+        DummyNode(3, 100.0, 0.0, 14.0, channel0),
+        DummyNode(4, 120.0, 0.0, 14.0, channel0),
+    ]
+    gateways = [DummyGateway(0.0, 0.0)]
+    simulator = DummySimulator(
+        nodes,
+        gateways,
+        channel0,
+        extra_channels=[channel1],
+    )
+
+    manager = QoSManager()
+    manager.configure_clusters(
+        1,
+        proportions=[1.0],
+        arrival_rates=[0.05],
+        pdr_targets=[0.95],
+    )
+
+    cluster = manager.clusters[0]
+    sfs = [7, 8, 9, 10, 11, 12]
+    simulator.current_time = 0.0
+    manager.apply(simulator, "MixRA-Opt")
+
+    airtimes = manager.sf_airtimes
+    per_node_loads = {
+        sf: cluster.arrival_rate * airtimes.get(sf, 0.0)
+        for sf in sfs
+    }
+    manager.cluster_sf_channel_capacity = {
+        cluster.cluster_id: {
+            sf: {channel0.channel_index: per_node_loads[sf]}
+            for sf in sfs
+        }
+    }
+
+    simulator.current_time = 1.0
+    manager.apply(simulator, "MixRA-Opt")
+
+    combo_counts: dict[tuple[int, int], int] = {}
+    for node in nodes:
+        if manager.node_clusters.get(node.id) != cluster.cluster_id:
+            continue
+        channel = getattr(node, "channel", None)
+        if channel is None:
+            continue
+        channel_index = getattr(channel, "channel_index", None)
+        if channel_index is None:
+            continue
+        key = (node.sf, channel_index)
+        combo_counts[key] = combo_counts.get(key, 0) + 1
+
+    assert combo_counts
+    for (sf, channel_index), count in combo_counts.items():
+        cap = manager.cluster_sf_channel_capacity[cluster.cluster_id].get(sf, {}).get(
+            channel_index
+        )
+        if cap is None:
+            continue
+        per_node_load = cluster.arrival_rate * airtimes.get(sf, 0.0)
+        assert count * per_node_load <= cap + 1e-6
+        if channel_index == channel0.channel_index:
+            assert count <= 1
+
+
 def test_mixra_h_enforces_min_sf_limit():
     channel0 = DummyChannel(channel_index=0)
     channel1 = DummyChannel(channel_index=1)
