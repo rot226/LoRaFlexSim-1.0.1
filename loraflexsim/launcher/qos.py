@@ -1618,6 +1618,8 @@ class QoSManager:
                 max_nodes = int(math.floor(bounds[idx][1] * node_count + 1e-9))
                 if max_nodes < 0:
                     max_nodes = 0
+                sf_val = int(var_data[idx]["sf"])
+                channel_val = int(var_data[idx]["channel"])
                 load_coeff = float(var_data[idx]["load_coeff"])
                 if node_count > 0 and load_coeff > 0.0:
                     per_node_load = load_coeff / node_count
@@ -1632,8 +1634,8 @@ class QoSManager:
                             max_nodes = cluster_limit
                     combo_cap = (
                         sf_channel_caps.get(cluster_id, {})
-                        .get(sf, {})
-                        .get(channel_index)
+                        .get(sf_val, {})
+                        .get(channel_val)
                     )
                     if combo_cap is not None:
                         combo_limit = int(math.floor((combo_cap + 1e-9) / per_node_load))
