@@ -170,10 +170,62 @@ def load_scenarios(path: Path, use_default: bool = False) -> Dict[str, Any]:
     if path.exists():
         with path.open("r", encoding="utf-8") as stream:
             data = yaml.safe_load(stream) or {}
-        # TODO: Valider la structure chargée (schéma, types) avant utilisation.
-        return data
+        return _validate_loaded_scenarios(data)
 
     return get_default_scenarios()
+
+
+def _validate_loaded_scenarios(data: Any) -> Dict[str, Any]:
+    """Valide sommairement la structure YAML chargée depuis un fichier."""
+
+    if data is None:
+        return get_default_scenarios()
+
+    if not isinstance(data, Mapping):
+        raise ValueError("Le fichier de scénarios doit contenir un mapping YAML racine.")
+
+    if not data:
+        return get_default_scenarios()
+
+    common = data.get("common")
+    if common is not None and not isinstance(common, Mapping):
+        raise ValueError("La section 'common' doit être un mapping.")
+
+    scenarios = data.get("scenarios")
+    if scenarios is None:
+        raise ValueError("Le fichier de scénarios doit contenir une section 'scenarios'.")
+    if not isinstance(scenarios, Mapping):
+        raise ValueError(
+            "La section 'scenarios' doit être un mapping d'identifiants vers des configurations."
+        )
+
+    for scenario_id, scenario_cfg in scenarios.items():
+        if not isinstance(scenario_cfg, Mapping):
+            raise ValueError(
+                f"Le scénario '{scenario_id}' doit être défini sous forme de mapping YAML."
+            )
+
+        for required_field in ("label", "description", "N", "period"):
+            if required_field not in scenario_cfg:
+                raise ValueError(
+                    f"Le scénario '{scenario_id}' doit définir le champ '{required_field}'."
+                )
+
+        for int_field in ("N", "period"):
+            try:
+                int(scenario_cfg[int_field])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"La valeur du champ '{int_field}' dans le scénario '{scenario_id}' doit être numérique."
+                ) from exc
+
+        clusters = scenario_cfg.get("clusters")
+        if clusters is not None and not isinstance(clusters, Mapping):
+            raise ValueError(
+                f"La section 'clusters' du scénario '{scenario_id}' doit être un mapping."
+            )
+
+    return dict(data)
 
 
 def parse_set_option(option: str) -> Tuple[str, Any]:
