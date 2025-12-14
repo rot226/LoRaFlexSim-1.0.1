@@ -1,0 +1,31 @@
+figure:
+  figsize: [3.5, 2.6]
+  dpi: 300
+  constrained_layout: true
+font:
+  family: sans-serif
+  sans-serif: ["Arial", "Helvetica", "DejaVu Sans"]
+  size: 9
+axes:
+  titlesize: 9
+  labelsize: 9
+  grid: true
+  grid_alpha: 0.25
+  grid_linestyle: "--"
+  linewidth: 0.8
+lines:
+  linewidth: 1.5
+  markersize: 5
+legend:
+  fontsize: 8
+  title_fontsize: 8
+  frameon: false
+xtick:
+  labelsize: 8
+ytick:
+  labelsize: 8
+savefig:
+  bbox: tight
+  transparent: true
+text:
+  usetex: false
