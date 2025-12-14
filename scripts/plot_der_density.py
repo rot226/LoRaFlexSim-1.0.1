@@ -3,10 +3,17 @@ from __future__ import annotations
 import argparse
 import csv
 from collections import defaultdict
+import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
 
 import matplotlib.pyplot as plt
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.mne3sd.common import apply_ieee_style
 
 DEFAULT_INPUT = Path("data/der_density.csv")
 DEFAULT_OUTPUT_DIR = Path("plots")
@@ -59,8 +66,14 @@ def _group_by_cluster(records: Iterable[Mapping[str, str]]) -> Dict[str, Dict[st
     return grouped
 
 
-def _build_axes(num_clusters: int):
-    fig, axes = plt.subplots(2, num_clusters, figsize=(4.5 * num_clusters, 6.2), sharex="col")
+def _build_axes(num_clusters: int, *, double_column: bool):
+    width_multiplier = 3.6 * (2 if double_column else 1)
+    fig, axes = plt.subplots(
+        2,
+        num_clusters,
+        figsize=(width_multiplier * num_clusters, 6.2),
+        sharex="col",
+    )
     if num_clusters == 1:
         axes = [[axes[0]], [axes[1]]]  # type: ignore[list-item]
     return fig, axes
@@ -110,14 +123,24 @@ def plot_der_density(
     csv_path: Path = DEFAULT_INPUT,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     pdr_target: float = 0.9,
-) -> Tuple[Path, Path]:
+    *,
+    formats: Sequence[str] = ("png", "pdf"),
+    double_column: bool = False,
+    ieee_style: bool = False,
+) -> List[Path]:
+    formats = [ext.lower().lstrip(".") for ext in formats if ext]
+    if not formats:
+        raise ValueError("Aucun format de sortie fourni.")
+
+    if ieee_style:
+        apply_ieee_style(figsize=(7.2 if double_column else 3.6, 6.2))
     records = _load_records(csv_path)
     grouped = _group_by_cluster(records)
     if not grouped:
         raise ValueError("Aucune donnée à tracer.")
 
     clusters = sorted(grouped.keys(), key=_cluster_sort_value)
-    fig, axes = _build_axes(len(clusters))
+    fig, axes = _build_axes(len(clusters), double_column=double_column)
     plotted = False
 
     for idx, cluster_label in enumerate(clusters):
@@ -131,16 +154,18 @@ def plot_der_density(
     fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.92))
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    png_path = output_dir / "der_density.png"
-    pdf_path = output_dir / "der_density.pdf"
-    fig.savefig(png_path, dpi=150)
-    fig.savefig(pdf_path)
+    saved_paths: List[Path] = []
+    for fmt in dict.fromkeys(formats):
+        suffix = f".{fmt}"
+        output_path = output_dir / f"der_density{suffix}"
+        fig.savefig(output_path, dpi=150, format=fmt)
+        saved_paths.append(output_path)
     plt.close(fig)
 
     if not plotted:
         raise ValueError("Aucune courbe tracée : vérifiez les algorithmes disponibles dans le CSV.")
 
-    return png_path, pdf_path
+    return saved_paths
 
 
 def parse_args() -> argparse.Namespace:
@@ -153,13 +178,37 @@ def parse_args() -> argparse.Namespace:
         default=0.9,
         help="Valeur cible de PDR pour la ligne horizontale.",
     )
+    parser.add_argument(
+        "--formats",
+        type=str,
+        default="png,pdf",
+        help="Formats de sortie séparés par des virgules (ex: png,pdf,eps).",
+    )
+    parser.add_argument(
+        "--double-column",
+        action="store_true",
+        help="Utiliser une largeur de figure double colonne.",
+    )
+    parser.add_argument(
+        "--ieee-style",
+        action="store_true",
+        help="Appliquer le style rcParams compact pour publication IEEE.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    png_path, pdf_path = plot_der_density(args.input, args.output_dir, args.pdr_target)
-    print(f"Figures enregistrées dans : {png_path} et {pdf_path}")
+    formats = [item.strip() for part in args.formats.split(",") for item in [part] if item.strip()]
+    saved_paths = plot_der_density(
+        args.input,
+        args.output_dir,
+        args.pdr_target,
+        formats=formats,
+        double_column=args.double_column,
+        ieee_style=args.ieee_style,
+    )
+    print("Figures enregistrées dans :", ", ".join(str(path) for path in saved_paths))
 
 
 if __name__ == "__main__":
