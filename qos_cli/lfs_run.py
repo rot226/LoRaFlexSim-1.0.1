@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Mapping, Optional, Sequence, Tuple
 
@@ -21,6 +22,17 @@ AREA_SIZE_M = AREA_RADIUS_M * 2.0
 
 
 MethodName = str
+
+
+@dataclass(frozen=True)
+class PhyProfile:
+    """Enveloppe des paramètres radio appliqués aux canaux."""
+
+    name: str
+    use_snir: bool
+    flora_capture: bool
+    interference_model: bool
+    snir_model: bool
 
 
 class ScenarioQoSManager(QoSManager):
@@ -170,7 +182,18 @@ def _parse_clusters(
 def _build_channels(
     channels_cfg: Mapping[str, object],
     propagation_cfg: Mapping[str, object],
-) -> Tuple[MultiChannel, dict[str, int]]:
+) -> Tuple[MultiChannel, dict[str, int], PhyProfile]:
+    raw_profile = propagation_cfg.get("phy_profile", "qos_original")
+    profile_name = str(raw_profile).strip().lower() if raw_profile is not None else ""
+    enhanced = profile_name == "snir_enhanced"
+    profile = PhyProfile(
+        name="snir_enhanced" if enhanced else "qos_original",
+        use_snir=enhanced,
+        flora_capture=enhanced,
+        interference_model=enhanced,
+        snir_model=enhanced,
+    )
+
     channels: List[Channel] = []
     channel_map: dict[str, int] = {}
     capture_threshold = float(propagation_cfg.get("capture_threshold_db", 1.0))
@@ -192,11 +215,15 @@ def _build_channels(
         )
         channel.channel_index = index
         channel.orthogonal_sf = False
+        channel.use_snir = profile.use_snir
+        channel.flora_capture = profile.flora_capture
+        channel.interference_model = profile.interference_model
+        channel.snir_model = profile.snir_model
         channels.append(channel)
         channel_map[str(name)] = index
     multichannel = MultiChannel(channels)
     multichannel.force_non_orthogonal(DEFAULT_NON_ORTH_DELTA)
-    return multichannel, channel_map
+    return multichannel, channel_map, profile
 
 
 def _apply_method(
@@ -359,10 +386,22 @@ def _prepare_gateway(simulator: Simulator, gateway_cfg: Mapping[str, object]) ->
 def _collect_packets(
     simulator: Simulator,
     cluster_lookup: Mapping[int, str],
+    phy_profile: PhyProfile,
 ) -> "Optional['pd.DataFrame']":
     df = simulator.get_events_dataframe()
     if df is None or df.empty:
         return df
+    if phy_profile.name == "qos_original":
+        for column in (
+            "snir_dB",
+            "snir_db",
+            "snir",
+            "snr",
+            "snr_db",
+            "snr_dB",
+        ):
+            if column in df.columns:
+                df[column] = float("nan")
     node_clusters = {getattr(node, "id", None): getattr(node, "qos_cluster_id", None) for node in simulator.nodes}
     df["cluster_id"] = df["node_id"].map(node_clusters)
     df["cluster"] = df["cluster_id"].map(lambda cid: cluster_lookup.get(cid) if cid is not None else None)
@@ -426,7 +465,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     num_nodes = int(scenario_cfg.get("N", 120))
     duration = _scenario_duration(period, args.duration)
 
-    multichannel, channel_map = _build_channels(channels_cfg, propagation_cfg)
+    multichannel, channel_map, phy_profile = _build_channels(channels_cfg, propagation_cfg)
 
     simulator = Simulator(
         num_nodes=num_nodes,
@@ -449,6 +488,11 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         pure_poisson_mode=True,
     )
     setattr(simulator, "capture_delta_db", float(propagation_cfg.get("capture_threshold_db", 1.0)))
+    simulator.use_snir = phy_profile.use_snir
+    simulator.phy_profile = phy_profile.name
+    simulator.snir_model = phy_profile.snir_model
+    simulator.interference_model = phy_profile.interference_model
+    simulator.flora_capture = phy_profile.flora_capture
     _prepare_gateway(simulator, gateway_cfg)
 
     manager = ScenarioQoSManager()
@@ -471,7 +515,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
 
     cluster_lookup = {cluster.cluster_id: names[index] for index, cluster in enumerate(manager.clusters)}
 
-    packets_df = _collect_packets(simulator, cluster_lookup)
+    packets_df = _collect_packets(simulator, cluster_lookup, phy_profile)
     if packets_df is not None:
         packets_df.to_csv(out_dir / "packets.csv", index=False)
 
