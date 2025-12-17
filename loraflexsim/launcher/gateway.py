@@ -1,5 +1,6 @@
 import logging
 import math
+from traffic.numpy_compat import create_generator
 
 from .non_orth_delta import (
     DEFAULT_NON_ORTH_DELTA as FLORA_NON_ORTH_DELTA,
@@ -29,6 +30,7 @@ class Gateway:
         energy_profile: EnergyProfile | str | None = None,
         downlink_power_dBm: float | None = None,
         energy_detection_dBm: float = -float("inf"),
+        rng=None,
     ):
         """
         Initialise une passerelle LoRa.
@@ -69,6 +71,7 @@ class Gateway:
         self.energy_processing = 0.0
         self.energy_ramp = 0.0
         self.energy_detection_dBm = energy_detection_dBm
+        self.rng = rng or create_generator()
         # Accumulateur d'énergie par état
         self.energy = EnergyAccumulator()
         # Transmissions en cours indexées par (sf, frequency)
@@ -132,6 +135,9 @@ class Gateway:
         orthogonal_sf: bool = True,
         capture_window_symbols: int = 5,
         non_orth_delta: list[list[float]] | None = None,
+        snir_fading_std: float = 0.0,
+        marginal_snir_db: float = 0.0,
+        marginal_drop_prob: float = 0.0,
     ):
         """
         Tente de démarrer la réception d'une nouvelle transmission sur cette passerelle.
@@ -160,6 +166,13 @@ class Gateway:
             ``orthogonal_sf`` vaut ``False``. Chaque cellule représente le
             ΔRSSI (dB) minimal entre ``SF_signal`` (ligne) et
             ``SF_interférence`` (colonne) pour autoriser la capture.
+        :param snir_fading_std: Écart-type (dB) appliqué aux RSSI pour refléter
+            un fading rapide lors du calcul de capture SNIR.
+        :param marginal_snir_db: Marge en-dessous de laquelle un paquet capturé
+            peut encore échouer aléatoirement malgré un SNIR légèrement au-dessus
+            du seuil.
+        :param marginal_drop_prob: Probabilité maximale de déclencher cette
+            perte marginale lorsque ``margin=0``.
         """
         if rssi < getattr(self, "energy_detection_dBm", -float("inf")):
             logger.debug(
@@ -303,6 +316,9 @@ class Gateway:
             return True
 
         flora_mode = False
+        if snir_fading_std > 0.0:
+            for t in colliders:
+                t['rssi'] += float(self.rng.normal(0.0, snir_fading_std))
 
         if capture_mode in {"advanced", "omnet"} and noise_floor is not None:
             def _snr(i: int) -> float:
@@ -414,9 +430,20 @@ class Gateway:
 
         snir_threshold = threshold_fn(strongest.get('sf', sf))
         snir_failure = False
+        failure_reason = None
         if strongest_snir is not None and strongest_snir < snir_threshold:
             snir_failure = True
+            failure_reason = "snir_below_threshold"
             capture = False
+
+        if capture and strongest_snir is not None and marginal_drop_prob > 0.0:
+            margin = strongest_snir - snir_threshold
+            if margin < marginal_snir_db:
+                drop_prob = marginal_drop_prob * (1.0 - max(margin, 0.0) / max(marginal_snir_db, 1e-9))
+                if self.rng.random() < drop_prob:
+                    capture = False
+                    failure_reason = "snir_marginal"
+                    snir_failure = True
 
         if capture:
             # Apply preamble rule: the winning packet must have started
@@ -462,8 +489,8 @@ class Gateway:
             # Aucun signal ne peut être décodé (collision totale)
             for t in colliders:
                 t['lost_flag'] = True
-                if snir_failure:
-                    t['collision_reason'] = "snir_below_threshold"
+                if failure_reason is not None:
+                    t['collision_reason'] = failure_reason
             # Conserver la nouvelle transmission marquée comme perdue pour bloquer le canal
             self.active_map.setdefault(key, []).append(new_transmission)
             self.active_by_event[event_id] = (key, new_transmission)

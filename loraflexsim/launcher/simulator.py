@@ -9,6 +9,7 @@ from collections import deque
 
 from traffic.exponential import sample_interval
 from traffic.rng_manager import RngManager
+from traffic.numpy_compat import create_generator
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -185,8 +186,9 @@ class _PowerTimeline:
 class InterferenceTracker:
     """Suivi des transmissions actives par passerelle, fréquence et SF."""
 
-    def __init__(self) -> None:
+    def __init__(self, rng=None) -> None:
         self.active: dict[tuple[int, float], _PowerTimeline] = {}
+        self.rng = rng or create_generator()
 
     def add(
         self,
@@ -240,6 +242,7 @@ class InterferenceTracker:
         *,
         base_noise_mW: float = 0.0,
         alpha_isf: float = 0.0,
+        fading_std: float = 0.0,
         exclude_event_id: int | None = None,
     ) -> float:
         """Calcule l'interférence moyenne (hors bruit) sur l'intervalle donné."""
@@ -262,7 +265,11 @@ class InterferenceTracker:
             alpha_isf=alpha_isf,
             exclude_event_id=exclude_event_id,
         )
-        return max(total_power - base_noise_mW, 0.0)
+        interference = max(total_power - base_noise_mW, 0.0)
+        if fading_std > 0.0:
+            fading_db = float(self.rng.normal(0.0, fading_std))
+            interference *= 10 ** (fading_db / 10.0)
+        return max(interference, 0.0)
 
     def power_changes(
         self,
@@ -843,6 +850,14 @@ class Simulator:
         if self.seed is not None:
             random.seed(self.seed)
 
+        for idx, channel in enumerate(self.multichannel.channels):
+            if hasattr(channel, "set_rng"):
+                channel.set_rng(self.rng_manager.get_stream("channel", idx))
+        if hasattr(self.control_channel, "set_rng"):
+            self.control_channel.set_rng(
+                self.rng_manager.get_stream("channel_control", 0)
+            )
+
         # Générer les passerelles
         self.gateways = []
         reset_ids()
@@ -884,6 +899,7 @@ class Simulator:
                     gw_y,
                     downlink_power_dBm=gw_power,
                     energy_detection_dBm=energy_detection_dBm,
+                    rng=self.rng_manager.get_stream("gateway", gw_id),
                 )
             )
 
@@ -1000,7 +1016,9 @@ class Simulator:
         self.retransmissions = 0
 
         # Gestion des transmissions simultanées pour calculer l'interférence
-        self._interference_tracker = InterferenceTracker()
+        self._interference_tracker = InterferenceTracker(
+            self.rng_manager.get_stream("interference", 0)
+        )
         # Alias rétrocompatible utilisé par certains tests pour intercepter les
         # enregistrements de transmissions et les mesures d'interférence.
         self._tx_manager = self._interference_tracker
@@ -1447,6 +1465,7 @@ class Simulator:
                     end_time,
                     base_noise_mW=noise_lin,
                     alpha_isf=getattr(node.channel, "alpha_isf", 0.0),
+                    fading_std=getattr(node.channel, "snir_fading_std", 0.0),
                 )
                 if interference_mw < 0.0:
                     interference_mw = 0.0
@@ -1530,6 +1549,11 @@ class Simulator:
                     orthogonal_sf=node.channel.orthogonal_sf,
                     capture_window_symbols=node.channel.capture_window_symbols,
                     non_orth_delta=getattr(node.channel, "non_orth_delta", None),
+                    snir_fading_std=getattr(node.channel, "snir_fading_std", 0.0),
+                    marginal_snir_db=getattr(node.channel, "marginal_snir_margin_db", 0.0),
+                    marginal_drop_prob=getattr(
+                        node.channel, "marginal_snir_drop_prob", 0.0
+                    ),
                 )
 
             # Retenir le meilleur RSSI/SNR mesuré pour cette transmission
@@ -1602,9 +1626,11 @@ class Simulator:
                 if heard:
                     self.packets_lost_collision += 1
                     reason = self.network_server.collision_reasons.get(event_id)
-                    if reason == "snir_below_threshold":
+                    if reason in {"snir_below_threshold", "snir_marginal"}:
                         self.packets_lost_snir += 1
-                    node.increment_collision(snir_limit=reason == "snir_below_threshold")
+                    node.increment_collision(
+                        snir_limit=reason in {"snir_below_threshold", "snir_marginal"}
+                    )
                 else:
                     self.packets_lost_no_signal += 1
             # Mettre à jour le résultat et la passerelle du log de l'événement
