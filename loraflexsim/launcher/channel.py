@@ -213,6 +213,9 @@ class Channel:
         impulsive_noise_dB: float = 0.0,
         adjacent_interference_dB: float = 0.0,
         use_snir: bool = True,
+        snir_fading_std: float | None = None,
+        marginal_snir_margin_db: float = 1.5,
+        marginal_snir_drop_prob: float = 0.25,
         use_flora_curves: bool = False,
         tx_current_a: float = 0.0,
         rx_current_a: float = 0.0,
@@ -462,6 +465,12 @@ class Channel:
         self.rx_current_a = float(rx_current_a)
         self.idle_current_a = float(idle_current_a)
         self.voltage_v = float(voltage_v)
+        if snir_fading_std is None:
+            self.snir_fading_std = 1.5 if use_snir else 0.0
+        else:
+            self.snir_fading_std = float(snir_fading_std)
+        self.marginal_snir_margin_db = float(marginal_snir_margin_db)
+        self.marginal_snir_drop_prob = float(marginal_snir_drop_prob)
         if flora_noise_path:
             self.flora_noise_table = self.parse_flora_noise_table(flora_noise_path)
         else:
@@ -491,6 +500,7 @@ class Channel:
             freq_drift_std=freq_drift_std_hz,
             clock_drift_std=clock_drift_std_s,
             temperature_K=temperature_K,
+            rng=self.rng,
         )
         self._temperature = _CorrelatedValue(
             temperature_K, temperature_std_K, fading_correlation, rng=self.rng
@@ -926,9 +936,14 @@ class Channel:
             self.last_rssi_dBm = rssi_dBm
             self.last_noise_dBm = noise_dBm
 
+        signal_mW = 10 ** (rssi_dBm / 10.0)
+        if self.snir_fading_std > 0.0:
+            fading_signal = 10 ** (self._snir_fading_db() / 10.0)
+            fading_interf = 10 ** (self._snir_fading_db() / 10.0)
+            signal_mW *= fading_signal
+            interference_mW *= fading_interf
         self.last_interference_mW = interference_mW
         noise_mW = 10 ** (noise_dBm / 10.0)
-        signal_mW = 10 ** (rssi_dBm / 10.0)
         total_noise = noise_mW + interference_mW
         if total_noise <= 0.0:
             snir_dB = float("inf")
@@ -1024,6 +1039,24 @@ class Channel:
         q = sum(self.rng.normal(0.0, 1.0) for _ in range(self.multipath_taps))
         amp = math.sqrt(i * i + q * q) / math.sqrt(self.multipath_taps)
         return 20 * math.log10(max(amp, 1e-12))
+
+    def _snir_fading_db(self) -> float:
+        """Return a fading term dedicated to SNIR computations."""
+
+        if self.snir_fading_std <= 0.0:
+            return 0.0
+        return float(self.rng.normal(0.0, self.snir_fading_std))
+
+    def set_rng(self, rng) -> None:
+        """Attach a new RNG to the channel and correlated helpers."""
+
+        self.rng = rng
+        for attr in ("_temperature", "_phase_noise", "_pa_nl", "_humidity", "_impulse"):
+            helper = getattr(self, attr, None)
+            if helper is not None:
+                helper.rng = rng
+        if getattr(self, "omnet", None) is not None:
+            self.omnet.rng = rng
 
     def _filter_attenuation_db(self, freq_offset_hz: float) -> float:
         """Return attenuation due to the front-end filter."""

@@ -503,6 +503,9 @@ scénarios FLoRa. Voici la liste complète des options :
 - `config_file` : chemin d'un fichier INI ou JSON décrivant
   positions, SF et puissance.
 - `seed` : graine aléatoire utilisée pour reproduire le placement des nœuds et le même ordre statistique des intervalles.
+- Chaque composant radio (canal, passerelle, suivi des interférences) reçoit
+  désormais son propre générateur pseudo-aléatoire dérivé de `seed` pour
+  éviter les corrélations entre fading, placement et génération des collisions.
 - `class_c_rx_interval` : période de vérification des downlinks en classe C.
 - `beacon_interval` : durée séparant deux beacons pour la classe B (s).
 - `ping_slot_interval` : intervalle de base (classe B). L'espacement réel entre
@@ -1273,4 +1276,3 @@ encore de maturité :
 
 Les contributions sont les bienvenues pour lever ces limitations ou proposer de
 nouvelles idées.
-
