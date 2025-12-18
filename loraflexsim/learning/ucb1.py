@@ -73,18 +73,12 @@ class LoRaSFSelectorUCB1:
     def reward_from_outcome(success: bool, snir_positive: bool | None = None) -> int:
         """Convertit le résultat radio en récompense binaire.
 
-        Un succès radio vaut 1. Si ``success`` est ``False``, on peut considérer le SNIR
-        comme un indice complémentaire : un SNIR positif peut être compté comme succès
-        partiel. Par défaut, toute absence de succès produit une récompense nulle.
+        La récompense est 1 en cas de succès, 0 sinon. Le SNIR peut être enregistré
+        séparément pour analyse mais n'influence pas directement la récompense.
         """
 
-        if success:
-            return 1
-
-        if snir_positive:
-            return 1
-
-        return 0
+        _ = snir_positive  # prévu pour un affinage futur des récompenses
+        return 1 if success else 0
 
     def update(self, sf: str, reward: float) -> None:
         """Met à jour l'état du bandit à partir du facteur d'étalement choisi."""
