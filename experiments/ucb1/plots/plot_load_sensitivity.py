@@ -1,35 +1,35 @@
-"""Visualise la sensibilité à la charge du DER pour UCB1.
+"""Compare la sensibilité au trafic pour Step1/QoS et UCB1 (SNIR on/off).
 
-Le script lit le CSV produit par ``run_ucb1_load_sweep.py`` et trace le DER par
-cluster en fonction de l'intervalle de génération de paquets. Si la colonne
-``packet_interval`` est absente (CSV généré avec le script actuel), les
-intervalles sont déduits à partir des valeurs par défaut ou de l'argument
-``--packet-intervals``.
+Les scripts Step1/QoS génèrent des colonnes ``cluster_pdr_*``/``cluster_der_*``
+sur plusieurs intervalles d'émission. Les CSV UCB1 (``run_ucb1_load_sweep.py``)
+exposent des colonnes ``cluster`` et ``der``/``pdr``. Les deux sources peuvent
+inclure un indicateur SNIR ; à défaut il est déduit du chemin ou des flags.
+
+Couleurs : bleu (SNIR désactivé) et rouge (SNIR activé). Les courbes UCB1 sont
+tracées en pointillé avec des marqueurs losange pour être différenciées.
 """
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Dict, Iterable, List, Mapping, MutableMapping
 
 import matplotlib.pyplot as plt
 import pandas as pd
 
-DEFAULT_INPUT = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
-DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "plots" / "ucb1_load_sensitivity.png"
-DEFAULT_INTERVALS: Sequence[float] = (300.0, 600.0, 900.0)
+ROOT_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_STEP1 = ROOT_DIR / "results" / "step1" / "summary.csv"
+DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
+DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "plots" / "ucb1_load_vs_step1.png"
+SNIR_LABELS = {"snir_on": "SNIR activé", "snir_off": "SNIR désactivé", "snir_unknown": "SNIR inconnu"}
+SNIR_COLORS = {"snir_on": "#d62728", "snir_off": "#1f77b4", "snir_unknown": "#7f7f7f"}
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Trace la sensibilité à la charge du DER.")
-    parser.add_argument("--csv", type=Path, default=DEFAULT_INPUT, help="Chemin du CSV de balayage de charge.")
-    parser.add_argument(
-        "--packet-intervals",
-        type=float,
-        nargs="*",
-        default=list(DEFAULT_INTERVALS),
-        help="Intervalles de paquets en secondes (utilisés si non présents dans le CSV).",
-    )
+    parser = argparse.ArgumentParser(description="Superpose le DER par cluster vs charge (Step1 + UCB1).")
+    parser.add_argument("--step1-csv", type=Path, default=DEFAULT_STEP1, help="CSV Step1/QoS (summary ou brut).")
+    parser.add_argument("--ucb1-csv", type=Path, default=DEFAULT_UCB1, help="CSV UCB1 du balayage de charge.")
     parser.add_argument(
         "--output",
         type=Path,
@@ -39,55 +39,130 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_load_csv(path: Path) -> pd.DataFrame:
-    if not path.exists():
-        raise FileNotFoundError(f"Impossible de trouver le CSV '{path}'.")
+def _parse_bool(value: object | None) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"", "none", "nan"}:
+        return None
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _detect_snir(row: Mapping[str, object], path: Path | None) -> str:
+    candidates = [row.get("with_snir"), row.get("use_snir"), row.get("snir_enabled"), row.get("snir")]
+    for candidate in candidates:
+        parsed = _parse_bool(candidate)
+        if parsed is not None:
+            return "snir_on" if parsed else "snir_off"
+    state = row.get("snir_state")
+    if isinstance(state, str) and state:
+        state_lower = state.lower()
+        if "on" in state_lower:
+            return "snir_on"
+        if "off" in state_lower:
+            return "snir_off"
+    if path and any("snir" in part.lower() for part in path.parts):
+        return "snir_on"
+    return "snir_unknown"
+
+
+def _extract_cluster_values(row: Mapping[str, object]) -> Dict[int, float]:
+    values: Dict[int, float] = {}
+    mean_keys: MutableMapping[int, float] = {}
+    direct_keys: MutableMapping[int, float] = {}
+    pattern = re.compile(r"cluster_(?:pdr|der)[^0-9]*([0-9]+)")
+    for key, raw_value in row.items():
+        match = pattern.match(str(key))
+        if not match:
+            continue
+        try:
+            cid = int(match.group(1))
+        except ValueError:
+            continue
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if "mean" in str(key):
+            mean_keys[cid] = value
+        elif cid not in direct_keys:
+            direct_keys[cid] = value
+    values.update(direct_keys)
+    values.update(mean_keys)
+    return values
+
+
+def _load_step1(path: Path) -> pd.DataFrame:
+    if not path or not path.exists():
+        print(f"Avertissement : CSV Step1 introuvable ({path}), section ignorée.")
+        return pd.DataFrame()
     df = pd.read_csv(path)
-    required_cols = {"cluster", "der"}
-    missing = required_cols - set(df.columns)
+    records: List[dict] = []
+    for row in df.to_dict(orient="records"):
+        snir_state = _detect_snir(row, path)
+        x_value = row.get("packet_interval_s")
+        if x_value is None:
+            x_value = row.get("packet_interval")
+        try:
+            x_value = float(x_value)
+        except (TypeError, ValueError):
+            x_value = None
+        clusters = _extract_cluster_values(row)
+        for cluster_id, value in clusters.items():
+            records.append({
+                "source": "Step1/QoS",
+                "cluster": cluster_id,
+                "packet_interval": x_value,
+                "der": value,
+                "snir_state": snir_state,
+            })
+    tidy = pd.DataFrame(records)
+    return tidy.dropna(subset=["packet_interval", "der"])
+
+
+def _load_ucb1(path: Path) -> pd.DataFrame:
+    if not path or not path.exists():
+        print(f"Avertissement : CSV UCB1 introuvable ({path}), section ignorée.")
+        return pd.DataFrame()
+    df = pd.read_csv(path)
+    metric = "der" if "der" in df.columns else "pdr" if "pdr" in df.columns else None
+    if metric is None:
+        raise ValueError(f"Impossible de trouver les colonnes 'der' ou 'pdr' dans {path}")
+    interval_col = "packet_interval" if "packet_interval" in df.columns else "packet_interval_s"
+    required = {"cluster", metric, interval_col}
+    missing = required - set(df.columns)
     if missing:
         raise ValueError(f"Colonnes manquantes dans {path}: {', '.join(sorted(missing))}")
-    return df
 
-
-def _attach_intervals(df: pd.DataFrame, intervals: Iterable[float]) -> pd.DataFrame:
-    if "packet_interval" in df.columns:
-        return df
-
-    clusters_per_sweep = df["cluster"].nunique()
-    intervals = list(intervals)
-    if len(intervals) * clusters_per_sweep != len(df):
-        raise ValueError(
-            "Impossible d'inférer les intervalles : le nombre de lignes du CSV ne correspond pas"
-            " au produit (nombre d'intervalles) x (nombre de clusters)."
-        )
-
-    expanded: list[float] = []
-    for interval in intervals:
-        expanded.extend([interval] * clusters_per_sweep)
     df = df.copy()
-    df["packet_interval"] = expanded
+    df.rename(columns={metric: "der", interval_col: "packet_interval"}, inplace=True)
+    df["source"] = "UCB1"
+    df["snir_state"] = df.apply(lambda row: _detect_snir(row, path), axis=1)
     return df
 
 
-def _plot_load_sensitivity(df: pd.DataFrame, output: Path) -> None:
+def _plot(df: pd.DataFrame, output: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
-    clusters = sorted(df["cluster"].unique())
-    for cluster_id in clusters:
-        subset = df[df["cluster"] == cluster_id].sort_values("packet_interval")
-        ax.plot(
-            subset["packet_interval"] / 60.0,
-            subset["der"],
-            marker="o",
-            label=f"Cluster {cluster_id}",
-        )
+    style_by_source = {"Step1/QoS": {"linestyle": "-", "marker": "o"}, "UCB1": {"linestyle": "--", "marker": "D"}}
+    for (source, snir_state, cluster_id), subset in df.groupby(["source", "snir_state", "cluster"], sort=True):
+        subset = subset.sort_values("packet_interval")
+        color = SNIR_COLORS.get(snir_state, SNIR_COLORS["snir_unknown"])
+        label = f"{source} C{int(cluster_id)} ({SNIR_LABELS.get(snir_state, snir_state)})"
+        style = style_by_source.get(source, {})
+        ax.plot(subset["packet_interval"] / 60.0, subset["der"], label=label, color=color, **style)
 
     ax.set_xlabel("Intervalle entre paquets (minutes)")
-    ax.set_ylabel("Data Extraction Rate (DER)")
+    ax.set_ylabel("DER / PDR par cluster")
     ax.set_ylim(0, 1.05)
     ax.grid(True, linestyle=":", alpha=0.6)
     ax.legend()
-    ax.set_title("Sensibilité à la charge (UCB1)")
+    ax.set_title("Sensibilité à la charge – Step1 vs UCB1")
 
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
@@ -97,9 +172,10 @@ def _plot_load_sensitivity(df: pd.DataFrame, output: Path) -> None:
 
 def main() -> None:
     args = parse_args()
-    df = _load_load_csv(args.csv)
-    df = _attach_intervals(df, args.packet_intervals)
-    _plot_load_sensitivity(df, args.output)
+    combined = pd.concat([_load_step1(args.step1_csv), _load_ucb1(args.ucb1_csv)], ignore_index=True)
+    if combined.empty:
+        raise SystemExit("Aucune donnée exploitable pour tracer la figure.")
+    _plot(combined, args.output)
 
 
 if __name__ == "__main__":
