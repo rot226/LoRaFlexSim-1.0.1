@@ -106,6 +106,17 @@ Le script détecte automatiquement l'état SNIR et génère
 `--strict-snir-detection` si vous souhaitez échouer lorsque l'état SNIR ne
 peut pas être déduit implicitement.
 
+Pour vérifier rapidement que les courbes combinées SNIR on/off restent
+fonctionnelles, lancez le test léger suivant :
+
+```bash
+python scripts/validate_snir_plots.py
+```
+
+Le script exécute deux simulations courtes (SNIR activé/désactivé), agrège
+les CSV puis s'assure qu'au moins une figure `*_snir_compare_*.png` est
+générée dans `figures/step1/`.
+
 ### Banc QoS par clusters
 
 Le scénario de validation QoS multi-algorithmes est automatisé via les scripts
