@@ -1,5 +1,6 @@
 """Event-driven simulator for LoRaFlexSim."""
 
+import configparser
 import heapq
 import logging
 import math
@@ -61,6 +62,39 @@ class Event:
 
 logger = logging.getLogger(__name__)
 diag_logger = logging.getLogger("diagnostics")
+
+
+def _load_channel_overrides(path: str | Path | None) -> dict[str, float]:
+    """Return channel override values defined in ``path`` if present."""
+
+    overrides: dict[str, float] = {}
+    if path is None:
+        return overrides
+    cfg_path = Path(path)
+    if not cfg_path.is_file():
+        return overrides
+
+    cp = configparser.ConfigParser()
+    cp.read(cfg_path)
+    if not cp.has_section("channel"):
+        return overrides
+
+    keys = (
+        "snir_fading_std",
+        "noise_floor_std",
+        "interference_dB",
+        "sensitivity_margin_dB",
+        "capture_threshold_dB",
+        "marginal_snir_margin_db",
+        "marginal_snir_drop_prob",
+    )
+    for key in keys:
+        try:
+            value = cp.getfloat("channel", key)
+        except Exception:
+            continue
+        overrides[key] = value
+    return overrides
 
 
 def _validate_positive_real(name: str, value: object) -> float:
@@ -403,6 +437,14 @@ class Simulator:
         beacon_loss_prob: float = 0.0,
         ping_slot_interval: float = 1.0,
         ping_slot_offset: float = 2.0,
+        channel_config: str | Path | None = None,
+        snir_fading_std: float | None = None,
+        noise_floor_std: float | None = None,
+        interference_dB: float | None = None,
+        sensitivity_margin_dB: float | None = None,
+        capture_threshold_dB: float | None = None,
+        marginal_snir_margin_db: float | None = None,
+        marginal_snir_drop_prob: float | None = None,
         debug_rx: bool = False,
         dump_intervals: bool = False,
         pure_poisson_mode: bool = False,
@@ -492,6 +534,24 @@ class Simulator:
             (s).
         :param ping_slot_offset: Décalage initial entre le beacon et le premier
             ping slot (s).
+        :param channel_config: Fichier INI optionnel contenant une section
+            ``[channel]`` pour surcharger les paramètres radio (fading SNIR,
+            bruit, capture…). Aucun effet si absent.
+        :param snir_fading_std: Écart-type du fading appliqué au signal et aux
+            interférences lors du calcul SNIR (dB). ``None`` conserve la
+            valeur par défaut ou celle du fichier de configuration.
+        :param noise_floor_std: Dispersion logarithmique appliquée au bruit de
+            fond (dB). ``None`` laisse la valeur actuelle.
+        :param interference_dB: Bruit de fond moyen ajouté au plancher thermique
+            (dB). ``None`` pour conserver la valeur existante.
+        :param sensitivity_margin_dB: Marge ajoutée aux seuils de sensibilité
+            par SF pour éviter des réceptions trop optimistes.
+        :param capture_threshold_dB: Seuil de capture utilisé lorsque plusieurs
+            paquets se chevauchent (dB).
+        :param marginal_snir_margin_db: Marge en-dessous de laquelle un paquet
+            capturé peut encore être perdu aléatoirement (dB).
+        :param marginal_snir_drop_prob: Probabilité maximale associée à la
+            perte marginale décrite ci-dessus.
         :param debug_rx: Active la journalisation détaillée des paquets reçus ou rejetés.
         :param dump_intervals: Exporte la série complète des intervalles dans un fichier Parquet.
         :param lock_step_poisson: Prégénère la séquence Poisson une seule fois et la réutilise.
@@ -607,6 +667,54 @@ class Simulator:
         self.capture_mode = capture_mode
         self.pa_ramp_up_s = pa_ramp_up_s
         self.pa_ramp_down_s = pa_ramp_down_s
+        channel_overrides = _load_channel_overrides(channel_config)
+        manual_overrides = {
+            "snir_fading_std": snir_fading_std,
+            "noise_floor_std": noise_floor_std,
+            "interference_dB": interference_dB,
+            "sensitivity_margin_dB": sensitivity_margin_dB,
+            "capture_threshold_dB": capture_threshold_dB,
+            "marginal_snir_margin_db": marginal_snir_margin_db,
+            "marginal_snir_drop_prob": marginal_snir_drop_prob,
+        }
+        for key, value in manual_overrides.items():
+            if value is not None:
+                channel_overrides[key] = float(value)
+
+        def _apply_overrides(channel: Channel) -> None:
+            if not channel_overrides:
+                return
+            if "capture_threshold_dB" in channel_overrides:
+                channel.capture_threshold_dB = channel_overrides["capture_threshold_dB"]
+            if "snir_fading_std" in channel_overrides:
+                channel.snir_fading_std = channel_overrides["snir_fading_std"]
+            if "noise_floor_std" in channel_overrides:
+                channel.noise_floor_std = channel_overrides["noise_floor_std"]
+            if "interference_dB" in channel_overrides:
+                channel.interference_dB = channel_overrides["interference_dB"]
+            if "marginal_snir_margin_db" in channel_overrides:
+                channel.marginal_snir_margin_db = channel_overrides["marginal_snir_margin_db"]
+            if "marginal_snir_drop_prob" in channel_overrides:
+                channel.marginal_snir_drop_prob = channel_overrides["marginal_snir_drop_prob"]
+            if "sensitivity_margin_dB" in channel_overrides:
+                channel.sensitivity_margin_dB = channel_overrides["sensitivity_margin_dB"]
+                if hasattr(channel, "_update_sensitivity"):
+                    channel._update_sensitivity()
+
+        channel_kwargs = {
+            key: value
+            for key, value in channel_overrides.items()
+            if key
+            in {
+                "snir_fading_std",
+                "noise_floor_std",
+                "interference_dB",
+                "sensitivity_margin_dB",
+                "capture_threshold_dB",
+                "marginal_snir_margin_db",
+                "marginal_snir_drop_prob",
+            }
+        }
         # Activation ou non de la mobilité des nœuds
         self.mobility_enabled = mobility
         if mobility_model is not None:
@@ -682,6 +790,8 @@ class Simulator:
             if energy_detection_dBm != -float("inf"):
                 for ch in self.multichannel.channels:
                     ch.energy_detection_dBm = energy_detection_dBm
+            for ch in self.multichannel.channels:
+                _apply_overrides(ch)
             if flora_mode:
                 for ch in self.multichannel.channels:
                     ch.phy_model = "omnet_full"
@@ -729,10 +839,12 @@ class Simulator:
                         clock_jitter_std_s=clock_jitter_std_s,
                         pa_ramp_up_s=pa_ramp_up_s,
                         pa_ramp_down_s=pa_ramp_down_s,
+                        **channel_kwargs,
                     )
                 ]
                 for ch in ch_list:
                     _apply_flora_curves(ch)
+                    _apply_overrides(ch)
             else:
                 ch_list = []
                 for ch in channels:
@@ -767,6 +879,7 @@ class Simulator:
                             ch.omnet_phy.pa_ramp_up_s = pa_ramp_up_s
                             ch.omnet_phy.pa_ramp_down_s = pa_ramp_down_s
                             ch.omnet_phy._phase_noise.std = phase_noise_std_dB
+                        _apply_overrides(ch)
                         ch_list.append(ch)
                     else:
                         channel_obj = Channel(
@@ -786,8 +899,10 @@ class Simulator:
                             clock_jitter_std_s=clock_jitter_std_s,
                             pa_ramp_up_s=pa_ramp_up_s,
                             pa_ramp_down_s=pa_ramp_down_s,
+                            **channel_kwargs,
                         )
                         _apply_flora_curves(channel_obj)
+                        _apply_overrides(channel_obj)
                         ch_list.append(channel_obj)
             self.multichannel = MultiChannel(ch_list, method=channel_distribution)
             if force_flora_curves:
@@ -823,6 +938,7 @@ class Simulator:
                 base_channel, "energy_detection_dBm", -float("inf")
             ),
             channel_index=self.control_channel_index,
+            **channel_kwargs,
         )
         self.control_channel.orthogonal_sf = getattr(
             base_channel, "orthogonal_sf", True
@@ -833,6 +949,7 @@ class Simulator:
         self.control_channel.sensitivity_margin_dB = getattr(
             base_channel, "sensitivity_margin_dB", 0.0
         )
+        _apply_overrides(self.control_channel)
         self._channel_lookup[self.control_channel_index] = self.control_channel
         self._channel_reverse[id(self.control_channel)] = self.control_channel_index
 
@@ -1487,6 +1604,13 @@ class Simulator:
                 )
                 if interference_mw < 0.0:
                     interference_mw = 0.0
+                fading_std = getattr(node.channel, "snir_fading_std", 0.0)
+                if fading_std > 0.0:
+                    rng = getattr(node.channel, "rng", None) or create_generator()
+                    rssi += float(rng.normal(0.0, fading_std))
+                    interference_mw *= 10 ** (
+                        float(rng.normal(0.0, fading_std)) / 10.0
+                    )
                 total_noise_mw = noise_lin + interference_mw
                 node.channel.last_interference_mW = interference_mw
                 node.channel.current_interference_mW = interference_mw

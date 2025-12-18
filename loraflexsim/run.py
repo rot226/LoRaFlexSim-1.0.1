@@ -167,6 +167,7 @@ def simulate(
         rx_current_a=rx_current,
         idle_current_a=idle_current,
         voltage_v=voltage,
+        rng=rng_manager.get_stream("channel", 0),
     )
     if non_orth_delta is not None:
         channel.non_orth_delta = non_orth_delta

@@ -102,3 +102,56 @@ def test_margin_collision_drop_marks_losses() -> None:
     assert server.received == []
     assert server.collision_reasons[1] == "snir_marginal"
     assert server.collision_reasons[2] == "snir_marginal"
+
+
+def test_marginal_snir_drop_remains_probabilistic() -> None:
+    def _run(seed: int):
+        gw = Gateway(1, 0.0, 0.0, rng=np.random.default_rng(seed))
+        server = _StubServer()
+        common_kwargs = dict(
+            sf=7,
+            capture_threshold=0.0,
+            frequency=868e6,
+            min_interference_time=0.0,
+            noise_floor=-120.0,
+            capture_mode="basic",
+            flora_phy=None,
+            orthogonal_sf=True,
+            capture_window_symbols=0,
+            non_orth_delta=None,
+            snir_fading_std=0.0,
+            marginal_snir_db=1.0,
+            marginal_drop_prob=0.5,
+        )
+
+        gw.start_reception(
+            event_id=10,
+            node_id=1,
+            rssi=-119.5,
+            end_time=1.0,
+            current_time=0.0,
+            snir=0.2,
+            **common_kwargs,
+        )
+        gw.start_reception(
+            event_id=11,
+            node_id=2,
+            rssi=-118.5,
+            end_time=1.0,
+            current_time=0.0,
+            snir=0.2,
+            **common_kwargs,
+        )
+
+        gw.end_reception(10, server, 1)
+        gw.end_reception(11, server, 2)
+        return server
+
+    dropped = _run(3)
+    kept = _run(4)
+
+    assert dropped.received == []
+    assert set(dropped.collision_reasons.values()) == {"snir_marginal"}
+
+    assert kept.received == [11]
+    assert kept.collision_reasons == {}

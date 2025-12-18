@@ -41,4 +41,18 @@
   cumulée pour éviter d'estimer une interférence constamment moyenne.
 - Les générateurs pseudo-aléatoires sont découplés (canaux, passerelles,
   collisions) et dérivés de `seed` via `RngManager`, limitant les corrélations
-  fortuites entre placement, fading et captures.
+  fortuites entre placement, fading et captures. Les canaux héritent
+  explicitement d'un flux `channel` pour rendre reproductibles les fades SNIR
+  injectés dans le calcul d'interférence.
+
+## Configuration rapide
+
+- La section `[channel]` d'un fichier INI (par ex. `config.ini`) peut fournir
+  `snir_fading_std`, `noise_floor_std`, `interference_dB`,
+  `capture_threshold_dB`, `sensitivity_margin_dB`,
+  `marginal_snir_margin_db` et `marginal_snir_drop_prob`. Passer
+  `channel_config=<chemin>` au constructeur `Simulator` applique ces valeurs à
+  tous les canaux créés par défaut.
+- Les mêmes clés restent surchargeables à l'initialisation du `Simulator`
+  (arguments nommés), ce qui permet d'ajuster rapidement le niveau de bruit de
+  fond ou la sévérité du capture effect sans modifier le code.
