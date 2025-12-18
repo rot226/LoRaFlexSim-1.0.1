@@ -36,6 +36,7 @@ from .server import NetworkServer
 from .duty_cycle import DutyCycleManager
 from .smooth_mobility import SmoothMobility
 from .id_provider import next_node_id, next_gateway_id, reset as reset_ids
+from ..learning import LoRaSFSelectorUCB1
 
 
 class EventType(IntEnum):
@@ -1515,6 +1516,16 @@ class Simulator:
                 diag_logger.info(
                     "Affectation de secours du nœud %s sur le canal %s", node_id, fallback
                 )
+
+            if not node.adr and getattr(node, "learning_method", None) in {None, "ucb1"}:
+                if getattr(node, "sf_selector", None) is None:
+                    node.sf_selector = LoRaSFSelectorUCB1()
+                selected_sf = node.sf_selector.select_sf()
+                if isinstance(selected_sf, str) and selected_sf.upper().startswith("SF"):
+                    try:
+                        node.sf = int(selected_sf[2:])
+                    except ValueError:
+                        pass
             node.last_tx_time = time
             if node._nb_trans_left <= 0:
                 node._nb_trans_left = max(1, node.nb_trans)
@@ -1803,6 +1814,14 @@ class Simulator:
 
             entry["snr_dB"] = snr_value
             entry["rssi_dBm"] = rssi_value
+
+            if not node.adr and getattr(node, "sf_selector", None) is not None:
+                snir_value = entry.get("snir_dB")
+                snir_positive = None
+                if snir_value is not None and not math.isnan(snir_value):
+                    snir_positive = snir_value > 0.0
+                reward = node.sf_selector.reward_from_outcome(delivered, snir_positive)
+                node.sf_selector.update(f"SF{node.sf}", reward)
 
             if self.debug_rx:
                 if delivered:
