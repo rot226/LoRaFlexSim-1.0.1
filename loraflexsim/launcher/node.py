@@ -265,6 +265,10 @@ class Node:
         self.total_airtime: float = 0.0
         self.last_rssi: float | None = None
         self.last_snr: float | None = None
+        # Dernier résultat radio (succès/échec et SNIR associé) pour alimenter
+        # les politiques d'apprentissage côté nœud.
+        self.last_radio_success: bool | None = None
+        self.last_radio_snir: float | None = None
         self.downlink_pending: int = 0
         self.acks_received: int = 0
         self.ack_history: list[bool] = []
@@ -411,6 +415,12 @@ class Node:
         self.packets_collision += 1
         if snir_limit:
             self.packets_collision_snir += 1
+
+    def record_radio_outcome(self, *, success: bool, snir: float | None) -> None:
+        """Conserve le dernier résultat radio (succès/SNIR)."""
+
+        self.last_radio_success = success
+        self.last_radio_snir = snir
 
     # ------------------------------------------------------------------
     # PDR utilities
