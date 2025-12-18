@@ -9,7 +9,8 @@ l'algorithme ajuste la distribution des SF.
 
 ## Scripts de simulation
 
-Deux balayages principaux sont fournis :
+Trois campagnes sont fournies. Les commandes peuvent être lancées depuis la
+racine du dépôt ou depuis ``experiments/ucb1``.
 
 - **Balayage de densité** :
   ```bash
@@ -26,29 +27,39 @@ Deux balayages principaux sont fournis :
   un parc de nœuds fixe ; les résultats sont écrits dans
   ``experiments/ucb1/ucb1_load_metrics.csv``.
 
-Le script ``run_baseline_comparison.py`` compare UCB1 aux variantes ADR et
-MixRA, en produisant ``experiments/ucb1/ucb1_baseline_metrics.csv`` si besoin.
+- **Comparaison UCB1 / ADR / MixRA** :
+  ```bash
+  python experiments/ucb1/run_baseline_comparison.py
+  ```
+  Cette campagne produit ``experiments/ucb1/ucb1_baseline_metrics.csv`` en
+  évaluant les trois stratégies avec les mêmes paramètres réseaux.
+
 Tous les CSV partagent les colonnes suivantes (``algorithm`` n'est présent que
 pour la comparaison) :
 
 - ``num_nodes`` : nombre total de nœuds simulés.
 - ``cluster`` : identifiant du cluster QoS du nœud (1, 2 ou 3).
 - ``sf`` : facteur d'étalement moyen observé sur le cluster.
-- ``reward_mean`` : récompense moyenne stockée par le bandit UCB1 (plus elle est
-  élevée, plus le SF testé est jugé efficace).
+- ``reward_mean`` : récompense moyenne stockée par le bandit UCB1. Elle
+  correspond à ``succès - pénalité`` (1 pour une trame reçue, 0 sinon) pondéré
+  par un bonus d'exploration (bornes supérieures de confiance) ; plus elle est
+  élevée, plus le SF testé est jugé efficace.
 - ``der`` : Data Extraction Rate, ratio de paquets décodés par rapport aux
   tentatives.
 - ``pdr`` : Packet Delivery Ratio calculé par le gestionnaire QoS (cible
   spécifique à chaque cluster).
 - ``snir_avg`` : SNIR (Signal to Noise plus Interference Ratio) moyen sur le
-  dernier paquet entendu par les nœuds du cluster.
+  dernier paquet entendu par les nœuds du cluster ; des valeurs plus élevées
+  traduisent de meilleures conditions radio et expliquent souvent des DER/PDR
+  plus élevés.
 - ``success_rate`` : taux de réussite des transmissions (équivalent au DER dans
   ces campagnes).
 
 ## Génération des figures
 
 Les scripts de traçage lisent directement les CSV générés et déposent les PNG
-dans ``experiments/ucb1/plots``. Exemple d’utilisation :
+dans ``experiments/ucb1/plots`` (les fichiers sont nommés automatiquement en
+fonction de la campagne). Exemple d’utilisation :
 
 ```bash
 python experiments/ucb1/plots/plot_der_by_cluster.py
