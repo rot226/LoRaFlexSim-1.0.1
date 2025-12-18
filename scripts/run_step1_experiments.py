@@ -71,6 +71,42 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Active le calcul SNIR sur les canaux",
     )
     parser.add_argument(
+        "--channel-config",
+        type=Path,
+        default=ROOT_DIR / "config.ini",
+        help="Fichier INI pour configurer le bruit et le fading du canal",
+    )
+    parser.add_argument(
+        "--fading-std-db",
+        type=float,
+        default=None,
+        help="Écart-type (dB) du fading aléatoire appliqué au calcul SNIR",
+    )
+    parser.add_argument(
+        "--noise-floor-std-db",
+        type=float,
+        default=None,
+        help="Écart-type (dB) du bruit de fond du canal",
+    )
+    parser.add_argument(
+        "--capture-threshold-db",
+        type=float,
+        default=None,
+        help="Seuil de capture (dB) utilisé dans le modèle de collision",
+    )
+    parser.add_argument(
+        "--marginal-snir-margin-db",
+        type=float,
+        default=None,
+        help="Marge sous laquelle une capture peut échouer aléatoirement",
+    )
+    parser.add_argument(
+        "--marginal-snir-drop-prob",
+        type=float,
+        default=None,
+        help="Probabilité max d'échec lorsque le SNIR est marginal",
+    )
+    parser.add_argument(
         "--mixra-solver",
         choices=["auto", "greedy"],
         default="auto",
@@ -86,8 +122,32 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _instantiate_simulator(nodes: int, packet_interval: float, seed: int, use_snir: bool) -> Simulator:
-    simulator = _create_simulator(nodes, packet_interval, seed)
+def _instantiate_simulator(
+    nodes: int,
+    packet_interval: float,
+    seed: int,
+    use_snir: bool,
+    *,
+    channel_config: Path | None = None,
+    fading_std_db: float | None = None,
+    noise_floor_std_db: float | None = None,
+    capture_threshold_db: float | None = None,
+    marginal_snir_margin_db: float | None = None,
+    marginal_snir_drop_prob: float | None = None,
+) -> Simulator:
+    simulator = _create_simulator(
+        nodes,
+        packet_interval,
+        seed,
+        channel_config=channel_config,
+        channel_overrides={
+            "snir_fading_std": fading_std_db,
+            "noise_floor_std": noise_floor_std_db,
+            "capture_threshold_dB": capture_threshold_db,
+            "marginal_snir_margin_db": marginal_snir_margin_db,
+            "marginal_snir_drop_prob": marginal_snir_drop_prob,
+        },
+    )
     simulator._interference_tracker = InterferenceTracker()
     simulator.channel.use_snir = use_snir
     multichannel = getattr(simulator, "multichannel", None)
@@ -125,10 +185,22 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
     print(
         "[RUN] "
         f"algo={args.algorithm} use_snir={args.use_snir} seed={args.seed} "
-        f"nodes={args.nodes} interval={args.packet_interval:g}s"
+        f"nodes={args.nodes} interval={args.packet_interval:g}s "
+        f"fading={args.fading_std_db or 'config'}dB noise_std={args.noise_floor_std_db or 'config'}dB"
     )
 
-    simulator = _instantiate_simulator(args.nodes, args.packet_interval, args.seed, args.use_snir)
+    simulator = _instantiate_simulator(
+        args.nodes,
+        args.packet_interval,
+        args.seed,
+        args.use_snir,
+        channel_config=args.channel_config,
+        fading_std_db=args.fading_std_db,
+        noise_floor_std_db=args.noise_floor_std_db,
+        capture_threshold_db=args.capture_threshold_db,
+        marginal_snir_margin_db=args.marginal_snir_margin_db,
+        marginal_snir_drop_prob=args.marginal_snir_drop_prob,
+    )
     manager = QoSManager()
     _configure_clusters(manager, args.packet_interval)
     _apply_algorithm(args.algorithm, simulator, manager, args.mixra_solver)
@@ -146,6 +218,12 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
             "use_snir": args.use_snir,
             "with_snir": args.use_snir,
             "snir_state": STATE_LABELS.get(args.use_snir, "snir_unknown"),
+            "channel_config": str(args.channel_config) if args.channel_config else None,
+            "snir_fading_std": getattr(simulator, "snir_fading_std", None),
+            "noise_floor_std": getattr(simulator, "noise_floor_std", None),
+            "capture_threshold_dB": getattr(simulator, "capture_delta_db", None),
+            "marginal_snir_margin_db": getattr(simulator, "marginal_snir_margin_db", None),
+            "marginal_snir_drop_prob": getattr(simulator, "marginal_snir_drop_prob", None),
         }
     )
     enriched = _compute_additional_metrics(simulator, dict(metrics), args.algorithm, args.mixra_solver)
