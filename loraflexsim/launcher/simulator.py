@@ -1815,11 +1815,20 @@ class Simulator:
             entry["snr_dB"] = snr_value
             entry["rssi_dBm"] = rssi_value
 
+            snir_value = entry.get("snir_dB")
+            snir_for_node: float | None
+            if snir_value is None or math.isnan(snir_value):
+                snir_for_node = None
+            else:
+                snir_for_node = float(snir_value)
+
+            if hasattr(node, "record_radio_outcome"):
+                node.record_radio_outcome(success=delivered, snir=snir_for_node)
+
             if not node.adr and getattr(node, "sf_selector", None) is not None:
-                snir_value = entry.get("snir_dB")
                 snir_positive = None
-                if snir_value is not None and not math.isnan(snir_value):
-                    snir_positive = snir_value > 0.0
+                if snir_for_node is not None:
+                    snir_positive = snir_for_node > 0.0
                 reward = node.sf_selector.reward_from_outcome(delivered, snir_positive)
                 node.sf_selector.update(f"SF{node.sf}", reward)
 
