@@ -53,8 +53,10 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_parse_bool,
         default=None,
         metavar="BOOL",
-        help="États SNIR à explorer (true/false). Utilisez explicitement "
-        """"--with-snir true false""" pour produire les deux jeux.",
+        help=(
+            "États SNIR à explorer (true/false). Utilisez explicitement "
+            '"--with-snir true false" pour produire les deux jeux.'
+        ),
     )
     parser.add_argument(
         "--seeds",

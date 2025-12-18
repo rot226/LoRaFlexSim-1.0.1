@@ -33,6 +33,17 @@ def _parse_float(value: str | None, default: float = 0.0) -> float:
         return default
 
 
+def _parse_bool(value: str | None) -> bool | None:
+    if value is None or value == "":
+        return None
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
 def _parse_int(value: str | None, default: int = 0) -> int:
     if value is None or value == "":
         return default
