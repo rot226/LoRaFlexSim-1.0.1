@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
 from collections import defaultdict
 from pathlib import Path
 from statistics import fmean, pstdev
-from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, MutableSequence, Sequence, Tuple
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -79,12 +80,15 @@ def _load_records(results_dir: Path, strict_snir: bool) -> Tuple[List[Record], L
                     "algorithm": row.get("algorithm", csv_path.parent.name),
                     "num_nodes": _parse_int(row.get("num_nodes")),
                     "packet_interval_s": _parse_float(row.get("packet_interval_s")),
+                    "random_seed": _parse_int(row.get("random_seed")),
+                    "simulation_duration_s": _parse_float(row.get("simulation_duration_s")),
                     "PDR": _parse_float(row.get("PDR")),
                     "DER": _parse_float(row.get("DER")),
                     "collisions": _parse_int(row.get("collisions")),
                     "jain_index": _parse_float(row.get("jain_index")),
                     "throughput_bps": _parse_float(row.get("throughput_bps")),
                     "cluster_pdr": cluster_pdr,
+                    "with_snir": snir_flag,
                     "use_snir": snir_flag,
                     "snir_state": STATE_LABELS.get(snir_flag, "snir_unknown"),
                 }
@@ -98,22 +102,58 @@ def _group_records(records: Iterable[Record]) -> Dict[Tuple[Any, ...], List[Reco
     for record in records:
         key = (
             record.get("algorithm"),
-            record.get("snir_state"),
+            record.get("with_snir"),
+            record.get("random_seed"),
             record.get("num_nodes"),
             record.get("packet_interval_s"),
+            record.get("simulation_duration_s"),
         )
         groups[key].append(record)
     return groups
 
 
+def _build_summary_rows(
+    groups: Mapping[Tuple[Any, ...], List[Record]], cluster_ids: Sequence[int]
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for key, items in sorted(groups.items()):
+        algorithm, with_snir, seed, num_nodes, packet_interval, duration = key
+        summary: Dict[str, Any] = {
+            "algorithm": algorithm,
+            "with_snir": with_snir,
+            "snir_state": STATE_LABELS.get(with_snir, "snir_unknown"),
+            "random_seed": seed,
+            "num_nodes": num_nodes,
+            "packet_interval_s": packet_interval,
+            "simulation_duration_s": duration,
+        }
+        for metric in ("PDR", "DER", "collisions", "jain_index", "throughput_bps"):
+            values = [float(r.get(metric, 0.0)) for r in items]
+            mean, std = _mean_std(values)
+            summary[f"{metric}_mean"] = mean
+            summary[f"{metric}_std"] = std
+
+        for cid in cluster_ids:
+            values = [r.get("cluster_pdr", {}).get(cid) for r in items]
+            filtered = [v for v in values if v is not None]
+            mean, std = _mean_std(filtered)
+            summary[f"cluster_pdr_{cid}_mean"] = mean
+            summary[f"cluster_pdr_{cid}_std"] = std
+        rows.append(summary)
+    return rows
+
+
 def _write_summary(
     output_path: Path, groups: Mapping[Tuple[Any, ...], List[Record]], cluster_ids: Sequence[int]
-) -> None:
+) -> List[Dict[str, Any]]:
     base_headers = [
         "algorithm",
+        "with_snir",
         "snir_state",
+        "random_seed",
         "num_nodes",
         "packet_interval_s",
+        "simulation_duration_s",
         "PDR_mean",
         "PDR_std",
         "DER_mean",
@@ -125,45 +165,63 @@ def _write_summary(
         "throughput_bps_mean",
         "throughput_bps_std",
     ]
-    cluster_headers = []
+    cluster_headers: MutableSequence[str] = []
     for cid in cluster_ids:
         cluster_headers.extend([f"cluster_pdr_{cid}_mean", f"cluster_pdr_{cid}_std"])
-    headers = base_headers + cluster_headers
+    headers = base_headers + list(cluster_headers)
 
+    rows = _build_summary_rows(groups, cluster_ids)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf8") as handle:
         writer = csv.DictWriter(handle, fieldnames=headers)
         writer.writeheader()
-        for key, items in sorted(groups.items()):
-            summary: Dict[str, Any] = {
-                "algorithm": key[0],
-                "snir_state": key[1],
-                "num_nodes": key[2],
-                "packet_interval_s": key[3],
-            }
-            for metric in ("PDR", "DER", "collisions", "jain_index", "throughput_bps"):
-                values = [float(r.get(metric, 0.0)) for r in items]
-                mean, std = _mean_std(values)
-                summary[f"{metric}_mean"] = mean
-                summary[f"{metric}_std"] = std
-
-            for cid in cluster_ids:
-                values = [r.get("cluster_pdr", {}).get(cid) for r in items]
-                filtered = [v for v in values if v is not None]
-                mean, std = _mean_std(filtered)
-                summary[f"cluster_pdr_{cid}_mean"] = mean
-                summary[f"cluster_pdr_{cid}_std"] = std
-            writer.writerow(summary)
+        writer.writerows(rows)
+    return rows
 
 
-def _write_raw_index(output_path: Path, records: Iterable[Record], cluster_ids: Sequence[int]) -> None:
+def _build_raw_rows(records: Iterable[Record], cluster_ids: Sequence[int]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for record in records:
+        row: Dict[str, Any] = {
+            "run_id": record.get("run_id"),
+            "algorithm": record.get("algorithm"),
+            "with_snir": record.get("with_snir"),
+            "snir_state": record.get("snir_state"),
+            "use_snir": record.get("use_snir"),
+            "random_seed": record.get("random_seed"),
+            "num_nodes": record.get("num_nodes"),
+            "packet_interval_s": record.get("packet_interval_s"),
+            "simulation_duration_s": record.get("simulation_duration_s"),
+            "csv_path": record.get("csv_path"),
+            "PDR": record.get("PDR"),
+            "DER": record.get("DER"),
+            "collisions": record.get("collisions"),
+            "jain_index": record.get("jain_index"),
+            "throughput_bps": record.get("throughput_bps"),
+        }
+        path = row.get("csv_path")
+        if isinstance(path, Path):
+            try:
+                row["csv_path"] = path.relative_to(ROOT_DIR)
+            except ValueError:
+                row["csv_path"] = str(path)
+        for cid in cluster_ids:
+            row[f"cluster_pdr_{cid}"] = record.get("cluster_pdr", {}).get(cid)
+        rows.append(row)
+    return rows
+
+
+def _write_raw_index(output_path: Path, records: Iterable[Record], cluster_ids: Sequence[int]) -> List[Dict[str, Any]]:
     base_headers = [
         "run_id",
         "algorithm",
+        "with_snir",
         "snir_state",
         "use_snir",
+        "random_seed",
         "num_nodes",
         "packet_interval_s",
+        "simulation_duration_s",
         "csv_path",
         "PDR",
         "DER",
@@ -174,39 +232,79 @@ def _write_raw_index(output_path: Path, records: Iterable[Record], cluster_ids: 
     cluster_headers = [f"cluster_pdr_{cid}" for cid in cluster_ids]
     headers = base_headers + cluster_headers
 
+    rows = _build_raw_rows(records, cluster_ids)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf8") as handle:
         writer = csv.DictWriter(handle, fieldnames=headers)
         writer.writeheader()
-        for record in records:
-            row = {key: record.get(key) for key in base_headers}
-            # Normalise les chemins pour l'index
-            path = record.get("csv_path")
-            if isinstance(path, Path):
-                try:
-                    row["csv_path"] = path.relative_to(ROOT_DIR)
-                except ValueError:
-                    row["csv_path"] = str(path)
-            for cid in cluster_ids:
-                row[f"cluster_pdr_{cid}"] = record.get("cluster_pdr", {}).get(cid)
-            writer.writerow(row)
+        writer.writerows(rows)
+    return rows
 
 
-def aggregate_step1_results(results_dir: Path, strict_snir_detection: bool) -> None:
+def _write_json(output_path: Path, rows: List[Dict[str, Any]]) -> None:
+    serialisable = []
+    for row in rows:
+        normalised = {key: (str(value) if isinstance(value, Path) else value) for key, value in row.items()}
+        serialisable.append(normalised)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf8") as handle:
+        json.dump(serialisable, handle, ensure_ascii=False, indent=2)
+
+
+def _write_outputs(
+    *,
+    results_dir: Path,
+    records: List[Record],
+    cluster_ids: Sequence[int],
+    split_snir: bool,
+) -> None:
+    groups = _group_records(records)
+    summary_path = results_dir / "summary.csv"
+    raw_path = results_dir / "raw_index.csv"
+
+    summary_rows = _write_summary(summary_path, groups, cluster_ids)
+    raw_rows = _write_raw_index(raw_path, records, cluster_ids)
+    _write_json(summary_path.with_suffix(".json"), summary_rows)
+    _write_json(raw_path.with_suffix(".json"), raw_rows)
+
+    print(f"Résumé écrit dans {summary_path} (et {summary_path.with_suffix('.json')})")
+    print(f"Index brut écrit dans {raw_path} (et {raw_path.with_suffix('.json')})")
+
+    if not split_snir:
+        return
+
+    for state_flag in (True, False):
+        state_label = STATE_LABELS.get(state_flag, "snir_unknown")
+        state_records = [record for record in records if record.get("with_snir") is state_flag]
+        if not state_records:
+            continue
+        state_groups = _group_records(state_records)
+        state_suffix = f"_{state_label}"
+        state_summary_path = summary_path.with_stem(summary_path.stem + state_suffix)
+        state_raw_path = raw_path.with_stem(raw_path.stem + state_suffix)
+
+        state_summary_rows = _write_summary(state_summary_path, state_groups, cluster_ids)
+        state_raw_rows = _write_raw_index(state_raw_path, state_records, cluster_ids)
+        _write_json(state_summary_path.with_suffix(".json"), state_summary_rows)
+        _write_json(state_raw_path.with_suffix(".json"), state_raw_rows)
+        print(
+            f"Fichiers SNIR {state_label} : {state_summary_path} / {state_raw_path} "
+            f"(et équivalents JSON)"
+        )
+
+
+def aggregate_step1_results(results_dir: Path, strict_snir_detection: bool, split_snir: bool) -> None:
     records, cluster_ids = _load_records(results_dir, strict_snir_detection)
     if not records:
         print(f"Aucun CSV trouvé dans {results_dir}")
         return
 
-    groups = _group_records(records)
-    summary_path = results_dir / "summary.csv"
-    raw_path = results_dir / "raw_index.csv"
-
-    _write_summary(summary_path, groups, cluster_ids)
-    _write_raw_index(raw_path, records, cluster_ids)
-
-    print(f"Résumé écrit dans {summary_path}")
-    print(f"Index brut écrit dans {raw_path}")
+    _write_outputs(
+        results_dir=results_dir,
+        records=records,
+        cluster_ids=cluster_ids,
+        split_snir=split_snir,
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -222,12 +320,17 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Impose la détection explicite de l'état SNIR (on/off) en utilisant la logique des figures",
     )
+    parser.add_argument(
+        "--split-snir",
+        action="store_true",
+        help="Produit des fichiers d'agrégation séparés pour SNIR activé/désactivé en plus du tableau combiné",
+    )
     return parser
 
 
 def main(argv: List[str] | None = None) -> None:
     args = _build_parser().parse_args(argv)
-    aggregate_step1_results(args.results_dir, args.strict_snir_detection)
+    aggregate_step1_results(args.results_dir, args.strict_snir_detection, args.split_snir)
 
 
 if __name__ == "__main__":
