@@ -203,7 +203,7 @@ def _configure_clusters(
     )
 
 
-def _build_multichannel() -> MultiChannel:
+def _build_multichannel(channel_kwargs: Mapping[str, object] | None = None) -> MultiChannel:
     channels = []
     for idx, freq in enumerate(FREQUENCIES_HZ):
         channel = Channel(
@@ -218,14 +218,27 @@ def _build_multichannel() -> MultiChannel:
             variable_noise_std=0.5,
         )
         channel.orthogonal_sf = False
+        if channel_kwargs:
+            for key, value in channel_kwargs.items():
+                if value is None:
+                    continue
+                if hasattr(channel, key):
+                    setattr(channel, key, value)
         channels.append(channel)
     multichannel = MultiChannel(channels)
     multichannel.force_non_orthogonal(DEFAULT_NON_ORTH_DELTA)
     return multichannel
 
 
-def _create_simulator(num_nodes: int, packet_interval: float, seed: int) -> Simulator:
-    multichannel = _build_multichannel()
+def _create_simulator(
+    num_nodes: int,
+    packet_interval: float,
+    seed: int,
+    *,
+    channel_config: str | Path | None = None,
+    channel_overrides: Mapping[str, object] | None = None,
+) -> Simulator:
+    multichannel = _build_multichannel(channel_overrides)
     simulator = Simulator(
         num_nodes=num_nodes,
         num_gateways=1,
@@ -245,8 +258,26 @@ def _create_simulator(num_nodes: int, packet_interval: float, seed: int) -> Simu
         capture_mode="advanced",
         phy_model="omnet",
         pure_poisson_mode=True,
+        channel_config=channel_config,
+        snir_fading_std=None,
+        noise_floor_std=None,
+        capture_threshold_dB=None,
+        marginal_snir_margin_db=None,
+        marginal_snir_drop_prob=None,
     )
     setattr(simulator, "capture_delta_db", 1.0)
+    if channel_overrides:
+        if (capture := channel_overrides.get("capture_threshold_dB")) is not None:
+            setattr(simulator, "capture_delta_db", float(capture))
+        for key in (
+            "snir_fading_std",
+            "noise_floor_std",
+            "capture_threshold_dB",
+            "marginal_snir_margin_db",
+            "marginal_snir_drop_prob",
+        ):
+            if key in channel_overrides and channel_overrides[key] is not None:
+                setattr(simulator, key, channel_overrides[key])
     return simulator
 
 
