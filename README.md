@@ -77,9 +77,8 @@ python -m loraflexsim.run --long-range-demo flora_hata --seed 3 --output long_ra
 ### Matrice Step 1 sous Windows
 
 Depuis la racine du projet, vous pouvez générer la matrice Step 1 utilisée dans
-`scripts/run_step1_matrix.py` (CSV rangés dans
-`results/step1/<snir_state>/seed_<seed>/`). Sous Windows 11, créez/activez
-votre environnement virtuel puis lancez :
+`scripts/run_step1_matrix.py`. Sous Windows 11, créez/activez votre
+environnement virtuel puis lancez :
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/run_step1_matrix_windows.ps1
@@ -91,6 +90,10 @@ Le script `scripts/run_step1_matrix_windows.ps1` active le venv (par défaut
 ```powershell
 python scripts/run_step1_matrix.py --algos adr apra mixra_h mixra_opt --with-snir true false --seeds 1 2 3 --nodes 1000 5000 --packet-intervals 300 600
 ```
+
+Les CSV générés sont rangés par état SNIR dans
+`results/step1/<snir_state>/seed_<seed>/` avec un suffixe explicite
+`_snir-on` ou `_snir-off` sur chaque fichier.【F:scripts/run_step1_matrix.py†L16-L92】
 
 Après l'exécution de la matrice, agrégerez les CSV présents dans
 `results/step1/**/*.csv` afin d'obtenir les statistiques nécessaires aux CDF
@@ -104,7 +107,21 @@ Le script détecte automatiquement l'état SNIR et génère
 `results/step1/summary.csv` (moyennes/écarts-types) ainsi que
 `results/step1/raw_index.csv` (index des runs bruts). Ajoutez
 `--strict-snir-detection` si vous souhaitez échouer lorsque l'état SNIR ne
-peut pas être déduit implicitement.
+peut pas être déduit implicitement.【F:scripts/aggregate_step1_results.py†L21-L126】
+
+Vous pouvez ensuite tracer les figures Step 1 en comparant directement SNIR
+on/off (rouge : SNIR activé, bleu : SNIR désactivé) et en utilisant les
+agrégations précédentes :
+
+```bash
+python scripts/plot_step1_results.py --compare-snir --use-summary
+```
+
+Les figures combinées `*_snir_compare_*.png` sont déposées dans
+`figures/step1/`, et les éventuelles CDF/figures étendues sont rangées dans
+`figures/step1/extended/`. Les couleurs par défaut sont définies dans
+`scripts/plot_step1_results.py` (`#d62728` pour SNIR activé, `#1f77b4` pour SNIR
+désactivé).【F:scripts/plot_step1_results.py†L16-L24】【F:scripts/plot_step1_results.py†L450-L520】
 
 Pour vérifier rapidement que les courbes combinées SNIR on/off restent
 fonctionnelles, lancez le test léger suivant :
