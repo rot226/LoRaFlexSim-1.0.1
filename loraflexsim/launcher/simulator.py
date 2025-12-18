@@ -3,6 +3,7 @@
 import heapq
 import logging
 import math
+import numbers
 import random
 import numpy as np
 from collections import deque
@@ -60,6 +61,18 @@ class Event:
 
 logger = logging.getLogger(__name__)
 diag_logger = logging.getLogger("diagnostics")
+
+
+def _validate_positive_real(name: str, value: object) -> float:
+    """Return ``value`` as a positive real number or raise a clear error."""
+
+    if isinstance(value, bool):
+        raise TypeError(f"{name} must be a real number, not bool")
+    if not isinstance(value, numbers.Real):
+        raise TypeError(f"{name} must be a real number")
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{name} must be a positive, finite number")
+    return float(value)
 
 
 class _PowerTimeline:
@@ -500,16 +513,21 @@ class Simulator:
         if flora_mode and packet_interval == 60.0 and first_packet_interval is None:
             packet_interval = first_packet_interval = 1000.0
 
+        packet_interval = _validate_positive_real("packet_interval", packet_interval)
+        if first_packet_interval is None:
+            first_packet_interval = packet_interval
+        else:
+            first_packet_interval = _validate_positive_real(
+                "first_packet_interval",
+                first_packet_interval,
+            )
+
         self.num_nodes = num_nodes
         self.num_gateways = num_gateways
         self.area_size = area_size
         self.transmission_mode = transmission_mode
         self.packet_interval = packet_interval
-        self.first_packet_interval = (
-            first_packet_interval
-            if first_packet_interval is not None
-            else packet_interval
-        )
+        self.first_packet_interval = first_packet_interval
         # Minimal delay before the first transmission (5 s in FLoRa mode)
         self.first_packet_min_delay = 0.0
         self.warm_up_intervals = warm_up_intervals
