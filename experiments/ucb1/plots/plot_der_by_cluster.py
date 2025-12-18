@@ -1,31 +1,48 @@
-"""Trace le DER par cluster en fonction du nombre de nœuds.
+"""Trace le DER par cluster pour Step1/QoS et UCB1 avec et sans SNIR.
 
-Le script consomme le CSV généré par ``run_ucb1_density_sweep.py`` et ajoute
-les lignes cibles de PDR/DER pour chaque cluster QoS.
+Deux familles de CSV sont acceptées :
+- **Step1/QoS** (résumés ou bruts) avec des colonnes ``cluster_pdr_*`` ou
+  ``cluster_der_*`` et un champ indiquant l'état SNIR (``with_snir``,
+  ``snir_state``…).
+- **UCB1** (``run_ucb1_density_sweep.py``) avec des colonnes ``cluster``,
+  ``der``/``pdr`` et éventuellement un indicateur SNIR.
+
+Les courbes sont superposées avec la convention suivante :
+- bleu : SNIR désactivé ;
+- rouge : SNIR activé ;
+- courbes UCB1 en pointillé/losange si présentes.
 """
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence
 
 import matplotlib.pyplot as plt
 import pandas as pd
 
-DEFAULT_INPUT = Path(__file__).resolve().parents[1] / "ucb1_density_metrics.csv"
-DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "plots" / "ucb1_der_by_cluster.png"
-DEFAULT_TARGETS: Sequence[float] = (0.9, 0.8, 0.7)
+ROOT_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_STEP1 = ROOT_DIR / "results" / "step1" / "summary.csv"
+DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_density_metrics.csv"
+DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "plots" / "ucb1_der_vs_step1.png"
+SNIR_LABELS = {"snir_on": "SNIR activé", "snir_off": "SNIR désactivé", "snir_unknown": "SNIR inconnu"}
+SNIR_COLORS = {"snir_on": "#d62728", "snir_off": "#1f77b4", "snir_unknown": "#7f7f7f"}
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Trace le DER par cluster QoS.")
-    parser.add_argument("--csv", type=Path, default=DEFAULT_INPUT, help="Chemin du CSV de densité.")
+    parser = argparse.ArgumentParser(description="Superpose le DER QoS (Step1) et UCB1 par cluster.")
     parser.add_argument(
-        "--targets",
-        type=float,
-        nargs="*",
-        default=list(DEFAULT_TARGETS),
-        help="Objectifs DER/PDR par cluster (dans l'ordre des clusters).",
+        "--step1-csv",
+        type=Path,
+        default=DEFAULT_STEP1,
+        help="CSV Step1/QoS (summary.csv ou brut avec cluster_pdr/der).",
+    )
+    parser.add_argument(
+        "--ucb1-csv",
+        type=Path,
+        default=DEFAULT_UCB1,
+        help="CSV UCB1 issu du balayage de densité.",
     )
     parser.add_argument(
         "--output",
@@ -36,47 +53,133 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_density_csv(path: Path) -> pd.DataFrame:
-    if not path.exists():
-        raise FileNotFoundError(f"Impossible de trouver le CSV '{path}'.")
+def _parse_bool(value: object | None) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"", "none", "nan"}:
+        return None
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _detect_snir(row: Mapping[str, object], path: Path | None) -> str:
+    candidates = [row.get("with_snir"), row.get("use_snir"), row.get("snir_enabled"), row.get("snir")]
+    for candidate in candidates:
+        parsed = _parse_bool(candidate)
+        if parsed is not None:
+            return "snir_on" if parsed else "snir_off"
+    state = row.get("snir_state")
+    if isinstance(state, str) and state:
+        state_lower = state.lower()
+        if "on" in state_lower:
+            return "snir_on"
+        if "off" in state_lower:
+            return "snir_off"
+    if path:
+        if any("snir" in part.lower() for part in path.parts):
+            return "snir_on"
+    return "snir_unknown"
+
+
+def _extract_cluster_values(row: Mapping[str, object]) -> Dict[int, float]:
+    values: Dict[int, float] = {}
+    # Priorité aux moyennes si présentes
+    mean_keys: MutableMapping[int, float] = {}
+    direct_keys: MutableMapping[int, float] = {}
+    pattern = re.compile(r"cluster_(?:pdr|der)[^0-9]*([0-9]+)")
+    for key, raw_value in row.items():
+        match = pattern.match(str(key))
+        if not match:
+            continue
+        try:
+            cid = int(match.group(1))
+        except ValueError:
+            continue
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if "mean" in str(key):
+            mean_keys[cid] = value
+        elif cid not in direct_keys:
+            direct_keys[cid] = value
+
+    values.update(direct_keys)
+    values.update(mean_keys)
+    return values
+
+
+def _load_step1(path: Path) -> pd.DataFrame:
+    if not path or not path.exists():
+        print(f"Avertissement : CSV Step1 introuvable ({path}), section ignorée.")
+        return pd.DataFrame()
     df = pd.read_csv(path)
-    required_cols = {"num_nodes", "cluster", "der"}
-    missing = required_cols - set(df.columns)
+    records: List[dict] = []
+    for row in df.to_dict(orient="records"):
+        snir_state = _detect_snir(row, path)
+        x_value = row.get("num_nodes")
+        try:
+            x_value = float(x_value)
+        except (TypeError, ValueError):
+            x_value = None
+        clusters = _extract_cluster_values(row)
+        for cluster_id, value in clusters.items():
+            records.append({
+                "source": "Step1/QoS",
+                "cluster": cluster_id,
+                "num_nodes": x_value,
+                "der": value,
+                "snir_state": snir_state,
+            })
+    tidy = pd.DataFrame(records)
+    return tidy.dropna(subset=["num_nodes", "der"])
+
+
+def _load_ucb1(path: Path) -> pd.DataFrame:
+    if not path or not path.exists():
+        print(f"Avertissement : CSV UCB1 introuvable ({path}), section ignorée.")
+        return pd.DataFrame()
+    df = pd.read_csv(path)
+    metric = "der" if "der" in df.columns else "pdr" if "pdr" in df.columns else None
+    if metric is None:
+        raise ValueError(f"Impossible de trouver les colonnes 'der' ou 'pdr' dans {path}")
+    required = {"cluster", "num_nodes", metric}
+    missing = required - set(df.columns)
     if missing:
         raise ValueError(f"Colonnes manquantes dans {path}: {', '.join(sorted(missing))}")
+
+    df = df.copy()
+    df["source"] = "UCB1"
+    df["snir_state"] = df.apply(lambda row: _detect_snir(row, path), axis=1)
+    df.rename(columns={metric: "der"}, inplace=True)
     return df
 
 
-def _plot_der(df: pd.DataFrame, targets: Iterable[float], output: Path) -> None:
+def _plot_der(df: pd.DataFrame, output: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
-    clusters = sorted(df["cluster"].unique())
-    for cluster_id in clusters:
-        subset = df[df["cluster"] == cluster_id].sort_values("num_nodes")
-        ax.plot(
-            subset["num_nodes"],
-            subset["der"],
-            marker="o",
-            label=f"Cluster {cluster_id}",
-        )
-
-    for cluster_id, target in zip(clusters, targets):
-        ax.axhline(target, linestyle="--", color="gray", linewidth=1, alpha=0.7)
-        ax.text(
-            df["num_nodes"].max(),
-            target + 0.01,
-            f"Cible {cluster_id}: {target:.0%}",
-            ha="right",
-            va="bottom",
-            fontsize=9,
-            color="gray",
-        )
+    style_by_source = {
+        "Step1/QoS": {"linestyle": "-", "marker": "o"},
+        "UCB1": {"linestyle": "--", "marker": "D"},
+    }
+    for (source, snir_state, cluster_id), subset in df.groupby(["source", "snir_state", "cluster"], sort=True):
+        subset = subset.sort_values("num_nodes")
+        color = SNIR_COLORS.get(snir_state, SNIR_COLORS["snir_unknown"])
+        label = f"{source} C{int(cluster_id)} ({SNIR_LABELS.get(snir_state, snir_state)})"
+        style = style_by_source.get(source, {})
+        ax.plot(subset["num_nodes"], subset["der"], label=label, color=color, **style)
 
     ax.set_xlabel("Nombre de nœuds")
-    ax.set_ylabel("Data Extraction Rate (DER)")
+    ax.set_ylabel("DER / PDR par cluster")
     ax.set_ylim(0, 1.05)
     ax.grid(True, linestyle=":", alpha=0.6)
     ax.legend()
-    ax.set_title("DER par cluster lors du balayage de densité (UCB1)")
+    ax.set_title("DER par cluster – Step1 vs UCB1")
 
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
@@ -86,8 +189,10 @@ def _plot_der(df: pd.DataFrame, targets: Iterable[float], output: Path) -> None:
 
 def main() -> None:
     args = parse_args()
-    df = _load_density_csv(args.csv)
-    _plot_der(df, args.targets, args.output)
+    combined = pd.concat([_load_step1(args.step1_csv), _load_ucb1(args.ucb1_csv)], ignore_index=True)
+    if combined.empty:
+        raise SystemExit("Aucune donnée exploitable pour tracer la figure.")
+    _plot_der(combined, args.output)
 
 
 if __name__ == "__main__":
