@@ -1146,5 +1146,6 @@ class Channel:
         bw = min(self.bandwidth, self.frontend_filter_bw)
         noise = -174 + 10 * math.log10(bw) + self.noise_figure_dB
         self.sensitivity_dBm = {
-            sf: noise + snr for sf, snr in self.SNR_THRESHOLDS.items()
+            sf: noise + snr + self.sensitivity_margin_dB
+            for sf, snr in self.SNR_THRESHOLDS.items()
         }
