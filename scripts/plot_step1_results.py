@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 try:  # pragma: no cover - dépend de l'environnement de test
     import matplotlib.pyplot as plt  # type: ignore
+    from matplotlib.ticker import MaxNLocator, ScalarFormatter  # type: ignore
 except Exception:  # pragma: no cover - permet de continuer même sans matplotlib
     plt = None  # type: ignore
 
@@ -21,6 +22,12 @@ __all__ = ["generate_step1_figures", "DEFAULT_RESULTS_DIR", "DEFAULT_FIGURES_DIR
 
 STATE_LABELS = {True: "snir_on", False: "snir_off", None: "snir_unknown"}
 SNIR_COLORS = {"snir_on": "#d62728", "snir_off": "#1f77b4", "snir_unknown": "#7f7f7f"}
+SNIR_LABELS = {
+    "snir_on": "SNIR activé",
+    "snir_off": "SNIR désactivé",
+    "snir_unknown": "SNIR inconnu",
+}
+MARKER_CYCLE = ["o", "s", "^", "D", "v", "P", "X"]
 
 
 def _parse_float(value: str | None, default: float = 0.0) -> float:
@@ -104,6 +111,26 @@ def _load_step1_records(results_dir: Path) -> List[Dict[str, Any]]:
     return records
 
 
+def _snir_label(state: str | None) -> str:
+    return SNIR_LABELS.get(state or "snir_unknown", SNIR_LABELS["snir_unknown"])
+
+
+def _snir_color(state: str | None) -> str:
+    return SNIR_COLORS.get(state or "snir_unknown", SNIR_COLORS["snir_unknown"])
+
+
+def _format_axes(ax: Any, integer_x: bool = False) -> None:
+    if plt is None:
+        return
+    ax.grid(True, which="major", linestyle=":", linewidth=0.8, alpha=0.7)
+    if integer_x:
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    y_formatter = ScalarFormatter(useMathText=True)
+    y_formatter.set_scientific(False)
+    ax.yaxis.set_major_formatter(y_formatter)
+    ax.tick_params(axis="both", direction="in", length=4, width=0.9)
+
+
 def _load_summary_records(summary_path: Path) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     if not summary_path.exists():
@@ -163,11 +190,11 @@ def _plot_global_metric(
         state_records = [r for r in records if r.get("snir_state") == state]
         if not state_records:
             continue
-        label_state = "SNIR activé" if state == "snir_on" else "SNIR désactivé" if state == "snir_off" else "SNIR inconnu"
+        label_state = _snir_label(state)
         suffix_state = state or "snir_unknown"
         for period in periods:
             fig, ax = plt.subplots(figsize=(6, 4))
-            for algorithm in algorithms:
+            for algo_idx, algorithm in enumerate(algorithms):
                 data = [
                     r
                     for r in state_records
@@ -177,12 +204,21 @@ def _plot_global_metric(
                 xs = [item["num_nodes"] for item in data]
                 ys = [item.get(metric, 0.0) for item in data]
                 if xs:
-                    ax.plot(xs, ys, marker="o", label=algorithm)
+                    marker = MARKER_CYCLE[algo_idx % len(MARKER_CYCLE)]
+                    ax.plot(
+                        xs,
+                        ys,
+                        marker=marker,
+                        markersize=5.5,
+                        linewidth=2,
+                        color=_snir_color(state),
+                        label=algorithm,
+                    )
             ax.set_xlabel("Nombre de nœuds")
             ax.set_ylabel(ylabel)
             title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
             ax.set_title(f"{ylabel} – {label_state} – période {title_period} s")
-            ax.grid(True, linestyle=":", alpha=0.5)
+            _format_axes(ax, integer_x=True)
             if ax.get_legend_handles_labels()[0]:
                 ax.legend()
             figures_dir.mkdir(parents=True, exist_ok=True)
@@ -246,11 +282,11 @@ def _plot_summary_bars(records: List[Dict[str, Any]], figures_dir: Path) -> None
                     values,
                     width=width,
                     yerr=errors,
-                    label="SNIR activé" if state == "snir_on" else "SNIR désactivé" if state == "snir_off" else "SNIR inconnu",
-                    color=SNIR_COLORS.get(state, "#7f7f7f"),
+                    label=_snir_label(state),
+                    color=_snir_color(state),
                     capsize=4,
                     edgecolor="black",
-                    linewidth=0.5,
+                    linewidth=0.9,
                 )
 
             ax.set_xticks(positions)
@@ -258,7 +294,7 @@ def _plot_summary_bars(records: List[Dict[str, Any]], figures_dir: Path) -> None
             ax.set_ylabel(ylabel)
             period_label = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
             ax.set_title(f"{ylabel} – période {period_label} s")
-            ax.grid(True, axis="y", linestyle=":", alpha=0.5)
+            _format_axes(ax, integer_x=False)
             if ax.get_legend_handles_labels()[0]:
                 ax.legend()
 
@@ -289,13 +325,19 @@ def _plot_cdf(records: Sequence[Mapping[str, Any]], figures_dir: Path) -> None:
             sorted_values = sorted(values)
             n = len(sorted_values)
             y = [i / n for i in range(1, n + 1)]
-            label = "SNIR activé" if state == "snir_on" else "SNIR désactivé" if state == "snir_off" else "SNIR inconnu"
-            ax.step(sorted_values, y, where="post", label=label, color=SNIR_COLORS.get(state, "#7f7f7f"))
+            ax.step(
+                sorted_values,
+                y,
+                where="post",
+                label=_snir_label(state),
+                color=_snir_color(state),
+                linewidth=2,
+            )
 
         ax.set_xlabel("DER")
         ax.set_ylabel("F(x)")
         ax.set_title(f"CDF DER – {algorithm}")
-        ax.grid(True, linestyle=":", alpha=0.5)
+        _format_axes(ax, integer_x=False)
         if ax.get_legend_handles_labels()[0]:
             ax.legend()
         figures_dir.mkdir(parents=True, exist_ok=True)
@@ -318,7 +360,7 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
         state_records = [r for r in records if r.get("snir_state") == state]
         if not state_records:
             continue
-        label_state = "SNIR activé" if state == "snir_on" else "SNIR désactivé" if state == "snir_off" else "SNIR inconnu"
+        label_state = _snir_label(state)
         suffix_state = state or "snir_unknown"
         for period in periods:
             filtered = [r for r in state_records if r["packet_interval_s"] == period]
@@ -329,7 +371,7 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
                 axes = [axes]
             for idx, cluster_id in enumerate(clusters):
                 ax = axes[idx]
-                for algorithm in algorithms:
+                for algo_idx, algorithm in enumerate(algorithms):
                     algo_records = [r for r in filtered if r["algorithm"] == algorithm]
                     algo_records.sort(key=lambda item: item["num_nodes"])
                     xs: List[int] = []
@@ -341,7 +383,16 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
                         xs.append(item["num_nodes"])
                         ys.append(value)
                     if xs:
-                        ax.plot(xs, ys, marker="o", label=algorithm)
+                        marker = MARKER_CYCLE[algo_idx % len(MARKER_CYCLE)]
+                        ax.plot(
+                            xs,
+                            ys,
+                            marker=marker,
+                            markersize=5.5,
+                            linewidth=2,
+                            color=_snir_color(state),
+                            label=algorithm,
+                        )
                 target = None
                 for item in filtered:
                     target = item.get("cluster_targets", {}).get(cluster_id)
@@ -354,7 +405,7 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
                 if idx == 0:
                     ax.set_ylabel("PDR")
                 ax.set_ylim(0.0, 1.05)
-                ax.grid(True, linestyle=":", alpha=0.4)
+                _format_axes(ax, integer_x=True)
             handles, labels = axes[0].get_legend_handles_labels()
             if handles:
                 fig.legend(handles, labels, loc="upper center", ncol=min(len(labels), 4))
@@ -376,13 +427,17 @@ def _apply_ieee_style() -> None:
         return
     plt.rcParams.update(
         {
-            "font.size": 11,
+            "font.size": 10,
             "axes.titlesize": 12,
             "axes.labelsize": 11,
             "legend.fontsize": 10,
             "xtick.labelsize": 10,
             "ytick.labelsize": 10,
-            "figure.dpi": 150,
+            "figure.dpi": 200,
+            "lines.linewidth": 2,
+            "lines.markersize": 6,
+            "savefig.dpi": 300,
+            "axes.grid": False,
         }
     )
 
@@ -412,7 +467,7 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
                 continue
             for metric, ylabel in metrics.items():
                 fig, ax = plt.subplots(figsize=(7, 4.5))
-                for state, color in [("snir_on", SNIR_COLORS["snir_on"]), ("snir_off", SNIR_COLORS["snir_off"])]:
+                for state in ("snir_on", "snir_off"):
                     state_records = [r for r in period_records if (r.get("snir_state") or "snir_unknown") == state]
                     state_records.sort(key=lambda item: _parse_float(item.get("num_nodes")))
                     xs = [_parse_float(item.get("num_nodes")) for item in state_records]
@@ -422,16 +477,17 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
                             xs,
                             ys,
                             marker="o",
+                            markersize=6,
                             linewidth=2,
-                            color=color,
-                            label="SNIR on (rouge)" if state == "snir_on" else "SNIR off (bleu)",
+                            color=_snir_color(state),
+                            label=_snir_label(state),
                         )
 
                 ax.set_xlabel("Nombre de nœuds")
                 ax.set_ylabel(ylabel)
                 period_label = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
                 ax.set_title(f"{ylabel} – {algorithm} – période {period_label} s")
-                ax.grid(True, linestyle=":", alpha=0.5)
+                _format_axes(ax, integer_x=True)
                 if ax.get_legend_handles_labels()[0]:
                     ax.legend()
 
