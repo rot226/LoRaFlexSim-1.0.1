@@ -144,6 +144,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
             "simulation_duration_s": getattr(simulator, "current_time", args.duration),
             "payload_bytes": PAYLOAD_BYTES,
             "use_snir": args.use_snir,
+            "with_snir": args.use_snir,
             "snir_state": STATE_LABELS.get(args.use_snir, "snir_unknown"),
         }
     )
