@@ -44,27 +44,39 @@ class LoRaPHY:
         tuple
             ``(rssi, snr, airtime, success)`` for the link.
         """
+        channel_rng = None
+        can_drive_channel = rng is not None and hasattr(rng, "normal")
+        if can_drive_channel:
+            # Ensure every random component of the channel (e.g. SNIR fading)
+            # uses the caller-provided generator for reproducibility.
+            channel_rng = getattr(self.channel, "rng", None)
+            if hasattr(self.channel, "set_rng"):
+                self.channel.set_rng(rng)
 
         distance = self.node.distance_to(dest)
-        if getattr(self.channel, "use_snir", False):
-            rssi, snr, snir, _ = self.channel.compute_snir(
-                self.node.tx_power,
-                distance,
-                self.node.sf,
-                0.0,
-                freq_offset_hz=self.node.current_freq_offset,
-                sync_offset_s=self.node.current_sync_offset,
-            )
-            snr_metric = snir
-        else:
-            rssi, snr = self.channel.compute_rssi(
-                self.node.tx_power,
-                distance,
-                self.node.sf,
-                freq_offset_hz=self.node.current_freq_offset,
-                sync_offset_s=self.node.current_sync_offset,
-            )
-            snr_metric = snr
+        try:
+            if getattr(self.channel, "use_snir", False):
+                rssi, snr, snir, _ = self.channel.compute_snir(
+                    self.node.tx_power,
+                    distance,
+                    self.node.sf,
+                    0.0,
+                    freq_offset_hz=self.node.current_freq_offset,
+                    sync_offset_s=self.node.current_sync_offset,
+                )
+                snr_metric = snir
+            else:
+                rssi, snr = self.channel.compute_rssi(
+                    self.node.tx_power,
+                    distance,
+                    self.node.sf,
+                    freq_offset_hz=self.node.current_freq_offset,
+                    sync_offset_s=self.node.current_sync_offset,
+                )
+                snr_metric = snr
+        finally:
+            if can_drive_channel and channel_rng is not None and hasattr(self.channel, "set_rng"):
+                self.channel.set_rng(channel_rng)
         channel = self.channel
         flora_phy = getattr(channel, "flora_phy", None)
         per = None
