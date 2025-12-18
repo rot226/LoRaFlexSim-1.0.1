@@ -53,6 +53,7 @@ def _assign_clusters(sim: Simulator) -> dict[int, int]:
         while cursor < threshold and cursor < total_nodes:
             node = sim.nodes[cursor]
             node.qos_cluster_id = cluster_id
+            node.learning_method = "ucb1"
             assignments[node.id] = cluster_id
             cursor += 1
     sim.qos_clusters_config = {

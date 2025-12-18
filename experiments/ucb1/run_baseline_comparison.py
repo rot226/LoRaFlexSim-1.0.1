@@ -71,12 +71,16 @@ def _apply_algorithm(sim: Simulator, name: str, packet_interval: float) -> None:
     if name == "ucb1":
         sim.adr_node = False
         sim.adr_server = False
+        for node in sim.nodes:
+            node.learning_method = "ucb1"
         return
 
     if name in {"ADR-MAX", "ADR-AVG"}:
         sim.adr_node = True
         sim.adr_server = True
         sim.adr_method = "max" if name == "ADR-MAX" else "avg"
+        for node in sim.nodes:
+            node.learning_method = None
         return
 
     manager = QoSManager()
@@ -88,8 +92,12 @@ def _apply_algorithm(sim: Simulator, name: str, packet_interval: float) -> None:
     )
     if name == "MixRA-H":
         manager.apply(sim, "MixRA-H")
+        for node in sim.nodes:
+            node.learning_method = None
         return
     manager.apply(sim, "MixRA-Opt")
+    for node in sim.nodes:
+        node.learning_method = None
 
 
 def _collect_cluster_metrics(
