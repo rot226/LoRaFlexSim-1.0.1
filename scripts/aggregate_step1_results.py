@@ -113,6 +113,7 @@ def _group_records(records: Iterable[Record]) -> Dict[Tuple[Any, ...], List[Reco
         key = (
             record.get("algorithm"),
             record.get("with_snir"),
+            record.get("snir_state"),
             record.get("random_seed"),
             record.get("num_nodes"),
             record.get("packet_interval_s"),
@@ -127,11 +128,11 @@ def _build_summary_rows(
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for key, items in sorted(groups.items()):
-        algorithm, with_snir, seed, num_nodes, packet_interval, duration = key
+        algorithm, with_snir, snir_state, seed, num_nodes, packet_interval, duration = key
         summary: Dict[str, Any] = {
             "algorithm": algorithm,
             "with_snir": with_snir,
-            "snir_state": STATE_LABELS.get(with_snir, "snir_unknown"),
+            "snir_state": snir_state or STATE_LABELS.get(with_snir, "snir_unknown"),
             "random_seed": seed,
             "num_nodes": num_nodes,
             "packet_interval_s": packet_interval,
@@ -192,11 +193,12 @@ def _write_summary(
 def _build_raw_rows(records: Iterable[Record], cluster_ids: Sequence[int]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for record in records:
+        snir_state = record.get("snir_state") or STATE_LABELS.get(record.get("with_snir"), "snir_unknown")
         row: Dict[str, Any] = {
             "run_id": record.get("run_id"),
             "algorithm": record.get("algorithm"),
             "with_snir": record.get("with_snir"),
-            "snir_state": record.get("snir_state"),
+            "snir_state": snir_state,
             "use_snir": record.get("use_snir"),
             "random_seed": record.get("random_seed"),
             "num_nodes": record.get("num_nodes"),
@@ -280,8 +282,15 @@ def _write_outputs(
     print(f"Résumé écrit dans {summary_path} (et {summary_path.with_suffix('.json')})")
     print(f"Index brut écrit dans {raw_path} (et {raw_path.with_suffix('.json')})")
 
-    if not split_snir:
+    snir_states_present = {record.get("with_snir") for record in records if record.get("with_snir") is not None}
+    should_split = split_snir or len(snir_states_present) > 1
+
+    if not should_split:
         return
+
+    split_reason = "option --split-snir" if split_snir else "détection des scénarios SNIR distincts"
+
+    print(f"Production des fichiers SNIR séparés ({split_reason}).")
 
     for state_flag in (True, False):
         state_label = STATE_LABELS.get(state_flag, "snir_unknown")
@@ -333,7 +342,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--split-snir",
         action="store_true",
-        help="Produit des fichiers d'agrégation séparés pour SNIR activé/désactivé en plus du tableau combiné",
+        help=(
+            "Produit des fichiers d'agrégation séparés pour SNIR activé/désactivé en plus du tableau combiné; "
+            "sera également activé automatiquement si des valeurs mélangées sont détectées"
+        ),
     )
     return parser
 
