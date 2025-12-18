@@ -7,6 +7,7 @@ from .channel import Channel
 from .lorawan import default_downlink_datarate
 from traffic.exponential import sample_interval
 from traffic.numpy_compat import is_mt19937_rng
+from ..learning import LoRaSFSelectorUCB1
 
 # Default energy profile used by all nodes (based on the FLoRa model)
 DEFAULT_ENERGY_PROFILE = FLORA_PROFILE
@@ -66,6 +67,7 @@ class Node:
         security: bool = True,
         beacon_loss_prob: float = 0.0,
         beacon_drift: float = 0.0,
+        learning_method: str | None = "ucb1",
     ):
         """
         Initialise le nœud avec ses paramètres de départ.
@@ -235,6 +237,14 @@ class Node:
         self.adr_ack_cnt = 0
         self.adr_ack_limit = 64
         self.adr_ack_delay = 32
+
+        # Sélection SF par apprentissage lorsque l'ADR est désactivé
+        self.learning_method = learning_method or "ucb1"
+        self.sf_selector = (
+            LoRaSFSelectorUCB1()
+            if (not self.adr and self.learning_method == "ucb1")
+            else None
+        )
 
         # Additional state used by the simulator
         self.history: list[dict] = []
