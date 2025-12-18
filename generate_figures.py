@@ -31,16 +31,17 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_lfs_plots() -> None:
+def run_lfs_plots(results_dir: Path, config_path: Path, output_dir: Path) -> None:
     command = [
         sys.executable,
-        "qos_cli/lfs_plots.py",
+        "-m",
+        "qos_cli.lfs_plots",
         "--in",
-        "results/",
+        str(results_dir),
         "--config",
-        "qos_cli/scenarios_small.yaml",
+        str(config_path),
         "--out",
-        "qos_cli/figures/",
+        str(output_dir),
     ]
 
     LOGGER.info("Exécution de la commande : %s", " ".join(command))
@@ -49,11 +50,10 @@ def run_lfs_plots() -> None:
         raise RuntimeError(f"Échec de l'exécution de {' '.join(command)} (code {result.returncode}).")
 
 
-def convert_figures(overwrite: bool) -> None:
-    figures_dir = Path("qos_cli/figures/")
+def convert_figures(figures_dir: Path, overwrite: bool) -> None:
     if not figures_dir.exists():
         raise FileNotFoundError(
-            "Le dossier des figures 'qos_cli/figures/' est introuvable. Vérifiez l'exécution de la commande lfs_plots."
+            f"Le dossier des figures '{figures_dir}' est introuvable. Vérifiez l'exécution de la commande lfs_plots."
         )
 
     png_files = sorted(figures_dir.glob("*.png"))
@@ -89,8 +89,12 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
     args = parse_args()
 
-    run_lfs_plots()
-    convert_figures(args.overwrite)
+    results_dir = Path("results")
+    config_path = Path("qos_cli") / "scenarios_small.yaml"
+    figures_dir = Path("qos_cli") / "figures"
+
+    run_lfs_plots(results_dir, config_path, figures_dir)
+    convert_figures(figures_dir, args.overwrite)
 
 
 if __name__ == "__main__":

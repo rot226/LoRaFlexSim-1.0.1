@@ -16,10 +16,17 @@ sensibilité. Un chemin personnalisé peut être fourni via `flora_noise_path`.
 1. **Clonez ou téléchargez** le projet.
 2. **Créez un environnement virtuel et installez le projet :**
    ```bash
-   python3 -m venv env
-   source env/bin/activate  # Sous Windows : env\Scripts\activate
+   python -m venv .venv
+   source .venv/bin/activate  # PowerShell : .\.venv\Scripts\Activate.ps1
    pip install -e .
    ```
+
+   Sous Windows 11, l'activation via PowerShell requiert parfois l'option
+   `-ExecutionPolicy Bypass` (`powershell -ExecutionPolicy Bypass -File ...`).
+   Les dépendances Python principales (NumPy, Pandas, SciPy, Matplotlib, Plotly,
+   Panel, FastAPI, Uvicorn) sont installées automatiquement par `pip install -e
+   .` ; aucune étape supplémentaire n'est nécessaire pour les scripts de
+   génération de figures.
 
    > **Remarque :** les tests automatisés utilisent un stub minimal
    > ``numpy_stub`` situé dans ``tests/stubs`` uniquement pour les tests. Pour
