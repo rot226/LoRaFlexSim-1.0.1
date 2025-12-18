@@ -20,7 +20,7 @@ DEFAULT_FIGURES_DIR = ROOT_DIR / "figures"
 __all__ = ["generate_step1_figures", "DEFAULT_RESULTS_DIR", "DEFAULT_FIGURES_DIR"]
 
 STATE_LABELS = {True: "snir_on", False: "snir_off", None: "snir_unknown"}
-SNIR_COLORS = {"snir_on": "#1f77b4", "snir_off": "#ff7f0e", "snir_unknown": "#7f7f7f"}
+SNIR_COLORS = {"snir_on": "#d62728", "snir_off": "#1f77b4", "snir_unknown": "#7f7f7f"}
 
 
 def _parse_float(value: str | None, default: float = 0.0) -> float:
@@ -49,6 +49,7 @@ def _parse_bool(value: Any) -> bool | None:
 
 def _detect_snir(row: Mapping[str, Any], path: Path) -> bool | None:
     candidates = [
+        row.get("with_snir"),
         row.get("use_snir"),
         row.get("channel__use_snir"),
         row.get("snir_enabled"),
@@ -121,6 +122,9 @@ def _load_summary_records(summary_path: Path) -> List[Dict[str, Any]]:
                     record[key] = float(value or 0)
                 else:
                     record[key] = _parse_float(value)
+            snir_flag = _parse_bool(row.get("with_snir"))
+            if snir_flag is not None and not record.get("snir_state"):
+                record["snir_state"] = STATE_LABELS.get(snir_flag, "snir_unknown")
             records.append(record)
     return records
 
@@ -363,15 +367,96 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
             plt.close(fig)
 
 
+def _select_metric_value(record: Mapping[str, Any], metric: str) -> float:
+    return _parse_float(record.get(f"{metric}_mean")) or _parse_float(record.get(metric))
+
+
+def _apply_ieee_style() -> None:
+    if plt is None:
+        return
+    plt.rcParams.update(
+        {
+            "font.size": 11,
+            "axes.titlesize": 12,
+            "axes.labelsize": 11,
+            "legend.fontsize": 10,
+            "xtick.labelsize": 10,
+            "ytick.labelsize": 10,
+            "figure.dpi": 150,
+        }
+    )
+
+
+def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> None:
+    if not records or plt is None:
+        return
+
+    metrics = {
+        "PDR": "PDR global",
+        "DER": "DER global",
+        "collisions": "Collisions",
+        "jain_index": "Indice de Jain",
+        "throughput_bps": "Débit agrégé (bps)",
+    }
+
+    by_algorithm = defaultdict(list)
+    for record in records:
+        algo = str(record.get("algorithm") or "unknown")
+        by_algorithm[algo].append(record)
+
+    for algorithm, algo_records in sorted(by_algorithm.items()):
+        periods = sorted({_parse_float(r.get("packet_interval_s")) for r in algo_records})
+        for period in periods:
+            period_records = [r for r in algo_records if _parse_float(r.get("packet_interval_s")) == period]
+            if not period_records:
+                continue
+            for metric, ylabel in metrics.items():
+                fig, ax = plt.subplots(figsize=(7, 4.5))
+                for state, color in [("snir_on", SNIR_COLORS["snir_on"]), ("snir_off", SNIR_COLORS["snir_off"])]:
+                    state_records = [r for r in period_records if (r.get("snir_state") or "snir_unknown") == state]
+                    state_records.sort(key=lambda item: _parse_float(item.get("num_nodes")))
+                    xs = [_parse_float(item.get("num_nodes")) for item in state_records]
+                    ys = [_select_metric_value(item, metric) for item in state_records]
+                    if xs:
+                        ax.plot(
+                            xs,
+                            ys,
+                            marker="o",
+                            linewidth=2,
+                            color=color,
+                            label="SNIR on (rouge)" if state == "snir_on" else "SNIR off (bleu)",
+                        )
+
+                ax.set_xlabel("Nombre de nœuds")
+                ax.set_ylabel(ylabel)
+                period_label = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
+                ax.set_title(f"{ylabel} – {algorithm} – période {period_label} s")
+                ax.grid(True, linestyle=":", alpha=0.5)
+                if ax.get_legend_handles_labels()[0]:
+                    ax.legend()
+
+                figures_dir.mkdir(parents=True, exist_ok=True)
+                output = figures_dir / f"algo_{algorithm}_{metric.lower()}_snir_compare_tx_{period_label}.png"
+                fig.tight_layout()
+                fig.savefig(output, dpi=200)
+                plt.close(fig)
+
+
 def generate_step1_figures(
-    results_dir: Path, figures_dir: Path, use_summary: bool = False, plot_cdf: bool = False
+    results_dir: Path,
+    figures_dir: Path,
+    use_summary: bool = False,
+    plot_cdf: bool = False,
+    compare_snir: bool = False,
 ) -> None:
     if plt is None:
         print("matplotlib n'est pas disponible ; aucune figure générée.")
         return
 
+    _apply_ieee_style()
     output_dir = figures_dir / "step1"
     extended_dir = output_dir / "extended"
+    comparison_records: List[Dict[str, Any]] = []
 
     if use_summary:
         summary_path = results_dir / "summary.csv"
@@ -380,6 +465,7 @@ def generate_step1_figures(
             print(f"Aucun summary.csv trouvé dans {summary_path}; aucune barre générée.")
         else:
             _plot_summary_bars(summary_records, extended_dir)
+            comparison_records = summary_records
     else:
         records = _load_step1_records(results_dir)
         if not records:
@@ -391,6 +477,13 @@ def generate_step1_figures(
         _plot_global_metric(records, "collisions", "Collisions", "collisions", output_dir)
         _plot_global_metric(records, "jain_index", "Indice de Jain", "jain_index", output_dir)
         _plot_global_metric(records, "throughput_bps", "Débit agrégé (bps)", "throughput", output_dir)
+        comparison_records = records
+
+    if compare_snir:
+        if not comparison_records:
+            print("Aucune donnée disponible pour comparer SNIR on/off.")
+        else:
+            _plot_snir_comparison(comparison_records, output_dir)
 
     if plot_cdf:
         raw_path = results_dir / "raw_index.csv"
@@ -425,13 +518,24 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Active le tracé des CDF à partir de raw_index.csv ou des CSV bruts",
     )
+    parser.add_argument(
+        "--compare-snir",
+        action="store_true",
+        help="Active les figures combinées SNIR on/off par métrique et par algorithme",
+    )
     return parser
 
 
 def main(argv: List[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    generate_step1_figures(args.results_dir, args.figures_dir, args.use_summary, args.plot_cdf)
+    generate_step1_figures(
+        args.results_dir,
+        args.figures_dir,
+        args.use_summary,
+        args.plot_cdf,
+        args.compare_snir,
+    )
 
 
 if __name__ == "__main__":
