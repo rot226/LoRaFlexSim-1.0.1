@@ -122,13 +122,22 @@ def _snir_color(state: str | None) -> str:
 def _format_axes(ax: Any, integer_x: bool = False) -> None:
     if plt is None:
         return
-    ax.grid(True, which="major", linestyle=":", linewidth=0.8, alpha=0.7)
+    ax.grid(True, which="both", linestyle=":", linewidth=0.8, alpha=0.5)
     if integer_x:
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     y_formatter = ScalarFormatter(useMathText=True)
     y_formatter.set_scientific(False)
     ax.yaxis.set_major_formatter(y_formatter)
-    ax.tick_params(axis="both", direction="in", length=4, width=0.9)
+    ax.tick_params(axis="both", direction="in", length=4.5, width=1.0, labelsize=9)
+    ax.xaxis.label.set_size(10)
+    ax.yaxis.label.set_size(10)
+    ax.title.set_size(12)
+    for spine in ax.spines.values():
+        spine.set_linewidth(1.0)
+    for line in ax.get_lines():
+        line.set_linewidth(2.0)
+        line.set_markersize(6.0)
+        line.set_markeredgewidth(0.8)
 
 
 def _load_summary_records(summary_path: Path, forced_state: str | None = None) -> List[Dict[str, Any]]:
@@ -505,7 +514,7 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
                     ax.legend()
 
                 figures_dir.mkdir(parents=True, exist_ok=True)
-                output = figures_dir / f"algo_{algorithm}_{metric.lower()}_snir_compare_tx_{period_label}.png"
+                output = figures_dir / f"algo_{algorithm}_{metric.lower()}_snir-compare_tx_{period_label}.png"
                 fig.tight_layout()
                 fig.savefig(output, dpi=200)
                 plt.close(fig)
