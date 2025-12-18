@@ -40,6 +40,7 @@ ALGORITHMS: Mapping[str, Callable[..., None]] = {
     "mixra_h": _apply_mixra_h,
     "mixra_opt": _apply_mixra_opt,
 }
+STATE_LABELS = {True: "snir_on", False: "snir_off"}
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -113,9 +114,19 @@ def _apply_algorithm(name: str, simulator: Simulator, manager: QoSManager, solve
     handler(simulator, manager)
 
 
+def _snir_suffix(use_snir: bool) -> str:
+    return "_snir-on" if use_snir else "_snir-off"
+
+
 def main(argv: list[str] | None = None) -> Mapping[str, object]:
     parser = _build_parser()
     args = parser.parse_args(argv)
+
+    print(
+        "[RUN] "
+        f"algo={args.algorithm} use_snir={args.use_snir} seed={args.seed} "
+        f"nodes={args.nodes} interval={args.packet_interval:g}s"
+    )
 
     simulator = _instantiate_simulator(args.nodes, args.packet_interval, args.seed, args.use_snir)
     manager = QoSManager()
@@ -132,6 +143,8 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
             "random_seed": args.seed,
             "simulation_duration_s": getattr(simulator, "current_time", args.duration),
             "payload_bytes": PAYLOAD_BYTES,
+            "use_snir": args.use_snir,
+            "snir_state": STATE_LABELS.get(args.use_snir, "snir_unknown"),
         }
     )
     enriched = _compute_additional_metrics(simulator, dict(metrics), args.algorithm, args.mixra_solver)
@@ -139,7 +152,8 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
 
     output_dir: Path = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = output_dir / f"{args.algorithm}_N{args.nodes}_T{int(args.packet_interval)}.csv"
+    interval_label = int(args.packet_interval) if float(args.packet_interval).is_integer() else args.packet_interval
+    csv_path = output_dir / f"{args.algorithm}_N{args.nodes}_T{interval_label}{_snir_suffix(args.use_snir)}.csv"
     _write_csv(csv_path, csv_row)
 
     if not args.quiet:
@@ -157,3 +171,4 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
 
 if __name__ == "__main__":
     main()
+
