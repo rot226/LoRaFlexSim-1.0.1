@@ -53,7 +53,8 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_parse_bool,
         default=None,
         metavar="BOOL",
-        help="États SNIR à explorer (true/false). Par défaut : les deux.",
+        help="États SNIR à explorer (true/false). Utilisez explicitement "
+        """"--with-snir true false""" pour produire les deux jeux.",
     )
     parser.add_argument(
         "--seeds",
@@ -111,7 +112,9 @@ def _csv_filename(algorithm: str, nodes: int, packet_interval: float, use_snir: 
 
 def _iter_snir_states(values: Iterable[bool] | None) -> Iterable[bool]:
     if values is None:
-        return DEFAULT_SNIR_STATES
+        raise ValueError(
+            "Argument --with-snir manquant : précisez true, false ou les deux (ex. --with-snir true false)."
+        )
     return values
 
 
@@ -164,7 +167,10 @@ def main(argv: list[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    snir_states = list(_iter_snir_states(args.with_snir))
+    try:
+        snir_states = list(_iter_snir_states(args.with_snir))
+    except ValueError as exc:  # clarification immédiate pour l'utilisateur
+        parser.error(str(exc))
 
     for use_snir in snir_states:
         for seed in args.seeds:

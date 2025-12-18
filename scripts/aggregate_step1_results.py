@@ -68,7 +68,17 @@ def _load_records(results_dir: Path, strict_snir: bool) -> Tuple[List[Record], L
                         cluster_ids.add(cid)
                         cluster_pdr[cid] = _parse_float(value)
 
-                snir_flag = _detect_snir(row, csv_path)
+                snir_state = row.get("snir_state")
+                snir_flag = _parse_bool(row.get("with_snir"))
+                if snir_flag is None:
+                    snir_flag = _parse_bool(row.get("use_snir"))
+                if snir_flag is None and snir_state in STATE_LABELS.values():
+                    snir_flag = next((flag for flag, label in STATE_LABELS.items() if label == snir_state), None)
+                if snir_flag is None:
+                    snir_flag = _detect_snir(row, csv_path)
+
+                if not snir_state and snir_flag is not None:
+                    snir_state = STATE_LABELS.get(snir_flag)
                 if strict_snir and snir_flag is None:
                     raise ValueError(
                         f"Impossible de déterminer l'état SNIR pour {csv_path}; utilisez des fichiers explicites."
@@ -90,7 +100,7 @@ def _load_records(results_dir: Path, strict_snir: bool) -> Tuple[List[Record], L
                     "cluster_pdr": cluster_pdr,
                     "with_snir": snir_flag,
                     "use_snir": snir_flag,
-                    "snir_state": STATE_LABELS.get(snir_flag, "snir_unknown"),
+                    "snir_state": snir_state or STATE_LABELS.get(snir_flag, "snir_unknown"),
                 }
                 records.append(record)
                 run_id += 1

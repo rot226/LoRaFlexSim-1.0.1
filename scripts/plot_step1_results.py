@@ -131,7 +131,7 @@ def _format_axes(ax: Any, integer_x: bool = False) -> None:
     ax.tick_params(axis="both", direction="in", length=4, width=0.9)
 
 
-def _load_summary_records(summary_path: Path) -> List[Dict[str, Any]]:
+def _load_summary_records(summary_path: Path, forced_state: str | None = None) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     if not summary_path.exists():
         return records
@@ -152,7 +152,20 @@ def _load_summary_records(summary_path: Path) -> List[Dict[str, Any]]:
             snir_flag = _parse_bool(row.get("with_snir"))
             if snir_flag is not None and not record.get("snir_state"):
                 record["snir_state"] = STATE_LABELS.get(snir_flag, "snir_unknown")
+            if forced_state and not record.get("snir_state"):
+                record["snir_state"] = forced_state
             records.append(record)
+    return records
+
+
+def _load_comparison_records(results_dir: Path, use_summary: bool) -> List[Dict[str, Any]]:
+    if use_summary:
+        explicit_on = _load_summary_records(results_dir / "summary_snir_on.csv", forced_state="snir_on")
+        explicit_off = _load_summary_records(results_dir / "summary_snir_off.csv", forced_state="snir_off")
+        combined = _load_summary_records(results_dir / "summary.csv")
+        records = explicit_on + explicit_off + combined
+    else:
+        records = _load_step1_records(results_dir)
     return records
 
 
@@ -536,6 +549,7 @@ def generate_step1_figures(
         comparison_records = records
 
     if compare_snir:
+        comparison_records = _load_comparison_records(results_dir, use_summary)
         if not comparison_records:
             print("Aucune donnée disponible pour comparer SNIR on/off.")
         else:
