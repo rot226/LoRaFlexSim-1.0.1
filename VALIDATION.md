@@ -66,6 +66,10 @@ Les tests d'intégration `pytest` exécutent cette matrice et vérifient que le 
 - [ ] `pytest tests/integration/test_validation_matrix.py` : compare collisions et PDR aux traces `.sca` de référence pour chaque mode (mono/multi-canaux, classes B/C).【F:tests/integration/test_validation_matrix.py†L1-L113】
 - [ ] `pytest tests/test_flora_defaults.py` : vérifie le seuil de détection, la matrice non orthogonale et la fenêtre de capture appliqués en mode FLoRa.【F:tests/test_flora_defaults.py†L1-L26】
 
+#### Figures SNIR
+
+- [ ] `python scripts/validate_snir_plots.py --nodes 8 --duration 120 --packet-interval 60` : exécute une matrice SNIR on/off minimale via `run_step1_matrix.py`, agrège les CSV puis vérifie que les figures `*_snir-compare.png` produites par `plot_step1_results.py` sont présentes pour servir de contrôle graphique rapide avant soumission.【F:scripts/validate_snir_plots.py†L1-L103】【F:scripts/plot_step1_results.py†L523-L567】
+
 #### ADR
 
 - [ ] `pytest tests/integration/test_adr_standard_alignment.py` : valide que la méthode `avg` reproduit les décisions ADR serveur historiques, y compris les fenêtres RX spécifiques aux classes.【F:tests/integration/test_adr_standard_alignment.py†L1-L79】

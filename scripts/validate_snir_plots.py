@@ -1,11 +1,11 @@
-"""Exécution rapide SNIR on/off pour valider les figures combinées."""
+"""Exécution rapide SNIR on/off via la matrice pour valider les figures combinées."""
 
 from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
-from typing import Iterable, List
+from typing import List
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -16,39 +16,44 @@ from scripts.plot_step1_results import (
     DEFAULT_FIGURES_DIR,
     generate_step1_figures,
 )
-from scripts.run_step1_experiments import main as run_step1_experiment
+from scripts.run_step1_matrix import main as run_step1_matrix
 
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "snir_validation"
 
 
-def _run_snir_experiments(
+def _run_snir_matrix(
     results_dir: Path,
     nodes: int,
     packet_interval: float,
     duration: float,
     seed: int,
     algorithm: str,
-    states: Iterable[bool],
-) -> List[Path]:
-    csv_paths: List[Path] = []
-    for use_snir in states:
-        argv = [
-            f"--nodes={nodes}",
-            f"--packet-interval={packet_interval}",
-            f"--duration={duration}",
-            f"--seed={seed}",
-            f"--algorithm={algorithm}",
-            f"--output-dir={results_dir}",
-            "--quiet",
-        ]
-        if use_snir:
-            argv.append("--use-snir")
-
-        result = run_step1_experiment(argv)
-        csv_path = Path(result.get("csv_path"))
-        csv_paths.append(csv_path)
-        print(f"[OK] Simulation SNIR={'on' if use_snir else 'off'} : {csv_path.relative_to(ROOT_DIR)}")
-    return csv_paths
+) -> None:
+    argv = [
+        "--algos",
+        algorithm,
+        "--with-snir",
+        "false",
+        "true",
+        "--seeds",
+        str(seed),
+        "--nodes",
+        str(nodes),
+        "--packet-intervals",
+        str(packet_interval),
+        "--duration",
+        str(duration),
+        "--results-dir",
+        str(results_dir),
+    ]
+    print("[RUN] Matrice SNIR on/off minimale via run_step1_matrix.py …")
+    run_step1_matrix(argv)
+    generated = sorted(results_dir.rglob("*_snir-*.csv"))
+    if generated:
+        for path in generated:
+            print(f"[OK] CSV généré : {path.relative_to(ROOT_DIR)}")
+    else:
+        print("[WARN] Aucun CSV SNIR détecté après l'exécution ; vérifiez les paramètres.")
 
 
 def _aggregate_results(results_dir: Path) -> None:
@@ -69,7 +74,7 @@ def _generate_plots(results_dir: Path, figures_dir: Path) -> Path:
 
 
 def _assert_compare_plots(figures_dir: Path) -> None:
-    compare_plots = list(figures_dir.glob("*_snir_compare_*.png"))
+    compare_plots = list(figures_dir.glob("*_snir-compare_*.png"))
     if not compare_plots:
         raise RuntimeError(
             f"Aucune figure SNIR combinée trouvée dans {figures_dir};"
@@ -92,17 +97,17 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_FIGURES_DIR,
         help="Répertoire racine pour les figures générées",
     )
-    parser.add_argument("--nodes", type=int, default=20, help="Nombre de nœuds pour le test rapide")
+    parser.add_argument("--nodes", type=int, default=10, help="Nombre de nœuds pour le test rapide")
     parser.add_argument(
         "--packet-interval",
         type=float,
-        default=120.0,
+        default=60.0,
         help="Intervalle moyen d'émission (secondes)",
     )
     parser.add_argument(
         "--duration",
         type=float,
-        default=300.0,
+        default=180.0,
         help="Durée maximale de simulation (secondes)",
     )
     parser.add_argument("--seed", type=int, default=42, help="Graine de simulation")
@@ -121,14 +126,13 @@ def main(argv: List[str] | None = None) -> None:
 
     args.results_dir.mkdir(parents=True, exist_ok=True)
 
-    _run_snir_experiments(
+    _run_snir_matrix(
         args.results_dir,
         args.nodes,
         args.packet_interval,
         args.duration,
         args.seed,
         args.algorithm,
-        states=(False, True),
     )
     _aggregate_results(args.results_dir)
 
