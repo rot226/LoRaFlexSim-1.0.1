@@ -130,6 +130,23 @@ Les figures combinées `*_snir_compare_*.png` sont déposées dans
 `scripts/plot_step1_results.py` (`#d62728` pour SNIR activé, `#1f77b4` pour SNIR
 désactivé).【F:scripts/plot_step1_results.py†L16-L24】【F:scripts/plot_step1_results.py†L450-L520】
 
+### Récapitulatif complet (commande unique + agrégation + tracé)
+
+Si vous souhaitez enchaîner l'exécution de la matrice, son agrégation puis le
+tracé comparatif, le workflow complet se résume à :
+
+```bash
+python scripts/run_step1_matrix.py --algos adr apra mixra_h mixra_opt --with-snir true false --seeds 1 2 3 --nodes 1000 5000 --packet-intervals 300 600
+python scripts/aggregate_step1_results.py
+python scripts/plot_step1_results.py --compare-snir --use-summary
+```
+
+- Les CSV intermédiaires sont écrits dans `results/step1/<snir_state>/seed_*`.
+- Les figures combinées `*_snir_compare_*.png` sont générées dans
+  `figures/step1/` (les variantes étendues dans `figures/step1/extended/`).
+- Les codes couleur sont **rouge** pour SNIR activé et **bleu** pour SNIR
+  désactivé (`#d62728` et `#1f77b4`).
+
 Pour vérifier rapidement que les courbes combinées SNIR on/off restent
 fonctionnelles, lancez le test léger suivant :
 
