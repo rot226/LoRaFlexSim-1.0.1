@@ -3,7 +3,8 @@
 Le script combine plusieurs algorithmes QoS, états SNIR, graines et
 configurations de charge puis délègue l'exécution à
 ``scripts/run_step1_experiments.py``. Les résultats CSV sont rangés par
-état SNIR (et par graine) dans ``results/step1/<state>/``.
+état SNIR (et par graine) dans ``results/step1/<state>/`` avec un suffixe
+de fichier explicite (``_snir-on`` ou ``_snir-off``).
 """
 
 from __future__ import annotations
@@ -95,9 +96,17 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _csv_filename(algorithm: str, nodes: int, packet_interval: float) -> str:
+def _snir_suffix(use_snir: bool | None) -> str:
+    if use_snir is True:
+        return "_snir-on"
+    if use_snir is False:
+        return "_snir-off"
+    return ""
+
+
+def _csv_filename(algorithm: str, nodes: int, packet_interval: float, use_snir: bool) -> str:
     interval = int(packet_interval) if float(packet_interval).is_integer() else packet_interval
-    return f"{algorithm}_N{nodes}_T{interval}.csv"
+    return f"{algorithm}_N{nodes}_T{interval}{_snir_suffix(use_snir)}.csv"
 
 
 def _iter_snir_states(values: Iterable[bool] | None) -> Iterable[bool]:
@@ -119,7 +128,7 @@ def _run_one(
 ) -> None:
     state = STATE_LABELS.get(use_snir, "snir_unknown")
     output_dir = results_dir / state / f"seed_{seed}"
-    csv_path = output_dir / _csv_filename(algorithm, nodes, packet_interval)
+    csv_path = output_dir / _csv_filename(algorithm, nodes, packet_interval, use_snir)
 
     if skip_existing and csv_path.exists():
         print(f"[SKIP] {csv_path} déjà présent")
@@ -144,8 +153,9 @@ def _run_one(
         argv.append("--use-snir")
 
     print(
-        f"[RUN] algo={algorithm} snir={use_snir} seed={seed} "
-        f"N={nodes} TX={packet_interval:g}s"
+        "[RUN] "
+        f"algo={algorithm} use_snir={use_snir} seed={seed} "
+        f"nodes={nodes} interval={packet_interval:g}s -> {csv_path}"
     )
     run_step1_experiments.main(argv)
 
