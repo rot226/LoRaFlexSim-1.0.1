@@ -1517,7 +1517,7 @@ class Simulator:
                     "Affectation de secours du nœud %s sur le canal %s", node_id, fallback
                 )
 
-            if not node.adr and getattr(node, "learning_method", None) in {None, "ucb1"}:
+            if not node.adr and getattr(node, "learning_method", None) == "ucb1":
                 if getattr(node, "sf_selector", None) is None:
                     node.sf_selector = LoRaSFSelectorUCB1()
                 selected_sf = node.sf_selector.select_sf()
@@ -1825,7 +1825,11 @@ class Simulator:
             if hasattr(node, "record_radio_outcome"):
                 node.record_radio_outcome(success=delivered, snir=snir_for_node)
 
-            if not node.adr and getattr(node, "sf_selector", None) is not None:
+            if (
+                not node.adr
+                and getattr(node, "learning_method", None) == "ucb1"
+                and getattr(node, "sf_selector", None) is not None
+            ):
                 snir_positive = None
                 if snir_for_node is not None:
                     snir_positive = snir_for_node > 0.0
