@@ -6,7 +6,7 @@ import argparse
 import math
 import re
 from pathlib import Path
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -64,6 +64,35 @@ SNIR_STATE_LABELS = {
     "snir_off": "SNIR désactivé",
     "snir_unknown": "SNIR inconnu",
 }
+
+
+def _render_snir_variants(
+    render: Callable[[List[str], str, str], Optional[Path]],
+    *,
+    on_title: str,
+    off_title: str,
+    mixed_title: str,
+) -> List[Path]:
+    """Rend systématiquement les variantes SNIR ON/OFF/mixte via un callback.
+
+    Le callback ``render`` reçoit la liste des états à tracer, un suffixe de
+    fichier (incluant le soulignement) et le titre associé, puis retourne
+    éventuellement le chemin sauvegardé. La fonction garantit la production des
+    trois combinaisons utilisées par la CLI (_snir-on, _snir-off, _snir-mixed).
+    """
+
+    variants: List[Tuple[List[str], str, str]] = [
+        (["snir_on"], "_snir-on", on_title),
+        (["snir_off"], "_snir-off", off_title),
+        (["snir_on", "snir_off", "snir_unknown"], "_snir-mixed", mixed_title),
+    ]
+
+    saved: List[Path] = []
+    for states, suffix, title in variants:
+        path = render(states, suffix, title)
+        if path is not None:
+            saved.append(path)
+    return saved
 
 
 def _style_mapping(labels: Sequence[str]) -> Dict[str, Tuple[str, str]]:
@@ -471,9 +500,7 @@ def _plot_metric_with_snir_states(
     method_styles = _style_mapping(sorted(metrics_by_method.keys()))
     values_by_state = _values_by_snir_state(metrics_by_method, scenarios, attribute)
 
-    saved_paths: List[Path] = []
-
-    def render(states_to_plot: List[str], suffix: str, title: str) -> None:
+    def render(states_to_plot: List[str], suffix: str, title: str) -> Optional[Path]:
         fig, ax = plt.subplots(figsize=(max(6.0, 2.5 * len(scenarios)), 4.5))
         plotted = False
         for state in states_to_plot:
@@ -517,13 +544,14 @@ def _plot_metric_with_snir_states(
         output_path = out_dir / filename
         fig.savefig(output_path, dpi=150)
         plt.close(fig)
-        saved_paths.append(output_path)
+        return output_path
 
-    render(["snir_on"], "_snir-on", f"{ylabel} – SNIR activé")
-    render(["snir_off"], "_snir-off", f"{ylabel} – SNIR désactivé")
-    render(["snir_on", "snir_off", "snir_unknown"], "_snir-mixed", f"{ylabel} – SNIR superposé")
-
-    return saved_paths
+    return _render_snir_variants(
+        render,
+        on_title=f"{ylabel} – SNIR activé",
+        off_title=f"{ylabel} – SNIR désactivé",
+        mixed_title=f"{ylabel} – SNIR superposé",
+    )
 
 
 def plot_der(
@@ -763,7 +791,7 @@ def plot_snir_cdf(
     states_order = ["snir_on", "snir_off", "snir_unknown"]
 
     for scenario in scenarios:
-        def render(state_filter: List[str], suffix: str, title: str) -> None:
+        def render(state_filter: List[str], suffix: str, title: str) -> Optional[Path]:
             fig, ax = plt.subplots(figsize=(6.5, 4.5))
             has_data = False
             for method in sorted(metrics_by_method.keys()):
@@ -814,10 +842,16 @@ def plot_snir_cdf(
             fig.savefig(output_path, dpi=150)
             plt.close(fig)
             saved_paths.append(output_path)
+            return output_path
 
-        render(["snir_on"], "_snir-on", f"SNIR CDF – {scenario} (SNIR activé)")
-        render(["snir_off"], "_snir-off", f"SNIR CDF – {scenario} (SNIR désactivé)")
-        render(states_order, "_snir-mixed", f"SNIR CDF – {scenario} (superposé)")
+        saved_paths.extend(
+            _render_snir_variants(
+                render,
+                on_title=f"SNIR CDF – {scenario} (SNIR activé)",
+                off_title=f"SNIR CDF – {scenario} (SNIR désactivé)",
+                mixed_title=f"SNIR CDF – {scenario} (superposé)",
+            )
+        )
     return saved_paths
 
 

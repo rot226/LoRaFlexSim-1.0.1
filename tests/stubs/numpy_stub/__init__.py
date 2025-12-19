@@ -1,8 +1,9 @@
 """Minimal NumPy stub used for tests when the real package is unavailable."""
 
-from . import random
-
+import sys
 from datetime import datetime, timedelta
+
+from . import random
 
 __all__ = [
     "random",
@@ -17,7 +18,19 @@ __all__ = [
     "datetime64",
     "timedelta64",
     "integer",
+    "VisibleDeprecationWarning",
 ]
+
+
+class VisibleDeprecationWarning(Warning):
+    pass
+
+
+class _ExceptionsModule:
+    VisibleDeprecationWarning = VisibleDeprecationWarning
+
+
+sys.modules.setdefault("numpy.exceptions", _ExceptionsModule())
 
 
 def array(obj, dtype=None):
