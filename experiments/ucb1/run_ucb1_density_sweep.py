@@ -3,7 +3,7 @@
 Ce script lance des simulations en faisant varier le nombre de nœuds entre
 2000 et 15000. Les clusters QoS sont répartis selon des proportions fixes
 (10 %, 30 %, 60 %) et chaque exécution exporte un CSV avec les champs
-``["num_nodes","cluster","sf","reward_mean","der","pdr","snir_avg","success_rate"]``.
+``["num_nodes","cluster","sf","reward_mean","reward_variance","der","pdr","snir_avg","success_rate"]``.
 """
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ class ClusterMetrics:
     cluster: int
     sf: float
     reward_mean: float
+    reward_variance: float
     der: float
     pdr: float
     snir_avg: float
@@ -82,12 +83,17 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
         attempts = sum(node.tx_attempted for node in nodes)
         delivered = sum(node.rx_delivered for node in nodes)
         avg_sf = sum(node.sf for node in nodes) / len(nodes)
-        reward_values: list[float] = []
+        reward_means: list[float] = []
+        reward_variances: list[float] = []
         for node in nodes:
             selector = getattr(node, "sf_selector", None)
             if selector and selector.bandit.total_rounds > 0:
-                reward_values.extend(selector.bandit.values)
-        reward_mean = sum(reward_values) / len(reward_values) if reward_values else 0.0
+                reward_means.extend(selector.bandit.reward_window_mean)
+                reward_variances.extend(selector.bandit.reward_window_variance)
+        reward_mean = sum(reward_means) / len(reward_means) if reward_means else 0.0
+        reward_variance = (
+            sum(reward_variances) / len(reward_variances) if reward_variances else 0.0
+        )
         snir_values = [node.last_radio_snir for node in nodes if node.last_radio_snir is not None]
         snir_avg = sum(snir_values) / len(snir_values) if snir_values else 0.0
         der = delivered / attempts if attempts > 0 else 0.0
@@ -99,6 +105,7 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
                 cluster=cluster_id,
                 sf=avg_sf,
                 reward_mean=reward_mean,
+                reward_variance=reward_variance,
                 der=der,
                 pdr=pdr,
                 snir_avg=snir_avg,
@@ -140,7 +147,17 @@ def run_density_sweep(
     with output_path.open("w", newline="", encoding="utf8") as handle:
         writer = csv.writer(handle)
         writer.writerow(
-            ["num_nodes", "cluster", "sf", "reward_mean", "der", "pdr", "snir_avg", "success_rate"]
+            [
+                "num_nodes",
+                "cluster",
+                "sf",
+                "reward_mean",
+                "reward_variance",
+                "der",
+                "pdr",
+                "snir_avg",
+                "success_rate",
+            ]
         )
         for entry in rows:
             writer.writerow(
@@ -149,6 +166,7 @@ def run_density_sweep(
                     entry.cluster,
                     f"{entry.sf:.6f}",
                     f"{entry.reward_mean:.6f}",
+                    f"{entry.reward_variance:.6f}",
                     f"{entry.der:.6f}",
                     f"{entry.pdr:.6f}",
                     f"{entry.snir_avg:.6f}",
