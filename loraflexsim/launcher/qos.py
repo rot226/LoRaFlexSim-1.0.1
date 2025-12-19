@@ -362,6 +362,7 @@ class QoSManager:
             return
 
         threshold_value = self._normalize_capture_thresholds(capture_thresholds)
+        effective_use_snir: bool | None = None
         for channel in channels:
             if use_snir is not None:
                 channel.use_snir = bool(use_snir)
@@ -374,6 +375,11 @@ class QoSManager:
                     channel.capture_threshold_dB = float(next(iter(threshold_value.values())))
                 else:
                     channel.capture_threshold_dB = threshold_value
+            if effective_use_snir is None:
+                effective_use_snir = bool(getattr(channel, "use_snir", False))
+
+        if effective_use_snir is not None:
+            setattr(simulator, "use_snir", effective_use_snir)
 
     # --- Calculs QoS -------------------------------------------------------
     def _update_qos_context(self, simulator) -> None:

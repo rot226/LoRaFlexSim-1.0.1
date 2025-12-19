@@ -117,10 +117,8 @@ def _csv_filename(algorithm: str, nodes: int, packet_interval: float, use_snir: 
 
 def _iter_snir_states(values: Iterable[bool] | None) -> Iterable[bool]:
     if values is None:
-        raise ValueError(
-            "Argument --with-snir manquant : précisez true, false ou les deux (ex. --with-snir true false)."
-        )
-    return values
+        return DEFAULT_SNIR_STATES
+    return tuple(values)
 
 
 def _run_one(
@@ -159,6 +157,8 @@ def _run_one(
     ]
     if use_snir:
         argv.append("--use-snir")
+    else:
+        argv.append("--no-snir")
 
     print(
         "[RUN] "

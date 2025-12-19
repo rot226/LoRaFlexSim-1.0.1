@@ -39,6 +39,8 @@ FREQUENCIES_HZ = [
     867_700_000.0,
     867_900_000.0,
 ]
+DEFAULT_SNIR_STATES: Sequence[bool] = (False, True)
+STATE_LABELS = {True: "snir_on", False: "snir_off"}
 
 
 @dataclass(frozen=True)
@@ -235,6 +237,7 @@ def _create_simulator(
     packet_interval: float,
     seed: int,
     *,
+    use_snir: bool = True,
     channel_config: str | Path | None = None,
     channel_overrides: Mapping[str, object] | None = None,
 ) -> Simulator:
@@ -265,6 +268,7 @@ def _create_simulator(
         marginal_snir_margin_db=None,
         marginal_snir_drop_prob=None,
     )
+    simulator.use_snir = bool(use_snir)
     setattr(simulator, "capture_delta_db", 1.0)
     if channel_overrides:
         if (capture := channel_overrides.get("capture_threshold_dB")) is not None:
@@ -278,6 +282,8 @@ def _create_simulator(
         ):
             if key in channel_overrides and channel_overrides[key] is not None:
                 setattr(simulator, key, channel_overrides[key])
+    for channel in getattr(simulator.multichannel, "channels", []) or []:
+        channel.use_snir = bool(use_snir)
     return simulator
 
 
@@ -312,6 +318,17 @@ def _frequency_mapping(simulator: Simulator) -> Dict[int, int]:
         if freq is not None:
             mapping.setdefault(_round_frequency(freq), getattr(base_channel, "channel_index", 0))
     return mapping
+
+
+def _effective_snir_state(simulator: Simulator, requested: bool) -> bool:
+    multichannel = getattr(simulator, "multichannel", None)
+    channels = list(getattr(multichannel, "channels", []) or [])
+    if channels:
+        return bool(getattr(channels[0], "use_snir", requested))
+    base_channel = getattr(simulator, "channel", None)
+    if base_channel is not None:
+        return bool(getattr(base_channel, "use_snir", requested))
+    return bool(getattr(simulator, "use_snir", requested))
 
 
 def _compute_additional_metrics(
@@ -600,6 +617,7 @@ def run_bench(
     node_counts: Sequence[int] = DEFAULT_NODE_COUNTS,
     tx_periods: Sequence[float] = DEFAULT_TX_PERIODS,
     seed: int = 1,
+    use_snir_states: Sequence[bool] | None = None,
     output_dir: Path | None = None,
     simulation_duration_s: float | None = DEFAULT_SIMULATION_DURATION_S,
     mixra_solver: str = "auto",
@@ -614,13 +632,13 @@ def run_bench(
     validation_mode = mode == VALIDATION_MODE
     if output_dir is None:
         if validation_mode:
-            output_root = DEFAULT_RESULTS_DIR / VALIDATION_MODE
+            base_output_root = DEFAULT_RESULTS_DIR / VALIDATION_MODE
         else:
-            output_root = DEFAULT_RESULTS_DIR
+            base_output_root = DEFAULT_RESULTS_DIR
     else:
-        output_root = Path(output_dir)
-    output_root.mkdir(parents=True, exist_ok=True)
-    report_path = DEFAULT_REPORT_PATH
+        base_output_root = Path(output_dir)
+    base_output_root.mkdir(parents=True, exist_ok=True)
+    snir_states = tuple(use_snir_states) if use_snir_states is not None else tuple(DEFAULT_SNIR_STATES)
     if validation_mode:
         node_counts = tuple(VALIDATION_NODE_COUNTS)
         tx_periods = tuple(VALIDATION_TX_PERIODS)
@@ -629,197 +647,220 @@ def run_bench(
         cluster_targets_override = None
 
     combos = [(n, p) for n in node_counts for p in tx_periods]
-    total_runs = len(combos) * len(ALGORITHMS)
-    records_by_algorithm: Dict[str, List[RunRecord]] = {spec.label: [] for spec in ALGORITHMS}
+    total_runs = len(combos) * len(ALGORITHMS) * len(snir_states)
     run_index = 0
-    validation_entries: List[Dict[str, Any]] = [] if validation_mode else []
+    summaries: Dict[str, Any] = {}
+    for use_snir in snir_states:
+        state_label = STATE_LABELS.get(use_snir, "snir_unknown")
+        output_root = base_output_root / state_label
+        output_root.mkdir(parents=True, exist_ok=True)
+        report_path = output_root / DEFAULT_REPORT_PATH.name
+        records_by_algorithm: Dict[str, List[RunRecord]] = {spec.label: [] for spec in ALGORITHMS}
+        validation_entries: List[Dict[str, Any]] = [] if validation_mode else []
 
-    for combo_index, (num_nodes, packet_interval) in enumerate(combos):
-        combo_seed = seed + combo_index
-        for spec in ALGORITHMS:
-            run_index += 1
-            context = {
-                "num_nodes": num_nodes,
-                "packet_interval_s": packet_interval,
-                "algorithm": spec.label,
-                "run_index": run_index,
-                "total_runs": total_runs,
-            }
-            if progress_callback is not None:
-                progress_callback(run_index, total_runs, context)
-            elif not quiet:
-                print(
-                    f"[{run_index}/{total_runs}] {spec.label} – N={num_nodes} TX={packet_interval:.0f}s"
-                )
-            simulator = _create_simulator(num_nodes, packet_interval, combo_seed)
-            manager = QoSManager()
-            if spec.requires_qos:
-                _configure_clusters(
-                    manager,
-                    packet_interval,
-                    pdr_targets=cluster_targets_override,
-                )
-            try:
-                spec.apply(simulator, manager, mixra_solver)
-            except Exception:
-                if not quiet:
-                    print(f"Échec de l'initialisation pour {spec.label}, la simulation est ignorée.")
-                raise
-            simulator.run(max_time=simulation_duration_s)
-            base_metrics = simulator.get_metrics()
-            base_metrics["num_nodes"] = num_nodes
-            base_metrics["packet_interval_s"] = packet_interval
-            base_metrics["random_seed"] = combo_seed
-            base_metrics["simulation_duration_s"] = getattr(simulator, "current_time", simulation_duration_s)
-            enriched = _compute_additional_metrics(simulator, dict(base_metrics), spec.label, mixra_solver)
-            csv_row = _flatten_metrics(enriched)
-            csv_filename = f"{num_nodes}_{int(packet_interval) if float(packet_interval).is_integer() else packet_interval:g}.csv"
-            csv_path = output_root / spec.key / csv_filename
-            _write_csv(csv_path, csv_row)
-            run_record = RunRecord(
-                num_nodes=num_nodes,
-                packet_interval_s=packet_interval,
-                algorithm=spec.label,
-                csv_path=csv_path,
-                metrics=enriched,
-                targets_met=_targets_met(enriched),
-            )
-            records_by_algorithm[spec.label].append(run_record)
-
-            if validation_mode:
-                cluster_pdr = {
-                    str(key): float(value)
-                    for key, value in (enriched.get("qos_cluster_pdr", {}) or {}).items()
+        for combo_index, (num_nodes, packet_interval) in enumerate(combos):
+            combo_seed = seed + combo_index
+            for spec in ALGORITHMS:
+                run_index += 1
+                context = {
+                    "num_nodes": num_nodes,
+                    "packet_interval_s": packet_interval,
+                    "algorithm": spec.label,
+                    "snir_state": state_label,
+                    "run_index": run_index,
+                    "total_runs": total_runs,
                 }
-                cluster_targets = {
-                    str(key): float(value)
-                    for key, value in (enriched.get("qos_cluster_targets", {}) or {}).items()
-                }
-                cluster_gaps = {
-                    str(key): float(value)
-                    for key, value in (enriched.get("qos_cluster_pdr_gap", {}) or {}).items()
-                }
-                cluster_throughput = {
-                    str(key): float(value)
-                    for key, value in (enriched.get("qos_cluster_throughput_bps", {}) or {}).items()
-                }
-                mean_abs_gap = _mean(abs(value) for value in cluster_gaps.values())
-                validation_entries.append(
+                if progress_callback is not None:
+                    progress_callback(run_index, total_runs, context)
+                elif not quiet:
+                    print(
+                        f"[{run_index}/{total_runs}] {spec.label} – {state_label} – N={num_nodes} TX={packet_interval:.0f}s"
+                    )
+                simulator = _create_simulator(num_nodes, packet_interval, combo_seed, use_snir=use_snir)
+                manager = QoSManager()
+                if spec.requires_qos:
+                    _configure_clusters(
+                        manager,
+                        packet_interval,
+                        pdr_targets=cluster_targets_override,
+                    )
+                try:
+                    spec.apply(simulator, manager, mixra_solver)
+                except Exception:
+                    if not quiet:
+                        print(
+                            f"Échec de l'initialisation pour {spec.label} ({state_label}), la simulation est ignorée."
+                        )
+                    raise
+                simulator.run(max_time=simulation_duration_s)
+                base_metrics = simulator.get_metrics()
+                effective_use_snir = _effective_snir_state(simulator, use_snir)
+                base_metrics.update(
                     {
-                        "algorithm": spec.label,
                         "num_nodes": num_nodes,
-                        "packet_interval_s": float(packet_interval),
-                        "DER": float(enriched.get("DER", 0.0) or 0.0),
-                        "throughput_bps": float(enriched.get("throughput_bps", 0.0) or 0.0),
-                        "gap_mean_abs": float(mean_abs_gap),
-                        "cluster_pdr": cluster_pdr,
-                        "cluster_targets": cluster_targets,
-                        "cluster_gaps": cluster_gaps,
-                        "cluster_throughput_bps": cluster_throughput,
+                        "packet_interval_s": packet_interval,
+                        "random_seed": combo_seed,
+                        "simulation_duration_s": getattr(simulator, "current_time", simulation_duration_s),
+                        "use_snir": effective_use_snir,
+                        "with_snir": effective_use_snir,
+                        "snir_state": state_label,
                     }
                 )
+                enriched = _compute_additional_metrics(simulator, dict(base_metrics), spec.label, mixra_solver)
+                csv_row = _flatten_metrics(enriched)
+                csv_filename = f"{num_nodes}_{int(packet_interval) if float(packet_interval).is_integer() else packet_interval:g}.csv"
+                csv_path = output_root / spec.key / csv_filename
+                _write_csv(csv_path, csv_row)
+                run_record = RunRecord(
+                    num_nodes=num_nodes,
+                    packet_interval_s=packet_interval,
+                    algorithm=spec.label,
+                    csv_path=csv_path,
+                    metrics=enriched,
+                    targets_met=_targets_met(enriched),
+                )
+                records_by_algorithm[spec.label].append(run_record)
 
-    algorithms_summary: Dict[str, Any] = {}
-    for spec in ALGORITHMS:
-        runs = records_by_algorithm.get(spec.label, [])
-        summary = _summarize_algorithm(runs)
-        summary["runs"] = [
-            {
-                "num_nodes": run.num_nodes,
-                "packet_interval_s": run.packet_interval_s,
-                "targets_met": run.targets_met,
-                "csv_path": _relative_path(run.csv_path),
-                "metrics": {
-                    "PDR": run.metrics.get("PDR", 0.0),
-                    "DER": run.metrics.get("DER", 0.0),
-                    "throughput_bps": run.metrics.get("throughput_bps", 0.0),
-                    "avg_energy_per_node_J": run.metrics.get("avg_energy_per_node_J", 0.0),
-                    "jain_index": run.metrics.get("jain_index", 0.0),
-                    "qos_cluster_pdr": run.metrics.get("qos_cluster_pdr", {}),
-                    "qos_cluster_targets": run.metrics.get("qos_cluster_targets", {}),
-                    "mixra_solver": run.metrics.get("mixra_solver"),
-                },
-            }
-            for run in runs
-        ]
-        algorithms_summary[spec.label] = summary
+                if validation_mode:
+                    cluster_pdr = {
+                        str(key): float(value)
+                        for key, value in (enriched.get("qos_cluster_pdr", {}) or {}).items()
+                    }
+                    cluster_targets = {
+                        str(key): float(value)
+                        for key, value in (enriched.get("qos_cluster_targets", {}) or {}).items()
+                    }
+                    cluster_gaps = {
+                        str(key): float(value)
+                        for key, value in (enriched.get("qos_cluster_pdr_gap", {}) or {}).items()
+                    }
+                    cluster_throughput = {
+                        str(key): float(value)
+                        for key, value in (enriched.get("qos_cluster_throughput_bps", {}) or {}).items()
+                    }
+                    mean_abs_gap = _mean(abs(value) for value in cluster_gaps.values())
+                    validation_entries.append(
+                        {
+                            "algorithm": spec.label,
+                            "num_nodes": num_nodes,
+                            "packet_interval_s": float(packet_interval),
+                            "DER": float(enriched.get("DER", 0.0) or 0.0),
+                            "throughput_bps": float(enriched.get("throughput_bps", 0.0) or 0.0),
+                            "gap_mean_abs": float(mean_abs_gap),
+                            "cluster_pdr": cluster_pdr,
+                            "cluster_targets": cluster_targets,
+                            "cluster_gaps": cluster_gaps,
+                            "cluster_throughput_bps": cluster_throughput,
+                            "snir_state": state_label,
+                        }
+                    )
 
-    summary_payload = {
-        "settings": {
-            "node_counts": list(node_counts),
-            "tx_periods": list(tx_periods),
-            "seed": seed,
-            "simulation_duration_s": simulation_duration_s,
-            "mixra_solver": mixra_solver,
-            "capture_delta_db": 1.0,
-            "output_dir": _relative_path(output_root),
-            "mode": mode,
-        },
-        "algorithms": algorithms_summary,
-        "total_runs": total_runs,
-        "report_path": _relative_path(report_path),
-    }
+        algorithms_summary: Dict[str, Any] = {}
+        for spec in ALGORITHMS:
+            runs = records_by_algorithm.get(spec.label, [])
+            summary = _summarize_algorithm(runs)
+            summary["runs"] = [
+                {
+                    "num_nodes": run.num_nodes,
+                    "packet_interval_s": run.packet_interval_s,
+                    "targets_met": run.targets_met,
+                    "csv_path": _relative_path(run.csv_path),
+                    "metrics": {
+                        "PDR": run.metrics.get("PDR", 0.0),
+                        "DER": run.metrics.get("DER", 0.0),
+                        "throughput_bps": run.metrics.get("throughput_bps", 0.0),
+                        "avg_energy_per_node_J": run.metrics.get("avg_energy_per_node_J", 0.0),
+                        "jain_index": run.metrics.get("jain_index", 0.0),
+                        "qos_cluster_pdr": run.metrics.get("qos_cluster_pdr", {}),
+                        "qos_cluster_targets": run.metrics.get("qos_cluster_targets", {}),
+                        "mixra_solver": run.metrics.get("mixra_solver"),
+                        "snir_state": state_label,
+                    },
+                }
+                for run in runs
+            ]
+            algorithms_summary[spec.label] = summary
 
-    if validation_mode and validation_entries:
-        max_der = max((entry["DER"] for entry in validation_entries), default=0.0)
-        max_throughput = max(
-            (entry["throughput_bps"] for entry in validation_entries),
-            default=0.0,
-        )
-        max_gap = max((entry["gap_mean_abs"] for entry in validation_entries), default=0.0)
-        for entry in validation_entries:
-            entry["der_normalized"] = (
-                entry["DER"] / max_der if max_der > 0 else 0.0
-            )
-            entry["throughput_normalized"] = (
-                entry["throughput_bps"] / max_throughput if max_throughput > 0 else 0.0
-            )
-            if max_gap > 0:
-                normalized_gap = 1.0 - entry["gap_mean_abs"] / max_gap
-            else:
-                normalized_gap = 1.0
-            entry["gap_normalized"] = max(0.0, min(1.0, normalized_gap))
-            cluster_ratio: Dict[str, float] = {}
-            for cluster_id, target in entry["cluster_targets"].items():
-                if target > 0:
-                    cluster_ratio[cluster_id] = entry["cluster_pdr"].get(cluster_id, 0.0) / target
-                else:
-                    cluster_ratio[cluster_id] = 0.0
-            entry["cluster_der_ratio"] = cluster_ratio
-            entry["cluster_gap_abs"] = {
-                cluster_id: abs(value)
-                for cluster_id, value in entry["cluster_gaps"].items()
-            }
-        validation_payload = {
-            "mode": VALIDATION_MODE,
-            "targets": list(cluster_targets_override or VALIDATION_PDR_TARGETS),
-            "entries": [_sanitize_for_json(entry) for entry in validation_entries],
-            "metadata": {
+        summary_payload = {
+            "settings": {
                 "node_counts": list(node_counts),
                 "tx_periods": list(tx_periods),
-                "metrics": ["DER", "throughput_bps", "gap_mean_abs"],
+                "seed": seed,
+                "simulation_duration_s": simulation_duration_s,
+                "mixra_solver": mixra_solver,
+                "capture_delta_db": 1.0,
+                "output_dir": _relative_path(output_root),
+                "mode": mode,
+                "use_snir": bool(use_snir),
+                "snir_state": state_label,
             },
+            "algorithms": algorithms_summary,
+            "total_runs": total_runs,
+            "report_path": _relative_path(report_path),
         }
-        validation_path = output_root / "validation_normalized_metrics.json"
-        validation_path.write_text(
-            json.dumps(validation_payload, indent=2, ensure_ascii=False, sort_keys=True),
+
+        if validation_mode and validation_entries:
+            max_der = max((entry["DER"] for entry in validation_entries), default=0.0)
+            max_throughput = max(
+                (entry["throughput_bps"] for entry in validation_entries),
+                default=0.0,
+            )
+            max_gap = max((entry["gap_mean_abs"] for entry in validation_entries), default=0.0)
+            for entry in validation_entries:
+                entry["der_normalized"] = (
+                    entry["DER"] / max_der if max_der > 0 else 0.0
+                )
+                entry["throughput_normalized"] = (
+                    entry["throughput_bps"] / max_throughput if max_throughput > 0 else 0.0
+                )
+                if max_gap > 0:
+                    normalized_gap = 1.0 - entry["gap_mean_abs"] / max_gap
+                else:
+                    normalized_gap = 1.0
+                entry["gap_normalized"] = max(0.0, min(1.0, normalized_gap))
+                cluster_ratio: Dict[str, float] = {}
+                for cluster_id, target in entry["cluster_targets"].items():
+                    if target > 0:
+                        cluster_ratio[cluster_id] = entry["cluster_pdr"].get(cluster_id, 0.0) / target
+                    else:
+                        cluster_ratio[cluster_id] = 0.0
+                entry["cluster_der_ratio"] = cluster_ratio
+                entry["cluster_gap_abs"] = {
+                    cluster_id: abs(value)
+                    for cluster_id, value in entry["cluster_gaps"].items()
+                }
+            validation_payload = {
+                "mode": VALIDATION_MODE,
+                "targets": list(cluster_targets_override or VALIDATION_PDR_TARGETS),
+                "entries": [_sanitize_for_json(entry) for entry in validation_entries],
+                "metadata": {
+                    "node_counts": list(node_counts),
+                    "tx_periods": list(tx_periods),
+                    "metrics": ["DER", "throughput_bps", "gap_mean_abs"],
+                },
+            }
+            validation_path = output_root / "validation_normalized_metrics.json"
+            validation_path.write_text(
+                json.dumps(validation_payload, indent=2, ensure_ascii=False, sort_keys=True),
+                encoding="utf8",
+            )
+            summary_payload["validation"] = {
+                "mode": VALIDATION_MODE,
+                "normalized_metrics_path": _relative_path(validation_path),
+                "targets": list(cluster_targets_override or VALIDATION_PDR_TARGETS),
+            }
+
+        summary_path = output_root / "summary.json"
+        summary_path.write_text(
+            json.dumps(_sanitize_for_json(summary_payload), indent=2, ensure_ascii=False, sort_keys=True),
             encoding="utf8",
         )
-        summary_payload["validation"] = {
-            "mode": VALIDATION_MODE,
-            "normalized_metrics_path": _relative_path(validation_path),
-            "targets": list(cluster_targets_override or VALIDATION_PDR_TARGETS),
-        }
 
-    summary_path = output_root / "summary.json"
-    summary_path.write_text(
-        json.dumps(_sanitize_for_json(summary_payload), indent=2, ensure_ascii=False, sort_keys=True),
-        encoding="utf8",
-    )
+        _generate_report(summary_payload, report_path)
+        summary_payload["summary_path"] = _relative_path(summary_path)
+        summaries[state_label] = summary_payload
 
-    _generate_report(summary_payload, report_path)
-    summary_payload["summary_path"] = _relative_path(summary_path)
-    return summary_payload
+    return {"states": summaries, "total_runs": total_runs}
 
 
 __all__ = ["run_bench"]
