@@ -2,9 +2,12 @@
 
 Le script combine plusieurs algorithmes QoS, états SNIR, graines et
 configurations de charge puis délègue l'exécution à
-``scripts/run_step1_experiments.py``. Les résultats CSV sont rangés par
-état SNIR (et par graine) dans ``results/step1/<state>/`` avec un suffixe
-de fichier explicite (``_snir-on`` ou ``_snir-off``).
+``scripts/run_step1_experiments.py``. Chaque exécution produit un CSV
+suffixé explicitement (``_snir-on`` ou ``_snir-off``) et rangé par état
+SNIR (puis par graine) dans ``results/step1/<state>/``. Ces suffixes et
+le champ ``snir_state`` écrit par ``run_step1_experiments.py`` doivent
+rester présents dans les CSV finaux pour permettre l'agrégation stricte
+des résultats.
 """
 
 from __future__ import annotations
