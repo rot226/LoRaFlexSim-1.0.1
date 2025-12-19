@@ -33,12 +33,25 @@ from loraflexsim.scenarios.qos_cluster_bench import (
     _configure_clusters,
 )
 
+
+def _apply_ucb1(simulator: Simulator, manager: QoSManager) -> None:
+    """Active la sélection SF par bandit UCB1 sur tous les nœuds."""
+
+    simulator.adr_node = False
+    simulator.adr_server = False
+    simulator.qos_active = False
+    simulator.qos_algorithm = "UCB1"
+    simulator.qos_mixra_solver = None
+    for node in getattr(simulator, "nodes", []) or []:
+        node.learning_method = "ucb1"
+
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
 ALGORITHMS: Mapping[str, Callable[..., None]] = {
     "adr": _apply_adr_pure,
     "apra": _apply_apra_like,
     "mixra_h": _apply_mixra_h,
     "mixra_opt": _apply_mixra_opt,
+    "ucb1": _apply_ucb1,
 }
 STATE_LABELS = {True: "snir_on", False: "snir_off"}
 
@@ -49,7 +62,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--algorithm",
         choices=sorted(ALGORITHMS),
         default="adr",
-        help="Algorithme testé (adr, apra, mixra_h, mixra_opt)",
+        help="Algorithme testé (adr, apra, mixra_h, mixra_opt, ucb1)",
     )
     parser.add_argument("--nodes", type=int, default=5000, help="Nombre de nœuds simulés")
     parser.add_argument(
