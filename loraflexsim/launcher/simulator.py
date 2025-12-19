@@ -1848,6 +1848,7 @@ class Simulator:
                     success=delivered,
                     snir_db=snir_for_node,
                     snir_threshold_db=snir_threshold,
+                    marginal_snir_margin_db=getattr(node.channel, "marginal_snir_margin_db", None),
                     airtime_s=airtime,
                     energy_j=entry.get("energy_J"),
                     collision=collision,

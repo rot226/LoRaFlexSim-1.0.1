@@ -34,7 +34,9 @@ class ClusterMetrics:
     attempts: int
     sf: float
     reward_mean: float
+    reward_variance: float
     reward_window_mean: float
+    reward_window_variance: float
     der: float
     der_window: float
     pdr: float
@@ -108,12 +110,27 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
             success,
             snir_db=snir_db,
             snir_threshold_db=None,
+            marginal_snir_margin_db=getattr(node.channel, "marginal_snir_margin_db", None) if node else None,
             airtime_s=airtime,
             energy_j=event.get("energy_J"),
             collision=event.get("result") != "Success" and event.get("heard"),
             expected_der=expected_der,
             local_der=getattr(node, "pdr", None) if node else None,
         )
+
+    def _bandit_reward_stats(nodes: list) -> tuple[float, float]:
+        reward_means: list[float] = []
+        reward_variances: list[float] = []
+        for node in nodes:
+            selector = getattr(node, "sf_selector", None)
+            if selector and selector.bandit.total_rounds > 0:
+                reward_means.extend(selector.bandit.reward_window_mean)
+                reward_variances.extend(selector.bandit.reward_window_variance)
+        mean = sum(reward_means) / len(reward_means) if reward_means else 0.0
+        variance = (
+            sum(reward_variances) / len(reward_variances) if reward_variances else 0.0
+        )
+        return mean, variance
 
     for cluster_id in range(1, len(CLUSTER_PROPORTIONS) + 1):
         nodes = [node for node in sim.nodes if assignments.get(node.id) == cluster_id]
@@ -141,8 +158,7 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
             window_count = 1
 
         expected_attempts = len(nodes)
-        reward_values = [val for val in (_event_reward(ev) for ev in cluster_events) if val is not None]
-        reward_mean_all = sum(reward_values) / len(reward_values) if reward_values else 0.0
+        reward_mean_all, reward_variance_all = _bandit_reward_stats(nodes)
 
         pdr = float(metrics.get("qos_cluster_pdr", {}).get(cluster_id, 0.0))
         der_all = total_success / total_attempts if total_attempts > 0 else 0.0
@@ -176,6 +192,11 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
                 if reward_window_values
                 else 0.0
             )
+            reward_window_variance = 0.0
+            if reward_window_values:
+                reward_window_variance = sum(
+                    (val - reward_window_mean) ** 2 for val in reward_window_values
+                ) / len(reward_window_values)
 
             rows.append(
                 ClusterMetrics(
@@ -189,7 +210,9 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
                     attempts=attempts,
                     sf=avg_sf,
                     reward_mean=reward_mean_all,
+                    reward_variance=reward_variance_all,
                     reward_window_mean=reward_window_mean,
+                    reward_window_variance=reward_window_variance,
                     der=der_all,
                     der_window=der_window,
                     pdr=pdr,
@@ -244,7 +267,9 @@ def run_load_sweep(
                 "attempts",
                 "sf",
                 "reward_mean",
+                "reward_variance",
                 "reward_window_mean",
+                "reward_window_variance",
                 "der",
                 "der_window",
                 "pdr",
@@ -268,7 +293,9 @@ def run_load_sweep(
                     entry.attempts,
                     f"{entry.sf:.6f}",
                     f"{entry.reward_mean:.6f}",
+                    f"{entry.reward_variance:.6f}",
                     f"{entry.reward_window_mean:.6f}",
+                    f"{entry.reward_window_variance:.6f}",
                     f"{entry.der:.6f}",
                     f"{entry.der_window:.6f}",
                     f"{entry.pdr:.6f}",
