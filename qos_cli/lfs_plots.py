@@ -8,6 +8,9 @@ import re
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
+import numpy as np
+import pandas as pd
+
 import matplotlib.pyplot as plt
 
 try:  # pragma: no cover - dépend du mode d'exécution
@@ -139,6 +142,107 @@ def _all_nan(values: Sequence[float]) -> bool:
     return all(math.isnan(value) for value in values)
 
 
+def _ratio_confidence(successes: int, attempts: int) -> Tuple[float, float]:
+    if attempts <= 0:
+        return float("nan"), float("nan")
+    p_hat = successes / attempts
+    margin = 1.96 * math.sqrt(max(0.0, p_hat * (1.0 - p_hat) / attempts))
+    return max(0.0, p_hat - margin), min(1.0, p_hat + margin)
+
+
+def _rolling_metrics(
+    df: pd.DataFrame, window_size: float, window_mode: str
+) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    df_sorted = df.sort_values("x").reset_index(drop=True)
+    times = df_sorted["x"].to_numpy(dtype=float)
+    delivered = df_sorted["delivered"].to_numpy(dtype=float)
+    snir = df_sorted["snir"].to_numpy(dtype=float)
+
+    results: List[dict] = []
+    cumulative_delivered = np.cumsum(delivered)
+
+    def _window_start_for_index(index: int) -> int:
+        if window_mode == "packets":
+            width = max(1, int(math.ceil(window_size)))
+            return max(0, index - width + 1)
+        start = 0
+        while start <= index and times[index] - times[start] > window_size:
+            start += 1
+        return start
+
+    for idx in range(len(times)):
+        start = _window_start_for_index(idx)
+        attempts = idx - start + 1
+        delivered_count = cumulative_delivered[idx] - (cumulative_delivered[start - 1] if start > 0 else 0)
+        pdr_value = delivered_count / attempts if attempts > 0 else float("nan")
+        ci_low, ci_high = _ratio_confidence(int(delivered_count), attempts)
+
+        window_snir = snir[start : idx + 1]
+        valid_snir = window_snir[~np.isnan(window_snir)]
+        if valid_snir.size > 0:
+            snir_mean = float(np.mean(valid_snir))
+            snir_error = 0.0
+            if valid_snir.size > 1:
+                snir_error = 1.96 * float(np.std(valid_snir, ddof=1) / math.sqrt(valid_snir.size))
+            snir_low = snir_mean - snir_error
+            snir_high = snir_mean + snir_error
+        else:
+            snir_mean = snir_low = snir_high = float("nan")
+
+        results.append(
+            {
+                "x": times[idx],
+                "attempts": attempts,
+                "pdr": pdr_value,
+                "pdr_low": ci_low,
+                "pdr_high": ci_high,
+                "der": pdr_value,
+                "der_low": ci_low,
+                "der_high": ci_high,
+                "snir": snir_mean,
+                "snir_low": snir_low,
+                "snir_high": snir_high,
+            }
+        )
+
+    return pd.DataFrame(results)
+
+
+def _load_packet_timeseries(
+    root: Path, method: str, scenario: str, *, require_time: bool
+) -> Optional[pd.DataFrame]:
+    path = root / method / scenario / "packets.csv"
+    if not path.is_file():
+        return None
+
+    df = pd.read_csv(path)
+    success_series = _extract_success_series(df)
+    if success_series is None:
+        return None
+    time_series = _extract_time_series(df)
+    if require_time and time_series is None:
+        raise RuntimeError(
+            "Impossible d'aligner la fenêtre temporelle : aucune colonne de temps détectée dans "
+            f"{path}"
+        )
+    snir_series = _extract_snir_series(df)
+
+    timeline = time_series if time_series is not None else pd.Series(range(len(success_series)), dtype=float)
+
+    prepared = pd.DataFrame(
+        {
+            "x": pd.to_numeric(timeline, errors="coerce"),
+            "delivered": pd.to_numeric(success_series, errors="coerce"),
+            "snir": pd.to_numeric(snir_series, errors="coerce") if snir_series is not None else np.nan,
+        }
+    )
+    prepared = prepared.dropna(subset=["x", "delivered"]).reset_index(drop=True)
+    return prepared
+
+
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     """Construit l'espace de noms d'arguments pour la CLI de génération de graphiques."""
 
@@ -169,7 +273,70 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=Path("qos_cli") / "figures",
         help="Dossier de destination des figures (défaut : qos_cli/figures).",
     )
+    parser.add_argument(
+        "--rolling-window",
+        dest="rolling_window",
+        type=float,
+        default=200.0,
+        help=(
+            "Taille de la fenêtre glissante pour les métriques temporelles. "
+            "Interprétée comme un nombre de paquets si --window-mode=packets, ou comme "
+            "une durée en secondes si --window-mode=duration."
+        ),
+    )
+    parser.add_argument(
+        "--window-mode",
+        dest="window_mode",
+        choices=["packets", "duration"],
+        default="packets",
+        help="Définit l'alignement de la fenêtre glissante : par nombre de paquets ou par durée (s).",
+    )
     return parser.parse_args(argv)
+
+
+def _extract_success_series(df: pd.DataFrame) -> Optional[pd.Series]:
+    success_columns = [
+        "delivered",
+        "success",
+        "is_delivered",
+        "rx_success",
+        "successful",
+    ]
+    for column in success_columns:
+        if column in df.columns:
+            series = df[column]
+            if series.dtype == bool:
+                return series.astype(int)
+            if pd.api.types.is_numeric_dtype(series):
+                return pd.to_numeric(series, errors="coerce")
+            return series.astype(str).str.lower().isin({"true", "1", "yes", "delivered", "success"}).astype(int)
+    return None
+
+
+def _extract_snir_series(df: pd.DataFrame) -> Optional[pd.Series]:
+    for column in ["snir_dB", "snir_db", "snir", "snr", "snr_db", "snr_dB"]:
+        if column in df.columns:
+            series = pd.to_numeric(df[column], errors="coerce")
+            if series.notna().any():
+                return series
+    return None
+
+
+def _extract_time_series(df: pd.DataFrame) -> Optional[pd.Series]:
+    for column in [
+        "time",
+        "timestamp",
+        "sent_time",
+        "tx_time",
+        "emission_time",
+        "sim_time",
+        "event_time",
+    ]:
+        if column in df.columns:
+            series = pd.to_numeric(df[column], errors="coerce")
+            if series.notna().any():
+                return series
+    return None
 
 
 def build_method_mapping(
@@ -654,6 +821,102 @@ def plot_snir_cdf(
     return saved_paths
 
 
+def _plot_rolling_metric_for_scenario(
+    metric: str,
+    data_per_method: Mapping[str, pd.DataFrame],
+    scenario: str,
+    out_dir: Path,
+    *,
+    window_size: float,
+    window_mode: str,
+) -> Optional[Path]:
+    if not data_per_method:
+        return None
+
+    fig, ax = plt.subplots(figsize=(7.0, 4.5))
+    method_styles = _style_mapping(sorted(data_per_method.keys()))
+    plotted = False
+
+    label_map = {
+        "pdr": "PDR",
+        "der": "DER",
+        "snir": "SNIR (dB)",
+    }
+
+    for method, df in data_per_method.items():
+        if df.empty or metric not in df.columns:
+            continue
+        color, marker = method_styles[method]
+        lower = df.get(f"{metric}_low")
+        upper = df.get(f"{metric}_high")
+        ax.plot(df["x"], df[metric], label=method, color=color, marker=marker, linewidth=1.5, markersize=4)
+        if lower is not None and upper is not None:
+            ax.fill_between(df["x"], lower, upper, color=color, alpha=0.15)
+        plotted = True
+
+    x_label = "Temps (s)" if window_mode == "duration" else "Position des paquets émis"
+    window_label = f"fenêtre {window_size:g} {'s' if window_mode == 'duration' else 'paquets'}"
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(label_map.get(metric, metric))
+    if metric in {"pdr", "der"}:
+        ax.set_ylim(0.0, 1.05)
+    ax.grid(True, linestyle="--", alpha=0.4)
+    title_metric = label_map.get(metric, metric)
+    ax.set_title(f"{title_metric} moyenne glissante – {scenario} ({window_label})")
+    if plotted:
+        ax.legend(loc="best")
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "Données temporelles indisponibles",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+    fig.tight_layout()
+
+    filename = f"rolling_{metric}_{sanitize_filename(scenario)}_{window_mode}.png"
+    output_path = out_dir / filename
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
+
+
+def plot_rolling_qos(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    metrics_root: Path,
+    scenarios: Sequence[str],
+    out_dir: Path,
+    *,
+    window_size: float,
+    window_mode: str,
+) -> List[Path]:
+    saved: List[Path] = []
+    methods = sorted(metrics_by_method.keys())
+    require_time = window_mode == "duration"
+
+    for scenario in scenarios:
+        data_per_method: Dict[str, pd.DataFrame] = {}
+        for method in methods:
+            timeseries = _load_packet_timeseries(
+                metrics_root, method, scenario, require_time=require_time
+            )
+            if timeseries is None or timeseries.empty:
+                continue
+            rolling_df = _rolling_metrics(timeseries, window_size, window_mode)
+            data_per_method[method] = rolling_df
+
+        for metric in ["pdr", "der", "snir"]:
+            output = _plot_rolling_metric_for_scenario(
+                metric, data_per_method, scenario, out_dir, window_size=window_size, window_mode=window_mode
+            )
+            if output:
+                saved.append(output)
+
+    return saved
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     args = parse_args(argv)
     metrics_root = args.root
@@ -688,6 +951,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     plot_jain_index(metrics_by_method, scenarios, out_dir)
     plot_min_sf_share(metrics_by_method, scenarios, out_dir)
     plot_snir_cdf(metrics_by_method, scenarios, out_dir)
+    plot_rolling_qos(
+        metrics_by_method,
+        metrics_root,
+        scenarios,
+        out_dir,
+        window_size=float(args.rolling_window),
+        window_mode=str(args.window_mode),
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover - point d'entrée CLI
