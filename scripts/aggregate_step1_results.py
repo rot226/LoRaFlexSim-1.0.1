@@ -106,6 +106,7 @@ def _load_records(results_dir: Path, strict_snir: bool) -> Tuple[List[Record], L
                     "PDR": _parse_float(row.get("PDR")),
                     "DER": _parse_float(row.get("DER")),
                     "collisions": _parse_int(row.get("collisions")),
+                    "collisions_snir": _parse_int(row.get("collisions_snir")),
                     "jain_index": _parse_float(row.get("jain_index")),
                     "throughput_bps": _parse_float(row.get("throughput_bps")),
                     "cluster_pdr": cluster_pdr,
@@ -149,7 +150,14 @@ def _build_summary_rows(
             "packet_interval_s": packet_interval,
             "simulation_duration_s": duration,
         }
-        for metric in ("PDR", "DER", "collisions", "jain_index", "throughput_bps"):
+        for metric in (
+            "PDR",
+            "DER",
+            "collisions",
+            "collisions_snir",
+            "jain_index",
+            "throughput_bps",
+        ):
             values = [float(r.get(metric, 0.0)) for r in items]
             mean, std = _mean_std(values)
             summary[f"{metric}_mean"] = mean
@@ -182,6 +190,8 @@ def _write_summary(
         "DER_std",
         "collisions_mean",
         "collisions_std",
+        "collisions_snir_mean",
+        "collisions_snir_std",
         "jain_index_mean",
         "jain_index_std",
         "throughput_bps_mean",
@@ -219,6 +229,7 @@ def _build_raw_rows(records: Iterable[Record], cluster_ids: Sequence[int]) -> Li
             "PDR": record.get("PDR"),
             "DER": record.get("DER"),
             "collisions": record.get("collisions"),
+            "collisions_snir": record.get("collisions_snir"),
             "jain_index": record.get("jain_index"),
             "throughput_bps": record.get("throughput_bps"),
         }
@@ -249,6 +260,7 @@ def _write_raw_index(output_path: Path, records: Iterable[Record], cluster_ids: 
         "PDR",
         "DER",
         "collisions",
+        "collisions_snir",
         "jain_index",
         "throughput_bps",
     ]
