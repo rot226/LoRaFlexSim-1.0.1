@@ -78,10 +78,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Durée maximale de simulation en secondes",
     )
     parser.add_argument("--seed", type=int, default=1, help="Graine de simulation")
-    parser.add_argument(
+    snir_group = parser.add_mutually_exclusive_group(required=True)
+    snir_group.add_argument(
         "--use-snir",
         action="store_true",
-        help="Active le calcul SNIR sur les canaux",
+        dest="use_snir",
+        help="Active explicitement le calcul SNIR sur les canaux",
+    )
+    snir_group.add_argument(
+        "--no-snir",
+        action="store_false",
+        dest="use_snir",
+        help="Désactive explicitement le calcul SNIR sur les canaux",
     )
     parser.add_argument(
         "--channel-config",
@@ -191,6 +199,13 @@ def _snir_suffix(use_snir: bool) -> str:
     return "_snir-on" if use_snir else "_snir-off"
 
 
+def _effective_snir_state(simulator: Simulator, requested: bool) -> bool:
+    channel = getattr(simulator, "channel", None)
+    if channel is not None:
+        return bool(getattr(channel, "use_snir", requested))
+    return bool(getattr(simulator, "use_snir", requested))
+
+
 def main(argv: list[str] | None = None) -> Mapping[str, object]:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -218,6 +233,8 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
     _configure_clusters(manager, args.packet_interval)
     _apply_algorithm(args.algorithm, simulator, manager, args.mixra_solver)
 
+    effective_use_snir = _effective_snir_state(simulator, args.use_snir)
+
     simulator.run(max_time=args.duration)
 
     metrics = simulator.get_metrics()
@@ -228,9 +245,9 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
             "random_seed": args.seed,
             "simulation_duration_s": getattr(simulator, "current_time", args.duration),
             "payload_bytes": PAYLOAD_BYTES,
-            "use_snir": args.use_snir,
-            "with_snir": args.use_snir,
-            "snir_state": STATE_LABELS.get(args.use_snir, "snir_unknown"),
+            "use_snir": effective_use_snir,
+            "with_snir": effective_use_snir,
+            "snir_state": STATE_LABELS.get(effective_use_snir, "snir_unknown"),
             "channel_config": str(args.channel_config) if args.channel_config else None,
             "snir_fading_std": getattr(simulator, "snir_fading_std", None),
             "noise_floor_std": getattr(simulator, "noise_floor_std", None),
@@ -245,7 +262,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
     output_dir: Path = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     interval_label = int(args.packet_interval) if float(args.packet_interval).is_integer() else args.packet_interval
-    csv_path = output_dir / f"{args.algorithm}_N{args.nodes}_T{interval_label}{_snir_suffix(args.use_snir)}.csv"
+    csv_path = output_dir / f"{args.algorithm}_N{args.nodes}_T{interval_label}{_snir_suffix(effective_use_snir)}.csv"
     _write_csv(csv_path, csv_row)
 
     if not args.quiet:

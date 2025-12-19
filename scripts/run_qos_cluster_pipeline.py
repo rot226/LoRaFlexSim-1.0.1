@@ -93,6 +93,18 @@ def _resolve_directories(
 
 
 def _print_summary(summary: Mapping[str, Any]) -> None:
+    states = summary.get("states")
+    if isinstance(states, Mapping):
+        for label, payload in states.items():
+            report_path = payload.get("report_path") if isinstance(payload, Mapping) else None
+            summary_path = payload.get("summary_path") if isinstance(payload, Mapping) else None
+            print(f"État SNIR : {label}")
+            if report_path:
+                print(f"  Rapport Markdown : {report_path}")
+            if summary_path:
+                print(f"  Résumé JSON : {summary_path}")
+        return
+
     report_path = summary.get("report_path")
     summary_path = summary.get("summary_path")
     if report_path:
@@ -147,12 +159,29 @@ def main(
         _print_summary(summary)
 
     if not args.skip_plots:
-        generated = plotter(results_dir, figures_dir)
-        if not args.quiet:
-            if generated:
-                print(f"Figures enregistrées dans {figures_dir}")
-            else:
-                print("Aucun résultat disponible pour générer des figures.")
+        generated_any = False
+        state_payloads = summary.get("states") if isinstance(summary, Mapping) else None
+        if isinstance(state_payloads, Mapping) and state_payloads:
+            for label in state_payloads:
+                state_dir = results_dir / label
+                state_fig_dir = figures_dir / label
+                generated = plotter(state_dir, state_fig_dir)
+                generated_any = generated_any or bool(generated)
+                if not args.quiet:
+                    suffix = f" ({label})"
+                    if generated:
+                        print(f"Figures enregistrées dans {state_fig_dir}{suffix}")
+                    else:
+                        print(f"Aucune figure générée pour {state_dir}{suffix}.")
+        else:
+            generated_any = plotter(results_dir, figures_dir)
+            if not args.quiet:
+                if generated_any:
+                    print(f"Figures enregistrées dans {figures_dir}")
+                else:
+                    print("Aucun résultat disponible pour générer des figures.")
+        if not args.quiet and not generated_any:
+            print("Aucune figure n'a été produite.")
     return summary
 
 
