@@ -258,6 +258,7 @@ def _plot_summary_bars(records: List[Dict[str, Any]], figures_dir: Path) -> None
         "PDR": "PDR global",
         "DER": "DER global",
         "collisions": "Collisions",
+        "collisions_snir": "Collisions (SNIR)",
         "jain_index": "Indice de Jain",
         "throughput_bps": "Débit agrégé (bps)",
     }
@@ -472,6 +473,7 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
         "PDR": "PDR global",
         "DER": "DER global",
         "collisions": "Collisions",
+        "collisions_snir": "Collisions (SNIR)",
         "jain_index": "Indice de Jain",
         "throughput_bps": "Débit agrégé (bps)",
     }
@@ -553,6 +555,7 @@ def generate_step1_figures(
         _plot_global_metric(records, "PDR", "PDR global", "pdr_global", output_dir)
         _plot_global_metric(records, "DER", "DER global", "der_global", output_dir)
         _plot_global_metric(records, "collisions", "Collisions", "collisions", output_dir)
+        _plot_global_metric(records, "collisions_snir", "Collisions (SNIR)", "collisions_snir", output_dir)
         _plot_global_metric(records, "jain_index", "Indice de Jain", "jain_index", output_dir)
         _plot_global_metric(records, "throughput_bps", "Débit agrégé (bps)", "throughput", output_dir)
         comparison_records = records
