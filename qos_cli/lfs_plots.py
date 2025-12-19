@@ -50,6 +50,18 @@ MARKERS = [
     ">",
 ]
 
+SNIR_STATE_COLORS = {
+    "snir_on": "#d62728",  # rouge
+    "snir_off": "#1f77b4",  # bleu
+    "snir_unknown": "#7f7f7f",
+}
+
+SNIR_STATE_LABELS = {
+    "snir_on": "SNIR activé",
+    "snir_off": "SNIR désactivé",
+    "snir_unknown": "SNIR inconnu",
+}
+
 
 def _style_mapping(labels: Sequence[str]) -> Dict[str, Tuple[str, str]]:
     mapping: Dict[str, Tuple[str, str]] = {}
@@ -77,6 +89,50 @@ def _values_for_attribute(
                 values.append(float(value))
         values_per_method[method] = values
     return values_per_method
+
+
+def _metric_snir_state(metric: Optional[MethodScenarioMetrics]) -> str:
+    if metric is None:
+        return "snir_unknown"
+    if metric.use_snir is True:
+        return "snir_on"
+    if metric.use_snir is False:
+        return "snir_off"
+    if metric.snir_state:
+        normalized = metric.snir_state.strip().lower()
+        if normalized in SNIR_STATE_LABELS:
+            return normalized
+        if normalized in {"snir-on", "on", "enabled"}:
+            return "snir_on"
+        if normalized in {"snir-off", "off", "disabled"}:
+            return "snir_off"
+    return "snir_unknown"
+
+
+def _values_by_snir_state(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    attribute: str,
+) -> Dict[str, Dict[str, List[float]]]:
+    states = {"snir_on", "snir_off", "snir_unknown"}
+    values_per_state: Dict[str, Dict[str, List[float]]] = {
+        state: {method: [float("nan")] * len(scenarios) for method in metrics_by_method}
+        for state in states
+    }
+
+    for method, scenario_metrics in metrics_by_method.items():
+        for idx, scenario in enumerate(scenarios):
+            metric = scenario_metrics.get(scenario)
+            if metric is None:
+                continue
+            value = getattr(metric, attribute, None)
+            if value is None:
+                continue
+            state = _metric_snir_state(metric)
+            if state not in values_per_state:
+                continue
+            values_per_state[state][method][idx] = float(value)
+    return values_per_state
 
 
 def _all_nan(values: Sequence[float]) -> bool:
@@ -232,98 +288,109 @@ def plot_cluster_pdr(
     return output_path
 
 
+def _plot_metric_with_snir_states(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    out_dir: Path,
+    *,
+    attribute: str,
+    ylabel: str,
+    filename_base: str,
+) -> List[Path]:
+    if not scenarios or not metrics_by_method:
+        return []
+
+    x_positions = list(range(len(scenarios)))
+    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
+    values_by_state = _values_by_snir_state(metrics_by_method, scenarios, attribute)
+
+    saved_paths: List[Path] = []
+
+    def render(states_to_plot: List[str], suffix: str, title: str) -> None:
+        fig, ax = plt.subplots(figsize=(max(6.0, 2.5 * len(scenarios)), 4.5))
+        plotted = False
+        for state in states_to_plot:
+            state_values = values_by_state.get(state, {})
+            color = SNIR_STATE_COLORS.get(state, "#7f7f7f")
+            label_state = SNIR_STATE_LABELS.get(state, state)
+            for method, values in state_values.items():
+                if not values or _all_nan(values):
+                    continue
+                _, marker = method_styles[method]
+                ax.plot(
+                    x_positions,
+                    values,
+                    marker=marker,
+                    color=color,
+                    label=f"{method} ({label_state})",
+                )
+                plotted = True
+
+        ax.set_xticks(x_positions, scenarios)
+        ax.set_xlabel("Scenario")
+        ax.set_ylabel(ylabel)
+        ax.set_ylim(0.0, 1.0)
+        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+        if title:
+            ax.set_title(title)
+        if plotted:
+            ax.legend(loc="best")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                f"{ylabel} unavailable",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+        fig.tight_layout()
+
+        filename = f"{filename_base}{suffix}.png"
+        output_path = out_dir / filename
+        fig.savefig(output_path, dpi=150)
+        plt.close(fig)
+        saved_paths.append(output_path)
+
+    render(["snir_on"], "_snir-on", f"{ylabel} – SNIR activé")
+    render(["snir_off"], "_snir-off", f"{ylabel} – SNIR désactivé")
+    render(["snir_on", "snir_off", "snir_unknown"], "_snir-mixed", f"{ylabel} – SNIR superposé")
+
+    return saved_paths
+
+
 def plot_der(
     metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
     scenarios: Sequence[str],
     out_dir: Path,
-) -> Optional[Path]:
-    """Trace la DER globale par scénario pour chaque méthode."""
+) -> List[Path]:
+    """Trace la DER globale par scénario en distinguant l'état SNIR."""
 
-    if not scenarios or not metrics_by_method:
-        return None
-
-    fig, ax = plt.subplots(figsize=(max(6.0, 2.5 * len(scenarios)), 4.5))
-    x_positions = list(range(len(scenarios)))
-
-    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
-    plotted = False
-    der_values = _values_for_attribute(metrics_by_method, scenarios, "der_global")
-    for method in sorted(metrics_by_method.keys()):
-        values = der_values.get(method, [])
-        if not values or _all_nan(values):
-            continue
-        color, marker = method_styles[method]
-        ax.plot(x_positions, values, marker=marker, color=color, label=method)
-        plotted = True
-
-    ax.set_xticks(x_positions, scenarios)
-    ax.set_xlabel("Scenario")
-    ax.set_ylabel("Global DER")
-    ax.set_ylim(0.0, 1.0)
-    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
-    if plotted:
-        ax.legend(loc="best")
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "DER unavailable",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
-    fig.tight_layout()
-
-    output_path = out_dir / "der_global_vs_scenarios.png"
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
-    return output_path
+    return _plot_metric_with_snir_states(
+        metrics_by_method,
+        scenarios,
+        out_dir,
+        attribute="der_global",
+        ylabel="Global DER",
+        filename_base="der_global_vs_scenarios",
+    )
 
 
 def plot_pdr(
     metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
     scenarios: Sequence[str],
     out_dir: Path,
-) -> Optional[Path]:
-    if not scenarios or not metrics_by_method:
-        return None
+) -> List[Path]:
+    """Trace le PDR global en distinguant l'état SNIR."""
 
-    fig, ax = plt.subplots(figsize=(max(6.0, 2.5 * len(scenarios)), 4.5))
-    x_positions = list(range(len(scenarios)))
-    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
-    plotted = False
-
-    pdr_values = _values_for_attribute(metrics_by_method, scenarios, "pdr_global")
-    for method in sorted(pdr_values.keys()):
-        values = pdr_values[method]
-        if not values or _all_nan(values):
-            continue
-        color, marker = method_styles[method]
-        ax.plot(x_positions, values, marker=marker, color=color, label=method)
-        plotted = True
-
-    ax.set_xticks(x_positions, scenarios)
-    ax.set_xlabel("Scenario")
-    ax.set_ylabel("Global PDR")
-    ax.set_ylim(0.0, 1.0)
-    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
-    if plotted:
-        ax.legend(loc="best")
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "PDR unavailable",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
-    fig.tight_layout()
-
-    output_path = out_dir / "pdr_global_vs_scenarios.png"
-    fig.savefig(output_path, dpi=150)
-    plt.close(fig)
-    return output_path
+    return _plot_metric_with_snir_states(
+        metrics_by_method,
+        scenarios,
+        out_dir,
+        attribute="pdr_global",
+        ylabel="Global PDR",
+        filename_base="pdr_global_vs_scenarios",
+    )
 
 
 def plot_collisions(
@@ -526,41 +593,64 @@ def plot_snir_cdf(
 
     saved_paths: List[Path] = []
     method_styles = _style_mapping(sorted(metrics_by_method.keys()))
-    for scenario in scenarios:
-        fig, ax = plt.subplots(figsize=(6.5, 4.5))
-        has_data = False
-        for method in sorted(metrics_by_method.keys()):
-            metric = metrics_by_method[method].get(scenario)
-            if not metric or not metric.snir_cdf:
-                continue
-            has_data = True
-            xs, ys = zip(*sorted(metric.snir_cdf))
-            color, _ = method_styles[method]
-            ax.step(xs, ys, where="post", label=method, color=color)
-        if not has_data:
-            ax.text(
-                0.5,
-                0.5,
-                "SNIR data unavailable",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
-        ax.set_xlabel("SNIR (dB)")
-        ax.set_ylabel("CDF")
-        ax.set_ylim(0.0, 1.0)
-        ax.set_xlim(auto=True)
-        ax.grid(True, linestyle="--", alpha=0.4)
-        handles, labels = ax.get_legend_handles_labels()
-        if handles:
-            ax.legend(loc="best")
-        fig.tight_layout()
+    states_order = ["snir_on", "snir_off", "snir_unknown"]
 
-        filename = f"snir_cdf_{sanitize_filename(scenario)}.png"
-        output_path = out_dir / filename
-        fig.savefig(output_path, dpi=150)
-        plt.close(fig)
-        saved_paths.append(output_path)
+    for scenario in scenarios:
+        def render(state_filter: List[str], suffix: str, title: str) -> None:
+            fig, ax = plt.subplots(figsize=(6.5, 4.5))
+            has_data = False
+            for method in sorted(metrics_by_method.keys()):
+                metric = metrics_by_method[method].get(scenario)
+                if not metric or not metric.snir_cdf:
+                    continue
+                state = _metric_snir_state(metric)
+                if state_filter and state not in state_filter:
+                    continue
+                has_data = True
+                xs, ys = zip(*sorted(metric.snir_cdf))
+                _, marker = method_styles[method]
+                color = SNIR_STATE_COLORS.get(state, "#7f7f7f")
+                label_state = SNIR_STATE_LABELS.get(state, state)
+                ax.step(
+                    xs,
+                    ys,
+                    where="post",
+                    label=f"{method} ({label_state})",
+                    color=color,
+                )
+                ax.plot([], [], marker=marker, color=color, linestyle="", label="")
+            if not has_data:
+                ax.text(
+                    0.5,
+                    0.5,
+                    "SNIR data unavailable",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                )
+            ax.set_xlabel("SNIR (dB)")
+            ax.set_ylabel("CDF")
+            ax.set_ylim(0.0, 1.0)
+            ax.set_xlim(auto=True)
+            ax.grid(True, linestyle="--", alpha=0.4)
+            if title:
+                ax.set_title(title)
+            handles, labels = ax.get_legend_handles_labels()
+            filtered_handles = [h for h, l in zip(handles, labels) if l]
+            filtered_labels = [l for l in labels if l]
+            if filtered_handles:
+                ax.legend(filtered_handles, filtered_labels, loc="best")
+            fig.tight_layout()
+
+            filename = f"snir_cdf_{sanitize_filename(scenario)}{suffix}.png"
+            output_path = out_dir / filename
+            fig.savefig(output_path, dpi=150)
+            plt.close(fig)
+            saved_paths.append(output_path)
+
+        render(["snir_on"], "_snir-on", f"SNIR CDF – {scenario} (SNIR activé)")
+        render(["snir_off"], "_snir-off", f"SNIR CDF – {scenario} (SNIR désactivé)")
+        render(states_order, "_snir-mixed", f"SNIR CDF – {scenario} (superposé)")
     return saved_paths
 
 
