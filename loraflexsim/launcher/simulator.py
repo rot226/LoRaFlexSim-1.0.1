@@ -32,7 +32,7 @@ from .node import Node
 from .gateway import Gateway, FLORA_NON_ORTH_DELTA
 from .channel import Channel
 from .multichannel import MultiChannel
-from .server import NetworkServer
+from .server import NetworkServer, REQUIRED_SNR
 from .duty_cycle import DutyCycleManager
 from .smooth_mobility import SmoothMobility
 from .id_provider import next_node_id, next_gateway_id, reset as reset_ids
@@ -1830,11 +1830,18 @@ class Simulator:
                 and getattr(node, "learning_method", None) == "ucb1"
                 and getattr(node, "sf_selector", None) is not None
             ):
-                snir_positive = None
-                if snir_for_node is not None:
-                    snir_positive = snir_for_node > 0.0
-                reward = node.sf_selector.reward_from_outcome(delivered, snir_positive)
-                node.sf_selector.update(f"SF{node.sf}", reward)
+                airtime = entry["end_time"] - entry["start_time"]
+                collision = entry["heard"] and not delivered
+                snir_threshold = REQUIRED_SNR.get(node.sf)
+                node.sf_selector.update(
+                    f"SF{node.sf}",
+                    success=delivered,
+                    snir_db=snir_for_node,
+                    snir_threshold_db=snir_threshold,
+                    airtime_s=airtime,
+                    energy_j=entry.get("energy_J"),
+                    collision=collision,
+                )
 
             if self.debug_rx:
                 if delivered:

@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import math
-from typing import Dict, List
+from collections import deque
+from typing import Deque, Dict, List
 
 
 class UCB1Bandit:
@@ -11,11 +12,15 @@ class UCB1Bandit:
     Les bras sont indexés de 0 à ``n_arms - 1``.
     """
 
-    def __init__(self, n_arms: int = 6) -> None:
+    def __init__(self, n_arms: int = 6, window_size: int = 20) -> None:
         self.n_arms = n_arms
         self.counts: List[int] = [0 for _ in range(self.n_arms)]
         self.values: List[float] = [0.0 for _ in range(self.n_arms)]
         self.total_rounds = 0
+        self.window_size = max(1, window_size)
+        self._reward_windows: List[Deque[float]] = [
+            deque(maxlen=self.window_size) for _ in range(self.n_arms)
+        ]
 
     def select_arm(self) -> int:
         """Sélectionne le bras suivant en appliquant la borne supérieure de confiance.
@@ -41,10 +46,10 @@ class UCB1Bandit:
 
         self.total_rounds += 1
         self.counts[arm] += 1
-        count = self.counts[arm]
-        value = self.values[arm]
-        # Mise à jour incrémentale de la moyenne : new_value = old + (r - old) / n
-        self.values[arm] = value + (reward - value) / count
+        window = self._reward_windows[arm]
+        window.append(reward)
+        window_mean = sum(window) / len(window)
+        self.values[arm] = window_mean
 
     def reset(self) -> None:
         """Réinitialise l'état du bandit."""
@@ -52,6 +57,13 @@ class UCB1Bandit:
         self.counts = [0 for _ in range(self.n_arms)]
         self.values = [0.0 for _ in range(self.n_arms)]
         self.total_rounds = 0
+        self._reward_windows = [deque(maxlen=self.window_size) for _ in range(self.n_arms)]
+
+    @property
+    def reward_window_mean(self) -> List[float]:
+        """Retourne la moyenne des récompenses sur la fenêtre glissante."""
+
+        return [sum(window) / len(window) if window else 0.0 for window in self._reward_windows]
 
 
 class LoRaSFSelectorUCB1:
@@ -60,8 +72,22 @@ class LoRaSFSelectorUCB1:
     ARM_TO_SF: Dict[int, str] = {i: f"SF{7 + i}" for i in range(6)}
     SF_TO_ARM: Dict[str, int] = {sf: arm for arm, sf in ARM_TO_SF.items()}
 
-    def __init__(self) -> None:
-        self.bandit = UCB1Bandit(n_arms=6)
+    def __init__(
+        self,
+        *,
+        success_weight: float = 1.0,
+        snir_margin_weight: float = 0.1,
+        energy_penalty_weight: float = 0.0,
+        collision_penalty: float = 0.5,
+        snir_threshold_db: float = 0.0,
+        reward_window: int = 20,
+    ) -> None:
+        self.bandit = UCB1Bandit(n_arms=6, window_size=reward_window)
+        self.success_weight = success_weight
+        self.snir_margin_weight = snir_margin_weight
+        self.energy_penalty_weight = energy_penalty_weight
+        self.collision_penalty = collision_penalty
+        self.snir_threshold_db = snir_threshold_db
 
     def select_sf(self) -> str:
         """Retourne le facteur d'étalement à utiliser."""
@@ -69,24 +95,70 @@ class LoRaSFSelectorUCB1:
         arm = self.bandit.select_arm()
         return self.ARM_TO_SF[arm]
 
-    @staticmethod
-    def reward_from_outcome(success: bool, snir_positive: bool | None = None) -> int:
-        """Convertit le résultat radio en récompense binaire.
+    def reward_from_outcome(
+        self,
+        success: bool,
+        *,
+        snir_db: float | None = None,
+        snir_threshold_db: float | None = None,
+        airtime_s: float | None = None,
+        energy_j: float | None = None,
+        collision: bool | None = None,
+    ) -> float:
+        """Calcule une récompense combinant fiabilité, marge SNIR et coûts.
 
-        La récompense est 1 en cas de succès, 0 sinon. Le SNIR peut être enregistré
-        séparément pour analyse mais n'influence pas directement la récompense.
+        Les pondérations sont configurables via le constructeur. Le paramètre
+        ``snir_threshold_db`` permet d'utiliser un seuil spécifique, sinon la
+        valeur par défaut fournie au constructeur est employée.
         """
 
-        _ = snir_positive  # prévu pour un affinage futur des récompenses
-        return 1 if success else 0
+        reward = self.success_weight if success else 0.0
 
-    def update(self, sf: str, reward: float) -> None:
+        threshold = self.snir_threshold_db if snir_threshold_db is None else snir_threshold_db
+        if snir_db is not None and threshold is not None:
+            reward += (snir_db - threshold) * self.snir_margin_weight
+
+        energy_metric = energy_j if energy_j is not None else airtime_s
+        if energy_metric is not None:
+            reward -= energy_metric * self.energy_penalty_weight
+
+        if collision:
+            reward -= self.collision_penalty
+
+        return reward
+
+    def update(
+        self,
+        sf: str,
+        *,
+        success: bool,
+        snir_db: float | None = None,
+        snir_threshold_db: float | None = None,
+        airtime_s: float | None = None,
+        energy_j: float | None = None,
+        collision: bool | None = None,
+    ) -> float:
         """Met à jour l'état du bandit à partir du facteur d'étalement choisi."""
 
         arm = self.SF_TO_ARM[sf]
+        reward = self.reward_from_outcome(
+            success,
+            snir_db=snir_db,
+            snir_threshold_db=snir_threshold_db,
+            airtime_s=airtime_s,
+            energy_j=energy_j,
+            collision=collision,
+        )
         self.bandit.update(arm, reward)
+        return reward
 
     def reset(self) -> None:
         """Réinitialise les statistiques internes du sélecteur."""
 
         self.bandit.reset()
+
+    @property
+    def reward_window_mean(self) -> List[float]:
+        """Moyenne lissée des récompenses par bras."""
+
+        return self.bandit.reward_window_mean
