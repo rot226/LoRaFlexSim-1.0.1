@@ -46,6 +46,8 @@ class MethodScenarioMetrics:
 
     method: str
     scenario: str
+    use_snir: Optional[bool]
+    snir_state: Optional[str]
     delivered: int
     attempted: int
     cluster_pdr: Dict[str, float]
@@ -186,6 +188,62 @@ def _extract_collision_series(df: pd.DataFrame) -> Optional[pd.Series]:
         statuses = df[status_column].astype(str).str.lower()
         return statuses.isin({"collision", "collided", "fail_collision"}).astype(int)
     return None
+
+
+def _parse_bool(value: object) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    try:
+        text = str(value).strip().lower()
+    except Exception:
+        return None
+    if text in {"true", "1", "yes", "y", "on", "enabled", "snir_on"}:
+        return True
+    if text in {"false", "0", "no", "n", "off", "disabled", "snir_off"}:
+        return False
+    return None
+
+
+def _normalize_snir_state(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    mapping = {
+        "snir_on": "snir_on",
+        "snir-on": "snir_on",
+        "on": "snir_on",
+        "enabled": "snir_on",
+        "snir_off": "snir_off",
+        "snir-off": "snir_off",
+        "off": "snir_off",
+        "disabled": "snir_off",
+    }
+    return mapping.get(text)
+
+
+def _detect_snir_state(packets_df: Optional[pd.DataFrame]) -> Tuple[Optional[bool], Optional[str]]:
+    if packets_df is None or packets_df.empty:
+        return None, None
+
+    state_column = _find_column(packets_df.columns, ["snir_state"])
+    if state_column is not None:
+        for raw in packets_df[state_column]:
+            normalized = _normalize_snir_state(raw)
+            if normalized:
+                flag = True if normalized == "snir_on" else False if normalized == "snir_off" else None
+                return flag, normalized
+
+    flag_candidates = ["use_snir", "with_snir", "snir_enabled", "snir"]
+    for column in flag_candidates:
+        if column not in packets_df.columns:
+            continue
+        for raw in packets_df[column]:
+            parsed = _parse_bool(raw)
+            if parsed is not None:
+                return parsed, "snir_on" if parsed else "snir_off"
+    return None, None
 
 
 def compute_cluster_pdr(df: Optional[pd.DataFrame]) -> Dict[str, float]:
@@ -360,6 +418,7 @@ def load_metrics_for_method_scenario(
     pdr_global, der_global, delivered, attempted = compute_global_ratios(packets_df)
     collisions = compute_collisions(packets_df)
     snir_cdf = compute_snir_cdf(packets_df)
+    use_snir_flag, snir_state = _detect_snir_state(packets_df)
     energy_j = compute_energy(nodes_df)
     jain_index = compute_jain_index(packets_df)
     min_sf_share = compute_min_sf_share(nodes_df)
@@ -388,9 +447,15 @@ def load_metrics_for_method_scenario(
     if der_global is not None:
         loss_rate = float(max(0.0, 1.0 - der_global))
 
+    normalized_state = snir_state or (
+        "snir_on" if use_snir_flag else "snir_off" if use_snir_flag is not None else None
+    )
+
     return MethodScenarioMetrics(
         method=method,
         scenario=scenario,
+        use_snir=use_snir_flag,
+        snir_state=normalized_state,
         delivered=delivered,
         attempted=attempted,
         cluster_pdr=cluster_pdr,
