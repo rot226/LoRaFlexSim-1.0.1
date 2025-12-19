@@ -525,7 +525,7 @@ def generate_step1_figures(
     figures_dir: Path,
     use_summary: bool = False,
     plot_cdf: bool = False,
-    compare_snir: bool = False,
+    compare_snir: bool = True,
 ) -> None:
     if plt is None:
         print("matplotlib n'est pas disponible ; aucune figure générée.")
@@ -600,7 +600,16 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--compare-snir",
         action="store_true",
-        help="Active les figures combinées SNIR on/off par métrique et par algorithme",
+        default=True,
+        help=(
+            "Active les figures combinées SNIR on/off par métrique et par algorithme (activé par défaut)"
+        ),
+    )
+    parser.add_argument(
+        "--no-compare-snir",
+        action="store_false",
+        dest="compare_snir",
+        help="Désactive les figures combinées SNIR on/off",
     )
     return parser
 

@@ -124,11 +124,14 @@ agrégations précédentes :
 python scripts/plot_step1_results.py --compare-snir --use-summary
 ```
 
-Les figures combinées `*_snir_compare_*.png` sont déposées dans
-`figures/step1/`, et les éventuelles CDF/figures étendues sont rangées dans
-`figures/step1/extended/`. Les couleurs par défaut sont définies dans
-`scripts/plot_step1_results.py` (`#d62728` pour SNIR activé, `#1f77b4` pour SNIR
-désactivé).【F:scripts/plot_step1_results.py†L16-L24】【F:scripts/plot_step1_results.py†L450-L520】
+L'option `--compare-snir` est désormais activée par défaut (ajoutez
+`--no-compare-snir` pour la désactiver) afin que les figures combinées soient
+toujours générées, notamment lorsque vous utilisez `--use-summary`. Les figures
+combinées `*_snir_compare_*.png` sont déposées dans `figures/step1/`, et les
+éventuelles CDF/figures étendues sont rangées dans `figures/step1/extended/`.
+Les couleurs par défaut restent **rouge** pour SNIR activé et **bleu** pour
+SNIR désactivé (`#d62728` et `#1f77b4`), telles que définies dans
+`scripts/plot_step1_results.py`.【F:scripts/plot_step1_results.py†L16-L24】【F:scripts/plot_step1_results.py†L450-L520】
 
 ### Récapitulatif complet (commande unique + agrégation + tracé)
 
@@ -144,7 +147,7 @@ python scripts/plot_step1_results.py --compare-snir --use-summary
 - Les CSV intermédiaires sont écrits dans `results/step1/<snir_state>/seed_*`.
 - Les figures combinées `*_snir_compare_*.png` sont générées dans
   `figures/step1/` (les variantes étendues dans `figures/step1/extended/`).
-- Les codes couleur sont **rouge** pour SNIR activé et **bleu** pour SNIR
+- Les codes couleur restent **rouge** pour SNIR activé et **bleu** pour SNIR
   désactivé (`#d62728` et `#1f77b4`).
 
 Pour vérifier rapidement que les courbes combinées SNIR on/off restent
