@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 from collections import deque
-from typing import Deque, Dict, List
+from typing import Deque, Dict, List, Tuple
 
 
 class UCB1Bandit:
@@ -12,13 +12,16 @@ class UCB1Bandit:
     Les bras sont indexés de 0 à ``n_arms - 1``.
     """
 
-    def __init__(self, n_arms: int = 6, window_size: int = 20) -> None:
+    def __init__(
+        self, n_arms: int = 6, window_size: int = 20, *, traffic_weighted_mean: bool = False
+    ) -> None:
         self.n_arms = n_arms
         self.counts: List[int] = [0 for _ in range(self.n_arms)]
         self.values: List[float] = [0.0 for _ in range(self.n_arms)]
         self.total_rounds = 0
         self.window_size = max(1, window_size)
-        self._reward_windows: List[Deque[float]] = [
+        self.traffic_weighted_mean = traffic_weighted_mean
+        self._reward_windows: List[Deque[Tuple[float, float]]] = [
             deque(maxlen=self.window_size) for _ in range(self.n_arms)
         ]
 
@@ -41,14 +44,14 @@ class UCB1Bandit:
 
         return int(max(range(self.n_arms), key=lambda arm: ucb_values[arm]))
 
-    def update(self, arm: int, reward: float) -> None:
+    def update(self, arm: int, reward: float, *, weight: float = 1.0) -> None:
         """Met à jour les statistiques du bras après avoir observé une récompense."""
 
         self.total_rounds += 1
         self.counts[arm] += 1
         window = self._reward_windows[arm]
-        window.append(reward)
-        window_mean = sum(window) / len(window)
+        window.append((reward, max(weight, 0.0)))
+        window_mean = self._window_mean(window)
         self.values[arm] = window_mean
 
     def reset(self) -> None:
@@ -59,11 +62,21 @@ class UCB1Bandit:
         self.total_rounds = 0
         self._reward_windows = [deque(maxlen=self.window_size) for _ in range(self.n_arms)]
 
+    def _window_mean(self, window: Deque[Tuple[float, float]]) -> float:
+        if not window:
+            return 0.0
+        if self.traffic_weighted_mean:
+            total_weight = sum(weight for _, weight in window)
+            if total_weight == 0:
+                return 0.0
+            return sum(reward * weight for reward, weight in window) / total_weight
+        return sum(reward for reward, _ in window) / len(window)
+
     @property
     def reward_window_mean(self) -> List[float]:
         """Retourne la moyenne des récompenses sur la fenêtre glissante."""
 
-        return [sum(window) / len(window) if window else 0.0 for window in self._reward_windows]
+        return [self._window_mean(window) for window in self._reward_windows]
 
 
 class LoRaSFSelectorUCB1:
@@ -81,8 +94,11 @@ class LoRaSFSelectorUCB1:
         collision_penalty: float = 0.5,
         snir_threshold_db: float = 0.0,
         reward_window: int = 20,
+        traffic_weighted_mean: bool = False,
     ) -> None:
-        self.bandit = UCB1Bandit(n_arms=6, window_size=reward_window)
+        self.bandit = UCB1Bandit(
+            n_arms=6, window_size=reward_window, traffic_weighted_mean=traffic_weighted_mean
+        )
         self.success_weight = success_weight
         self.snir_margin_weight = snir_margin_weight
         self.energy_penalty_weight = energy_penalty_weight
@@ -104,6 +120,8 @@ class LoRaSFSelectorUCB1:
         airtime_s: float | None = None,
         energy_j: float | None = None,
         collision: bool | None = None,
+        expected_der: float | None = None,
+        local_der: float | None = None,
     ) -> float:
         """Calcule une récompense combinant fiabilité, marge SNIR et coûts.
 
@@ -112,18 +130,28 @@ class LoRaSFSelectorUCB1:
         valeur par défaut fournie au constructeur est employée.
         """
 
-        reward = self.success_weight if success else 0.0
+        expected = expected_der if expected_der is not None and expected_der > 0 else 1.0
+        success_component = local_der if local_der is not None else (1.0 if success else 0.0)
+        success_component = min(max(success_component, 0.0), 1.0)
 
         threshold = self.snir_threshold_db if snir_threshold_db is None else snir_threshold_db
+        snir_component = 0.0
         if snir_db is not None and threshold is not None:
-            reward += (snir_db - threshold) * self.snir_margin_weight
+            margin = snir_db - threshold
+            snir_component = min(max(margin, 0.0), 1.0)
 
         energy_metric = energy_j if energy_j is not None else airtime_s
-        if energy_metric is not None:
-            reward -= energy_metric * self.energy_penalty_weight
+        energy_component = min(max(energy_metric or 0.0, 0.0), 1.0)
 
-        if collision:
-            reward -= self.collision_penalty
+        collision_component = 1.0 if collision else 0.0
+
+        reward = (
+            self.success_weight * success_component
+            + self.snir_margin_weight * snir_component
+            - self.energy_penalty_weight * energy_component
+            - self.collision_penalty * collision_component
+        )
+        reward /= expected
 
         return reward
 
@@ -137,6 +165,9 @@ class LoRaSFSelectorUCB1:
         airtime_s: float | None = None,
         energy_j: float | None = None,
         collision: bool | None = None,
+        expected_der: float | None = None,
+        local_der: float | None = None,
+        traffic_volume: float | None = None,
     ) -> float:
         """Met à jour l'état du bandit à partir du facteur d'étalement choisi."""
 
@@ -148,8 +179,11 @@ class LoRaSFSelectorUCB1:
             airtime_s=airtime_s,
             energy_j=energy_j,
             collision=collision,
+            expected_der=expected_der,
+            local_der=local_der,
         )
-        self.bandit.update(arm, reward)
+        weight = max(traffic_volume, 0.0) if traffic_volume is not None else 1.0
+        self.bandit.update(arm, reward, weight=weight)
         return reward
 
     def reset(self) -> None:

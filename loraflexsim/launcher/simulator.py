@@ -1833,6 +1833,16 @@ class Simulator:
                 airtime = entry["end_time"] - entry["start_time"]
                 collision = entry["heard"] and not delivered
                 snir_threshold = REQUIRED_SNR.get(node.sf)
+                qos_config = getattr(self, "qos_clusters_config", {}) or {}
+                qos_cluster_id = getattr(node, "qos_cluster_id", None)
+                expected_der = None
+                if qos_cluster_id is not None:
+                    expected_der = qos_config.get(qos_cluster_id, {}).get("pdr_target")
+
+                traffic_volume = None
+                if self.packets_to_send:
+                    traffic_volume = min(node.tx_attempted / self.packets_to_send, 1.0)
+
                 node.sf_selector.update(
                     f"SF{node.sf}",
                     success=delivered,
@@ -1841,6 +1851,9 @@ class Simulator:
                     airtime_s=airtime,
                     energy_j=entry.get("energy_J"),
                     collision=collision,
+                    expected_der=expected_der,
+                    local_der=node.pdr,
+                    traffic_volume=traffic_volume,
                 )
 
             if self.debug_rx:

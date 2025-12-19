@@ -98,6 +98,12 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
         except (TypeError, ValueError):
             snir_db = None
         airtime = float(event.get("end_time", 0.0) or 0.0) - float(event.get("start_time", 0.0) or 0.0)
+        expected_der = None
+        qos_config = getattr(sim, "qos_clusters_config", {}) or {}
+        qos_cluster_id = getattr(node, "qos_cluster_id", None) if node else None
+        if qos_cluster_id is not None:
+            expected_der = qos_config.get(qos_cluster_id, {}).get("pdr_target")
+
         return selector.reward_from_outcome(
             success,
             snir_db=snir_db,
@@ -105,6 +111,8 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
             airtime_s=airtime,
             energy_j=event.get("energy_J"),
             collision=event.get("result") != "Success" and event.get("heard"),
+            expected_der=expected_der,
+            local_der=getattr(node, "pdr", None) if node else None,
         )
 
     for cluster_id in range(1, len(CLUSTER_PROPORTIONS) + 1):
