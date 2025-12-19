@@ -107,14 +107,15 @@ Après l'exécution de la matrice, agrégerez les CSV présents dans
 et aux courbes d'erreur :
 
 ```bash
-python scripts/aggregate_step1_results.py
+python scripts/aggregate_step1_results.py --strict-snir-detection
 ```
 
 Le script détecte automatiquement l'état SNIR et génère
 `results/step1/summary.csv` (moyennes/écarts-types) ainsi que
-`results/step1/raw_index.csv` (index des runs bruts). Ajoutez
-`--strict-snir-detection` si vous souhaitez échouer lorsque l'état SNIR ne
-peut pas être déduit implicitement.【F:scripts/aggregate_step1_results.py†L21-L126】
+`results/step1/raw_index.csv` (index des runs bruts). L'option
+`--strict-snir-detection` est recommandée pour refuser les CSV dont l'état
+SNIR n'est pas explicite et aligner le pipeline sur la détection stricte
+utilisée pour les figures.【F:scripts/aggregate_step1_results.py†L21-L126】
 
 Vous pouvez ensuite tracer les figures Step 1 en comparant directement SNIR
 on/off (rouge : SNIR activé, bleu : SNIR désactivé) et en utilisant les
@@ -140,7 +141,7 @@ tracé comparatif, le workflow complet se résume à :
 
 ```bash
 python scripts/run_step1_matrix.py --algos adr apra mixra_h mixra_opt --with-snir true false --seeds 1 2 3 --nodes 1000 5000 --packet-intervals 300 600
-python scripts/aggregate_step1_results.py
+python scripts/aggregate_step1_results.py --strict-snir-detection
 python scripts/plot_step1_results.py --compare-snir --use-summary
 ```
 
