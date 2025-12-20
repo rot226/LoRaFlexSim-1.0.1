@@ -27,6 +27,16 @@ racine du dépôt ou depuis ``experiments/ucb1``.
   un parc de nœuds fixe ; les résultats sont écrits dans
   ``experiments/ucb1/ucb1_load_metrics.csv``.
 
+- **Démo SNIR on/off avec fenêtres temporelles** :
+  ```bash
+  python experiments/ucb1/run_snir_window_demo.py
+  ```
+  Un petit scénario QoS (quelques paquets par nœud) est exécuté deux fois avec
+  le SNIR désactivé puis activé. Le CSV fusionné
+  ``experiments/ucb1/ucb1_snir_window_demo.csv`` contient les colonnes
+  ``window_start_s``/``window_end_s`` et l'indicateur ``with_snir`` pour
+  comparer directement les dérivées par cluster.
+
 - **Comparaison UCB1 / ADR / MixRA** :
   ```bash
   python experiments/ucb1/run_baseline_comparison.py
@@ -69,6 +79,9 @@ python experiments/ucb1/plots/plot_throughput.py
 
 - ``plot_der_by_cluster.py`` reproduit la figure DER par cluster sur le balayage
   de densité et ajoute les lignes horizontales correspondant aux cibles QoS.
+  Les options ``--time-window`` (format ``debut:fin``) et ``--window-index``
+  permettent de filtrer des agrégats temporels et de superposer facilement les
+  courbes SNIR on/off issues de ``run_snir_window_demo.py``.
 - ``plot_load_sensitivity.py`` trace le DER par cluster en fonction de l’intervalle
   de génération de paquets (les intervalles sont inférés si la colonne manque
   dans le CSV).
