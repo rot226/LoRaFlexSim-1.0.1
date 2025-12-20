@@ -492,6 +492,7 @@ def _plot_metric_with_snir_states(
     attribute: str,
     ylabel: str,
     filename_base: str,
+    y_limits: Tuple[Optional[float], Optional[float]] | None = (0.0, 1.0),
 ) -> List[Path]:
     if not scenarios or not metrics_by_method:
         return []
@@ -523,7 +524,9 @@ def _plot_metric_with_snir_states(
         ax.set_xticks(x_positions, scenarios)
         ax.set_xlabel("Scenario")
         ax.set_ylabel(ylabel)
-        ax.set_ylim(0.0, 1.0)
+        if y_limits is not None:
+            lower, upper = y_limits
+            ax.set_ylim(bottom=lower, top=upper)
         ax.grid(True, axis="y", linestyle="--", alpha=0.4)
         if title:
             ax.set_title(title)
@@ -585,6 +588,41 @@ def plot_pdr(
         attribute="pdr_global",
         ylabel="Global PDR",
         filename_base="pdr_global_vs_scenarios",
+    )
+
+
+def plot_energy_snir(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    out_dir: Path,
+) -> List[Path]:
+    """Trace l'énergie totale par scénario en distinguant l'état SNIR."""
+
+    return _plot_metric_with_snir_states(
+        metrics_by_method,
+        scenarios,
+        out_dir,
+        attribute="energy_j",
+        ylabel="Énergie cumulée (J)",
+        filename_base="energy_total_vs_scenarios",
+        y_limits=(0.0, None),
+    )
+
+
+def plot_jain_index_snir(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    out_dir: Path,
+) -> List[Path]:
+    """Trace l'indice de Jain par scénario en distinguant l'état SNIR."""
+
+    return _plot_metric_with_snir_states(
+        metrics_by_method,
+        scenarios,
+        out_dir,
+        attribute="jain_index",
+        ylabel="Indice de Jain",
+        filename_base="jain_index_vs_scenarios",
     )
 
 
@@ -982,7 +1020,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     plot_der(metrics_by_method, scenarios, out_dir)
     plot_collisions(metrics_by_method, scenarios, out_dir)
     plot_energy(metrics_by_method, scenarios, out_dir)
+    plot_energy_snir(metrics_by_method, scenarios, out_dir)
     plot_jain_index(metrics_by_method, scenarios, out_dir)
+    plot_jain_index_snir(metrics_by_method, scenarios, out_dir)
     plot_min_sf_share(metrics_by_method, scenarios, out_dir)
     plot_snir_cdf(metrics_by_method, scenarios, out_dir)
     plot_rolling_qos(
