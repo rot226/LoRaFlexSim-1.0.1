@@ -50,6 +50,23 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_OUTPUT,
         help="Chemin du PNG à générer (répertoires créés si besoin).",
     )
+    parser.add_argument(
+        "--time-window",
+        action="append",
+        default=[],
+        metavar="DEBUT:FIN",
+        help=(
+            "Filtre les lignes issues d'agrégats temporels (window_start_s/window_end_s) "
+            "sur l'intervalle fourni en secondes. Peut être passé plusieurs fois."
+        ),
+    )
+    parser.add_argument(
+        "--window-index",
+        action="append",
+        type=int,
+        default=[],
+        help="Sélectionne un ou plusieurs indices de fenêtre (colonne window_index).",
+    )
     return parser.parse_args()
 
 
@@ -115,6 +132,26 @@ def _extract_cluster_values(row: Mapping[str, object]) -> Dict[int, float]:
     return values
 
 
+def _extract_windows(row: Mapping[str, object]) -> dict[str, float | int | None]:
+    def _to_float(value: object | None) -> float | None:
+        try:
+            return float(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _to_int(value: object | None) -> int | None:
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "window_index": _to_int(row.get("window_index")),
+        "window_start_s": _to_float(row.get("window_start_s")),
+        "window_end_s": _to_float(row.get("window_end_s")),
+    }
+
+
 def _load_step1(path: Path) -> pd.DataFrame:
     if not path or not path.exists():
         print(f"Avertissement : CSV Step1 introuvable ({path}), section ignorée.")
@@ -128,6 +165,7 @@ def _load_step1(path: Path) -> pd.DataFrame:
             x_value = float(x_value)
         except (TypeError, ValueError):
             x_value = None
+        window_fields = _extract_windows(row)
         clusters = _extract_cluster_values(row)
         for cluster_id, value in clusters.items():
             records.append({
@@ -136,6 +174,7 @@ def _load_step1(path: Path) -> pd.DataFrame:
                 "num_nodes": x_value,
                 "der": value,
                 "snir_state": snir_state,
+                **window_fields,
             })
     tidy = pd.DataFrame(records)
     return tidy.dropna(subset=["num_nodes", "der"])
@@ -158,7 +197,56 @@ def _load_ucb1(path: Path) -> pd.DataFrame:
     df["source"] = "UCB1"
     df["snir_state"] = df.apply(lambda row: _detect_snir(row, path), axis=1)
     df.rename(columns={metric: "der"}, inplace=True)
+    if {"window_start_s", "window_end_s", "window_index"}.issubset(df.columns):
+        df[["window_start_s", "window_end_s"]] = df[["window_start_s", "window_end_s"]].apply(pd.to_numeric)
+        df["window_index"] = pd.to_numeric(df["window_index"], errors="coerce")
     return df
+
+
+def _parse_time_windows(raw_windows: Sequence[str]) -> list[tuple[float, float]]:
+    parsed: list[tuple[float, float]] = []
+    for raw in raw_windows:
+        if not raw:
+            continue
+        if ":" not in raw:
+            raise ValueError(f"Fenêtre temporelle invalide '{raw}' (attendu: debut:fin en secondes)")
+        start_text, end_text = raw.split(":", maxsplit=1)
+        try:
+            start = float(start_text)
+            end = float(end_text)
+        except ValueError as exc:  # pragma: no cover - validation simple
+            raise ValueError(
+                f"Impossible de parser la fenêtre '{raw}', valeurs numériques attendues"
+            ) from exc
+        if end <= start:
+            raise ValueError(f"Fenêtre temporelle invalide '{raw}' : fin <= début")
+        parsed.append((start, end))
+    return parsed
+
+
+def _filter_windows(
+    df: pd.DataFrame, time_windows: Sequence[tuple[float, float]], indices: Sequence[int]
+) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    filtered = df
+    if time_windows and {"window_start_s", "window_end_s"}.issubset(filtered.columns):
+        mask = False
+        for start, end in time_windows:
+            mask |= (filtered["window_start_s"] >= start) & (filtered["window_end_s"] <= end)
+        filtered = filtered[mask]
+    elif time_windows:
+        print(
+            "Avertissement : filtres temporels ignorés car les colonnes window_start_s/window_end_s sont absentes."
+        )
+
+    if indices and "window_index" in filtered.columns:
+        filtered = filtered[filtered["window_index"].isin(indices)]
+    elif indices:
+        print("Avertissement : filtres par indice de fenêtre ignorés (colonne window_index absente).")
+
+    return filtered
 
 
 def _plot_der(df: pd.DataFrame, output: Path) -> None:
@@ -189,7 +277,9 @@ def _plot_der(df: pd.DataFrame, output: Path) -> None:
 
 def main() -> None:
     args = parse_args()
+    time_windows = _parse_time_windows(args.time_window)
     combined = pd.concat([_load_step1(args.step1_csv), _load_ucb1(args.ucb1_csv)], ignore_index=True)
+    combined = _filter_windows(combined, time_windows, args.window_index)
     if combined.empty:
         raise SystemExit("Aucune donnée exploitable pour tracer la figure.")
     _plot_der(combined, args.output)
