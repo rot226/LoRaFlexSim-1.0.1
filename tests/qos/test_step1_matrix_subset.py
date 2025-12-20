@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,43 @@ def _mean_snir(row: dict[str, str]) -> float:
     return sum(float(bin_key) * count for bin_key, count in histogram.items()) / total
 
 
+def _snir_quantiles(row: dict[str, str], quantiles: Iterable[float]) -> dict[float, float]:
+    histogram = json.loads(row["snr_histogram_json"])
+    total = sum(histogram.values()) or 1
+    cumulative = 0
+    targets = sorted(set(quantiles))
+    quantile_values: dict[float, float] = {}
+
+    for bin_key, count in sorted(histogram.items(), key=lambda item: float(item[0])):
+        cumulative += count
+        ratio = cumulative / total
+        while targets and ratio >= targets[0]:
+            quantile_values[targets.pop(0)] = float(bin_key)
+        if not targets:
+            break
+
+    # Au cas où des quantiles manqueraient (histogramme vide), on duplique le dernier bin connu.
+    if histogram and targets:
+        last_bin = float(sorted(histogram, key=lambda key: float(key))[-1])
+        for target in targets:
+            quantile_values[target] = last_bin
+
+    return quantile_values
+
+
+def _moving_average(values: list[float], window: int) -> list[float]:
+    if not values:
+        return []
+
+    if window <= 0:
+        raise ValueError("La taille de fenêtre doit être positive")
+
+    if len(values) < window:
+        return [sum(values) / len(values)]
+
+    return [sum(values[idx : idx + window]) / window for idx in range(len(values) - window + 1)]
+
+
 def _collect_metrics(results_dir: Path) -> dict[bool, list[dict[str, float]]]:
     grouped: dict[bool, list[dict[str, float]]] = {True: [], False: []}
 
@@ -32,8 +70,10 @@ def _collect_metrics(results_dir: Path) -> dict[bool, list[dict[str, float]]]:
         grouped[use_snir].append(
             {
                 "pdr": float(row["PDR"]),
+                "der": float(row["DER"]),
                 "collisions": float(row["collisions"]),
                 "mean_snir": _mean_snir(row),
+                "snir_quantiles": _snir_quantiles(row, quantiles=(0.1, 0.5, 0.9)),
             }
         )
 
@@ -43,41 +83,129 @@ def _collect_metrics(results_dir: Path) -> dict[bool, list[dict[str, float]]]:
 @pytest.mark.slow
 @pytest.mark.filterwarnings("ignore::RuntimeWarning")
 def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
-    results_dir = tmp_path / "subset"
-    args = [
-        "--algos",
-        "adr",
-        "--with-snir",
-        "true",
-        "false",
-        "--seeds",
-        "1",
-        "--nodes",
-        "12",
-        "24",
-        "--packet-intervals",
-        "5",
-        "--duration",
-        "20",
-        "--results-dir",
-        str(results_dir),
-    ]
+    campaigns = {
+        "subset": [
+            "--algos",
+            "adr",
+            "--with-snir",
+            "true",
+            "false",
+            "--seeds",
+            "1",
+            "--nodes",
+            "12",
+            "24",
+            "--packet-intervals",
+            "5",
+            "--duration",
+            "20",
+        ],
+        "subset_dense": [
+            "--algos",
+            "adr",
+            "--with-snir",
+            "true",
+            "false",
+            "--seeds",
+            "1",
+            "--nodes",
+            "12",
+            "24",
+            "--packet-intervals",
+            "2",
+            "--duration",
+            "40",
+        ],
+    }
 
-    run_step1_matrix.main(args)
+    metrics_by_campaign: dict[str, dict[bool, list[dict[str, float]]]] = {}
+    for name, args in campaigns.items():
+        results_dir = tmp_path / name
+        run_step1_matrix.main([
+            *args,
+            "--results-dir",
+            str(results_dir),
+        ])
+        metrics_by_campaign[name] = _collect_metrics(results_dir)
 
-    metrics = _collect_metrics(results_dir)
-    assert metrics[True] and metrics[False], "Les états SNIR doivent être couverts"
+    for metrics in metrics_by_campaign.values():
+        assert metrics[True] and metrics[False], "Les états SNIR doivent être couverts"
 
-    for use_snir, rows in metrics.items():
-        pdr_mean = sum(item["pdr"] for item in rows) / len(rows)
-        collisions_mean = sum(item["collisions"] for item in rows) / len(rows)
-        snir_mean = sum(item["mean_snir"] for item in rows) / len(rows)
+    snir_spread_threshold = 8.0
+    der_threshold = 0.25
+    pdr_threshold = 0.25
+    snir_gap_threshold = 6.0
 
-        assert 0.75 <= pdr_mean <= 1.01, f"PDR moyen inattendu pour SNIR={use_snir}: {pdr_mean:.3f}"
-        assert 0.0 <= collisions_mean <= 10.0, (
-            f"Taux de collisions moyen hors bornes pour SNIR={use_snir}: {collisions_mean:.3f}"
+    for campaign_name, metrics in metrics_by_campaign.items():
+        for use_snir, rows in metrics.items():
+            pdr_values = [item["pdr"] for item in rows]
+            der_values = [item["der"] for item in rows]
+            collisions_values = sorted(item["collisions"] for item in rows)
+            mean_snir_values = [item["mean_snir"] for item in rows]
+            snir_quantiles = [item["snir_quantiles"] for item in rows]
+
+            pdr_mean = sum(pdr_values) / len(pdr_values)
+            collisions_mean = sum(collisions_values) / len(collisions_values)
+            snir_mean = sum(mean_snir_values) / len(mean_snir_values)
+            collisions_median = collisions_values[len(collisions_values) // 2]
+
+            assert 0.75 <= pdr_mean <= 1.01, (
+                f"PDR moyen inattendu pour SNIR={use_snir} ({campaign_name}): {pdr_mean:.3f}"
+            )
+            assert 0.0 <= collisions_mean <= 10.0, (
+                f"Taux de collisions moyen hors bornes pour SNIR={use_snir} ({campaign_name}): {collisions_mean:.3f}"
+            )
+            assert -10.0 <= snir_mean <= 40.0, (
+                f"SNIR moyen irréaliste pour SNIR={use_snir} ({campaign_name}): {snir_mean:.2f} dB"
+            )
+            assert 0.0 <= collisions_median <= 12.0, (
+                f"Médiane des collisions incohérente pour SNIR={use_snir} ({campaign_name}): {collisions_median:.3f}"
+            )
+
+            q10_avg = sum(item[0.1] for item in snir_quantiles) / len(snir_quantiles)
+            q90_avg = sum(item[0.9] for item in snir_quantiles) / len(snir_quantiles)
+            assert -30.0 <= q10_avg <= 25.0, (
+                f"Quantile 10% SNIR suspect pour SNIR={use_snir} ({campaign_name}): {q10_avg:.2f} dB"
+            )
+            assert -5.0 <= q90_avg <= 55.0, (
+                f"Quantile 90% SNIR suspect pour SNIR={use_snir} ({campaign_name}): {q90_avg:.2f} dB"
+            )
+            assert (q90_avg - q10_avg) >= snir_spread_threshold, (
+                f"Dispersion SNIR trop faible pour SNIR={use_snir} ({campaign_name}): {(q90_avg - q10_avg):.2f} dB"
+            )
+
+            for metric_values, threshold, label in [
+                (pdr_values, pdr_threshold, "PDR"),
+                (der_values, der_threshold, "DER"),
+                (mean_snir_values, snir_gap_threshold, "SNIR"),
+            ]:
+                ma_5 = _moving_average(metric_values, window=5)[-1]
+                ma_20 = _moving_average(metric_values, window=20)[-1]
+                assert abs(ma_5 - ma_20) <= threshold, (
+                    f"Moyenne glissante incohérente pour {label} SNIR={use_snir} ({campaign_name})"
+                    f" (Δ={abs(ma_5 - ma_20):.3f})"
+                )
+
+    reference_campaign, comparison_campaign = (metrics_by_campaign[name] for name in campaigns)
+    for use_snir in (True, False):
+        ref_rows = reference_campaign[use_snir]
+        cmp_rows = comparison_campaign[use_snir]
+
+        ref_pdr_ma = _moving_average([item["pdr"] for item in ref_rows], 20)[-1]
+        cmp_pdr_ma = _moving_average([item["pdr"] for item in cmp_rows], 20)[-1]
+        assert abs(ref_pdr_ma - cmp_pdr_ma) <= 0.3, (
+            f"Écart PDR entre campagnes trop marqué pour SNIR={use_snir}: {abs(ref_pdr_ma - cmp_pdr_ma):.3f}"
         )
-        assert -10.0 <= snir_mean <= 40.0, (
-            f"SNIR moyen irréaliste pour SNIR={use_snir}: {snir_mean:.2f} dB"
+
+        ref_der_ma = _moving_average([item["der"] for item in ref_rows], 20)[-1]
+        cmp_der_ma = _moving_average([item["der"] for item in cmp_rows], 20)[-1]
+        assert abs(ref_der_ma - cmp_der_ma) <= 0.3, (
+            f"Écart DER entre campagnes trop marqué pour SNIR={use_snir}: {abs(ref_der_ma - cmp_der_ma):.3f}"
+        )
+
+        ref_snir_ma = _moving_average([item["mean_snir"] for item in ref_rows], 20)[-1]
+        cmp_snir_ma = _moving_average([item["mean_snir"] for item in cmp_rows], 20)[-1]
+        assert abs(ref_snir_ma - cmp_snir_ma) <= 10.0, (
+            f"Écart SNIR entre campagnes trop marqué pour SNIR={use_snir}: {abs(ref_snir_ma - cmp_snir_ma):.3f} dB"
         )
 
