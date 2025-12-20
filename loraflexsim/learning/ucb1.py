@@ -113,9 +113,11 @@ class LoRaSFSelectorUCB1:
         *,
         success_weight: float = 1.0,
         snir_margin_weight: float = 0.1,
+        fairness_weight: float = 0.0,
         energy_penalty_weight: float = 0.0,
         collision_penalty: float = 0.5,
         snir_threshold_db: float = 0.0,
+        energy_normalization: float | None = None,
         reward_window: int = 20,
         traffic_weighted_mean: bool = False,
     ) -> None:
@@ -124,9 +126,11 @@ class LoRaSFSelectorUCB1:
         )
         self.success_weight = success_weight
         self.snir_margin_weight = snir_margin_weight
+        self.fairness_weight = fairness_weight
         self.energy_penalty_weight = energy_penalty_weight
         self.collision_penalty = collision_penalty
         self.snir_threshold_db = snir_threshold_db
+        self.energy_normalization = energy_normalization
 
     def select_sf(self) -> str:
         """Retourne le facteur d'étalement à utiliser."""
@@ -146,6 +150,8 @@ class LoRaSFSelectorUCB1:
         collision: bool | None = None,
         expected_der: float | None = None,
         local_der: float | None = None,
+        fairness_index: float | None = None,
+        energy_normalization: float | None = None,
     ) -> float:
         """Calcule une récompense combinant fiabilité, marge SNIR et coûts.
 
@@ -173,9 +179,22 @@ class LoRaSFSelectorUCB1:
             snir_component = max(min(snir_component, 1.0), -1.0)
 
         energy_metric = energy_j if energy_j is not None else airtime_s
-        energy_component = min(max(energy_metric or 0.0, 0.0), 1.0)
+        energy_component = 0.0
+        normalization = energy_normalization
+        if normalization is None:
+            normalization = self.energy_normalization
+        if energy_metric is not None:
+            if normalization is not None and normalization > 0:
+                energy_component = energy_metric / normalization
+            else:
+                energy_component = energy_metric
+        energy_component = min(max(energy_component, 0.0), 1.0)
 
         collision_component = 1.0 if collision else 0.0
+
+        fairness_component = None
+        if fairness_index is not None:
+            fairness_component = min(max(fairness_index, 0.0), 1.0)
 
         reward = (
             self.success_weight * success_component
@@ -183,6 +202,8 @@ class LoRaSFSelectorUCB1:
             - self.energy_penalty_weight * energy_component
             - self.collision_penalty * collision_component
         )
+        if fairness_component is not None:
+            reward += self.fairness_weight * fairness_component
         reward /= expected
 
         return reward
@@ -201,6 +222,8 @@ class LoRaSFSelectorUCB1:
         local_der: float | None = None,
         traffic_volume: float | None = None,
         marginal_snir_margin_db: float | None = None,
+        fairness_index: float | None = None,
+        energy_normalization: float | None = None,
     ) -> float:
         """Met à jour l'état du bandit à partir du facteur d'étalement choisi."""
 
@@ -215,6 +238,8 @@ class LoRaSFSelectorUCB1:
             collision=collision,
             expected_der=expected_der,
             local_der=local_der,
+            fairness_index=fairness_index,
+            energy_normalization=energy_normalization,
         )
         weight = max(traffic_volume, 0.0) if traffic_volume is not None else 1.0
         self.bandit.update(arm, reward, weight=weight)
