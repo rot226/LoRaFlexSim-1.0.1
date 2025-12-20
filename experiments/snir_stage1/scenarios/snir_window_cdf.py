@@ -1,0 +1,166 @@
+"""Campagne SNIR balayant la fenêtre d'interférence utilisée."""
+
+from __future__ import annotations
+
+import csv
+import math
+import sys
+from pathlib import Path
+from typing import Iterable
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from loraflexsim.launcher import MultiChannel, Simulator
+from loraflexsim.launcher.non_orth_delta import DEFAULT_NON_ORTH_DELTA
+
+FREQUENCIES_HZ = (
+    868_100_000.0,
+    868_300_000.0,
+    868_500_000.0,
+    867_100_000.0,
+    867_300_000.0,
+    867_500_000.0,
+    867_700_000.0,
+    867_900_000.0,
+)
+
+PACKET_INTERVAL_S = 900.0
+PACKETS_PER_NODE = 10
+PAYLOAD_BYTES = 20
+NUM_NODES = 6000
+WINDOW_MODES: tuple[tuple[str, str], ...] = (
+    ("packet", "packet"),
+    ("preamble", "preamble"),
+    ("symbol", "symbol"),
+)
+OUTPUT_PATH = ROOT_DIR / "data" / "snir_window_cdf.csv"
+
+
+def _build_multichannel(window_mode: str) -> MultiChannel:
+    multichannel = MultiChannel(FREQUENCIES_HZ)
+    multichannel.force_non_orthogonal(DEFAULT_NON_ORTH_DELTA)
+    for channel in multichannel.channels:
+        channel.use_snir = True
+        channel.snir_window = window_mode
+    return multichannel
+
+
+def _snir_cdf(values: Iterable[float], attempts: int) -> list[tuple[float, float]]:
+    filtered = [v for v in values if v is not None and math.isfinite(v)]
+    if attempts <= 0 or not filtered:
+        return []
+    minimum = math.floor(min(filtered))
+    maximum = math.ceil(max(filtered))
+    if minimum == maximum:
+        return [(float(minimum), len(filtered) / attempts)]
+    bin_width = 1.0
+    bin_edges = [minimum + i * bin_width for i in range(int((maximum - minimum) / bin_width) + 1)]
+    bin_edges.append(maximum)
+    counts = [0 for _ in range(len(bin_edges) - 1)]
+    for value in filtered:
+        index = min(int((value - minimum) / bin_width), len(counts) - 1)
+        counts[index] += 1
+    cdf: list[tuple[float, float]] = []
+    cumulative = 0
+    for edge, count in zip(bin_edges, counts):
+        cumulative += count
+        cdf.append((float(edge), cumulative / attempts))
+    return cdf
+
+
+def _global_stats(simulator: Simulator) -> dict[str, float]:
+    sent = sum(node.packets_sent for node in simulator.nodes)
+    attempts = sum(node.tx_attempted for node in simulator.nodes)
+    delivered = sum(node.rx_delivered for node in simulator.nodes)
+    collisions = sum(node.packets_collision for node in simulator.nodes)
+    der = delivered / sent if sent else 0.0
+    pdr = delivered / attempts if attempts else 0.0
+    return {
+        "sent": float(sent),
+        "attempts": float(attempts),
+        "delivered": float(delivered),
+        "collisions": float(collisions),
+        "der": der,
+        "pdr": pdr,
+    }
+
+
+def _run_single(window_mode: str) -> list[dict[str, object]]:
+    multichannel = _build_multichannel(window_mode)
+    simulator = Simulator(
+        num_nodes=NUM_NODES,
+        num_gateways=1,
+        area_size=5000.0,
+        transmission_mode="Random",
+        packet_interval=PACKET_INTERVAL_S,
+        first_packet_interval=PACKET_INTERVAL_S,
+        packets_to_send=PACKETS_PER_NODE,
+        duty_cycle=0.01,
+        mobility=False,
+        channels=multichannel,
+        channel_distribution="round-robin",
+        payload_size_bytes=PAYLOAD_BYTES,
+        flora_mode=True,
+        seed=1,
+    )
+    simulator.run()
+
+    stats = _global_stats(simulator)
+    events = list(getattr(simulator, "events_log", []) or [])
+    snir_values = [entry.get("snir_dB") for entry in events if "snir_dB" in entry]
+    cdf = _snir_cdf(snir_values, int(stats["sent"]))
+
+    rows: list[dict[str, object]] = []
+    for snir_db, probability in cdf:
+        rows.append(
+            {
+                "window": window_mode,
+                "snir_db": snir_db,
+                "cdf": probability,
+                "der": stats["der"],
+                "pdr": stats["pdr"],
+                "sent": int(stats["sent"]),
+                "delivered": int(stats["delivered"]),
+                "collisions": int(stats["collisions"]),
+            }
+        )
+    return rows
+
+
+def run_campaign() -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for mode, label in WINDOW_MODES:
+        for row in _run_single(mode):
+            row["window_label"] = label
+            rows.append(row)
+    return rows
+
+
+def write_csv(rows: Iterable[dict[str, object]], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf8") as csvfile:
+        writer = csv.DictWriter(
+            csvfile,
+            fieldnames=[
+                "window",
+                "window_label",
+                "snir_db",
+                "cdf",
+                "der",
+                "pdr",
+                "sent",
+                "delivered",
+                "collisions",
+            ],
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
+if __name__ == "__main__":
+    dataset = run_campaign()
+    write_csv(dataset, OUTPUT_PATH)
+    print(f"Résultats enregistrés dans {OUTPUT_PATH}")

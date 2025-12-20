@@ -292,6 +292,7 @@ class InterferenceTracker:
         alpha_isf: float = 0.0,
         fading_std: float = 0.0,
         exclude_event_id: int | None = None,
+        window_s: float | None = None,
     ) -> float:
         """Calcule l'interférence moyenne (hors bruit) sur l'intervalle donné."""
 
@@ -305,14 +306,44 @@ class InterferenceTracker:
             self.active.pop(key, None)
             return 0.0
 
-        total_power = timeline.total_power(
-            start_time,
-            end_time,
-            base_power=base_noise_mW,
-            target_sf=sf,
-            alpha_isf=alpha_isf,
-            exclude_event_id=exclude_event_id,
-        )
+        window = None if window_s is None else max(float(window_s), 0.0)
+        if window is not None and window > 0.0 and end_time > start_time:
+            window = min(window, end_time - start_time)
+            change_points = timeline.power_changes(
+                start_time,
+                end_time,
+                base_power=base_noise_mW,
+                target_sf=sf,
+                alpha_isf=alpha_isf,
+            )
+            candidates = [t for t in sorted(change_points) if t <= end_time - window]
+            if not candidates or candidates[0] > start_time:
+                candidates.insert(0, start_time)
+            last_start = end_time - window
+            if last_start not in candidates:
+                candidates.append(last_start)
+            total_power = base_noise_mW
+            for t0 in candidates:
+                t1 = min(t0 + window, end_time)
+                avg_power = timeline.total_power(
+                    t0,
+                    t1,
+                    base_power=base_noise_mW,
+                    target_sf=sf,
+                    alpha_isf=alpha_isf,
+                    exclude_event_id=exclude_event_id,
+                )
+                if avg_power > total_power:
+                    total_power = avg_power
+        else:
+            total_power = timeline.total_power(
+                start_time,
+                end_time,
+                base_power=base_noise_mW,
+                target_sf=sf,
+                alpha_isf=alpha_isf,
+                exclude_event_id=exclude_event_id,
+            )
         interference = max(total_power - base_noise_mW, 0.0)
         if fading_std > 0.0:
             fading_db = float(self.rng.normal(0.0, fading_std))
@@ -1603,6 +1634,11 @@ class Simulator:
                 noise_dBm = node.channel.last_noise_dBm
                 noise_lin = 10 ** (noise_dBm / 10.0)
                 freq_hz = getattr(node.channel, "last_freq_hz", node.channel.frequency_hz)
+                window_s = None
+                if hasattr(node.channel, "snir_window_duration"):
+                    window_s = node.channel.snir_window_duration(
+                        sf, end_time - time
+                    )
                 interference_mw = self._interference_tracker.total_interference(
                     gw.id,
                     freq_hz,
@@ -1612,6 +1648,7 @@ class Simulator:
                     base_noise_mW=noise_lin,
                     alpha_isf=getattr(node.channel, "alpha_isf", 0.0),
                     fading_std=getattr(node.channel, "snir_fading_std", 0.0),
+                    window_s=window_s,
                 )
                 if interference_mw < 0.0:
                     interference_mw = 0.0
