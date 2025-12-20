@@ -936,7 +936,11 @@ def _plot_rolling_metric_for_scenario(
     title_metric = label_map.get(metric, metric)
     ax.set_title(f"{title_metric} moyenne glissante – {scenario} ({window_label})")
     if plotted:
-        ax.legend(loc="best")
+        legend = ax.legend(loc="best", title=window_label)
+        if legend is not None:
+            legend.set_title(window_label)
+            legend.get_title().set_text(window_label)
+            legend.get_title().set_fontsize("small")
     else:
         ax.text(
             0.5,
