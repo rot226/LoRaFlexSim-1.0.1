@@ -61,6 +61,22 @@ def _mean_std(values: Sequence[float]) -> Tuple[float, float]:
     return fmean(values), pstdev(values)
 
 
+def _expected_snir_state_from_path(path: Path) -> str | None:
+    lower_name = path.name.lower()
+    if lower_name.endswith("_snir-on.csv"):
+        return STATE_LABELS.get(True)
+    if lower_name.endswith("_snir-off.csv"):
+        return STATE_LABELS.get(False)
+
+    for part in path.parts:
+        normalized = part.lower().replace("-", "_")
+        if "snir_on" in normalized:
+            return STATE_LABELS.get(True)
+        if "snir_off" in normalized:
+            return STATE_LABELS.get(False)
+    return None
+
+
 def _load_records(results_dir: Path, strict_snir: bool) -> Tuple[List[Record], List[int]]:
     records: List[Record] = []
     cluster_ids: set[int] = set()
@@ -79,7 +95,19 @@ def _load_records(results_dir: Path, strict_snir: bool) -> Tuple[List[Record], L
                         cluster_ids.add(cid)
                         cluster_pdr[cid] = _parse_float(value)
 
-                snir_state = row.get("snir_state")
+                expected_state = _expected_snir_state_from_path(csv_path)
+
+                snir_state = (row.get("snir_state") or "").strip() or None
+                if not snir_state:
+                    raise ValueError(
+                        "Le champ snir_state est manquant dans "
+                        f"{csv_path}; ajoutez la colonne avant d'agréger."
+                    )
+                if expected_state and snir_state != expected_state:
+                    raise ValueError(
+                        f"Le fichier {csv_path} déclare snir_state={snir_state} "
+                        f"mais le suffixe implique {expected_state}."
+                    )
                 snir_flag = _parse_bool(row.get("with_snir"))
                 if snir_flag is None:
                     snir_flag = _parse_bool(row.get("use_snir"))
@@ -88,8 +116,11 @@ def _load_records(results_dir: Path, strict_snir: bool) -> Tuple[List[Record], L
                 if snir_flag is None:
                     snir_flag = _detect_snir(row, csv_path)
 
-                if not snir_state and snir_flag is not None:
-                    snir_state = STATE_LABELS.get(snir_flag)
+                if snir_flag is not None and snir_state != STATE_LABELS.get(snir_flag):
+                    raise ValueError(
+                        f"Le fichier {csv_path} mélange snir_state={snir_state} "
+                        "et un indicateur SNIR incompatible."
+                    )
                 if strict_snir and snir_flag is None:
                     raise ValueError(
                         f"Impossible de déterminer l'état SNIR pour {csv_path}; utilisez des fichiers explicites."
