@@ -22,7 +22,8 @@ dependencies = [
   "plotly>=5.4",
   "panel>=0.13",
   "fastapi>=0.88",
-  "uvicorn>=0.20"
+  "uvicorn>=0.20",
+  "Pillow>=10.0"
 ]
 
 [tool.setuptools.packages.find]
