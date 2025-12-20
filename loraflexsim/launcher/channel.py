@@ -216,6 +216,7 @@ class Channel:
         snir_fading_std: float | None = None,
         marginal_snir_margin_db: float = 1.5,
         marginal_snir_drop_prob: float = 0.25,
+        snir_window: str | float | None = None,
         use_flora_curves: bool = False,
         tx_current_a: float = 0.0,
         rx_current_a: float = 0.0,
@@ -336,6 +337,12 @@ class Channel:
         :param use_snir: Si ``True``, applique le calcul SNIR en tenant compte
             des interférences explicites. Sinon, le calcul SNR historique est
             conservé.
+        :param snir_window: Fenêtre utilisée pour évaluer l'interférence
+            moyenne lorsque ``use_snir`` est activé. La valeur ``None`` ou
+            ``"packet"`` conserve le comportement historique (moyenne sur
+            l'airtime complet). ``"preamble"`` limite la mesure à la durée du
+            préambule, ``"symbol"`` à un seul symbole ou bien une durée en
+            secondes peut être fournie.
         :param environment: Chaîne optionnelle pour charger un preset
             ("urban", "suburban", "rural", "rural_long_range", "flora",
             "flora_hata" ou "flora_oulu").
@@ -536,6 +543,7 @@ class Channel:
         self.rssi_offset_dB = rssi_offset_dB
         self.snr_offset_dB = snr_offset_dB
         self.processing_gain = bool(processing_gain)
+        self.snir_window = snir_window
 
         # Paramètres LoRa (BW 125 kHz, CR 4/5, préambule 8, CRC activé)
         self.bandwidth = bandwidth
@@ -900,6 +908,43 @@ class Channel:
         self.last_rssi_dBm = rssi
         self.last_filter_att_dB = attenuation
         return rssi, snr
+
+    def snir_window_duration(
+        self, sf: int | None, packet_duration: float
+    ) -> float | None:
+        """Retourne la fenêtre (s) à utiliser pour évaluer l'interférence SNIR."""
+
+        mode = self.snir_window
+        if mode is None:
+            return None
+
+        if isinstance(mode, (int, float)):
+            window = max(float(mode), 0.0)
+            if window <= 0.0:
+                return None
+            return min(window, max(packet_duration, 0.0))
+
+        normalized = str(mode).strip().lower()
+        if normalized in {"packet", "full", "full_packet", "full-packet"}:
+            return None
+
+        bw = self.bandwidth if self.bandwidth > 0 else 1.0
+        symbol_time = (2 ** sf) / bw if sf is not None else 1.0 / bw
+
+        if normalized in {"symbol", "symbols", "per_symbol"}:
+            return min(symbol_time, max(packet_duration, 0.0))
+
+        if normalized in {"preamble", "preamble_only", "preamble-only"}:
+            duration = max(symbol_time, symbol_time * self.preamble_symbols)
+            return min(duration, max(packet_duration, 0.0))
+
+        warnings.warn(
+            "snir_window inconnu : %s (valeurs acceptées: packet, preamble, symbol ou durée en secondes)"
+            % mode,
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return None
 
     def compute_snir(
         self,
