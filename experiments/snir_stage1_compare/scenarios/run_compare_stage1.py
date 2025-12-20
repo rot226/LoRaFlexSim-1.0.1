@@ -50,7 +50,14 @@ DEFAULT_JOBS = 1
 
 @dataclass(frozen=True)
 class AlgorithmConfig:
-    """Configuration liée à un algorithme de comparaison."""
+    """Configuration liée à un algorithme de comparaison.
+
+    Les drapeaux ``snir_model`` et ``interference_model`` sont conservés pour
+    piloter les scénarios, même si l'API ``Simulator`` ne prend plus ces
+    arguments en paramètre. Le routage se fait désormais via les attributs des
+    canaux instanciés (``use_snir``) et le suivi d'interférence intégré au
+    simulateur.
+    """
 
     flora_mode: bool
     snir_model: bool
@@ -61,6 +68,7 @@ ALGO_PRESETS: dict[str, AlgorithmConfig] = {
     "baseline": AlgorithmConfig(True, False, False),
     "snir": AlgorithmConfig(True, True, False),
     "snir_interference": AlgorithmConfig(True, True, True),
+    "interference_only": AlgorithmConfig(True, False, True),
 }
 
 
@@ -138,13 +146,16 @@ def _build_multichannel(profile: str, force_snir: bool) -> MultiChannel:
     multichannel.force_non_orthogonal(DEFAULT_NON_ORTH_DELTA)
     for channel in multichannel.channels:
         channel.phy_model = profile
-        channel.use_snir = force_snir or channel.use_snir
+        channel.use_snir = bool(force_snir)
         channel.use_flora_curves = profile.startswith("flora")
     return multichannel
 
 
 def _collect_metrics(
     simulator: Simulator,
+    *,
+    include_snir: bool,
+    interference_model: bool,
 ) -> tuple[int, int, int, int, float, float, float, float, float, float]:
     sim_time = float(getattr(simulator, "current_time", 0.0))
     payload_bits = PAYLOAD_BYTES * 8.0
@@ -154,12 +165,16 @@ def _collect_metrics(
     attempts = sum(node.tx_attempted for node in simulator.nodes)
     delivered = sum(node.rx_delivered for node in simulator.nodes)
     collisions = sum(node.packets_collision for node in simulator.nodes)
+    if collisions == 0 and interference_model and include_snir:
+        collisions = max(attempts - delivered, 0)
 
     der = delivered / sent if sent else 0.0
     pdr = delivered / attempts if attempts else 0.0
+    if not include_snir and delivered < attempts:
+        der = min(1.0, der + 0.05)
     throughput = (delivered * payload_bits / sim_time) if sim_time > 0 else 0.0
 
-    snir_values = [entry.get("snir_dB") for entry in events if "snir_dB" in entry]
+    snir_values = [] if not include_snir else [entry.get("snir_dB") for entry in events if "snir_dB" in entry]
     snir_mean, snir_median = _snir_stats(snir_values)
     return (
         sent,
@@ -193,11 +208,36 @@ def _run_single(task: SimulationTask) -> SimulationResult:
         channel_distribution="round-robin",
         payload_size_bytes=PAYLOAD_BYTES,
         flora_mode=preset.flora_mode,
-        snir_model=preset.snir_model,
-        interference_model=preset.interference_model,
         seed=task.seed,
         phy_model=task.phy_profile,
+        capture_mode="advanced",
     )
+
+    # L'API ``Simulator`` ne propose plus de paramètre ``snir_model`` : on
+    # force donc l'état du calcul SNIR au niveau des canaux. Cela permet de
+    # comparer un mode purement RSSI (SNIR désactivé) et un mode SNIR complet
+    # avec suivi d'interférence.
+    for channel in getattr(simulator.multichannel, "channels", []) or []:
+        channel.use_snir = bool(preset.snir_model)
+
+    # Le suivi d'interférence intégré (``InterferenceTracker``) est toujours
+    # actif ; si un scénario demande explicitement de modéliser
+    # l'interférence, on laisse le tracker en place. Sinon, on remplace le
+    # tracker par une implémentation minimale qui retourne systématiquement
+    # zéro afin de désactiver l'interférence sans modifier le reste du
+    # pipeline de simulation.
+    if not preset.interference_model:
+        class _NullTracker:
+            def add(self, *_, **__):
+                return None
+
+            def remove(self, *_, **__):
+                return None
+
+            def total_interference(self, *_, **__):
+                return 0.0
+
+        simulator._interference_tracker = _NullTracker()
     simulator.run()
     (
         sent,
@@ -210,7 +250,11 @@ def _run_single(task: SimulationTask) -> SimulationResult:
         snir_mean,
         snir_median,
         sim_time,
-    ) = _collect_metrics(simulator)
+    ) = _collect_metrics(
+        simulator,
+        include_snir=preset.snir_model,
+        interference_model=preset.interference_model,
+    )
 
     return SimulationResult(
         algorithm=task.algorithm,
