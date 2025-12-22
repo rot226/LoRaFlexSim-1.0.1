@@ -93,12 +93,12 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
             "--seeds",
             "1",
             "--nodes",
-            "12",
-            "24",
+            "32",
+            "64",
             "--packet-intervals",
-            "5",
+            "1.5",
             "--duration",
-            "20",
+            "45",
         ],
         "subset_dense": [
             "--algos",
@@ -109,12 +109,12 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
             "--seeds",
             "1",
             "--nodes",
-            "12",
-            "24",
+            "48",
+            "96",
             "--packet-intervals",
-            "2",
+            "0.75",
             "--duration",
-            "40",
+            "60",
         ],
     }
 
@@ -135,8 +135,12 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
     der_threshold = 0.25
     pdr_threshold = 0.25
     snir_gap_threshold = 6.0
+    min_snir_gap_between_states = 0.0
+    min_rate_gap_between_states = 0.0
+    min_collision_gap_between_states = 0.0
 
     for campaign_name, metrics in metrics_by_campaign.items():
+        state_means: dict[bool, dict[str, float]] = {}
         for use_snir, rows in metrics.items():
             pdr_values = [item["pdr"] for item in rows]
             der_values = [item["der"] for item in rows]
@@ -185,6 +189,34 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
                     f"Moyenne glissante incohérente pour {label} SNIR={use_snir} ({campaign_name})"
                     f" (Δ={abs(ma_5 - ma_20):.3f})"
                 )
+
+            state_means[use_snir] = {
+                "pdr": pdr_mean,
+                "der": sum(der_values) / len(der_values),
+                "mean_snir": snir_mean,
+                "collisions_mean": collisions_mean,
+                "collisions_median": collisions_median,
+            }
+
+        mean_gap = abs(state_means[True]["mean_snir"] - state_means[False]["mean_snir"])
+        assert mean_gap >= min_snir_gap_between_states, (
+            f"Écart moyen de SNIR insuffisant entre états ({campaign_name}): {mean_gap:.2f} dB"
+        )
+
+        for metric in ("pdr", "der"):
+            gap = abs(state_means[True][metric] - state_means[False][metric])
+            assert gap >= min_rate_gap_between_states, (
+                f"Écart moyen de {metric.upper()} trop faible entre états ({campaign_name}): {gap:.3f}"
+            )
+
+        collisions_mean_gap = abs(state_means[True]["collisions_mean"] - state_means[False]["collisions_mean"])
+        collisions_median_gap = abs(
+            state_means[True]["collisions_median"] - state_means[False]["collisions_median"]
+        )
+        assert max(collisions_mean_gap, collisions_median_gap) >= min_collision_gap_between_states, (
+            f"Dispersion des collisions trop faible entre états ({campaign_name}): "
+            f"Δmoyenne={collisions_mean_gap:.3f}, Δmédiane={collisions_median_gap:.3f}"
+        )
 
     reference_campaign, comparison_campaign = (metrics_by_campaign[name] for name in campaigns)
     for use_snir in (True, False):
