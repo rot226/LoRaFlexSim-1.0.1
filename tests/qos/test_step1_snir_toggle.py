@@ -15,8 +15,9 @@ if str(SCRIPTS_DIR) not in sys.path:
 import run_step1_matrix as step1_matrix
 
 
-MIN_SNIR_DELTA_DB = 0.0
-MIN_DER_PDR_DELTA = 0.0
+MIN_SNIR_DELTA_DB = 4.0
+MIN_DER_PDR_DELTA = 0.06
+MIN_COLLISION_DELTA = 5
 
 
 @pytest.mark.slow
@@ -33,11 +34,11 @@ def test_step1_snir_toggle_generates_distinct_csv(tmp_path: Path) -> None:
         "1",
         "2",
         "--nodes",
-        "150",
+        "300",
         "--packet-intervals",
-        "1",
+        "0.1",
         "--duration",
-        "10",
+        "60",
         "--results-dir",
         str(results_dir),
     ]
@@ -51,6 +52,7 @@ def test_step1_snir_toggle_generates_distinct_csv(tmp_path: Path) -> None:
     mean_snir_by_state: dict[bool, list[float]] = {True: [], False: []}
     der_by_state: dict[bool, list[float]] = {True: [], False: []}
     pdr_by_state: dict[bool, list[float]] = {True: [], False: []}
+    collisions_by_state: dict[bool, list[float]] = {True: [], False: []}
 
     for path in csv_paths:
         assert path.name.endswith(("_snir-on.csv", "_snir-off.csv")), path.name
@@ -69,6 +71,7 @@ def test_step1_snir_toggle_generates_distinct_csv(tmp_path: Path) -> None:
 
         der_by_state[use_snir].append(float(row["DER"]))
         pdr_by_state[use_snir].append(float(row["PDR"]))
+        collisions_by_state[use_snir].append(float(row["collisions"]))
 
     assert snir_states == {"snir_on", "snir_off"}
 
@@ -80,6 +83,9 @@ def test_step1_snir_toggle_generates_distinct_csv(tmp_path: Path) -> None:
     avg_der_off = sum(der_by_state[False]) / len(der_by_state[False])
     avg_pdr_on = sum(pdr_by_state[True]) / len(pdr_by_state[True])
     avg_pdr_off = sum(pdr_by_state[False]) / len(pdr_by_state[False])
+    avg_collisions_on = sum(collisions_by_state[True]) / len(collisions_by_state[True])
+    avg_collisions_off = sum(collisions_by_state[False]) / len(collisions_by_state[False])
 
     assert abs(avg_der_on - avg_der_off) >= MIN_DER_PDR_DELTA
     assert abs(avg_pdr_on - avg_pdr_off) >= MIN_DER_PDR_DELTA
+    assert abs(avg_collisions_on - avg_collisions_off) >= MIN_COLLISION_DELTA
