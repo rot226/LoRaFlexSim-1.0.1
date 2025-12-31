@@ -6,7 +6,7 @@ import argparse
 import csv
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 try:  # pragma: no cover - dépend de l'environnement de test
     import matplotlib.pyplot as plt  # type: ignore
@@ -37,6 +37,18 @@ def _parse_float(value: str | None, default: float = 0.0) -> float:
         return float(value)
     except ValueError:
         return default
+
+
+def _maybe_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if text == "":
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
 
 
 def _parse_bool(value: Any) -> bool | None:
@@ -90,6 +102,7 @@ def _load_step1_records(results_dir: Path) -> List[Dict[str, Any]]:
                         cluster_id = int(key.split("__")[-1])
                         cluster_targets[cluster_id] = _parse_float(value)
 
+                snir_candidate = row.get("snir_mean") or row.get("SNIR") or row.get("snir")
                 record: Dict[str, Any] = {
                     "csv_path": csv_path,
                     "algorithm": row.get("algorithm", csv_path.parent.name),
@@ -97,6 +110,7 @@ def _load_step1_records(results_dir: Path) -> List[Dict[str, Any]]:
                     "packet_interval_s": float(row.get("packet_interval_s", "0") or 0),
                     "PDR": _parse_float(row.get("PDR")),
                     "DER": _parse_float(row.get("DER")),
+                    "snir_mean": _maybe_float(snir_candidate),
                     "collisions": int(float(row.get("collisions", "0") or 0)),
                     "collisions_snir": int(float(row.get("collisions_snir", "0") or 0)),
                     "jain_index": _parse_float(row.get("jain_index")),
@@ -119,6 +133,22 @@ def _snir_color(state: str | None) -> str:
     return SNIR_COLORS.get(state or "snir_unknown", SNIR_COLORS["snir_unknown"])
 
 
+def _render_snir_variants(
+    render: Any,
+    *,
+    on_title: str,
+    off_title: str,
+    mixed_title: str,
+) -> None:
+    variants = [
+        (["snir_on"], "_snir-on", on_title),
+        (["snir_off"], "_snir-off", off_title),
+        (["snir_on", "snir_off", "snir_unknown"], "_snir-mixed", mixed_title),
+    ]
+    for states, suffix, title in variants:
+        render(states, suffix, title)
+
+
 def _format_axes(ax: Any, integer_x: bool = False) -> None:
     if plt is None:
         return
@@ -138,6 +168,18 @@ def _format_axes(ax: Any, integer_x: bool = False) -> None:
         line.set_linewidth(2.0)
         line.set_markersize(6.0)
         line.set_markeredgewidth(0.8)
+
+
+def _metric_error_bounds(record: Mapping[str, Any], metric: str, value: float) -> Tuple[float, float] | None:
+    for base in {metric, metric.lower(), metric.upper()}:
+        ci_low = _maybe_float(record.get(f"{base}_ci_low"))
+        ci_high = _maybe_float(record.get(f"{base}_ci_high"))
+        if ci_low is not None and ci_high is not None:
+            return max(0.0, value - ci_low), max(0.0, ci_high - value)
+        std = _maybe_float(record.get(f"{base}_std"))
+        if std is not None:
+            return float(std), float(std)
+    return None
 
 
 def _load_summary_records(summary_path: Path, forced_state: str | None = None) -> List[Dict[str, Any]]:
@@ -207,47 +249,104 @@ def _plot_global_metric(
         return
     periods = sorted({r["packet_interval_s"] for r in records})
     algorithms = sorted({r["algorithm"] for r in records})
-    snir_states = sorted({r.get("snir_state") for r in records}, key=str)
-    for state in snir_states:
-        state_records = [r for r in records if r.get("snir_state") == state]
-        if not state_records:
-            continue
-        label_state = _snir_label(state)
-        suffix_state = state or "snir_unknown"
+    error_metrics = {"PDR", "DER", "snir_mean", "SNIR"}
+
+    def render(states: List[str], suffix: str, title: str) -> None:
         for period in periods:
             fig, ax = plt.subplots(figsize=(6, 4))
-            for algo_idx, algorithm in enumerate(algorithms):
-                data = [
-                    r
-                    for r in state_records
-                    if r["algorithm"] == algorithm and r["packet_interval_s"] == period
-                ]
-                data.sort(key=lambda item: item["num_nodes"])
-                xs = [item["num_nodes"] for item in data]
-                ys = [item.get(metric, 0.0) for item in data]
-                if xs:
+            for state in states:
+                state_records = [r for r in records if r.get("snir_state") == state]
+                if not state_records:
+                    continue
+                for algo_idx, algorithm in enumerate(algorithms):
+                    data = [
+                        r
+                        for r in state_records
+                        if r["algorithm"] == algorithm and r["packet_interval_s"] == period
+                    ]
+                    data.sort(key=lambda item: item["num_nodes"])
+                    xs: List[int] = []
+                    ys: List[float] = []
+                    used_items: List[Dict[str, Any]] = []
+                    for item in data:
+                        raw_value = item.get(metric)
+                        if raw_value is None:
+                            continue
+                        xs.append(item["num_nodes"])
+                        ys.append(_parse_float(raw_value))
+                        used_items.append(item)
+                    if not xs:
+                        continue
                     marker = MARKER_CYCLE[algo_idx % len(MARKER_CYCLE)]
-                    ax.plot(
-                        xs,
-                        ys,
-                        marker=marker,
-                        markersize=5.5,
-                        linewidth=2,
-                        color=_snir_color(state),
-                        label=algorithm,
+                    label = (
+                        f"{algorithm} ({_snir_label(state)})"
+                        if len(states) > 1
+                        else algorithm
                     )
+                    if metric in error_metrics:
+                        lower: List[float] = []
+                        upper: List[float] = []
+                        for item, value in zip(used_items, ys):
+                            error = _metric_error_bounds(item, metric, value)
+                            if error is None:
+                                lower.append(float("nan"))
+                                upper.append(float("nan"))
+                            else:
+                                low, high = error
+                                lower.append(low)
+                                upper.append(high)
+                        has_errors = any(not (val != val) and val > 0 for val in lower + upper)
+                        if has_errors:
+                            ax.errorbar(
+                                xs,
+                                ys,
+                                yerr=[lower, upper],
+                                marker=marker,
+                                markersize=5.5,
+                                linewidth=2,
+                                color=_snir_color(state),
+                                label=label,
+                                capsize=4,
+                            )
+                        else:
+                            ax.plot(
+                                xs,
+                                ys,
+                                marker=marker,
+                                markersize=5.5,
+                                linewidth=2,
+                                color=_snir_color(state),
+                                label=label,
+                            )
+                    else:
+                        ax.plot(
+                            xs,
+                            ys,
+                            marker=marker,
+                            markersize=5.5,
+                            linewidth=2,
+                            color=_snir_color(state),
+                            label=label,
+                        )
             ax.set_xlabel("Nombre de nœuds")
             ax.set_ylabel(ylabel)
             title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
-            ax.set_title(f"{ylabel} – {label_state} – période {title_period} s")
+            ax.set_title(f"{title} – période {title_period} s")
             _format_axes(ax, integer_x=True)
             if ax.get_legend_handles_labels()[0]:
                 ax.legend()
             figures_dir.mkdir(parents=True, exist_ok=True)
-            output = figures_dir / f"step1_{filename_prefix}_{suffix_state}_tx_{title_period}.png"
+            output = figures_dir / f"step1_{filename_prefix}{suffix}_tx_{title_period}.png"
             fig.tight_layout()
             fig.savefig(output, dpi=150)
             plt.close(fig)
+
+    _render_snir_variants(
+        render,
+        on_title=f"{ylabel} – {_snir_label('snir_on')}",
+        off_title=f"{ylabel} – {_snir_label('snir_off')}",
+        mixed_title=f"{ylabel} – SNIR mixte",
+    )
 
 
 def _plot_summary_bars(records: List[Dict[str, Any]], figures_dir: Path) -> None:
@@ -257,6 +356,7 @@ def _plot_summary_bars(records: List[Dict[str, Any]], figures_dir: Path) -> None
     metrics = {
         "PDR": "PDR global",
         "DER": "DER global",
+        "snir_mean": "SNIR moyen (dB)",
         "collisions": "Collisions",
         "collisions_snir": "Collisions (SNIR)",
         "jain_index": "Indice de Jain",
@@ -277,6 +377,8 @@ def _plot_summary_bars(records: List[Dict[str, Any]], figures_dir: Path) -> None
             continue
 
         for metric, ylabel in metrics.items():
+            if not any(f"{metric}_mean" in r or metric in r for r in filtered):
+                continue
             fig, ax = plt.subplots(figsize=(10, 5))
             positions = list(range(len(combinations)))
             width = 0.2 if len(snir_states) > 0 else 0.4
@@ -378,15 +480,9 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
         return
     periods = sorted({r["packet_interval_s"] for r in records})
     algorithms = sorted({r["algorithm"] for r in records})
-    snir_states = sorted({r.get("snir_state") for r in records}, key=str)
-    for state in snir_states:
-        state_records = [r for r in records if r.get("snir_state") == state]
-        if not state_records:
-            continue
-        label_state = _snir_label(state)
-        suffix_state = state or "snir_unknown"
+    def render(states: List[str], suffix: str, title: str) -> None:
         for period in periods:
-            filtered = [r for r in state_records if r["packet_interval_s"] == period]
+            filtered = [r for r in records if r["packet_interval_s"] == period and r.get("snir_state") in states]
             if not filtered:
                 continue
             fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 4), sharey=True)
@@ -394,28 +490,35 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
                 axes = [axes]
             for idx, cluster_id in enumerate(clusters):
                 ax = axes[idx]
-                for algo_idx, algorithm in enumerate(algorithms):
-                    algo_records = [r for r in filtered if r["algorithm"] == algorithm]
-                    algo_records.sort(key=lambda item: item["num_nodes"])
-                    xs: List[int] = []
-                    ys: List[float] = []
-                    for item in algo_records:
-                        value = item.get("cluster_pdr", {}).get(cluster_id)
-                        if value is None:
-                            continue
-                        xs.append(item["num_nodes"])
-                        ys.append(value)
-                    if xs:
-                        marker = MARKER_CYCLE[algo_idx % len(MARKER_CYCLE)]
-                        ax.plot(
-                            xs,
-                            ys,
-                            marker=marker,
-                            markersize=5.5,
-                            linewidth=2,
-                            color=_snir_color(state),
-                            label=algorithm,
-                        )
+                for state in states:
+                    state_records = [r for r in filtered if r.get("snir_state") == state]
+                    for algo_idx, algorithm in enumerate(algorithms):
+                        algo_records = [r for r in state_records if r["algorithm"] == algorithm]
+                        algo_records.sort(key=lambda item: item["num_nodes"])
+                        xs: List[int] = []
+                        ys: List[float] = []
+                        for item in algo_records:
+                            value = item.get("cluster_pdr", {}).get(cluster_id)
+                            if value is None:
+                                continue
+                            xs.append(item["num_nodes"])
+                            ys.append(value)
+                        if xs:
+                            marker = MARKER_CYCLE[algo_idx % len(MARKER_CYCLE)]
+                            label = (
+                                f"{algorithm} ({_snir_label(state)})"
+                                if len(states) > 1
+                                else algorithm
+                            )
+                            ax.plot(
+                                xs,
+                                ys,
+                                marker=marker,
+                                markersize=5.5,
+                                linewidth=2,
+                                color=_snir_color(state),
+                                label=label,
+                            )
                 target = None
                 for item in filtered:
                     target = item.get("cluster_targets", {}).get(cluster_id)
@@ -433,12 +536,19 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
             if handles:
                 fig.legend(handles, labels, loc="upper center", ncol=min(len(labels), 4))
             title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
-            fig.suptitle(f"PDR par cluster – {label_state} – période {title_period} s")
+            fig.suptitle(f"{title} – période {title_period} s")
             figures_dir.mkdir(parents=True, exist_ok=True)
-            output = figures_dir / f"step1_cluster_pdr_{suffix_state}_tx_{title_period}.png"
+            output = figures_dir / f"step1_cluster_pdr{suffix}_tx_{title_period}.png"
             fig.tight_layout(rect=(0, 0, 1, 0.92))
             fig.savefig(output, dpi=150)
             plt.close(fig)
+
+    _render_snir_variants(
+        render,
+        on_title="PDR par cluster – SNIR activé",
+        off_title="PDR par cluster – SNIR désactivé",
+        mixed_title="PDR par cluster – SNIR mixte",
+    )
 
 
 def _select_metric_value(record: Mapping[str, Any], metric: str) -> float:
@@ -472,6 +582,7 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
     metrics = {
         "PDR": "PDR global",
         "DER": "DER global",
+        "snir_mean": "SNIR moyen (dB)",
         "collisions": "Collisions",
         "collisions_snir": "Collisions (SNIR)",
         "jain_index": "Indice de Jain",
@@ -490,36 +601,92 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
             if not period_records:
                 continue
             for metric, ylabel in metrics.items():
-                fig, ax = plt.subplots(figsize=(7, 4.5))
-                for state in ("snir_on", "snir_off"):
-                    state_records = [r for r in period_records if (r.get("snir_state") or "snir_unknown") == state]
-                    state_records.sort(key=lambda item: _parse_float(item.get("num_nodes")))
-                    xs = [_parse_float(item.get("num_nodes")) for item in state_records]
-                    ys = [_select_metric_value(item, metric) for item in state_records]
-                    if xs:
-                        ax.plot(
-                            xs,
-                            ys,
-                            marker="o",
-                            markersize=6,
-                            linewidth=2,
-                            color=_snir_color(state),
-                            label=_snir_label(state),
-                        )
+                if not any(f"{metric}_mean" in r or metric in r for r in period_records):
+                    continue
+                error_metrics = {"PDR", "DER", "snir_mean", "SNIR"}
 
-                ax.set_xlabel("Nombre de nœuds")
-                ax.set_ylabel(ylabel)
-                period_label = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
-                ax.set_title(f"{ylabel} – {algorithm} – période {period_label} s")
-                _format_axes(ax, integer_x=True)
-                if ax.get_legend_handles_labels()[0]:
-                    ax.legend()
+                def render(states: List[str], suffix: str, title: str) -> None:
+                    fig, ax = plt.subplots(figsize=(7, 4.5))
+                    for state in states:
+                        state_records = [
+                            r
+                            for r in period_records
+                            if (r.get("snir_state") or "snir_unknown") == state
+                        ]
+                        state_records.sort(key=lambda item: _parse_float(item.get("num_nodes")))
+                        xs = [_parse_float(item.get("num_nodes")) for item in state_records]
+                        ys = [_select_metric_value(item, metric) for item in state_records]
+                        if not xs:
+                            continue
+                        label = _snir_label(state) if len(states) > 1 else _snir_label(state)
+                        if metric in error_metrics:
+                            lower: List[float] = []
+                            upper: List[float] = []
+                            for item, value in zip(state_records, ys):
+                                error = _metric_error_bounds(item, metric, value)
+                                if error is None:
+                                    lower.append(float("nan"))
+                                    upper.append(float("nan"))
+                                else:
+                                    low, high = error
+                                    lower.append(low)
+                                    upper.append(high)
+                            has_errors = any(not (val != val) and val > 0 for val in lower + upper)
+                            if has_errors:
+                                ax.errorbar(
+                                    xs,
+                                    ys,
+                                    yerr=[lower, upper],
+                                    marker="o",
+                                    markersize=6,
+                                    linewidth=2,
+                                    color=_snir_color(state),
+                                    label=label,
+                                    capsize=4,
+                                )
+                            else:
+                                ax.plot(
+                                    xs,
+                                    ys,
+                                    marker="o",
+                                    markersize=6,
+                                    linewidth=2,
+                                    color=_snir_color(state),
+                                    label=label,
+                                )
+                        else:
+                            ax.plot(
+                                xs,
+                                ys,
+                                marker="o",
+                                markersize=6,
+                                linewidth=2,
+                                color=_snir_color(state),
+                                label=label,
+                            )
 
-                figures_dir.mkdir(parents=True, exist_ok=True)
-                output = figures_dir / f"algo_{algorithm}_{metric.lower()}_snir-compare_tx_{period_label}.png"
-                fig.tight_layout()
-                fig.savefig(output, dpi=200)
-                plt.close(fig)
+                    ax.set_xlabel("Nombre de nœuds")
+                    ax.set_ylabel(ylabel)
+                    period_label = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
+                    ax.set_title(f"{title} – {algorithm} – période {period_label} s")
+                    _format_axes(ax, integer_x=True)
+                    if ax.get_legend_handles_labels()[0]:
+                        ax.legend()
+
+                    figures_dir.mkdir(parents=True, exist_ok=True)
+                    output = figures_dir / (
+                        f"algo_{algorithm}_{metric.lower()}_snir-compare{suffix}_tx_{period_label}.png"
+                    )
+                    fig.tight_layout()
+                    fig.savefig(output, dpi=200)
+                    plt.close(fig)
+
+                _render_snir_variants(
+                    render,
+                    on_title=f"{ylabel} – SNIR activé",
+                    off_title=f"{ylabel} – SNIR désactivé",
+                    mixed_title=f"{ylabel} – SNIR mixte",
+                )
 
 
 def generate_step1_figures(
@@ -558,6 +725,8 @@ def generate_step1_figures(
         _plot_global_metric(records, "collisions_snir", "Collisions (SNIR)", "collisions_snir", output_dir)
         _plot_global_metric(records, "jain_index", "Indice de Jain", "jain_index", output_dir)
         _plot_global_metric(records, "throughput_bps", "Débit agrégé (bps)", "throughput", output_dir)
+        if any(r.get("snir_mean") is not None for r in records):
+            _plot_global_metric(records, "snir_mean", "SNIR moyen (dB)", "snir_mean", output_dir)
         comparison_records = records
 
     if compare_snir:
