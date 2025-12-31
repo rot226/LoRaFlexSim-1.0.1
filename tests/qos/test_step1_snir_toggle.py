@@ -63,6 +63,9 @@ def test_step1_snir_toggle_generates_distinct_csv(tmp_path: Path) -> None:
         use_snir = row["use_snir"] == "True"
         snir_state = row["snir_state"]
         snir_states.add(snir_state)
+        expected_state = "snir_on" if use_snir else "snir_off"
+        assert snir_state == expected_state
+        assert row["snir_state_effective"] == expected_state
 
         histogram_source = row["snir_histogram_json"]
         histogram = json.loads(histogram_source)
