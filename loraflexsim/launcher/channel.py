@@ -1013,6 +1013,24 @@ class Channel:
 
         return rssi_dBm, snr_dB, snir_dB, noise_dBm
 
+    @staticmethod
+    def estimate_snir_db(
+        rssi_dBm: float | None,
+        noise_dBm: float | None,
+        interference_mW: float | None = None,
+    ) -> float | None:
+        """Estime le SNIR (dB) à partir du RSSI, du bruit et de l'interférence."""
+
+        if rssi_dBm is None or noise_dBm is None:
+            return None
+        interference = max(float(interference_mW or 0.0), 0.0)
+        noise_mW = 10 ** (noise_dBm / 10.0)
+        total_noise = noise_mW + interference
+        if total_noise <= 0.0:
+            return float("inf")
+        signal_mW = 10 ** (rssi_dBm / 10.0)
+        return 10 * math.log10(signal_mW / total_noise)
+
     # ------------------------------------------------------------------
     def qos_path_gain(self, distance: float) -> float:
         """Return :math:`g(d)` for the QoS radio model."""
