@@ -218,6 +218,9 @@ class Channel:
         marginal_snir_drop_prob: float = 0.25,
         snir_window: str | float | None = None,
         use_flora_curves: bool = False,
+        residual_collision_prob: float | None = None,
+        residual_collision_load_scale: float = 4.0,
+        snir_off_noise_prob: float = 0.01,
         tx_current_a: float = 0.0,
         rx_current_a: float = 0.0,
         idle_current_a: float = 0.0,
@@ -343,6 +346,14 @@ class Channel:
             l'airtime complet). ``"preamble"`` limite la mesure à la durée du
             préambule, ``"symbol"`` à un seul symbole ou bien une durée en
             secondes peut être fournie.
+        :param residual_collision_prob: Probabilité maximale d'une collision
+            résiduelle lorsque la charge atteint ``residual_collision_load_scale``.
+            Si ``None``, une valeur minimale est injectée uniquement lorsque
+            ``use_snir`` est désactivé.
+        :param residual_collision_load_scale: Nombre de transmissions
+            concurrentes servant de référence pour saturer l'effet de charge.
+        :param snir_off_noise_prob: Probabilité minimale de perte aléatoire
+            appliquée lorsque ``use_snir`` est désactivé (bruit de fond).
         :param environment: Chaîne optionnelle pour charger un preset
             ("urban", "suburban", "rural", "rural_long_range", "flora",
             "flora_hata" ou "flora_oulu").
@@ -478,6 +489,11 @@ class Channel:
             self.snir_fading_std = float(snir_fading_std)
         self.marginal_snir_margin_db = float(marginal_snir_margin_db)
         self.marginal_snir_drop_prob = float(marginal_snir_drop_prob)
+        if residual_collision_prob is None:
+            residual_collision_prob = 0.03 if use_snir is False else 0.0
+        self.residual_collision_prob = float(residual_collision_prob)
+        self.residual_collision_load_scale = float(residual_collision_load_scale)
+        self.snir_off_noise_prob = float(snir_off_noise_prob)
         if flora_noise_path:
             self.flora_noise_table = self.parse_flora_noise_table(flora_noise_path)
         else:
