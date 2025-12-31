@@ -38,6 +38,7 @@ def _make_metrics(method: str, scenario: str, *, snir_state: str, pdr: float) ->
         collisions=0,
         collision_rate=0.0,
         snir_cdf=[],
+        snr_cdf=[],
         energy_j=None,
         energy_per_delivery=None,
         energy_per_attempt=None,

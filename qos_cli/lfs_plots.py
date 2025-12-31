@@ -834,16 +834,26 @@ def plot_snir_cdf(
             has_data = False
             for method in sorted(metrics_by_method.keys()):
                 metric = metrics_by_method[method].get(scenario)
-                if not metric or not metric.snir_cdf:
+                if not metric:
+                    continue
+                snir_cdf = metric.snir_cdf
+                snr_cdf = metric.snr_cdf
+                is_fallback = False
+                if not snir_cdf and snr_cdf:
+                    is_fallback = True
+                    snir_cdf = snr_cdf
+                if not snir_cdf:
                     continue
                 state = _metric_snir_state(metric)
                 if state_filter and state not in state_filter:
                     continue
                 has_data = True
-                xs, ys = zip(*sorted(metric.snir_cdf))
+                xs, ys = zip(*sorted(snir_cdf))
                 _, marker = method_styles[method]
                 color = SNIR_STATE_COLORS.get(state, "#7f7f7f")
                 label_state = SNIR_STATE_LABELS.get(state, state)
+                if is_fallback:
+                    label_state = f"{label_state}, SNR (fallback)"
                 ax.step(
                     xs,
                     ys,
@@ -856,7 +866,7 @@ def plot_snir_cdf(
                 ax.text(
                     0.5,
                     0.5,
-                    "SNIR data unavailable",
+                    "SNIR/SNR data unavailable",
                     ha="center",
                     va="center",
                     transform=ax.transAxes,
