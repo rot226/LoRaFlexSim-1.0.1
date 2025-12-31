@@ -1603,6 +1603,7 @@ class Simulator:
             best_snir = None
             for gw in self.gateways:
                 distance = node.distance_to(gw)
+                use_snir = bool(getattr(node.channel, "use_snir", True))
                 kwargs = {
                     "freq_offset_hz": getattr(node, "current_freq_offset", 0.0),
                     "sync_offset_s": getattr(node, "current_sync_offset", 0.0),
@@ -1639,26 +1640,30 @@ class Simulator:
                     window_s = node.channel.snir_window_duration(
                         sf, end_time - time
                     )
-                interference_mw = self._interference_tracker.total_interference(
-                    gw.id,
-                    freq_hz,
-                    sf,
-                    time,
-                    end_time,
-                    base_noise_mW=noise_lin,
-                    alpha_isf=getattr(node.channel, "alpha_isf", 0.0),
-                    fading_std=getattr(node.channel, "snir_fading_std", 0.0),
-                    window_s=window_s,
-                )
+                if use_snir:
+                    interference_mw = self._interference_tracker.total_interference(
+                        gw.id,
+                        freq_hz,
+                        sf,
+                        time,
+                        end_time,
+                        base_noise_mW=noise_lin,
+                        alpha_isf=getattr(node.channel, "alpha_isf", 0.0),
+                        fading_std=getattr(node.channel, "snir_fading_std", 0.0),
+                        window_s=window_s,
+                    )
+                else:
+                    interference_mw = 0.0
                 if interference_mw < 0.0:
                     interference_mw = 0.0
                 fading_std = getattr(node.channel, "snir_fading_std", 0.0)
                 if fading_std > 0.0:
                     rng = getattr(node.channel, "rng", None) or create_generator()
                     rssi += float(rng.normal(0.0, fading_std))
-                    interference_mw *= 10 ** (
-                        float(rng.normal(0.0, fading_std)) / 10.0
-                    )
+                    if use_snir:
+                        interference_mw *= 10 ** (
+                            float(rng.normal(0.0, fading_std)) / 10.0
+                        )
                 total_noise_mw = noise_lin + interference_mw
                 node.channel.last_interference_mW = interference_mw
                 node.channel.current_interference_mW = interference_mw
@@ -1743,6 +1748,16 @@ class Simulator:
                     marginal_snir_db=getattr(node.channel, "marginal_snir_margin_db", 0.0),
                     marginal_drop_prob=getattr(
                         node.channel, "marginal_snir_drop_prob", 0.0
+                    ),
+                    residual_collision_prob=getattr(
+                        node.channel, "residual_collision_prob", 0.0
+                    ),
+                    residual_collision_load_scale=getattr(
+                        node.channel, "residual_collision_load_scale", 1.0
+                    ),
+                    use_snir=use_snir,
+                    snir_off_noise_prob=getattr(
+                        node.channel, "snir_off_noise_prob", 0.0
                     ),
                 )
 

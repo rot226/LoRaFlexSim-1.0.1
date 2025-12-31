@@ -138,6 +138,10 @@ class Gateway:
         snir_fading_std: float = 0.0,
         marginal_snir_db: float = 0.0,
         marginal_drop_prob: float = 0.0,
+        residual_collision_prob: float = 0.0,
+        residual_collision_load_scale: float = 1.0,
+        use_snir: bool = True,
+        snir_off_noise_prob: float = 0.0,
     ):
         """
         Tente de démarrer la réception d'une nouvelle transmission sur cette passerelle.
@@ -173,6 +177,13 @@ class Gateway:
             du seuil.
         :param marginal_drop_prob: Probabilité maximale de déclencher cette
             perte marginale lorsque ``margin=0``.
+        :param residual_collision_prob: Probabilité maximale d'une collision
+            résiduelle lorsque la charge atteint ``residual_collision_load_scale``.
+        :param residual_collision_load_scale: Nombre de transmissions
+            concurrentes servant de référence pour saturer la collision résiduelle.
+        :param use_snir: Indique si le calcul SNIR est actif sur ce canal.
+        :param snir_off_noise_prob: Probabilité minimale de perte aléatoire
+            lorsque ``use_snir`` est désactivé.
         """
         if rssi < getattr(self, "energy_detection_dBm", -float("inf")):
             logger.debug(
@@ -444,6 +455,21 @@ class Gateway:
                     capture = False
                     failure_reason = "snir_marginal"
                     snir_failure = True
+
+        if capture and residual_collision_prob > 0.0 and interfering_transmissions:
+            scale = max(residual_collision_load_scale, 1.0)
+            load_factor = min(len(interfering_transmissions) / scale, 1.0)
+            drop_prob = residual_collision_prob * load_factor
+            if drop_prob > 0.0 and self.rng.random() < drop_prob:
+                capture = False
+                if failure_reason is None:
+                    failure_reason = "residual_load"
+
+        if capture and not use_snir and snir_off_noise_prob > 0.0:
+            if self.rng.random() < snir_off_noise_prob:
+                capture = False
+                if failure_reason is None:
+                    failure_reason = "snir_off_noise"
 
         if capture:
             # Apply preamble rule: the winning packet must have started
