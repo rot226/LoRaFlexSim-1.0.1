@@ -1,5 +1,5 @@
-Fig. 1 – DER moyen en fonction de la densité de noeuds pour les trois configurations (baseline, SNIR, SNIR+interférences) avec barres d'erreur représentant l'IC95 %.
-Fig. 2 – PDR moyen en fonction de l'intervalle d'émission, comparant l'effet du modèle SNIR et du modèle d'interférences.
-Fig. 3 – Débit agrégé en bits par seconde selon le profil PHY (FLoRa vs OMNeT++) et le nombre de noeuds, moyenne et IC95 %.
-Fig. 4 – Valeur médiane du SNIR par profil PHY et intervalle d'émission, incluant les intervalles de confiance à 95 %.
-Fig. 5 – Nombre moyen de collisions par trame en fonction du nombre de noeuds pour chaque configuration, avec barres d'IC95 %.
+Fig. 1 – DER moyen en fonction de la densité de nœuds, décliné en trois variantes (SNIR activé, SNIR désactivé, SNIR mixte) avec barres d'erreur (IC95 % ou écart-type).
+Fig. 2 – PDR moyen selon l'intervalle d'émission, décliné en variantes SNIR activé/désactivé/mixte, avec barres d'erreur (IC95 % ou écart-type).
+Fig. 3 – Débit agrégé en bits par seconde selon le profil PHY (FLoRa vs OMNeT++) et le nombre de nœuds, moyenne et IC95 %.
+Fig. 4 – SNIR moyen par profil PHY et intervalle d'émission, décliné en variantes SNIR activé/désactivé/mixte, avec IC95 % ou écart-type.
+Fig. 5 – Nombre moyen de collisions par trame en fonction du nombre de nœuds pour chaque configuration, avec barres d'IC95 %.
