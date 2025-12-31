@@ -142,9 +142,13 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
     der_threshold = 0.25
     pdr_threshold = 0.25
     snir_gap_threshold = 6.0
-    min_snir_gap_between_states = 0.0
-    min_rate_gap_between_states = 0.0
-    min_collision_gap_between_states = 0.0
+    # Seuils non nuls pour éviter les écarts arbitraires : avec 1 graine, des durées
+    # de 45–60 s et des charges modérées (32/64 ou 48/96 noeuds), on s'attend à des
+    # écarts SNIR de quelques dB, des variations PDR/DER d'au moins 5 points, et une
+    # différence de collisions d'au moins ~5 (variance suffisante sans allonger le test).
+    min_snir_gap_between_states = 5.0
+    min_rate_gap_between_states = 0.05
+    min_collision_gap_between_states = 5.0
 
     for campaign_name, metrics in metrics_by_campaign.items():
         state_means: dict[bool, dict[str, float]] = {}
