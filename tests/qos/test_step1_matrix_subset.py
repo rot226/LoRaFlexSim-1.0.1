@@ -100,10 +100,10 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
             "--seeds",
             "1",
             "--nodes",
-            "32",
-            "64",
+            "40",
+            "80",
             "--packet-intervals",
-            "1.5",
+            "1.0",
             "--duration",
             "45",
         ],
@@ -116,10 +116,10 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
             "--seeds",
             "1",
             "--nodes",
-            "48",
-            "96",
+            "60",
+            "120",
             "--packet-intervals",
-            "0.75",
+            "0.6",
             "--duration",
             "60",
         ],
@@ -149,6 +149,8 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
     min_snir_gap_between_states = 5.0
     min_rate_gap_between_states = 0.05
     min_collision_gap_between_states = 5.0
+    min_collision_mean_gap_between_states = 1.0
+    min_collision_median_gap_between_states = 1.0
 
     for campaign_name, metrics in metrics_by_campaign.items():
         state_means: dict[bool, dict[str, float]] = {}
@@ -223,6 +225,12 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
         collisions_mean_gap = abs(state_means[True]["collisions_mean"] - state_means[False]["collisions_mean"])
         collisions_median_gap = abs(
             state_means[True]["collisions_median"] - state_means[False]["collisions_median"]
+        )
+        assert collisions_mean_gap >= min_collision_mean_gap_between_states, (
+            f"Écart moyen de collisions trop faible entre états ({campaign_name}): {collisions_mean_gap:.3f}"
+        )
+        assert collisions_median_gap >= min_collision_median_gap_between_states, (
+            f"Écart médian de collisions trop faible entre états ({campaign_name}): {collisions_median_gap:.3f}"
         )
         assert max(collisions_mean_gap, collisions_median_gap) >= min_collision_gap_between_states, (
             f"Dispersion des collisions trop faible entre états ({campaign_name}): "
