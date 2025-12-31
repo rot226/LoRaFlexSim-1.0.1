@@ -57,6 +57,7 @@ def _load_records(results_dir: Path) -> List[Dict[str, Any]]:
                         "avg_energy_per_node_J": _parse_float(row.get("avg_energy_per_node_J")),
                         "jain_index": _parse_float(row.get("jain_index")),
                         "mixra_solver": row.get("mixra_solver"),
+                        "use_snir": row.get("use_snir") == "True",
                     }
                     cluster_pdr: Dict[int, float] = {}
                     cluster_targets: Dict[int, float] = {}
@@ -89,12 +90,25 @@ def _load_records(results_dir: Path) -> List[Dict[str, Any]]:
                             ]
                         except Exception:
                             record["snr_cdf"] = []
+                    if "snir_cdf_json" in row:
+                        try:
+                            record["snir_cdf"] = [
+                                (float(point[0]), float(point[1])) for point in json.loads(row["snir_cdf_json"])
+                            ]
+                        except Exception:
+                            record["snir_cdf"] = []
                     if "snr_histogram_json" in row:
                         try:
                             hist = json.loads(row["snr_histogram_json"])
                             record["snr_histogram"] = {float(bin_key): float(count) for bin_key, count in hist.items()}
                         except Exception:
                             record["snr_histogram"] = {}
+                    if "snir_histogram_json" in row:
+                        try:
+                            hist = json.loads(row["snir_histogram_json"])
+                            record["snir_histogram"] = {float(bin_key): float(count) for bin_key, count in hist.items()}
+                        except Exception:
+                            record["snir_histogram"] = {}
                     records.append(record)
     return records
 
@@ -226,7 +240,11 @@ def _plot_snr_cdf(records: List[Dict[str, Any]], figures_dir: Path) -> None:
         return
     fig, ax = plt.subplots(figsize=(6, 4))
     for algorithm, record in selected.items():
-        cdf = record.get("snr_cdf", [])
+        use_snir = record.get("use_snir", False)
+        if use_snir:
+            cdf = record.get("snir_cdf") or record.get("snr_cdf", [])
+        else:
+            cdf = record.get("snr_cdf", [])
         if not cdf:
             continue
         xs = [point[0] for point in cdf]
