@@ -1,0 +1,231 @@
+"""Trace des courbes temporelles MAB (regret cumulé, DER, SNIR, énergie)."""
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from typing import Iterable
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
+DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "plots"
+PALETTE = [
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#7f7f7f",
+    "#bcbd22",
+    "#17becf",
+]
+LINE_STYLES = ["-", "--", ":", "-."]
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Génère les graphiques MAB pour UCB1.")
+    parser.add_argument(
+        "--ucb1-csv",
+        type=Path,
+        default=DEFAULT_UCB1,
+        help="CSV UCB1 contenant des fenêtres temporelles (run_ucb1_load_sweep.py).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_OUTPUT_DIR,
+        help="Répertoire de sortie pour les PNG.",
+    )
+    parser.add_argument(
+        "--packet-interval",
+        type=float,
+        action="append",
+        default=[],
+        help="Filtre les intervalles de paquets (peut être répété).",
+    )
+    return parser.parse_args()
+
+
+def _ensure_columns(df: pd.DataFrame, required: Iterable[str], path: Path) -> None:
+    missing = [column for column in required if column not in df.columns]
+    if missing:
+        raise ValueError(f"Colonnes manquantes dans {path}: {', '.join(missing)}")
+
+
+def _resolve_time(df: pd.DataFrame) -> pd.Series:
+    if "window_start_s" in df.columns:
+        return pd.to_numeric(df["window_start_s"], errors="coerce")
+    if "window_index" in df.columns and "packet_interval_s" in df.columns:
+        return pd.to_numeric(df["window_index"], errors="coerce") * pd.to_numeric(
+            df["packet_interval_s"], errors="coerce"
+        )
+    if "window_index" in df.columns:
+        return pd.to_numeric(df["window_index"], errors="coerce")
+    return pd.Series([0.0 for _ in range(len(df))], index=df.index)
+
+
+def _style_maps(clusters: list[int], intervals: list[float]) -> tuple[dict[int, str], dict[float, str]]:
+    cluster_colors = {cluster: PALETTE[index % len(PALETTE)] for index, cluster in enumerate(clusters)}
+    interval_styles = {
+        interval: LINE_STYLES[index % len(LINE_STYLES)] for index, interval in enumerate(intervals)
+    }
+    return cluster_colors, interval_styles
+
+
+def _save_plot(fig: plt.Figure, output_dir: Path, name: str) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / name
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
+def _plot_metric(
+    df: pd.DataFrame,
+    *,
+    metric: str,
+    title: str,
+    ylabel: str,
+    output_name: str,
+    clusters: list[int],
+    intervals: list[float],
+    colors: dict[int, str],
+    styles: dict[float, str],
+    output_dir: Path,
+) -> None:
+    fig, ax = plt.subplots(figsize=(7.0, 4.2))
+    for cluster in clusters:
+        for interval in intervals:
+            subset = df[(df["cluster"] == cluster) & (df["packet_interval_s"] == interval)]
+            if subset.empty:
+                continue
+            subset = subset.sort_values("time_s")
+            label = f"Cluster {cluster} ({interval:.0f}s)"
+            ax.plot(
+                subset["time_s"],
+                subset[metric],
+                label=label,
+                color=colors[cluster],
+                linestyle=styles[interval],
+                marker="o",
+                markersize=3,
+            )
+    ax.set_title(title)
+    ax.set_xlabel("Temps (s)")
+    ax.set_ylabel(ylabel)
+    ax.grid(True, linestyle=":", alpha=0.5)
+    ax.legend(fontsize=8, ncol=2)
+    _save_plot(fig, output_dir, output_name)
+
+
+def run_plots(*, csv_path: Path, output_dir: Path, packet_intervals: list[float]) -> None:
+    if not csv_path.exists():
+        raise FileNotFoundError(f"CSV introuvable: {csv_path}")
+    df = pd.read_csv(csv_path)
+    _ensure_columns(
+        df,
+        [
+            "cluster",
+            "packet_interval_s",
+            "window_index",
+            "reward_window_mean",
+            "der_window",
+            "snir_window_mean",
+            "energy_window_mean",
+        ],
+        csv_path,
+    )
+    df = df.copy()
+    df["time_s"] = _resolve_time(df)
+    df["packet_interval_s"] = pd.to_numeric(df["packet_interval_s"], errors="coerce")
+    df["cluster"] = pd.to_numeric(df["cluster"], errors="coerce").astype("Int64")
+    df = df.dropna(subset=["time_s", "packet_interval_s", "cluster"])
+    if packet_intervals:
+        df = df[df["packet_interval_s"].isin(packet_intervals)]
+    if df.empty:
+        raise ValueError("Aucune donnée disponible après filtrage.")
+
+    df["cluster"] = df["cluster"].astype(int)
+    clusters = sorted(df["cluster"].unique().tolist())
+    intervals = sorted(df["packet_interval_s"].unique().tolist())
+    colors, styles = _style_maps(clusters, intervals)
+
+    regret_frames = []
+    for cluster in clusters:
+        for interval in intervals:
+            subset = df[(df["cluster"] == cluster) & (df["packet_interval_s"] == interval)]
+            if subset.empty:
+                continue
+            subset = subset.sort_values("time_s").copy()
+            best_reward = subset["reward_window_mean"].max()
+            subset["regret"] = best_reward - subset["reward_window_mean"]
+            subset["cumulative_regret"] = subset["regret"].cumsum()
+            regret_frames.append(subset)
+    regret_df = pd.concat(regret_frames, ignore_index=True)
+
+    _plot_metric(
+        regret_df,
+        metric="cumulative_regret",
+        title="Regret cumulé (récompense fenêtre)",
+        ylabel="Regret cumulé",
+        output_name="ucb1_mab_cumulative_regret.png",
+        clusters=clusters,
+        intervals=intervals,
+        colors=colors,
+        styles=styles,
+        output_dir=output_dir,
+    )
+    _plot_metric(
+        df,
+        metric="der_window",
+        title="DER par fenêtre",
+        ylabel="DER",
+        output_name="ucb1_mab_der_vs_time.png",
+        clusters=clusters,
+        intervals=intervals,
+        colors=colors,
+        styles=styles,
+        output_dir=output_dir,
+    )
+    _plot_metric(
+        df,
+        metric="snir_window_mean",
+        title="SNIR moyen par fenêtre",
+        ylabel="SNIR (dB)",
+        output_name="ucb1_mab_snir_vs_time.png",
+        clusters=clusters,
+        intervals=intervals,
+        colors=colors,
+        styles=styles,
+        output_dir=output_dir,
+    )
+    _plot_metric(
+        df,
+        metric="energy_window_mean",
+        title="Énergie moyenne par fenêtre",
+        ylabel="Énergie (J)",
+        output_name="ucb1_mab_energy_vs_time.png",
+        clusters=clusters,
+        intervals=intervals,
+        colors=colors,
+        styles=styles,
+        output_dir=output_dir,
+    )
+
+
+def main() -> None:
+    args = parse_args()
+    run_plots(
+        csv_path=args.ucb1_csv,
+        output_dir=args.output_dir,
+        packet_intervals=args.packet_interval,
+    )
+
+
+if __name__ == "__main__":
+    main()

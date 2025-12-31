@@ -42,6 +42,8 @@ class ClusterMetrics:
     pdr: float
     snir_avg: float
     snir_window_mean: float
+    energy_avg: float
+    energy_window_mean: float
     success_rate: float
     success_rate_window: float
     emission_ratio: float
@@ -144,6 +146,12 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
             if ev.get("snir_dB") is not None and not math.isnan(float(ev.get("snir_dB")))
         ]
         snir_avg = sum(snir_values_cluster) / len(snir_values_cluster) if snir_values_cluster else 0.0
+        energy_values_cluster = [
+            ev.get("energy_J")
+            for ev in cluster_events
+            if ev.get("energy_J") is not None and not math.isnan(float(ev.get("energy_J")))
+        ]
+        energy_avg = sum(energy_values_cluster) / len(energy_values_cluster) if energy_values_cluster else 0.0
 
         total_attempts = sum(node.tx_attempted for node in nodes)
         total_success = sum(node.rx_delivered for node in nodes)
@@ -185,6 +193,12 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
                 if ev.get("snir_dB") is not None and not math.isnan(float(ev.get("snir_dB")))
             ]
             snir_window_mean = sum(snir_values) / len(snir_values) if snir_values else 0.0
+            energy_values = [
+                ev.get("energy_J")
+                for ev in window_events
+                if ev.get("energy_J") is not None and not math.isnan(float(ev.get("energy_J")))
+            ]
+            energy_window_mean = sum(energy_values) / len(energy_values) if energy_values else 0.0
 
             reward_window_values = [val for val in (_event_reward(ev) for ev in window_events) if val is not None]
             reward_window_mean = (
@@ -218,6 +232,8 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
                     pdr=pdr,
                     snir_avg=snir_avg,
                     snir_window_mean=snir_window_mean,
+                    energy_avg=energy_avg,
+                    energy_window_mean=energy_window_mean,
                     success_rate=success_rate_all,
                     success_rate_window=success_rate_window,
                     emission_ratio=emission_ratio,
@@ -275,6 +291,8 @@ def run_load_sweep(
                 "pdr",
                 "snir_avg",
                 "snir_window_mean",
+                "energy_avg",
+                "energy_window_mean",
                 "success_rate",
                 "success_rate_window",
                 "emission_ratio",
@@ -301,6 +319,8 @@ def run_load_sweep(
                     f"{entry.pdr:.6f}",
                     f"{entry.snir_avg:.6f}",
                     f"{entry.snir_window_mean:.6f}",
+                    f"{entry.energy_avg:.6f}",
+                    f"{entry.energy_window_mean:.6f}",
                     f"{entry.success_rate:.6f}",
                     f"{entry.success_rate_window:.6f}",
                     f"{entry.emission_ratio:.6f}",
