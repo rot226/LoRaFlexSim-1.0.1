@@ -23,9 +23,9 @@ def test_interference_impacts_collisions_and_der() -> None:
         rep=1,
     )
 
-    without_interference = _run_single(base_task, baseline_der_bias=False)
+    without_interference = _run_single(base_task)
     with_interference = _run_single(
-        replace(base_task, algorithm="snir_interference"), baseline_der_bias=False
+        replace(base_task, algorithm="snir_interference")
     )
 
     assert without_interference.interference_enabled is False
