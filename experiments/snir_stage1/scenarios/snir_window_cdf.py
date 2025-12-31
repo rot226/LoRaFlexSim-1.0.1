@@ -200,6 +200,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--window-modes",
         help="Modes de fenêtre SNIR séparés par des virgules (ex: packet,preamble).",
     )
+    parser.add_argument(
+        "--quick-windows",
+        action="store_true",
+        help="Exécute rapidement les deux fenêtres principales (preamble vs packet).",
+    )
     parser.add_argument("--num-nodes", type=int, default=NUM_NODES)
     parser.add_argument("--packets-per-node", type=int, default=PACKETS_PER_NODE)
     parser.add_argument("--packet-interval", type=float, default=PACKET_INTERVAL_S)
@@ -211,7 +216,10 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    window_modes = _parse_window_modes(args.window_modes)
+    if args.quick_windows:
+        window_modes = [("packet", "packet"), ("preamble", "preamble")]
+    else:
+        window_modes = _parse_window_modes(args.window_modes)
     dataset = run_campaign(
         window_modes=window_modes,
         num_nodes=args.num_nodes,
