@@ -69,6 +69,7 @@ Les tests d'intégration `pytest` exécutent cette matrice et vérifient que le 
 #### Figures SNIR
 
 - [ ] `python scripts/validate_snir_plots.py --nodes 8 --duration 120 --packet-interval 60` : exécute une matrice SNIR on/off minimale via `run_step1_matrix.py`, agrège les CSV puis vérifie que les figures `*_snir-compare.png` produites par `plot_step1_results.py` sont présentes pour servir de contrôle graphique rapide avant soumission.【F:scripts/validate_snir_plots.py†L1-L103】【F:scripts/plot_step1_results.py†L523-L567】
+- [ ] `pytest tests/qos/test_snir_window_effect.py` : compare les CDF SNIR pour garantir un écart médian d'au moins 2 dB entre les fenêtres `packet` et `preamble`.
 
 #### ADR
 
