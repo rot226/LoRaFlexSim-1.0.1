@@ -16,6 +16,7 @@ import sys
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from statistics import mean, median
 from typing import Iterable, Sequence
@@ -156,6 +157,7 @@ def _collect_metrics(
     *,
     include_snir: bool,
     interference_model: bool,
+    baseline_der_bias: bool,
 ) -> tuple[int, int, int, int, float, float, float, float, float, float]:
     sim_time = float(getattr(simulator, "current_time", 0.0))
     payload_bits = PAYLOAD_BYTES * 8.0
@@ -170,7 +172,7 @@ def _collect_metrics(
 
     der = delivered / sent if sent else 0.0
     pdr = delivered / attempts if attempts else 0.0
-    if not include_snir and delivered < attempts:
+    if baseline_der_bias and not include_snir and delivered < attempts:
         der = min(1.0, der + 0.05)
     throughput = (delivered * payload_bits / sim_time) if sim_time > 0 else 0.0
 
@@ -190,7 +192,7 @@ def _collect_metrics(
     )
 
 
-def _run_single(task: SimulationTask) -> SimulationResult:
+def _run_single(task: SimulationTask, *, baseline_der_bias: bool) -> SimulationResult:
     preset = ALGO_PRESETS.get(task.algorithm, AlgorithmConfig(True, False, False))
     multichannel = _build_multichannel(task.phy_profile, preset.snir_model)
 
@@ -254,6 +256,7 @@ def _run_single(task: SimulationTask) -> SimulationResult:
         simulator,
         include_snir=preset.snir_model,
         interference_model=preset.interference_model,
+        baseline_der_bias=baseline_der_bias,
     )
 
     return SimulationResult(
@@ -347,14 +350,16 @@ def run_campaign(
     seed: int,
     reps: int,
     jobs: int,
+    baseline_der_bias: bool,
 ) -> list[SimulationResult]:
     tasks = _build_tasks(algorithms, profiles, nodes, intervals, seed=seed, reps=reps)
+    runner = partial(_run_single, baseline_der_bias=baseline_der_bias)
     if jobs <= 1:
-        return [_run_single(task) for task in tasks]
+        return [runner(task) for task in tasks]
 
     results: list[SimulationResult] = []
     with ProcessPoolExecutor(max_workers=jobs) as executor:
-        for res in executor.map(_run_single, tasks):
+        for res in executor.map(runner, tasks):
             results.append(res)
     return results
 
@@ -399,6 +404,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Nombre de processus en parallèle",
     )
     parser.add_argument(
+        "--baseline-der-bias",
+        action="store_true",
+        help="Appliquer un biais historique de +0.05 sur la DER baseline",
+    )
+    parser.add_argument(
         "--outdir",
         type=str,
         default=str(ROOT_DIR / "experiments" / "snir_stage1_compare" / "data"),
@@ -423,6 +433,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         seed=args.seed,
         reps=args.reps,
         jobs=args.jobs,
+        baseline_der_bias=args.baseline_der_bias,
     )
 
     outdir = Path(args.outdir)
