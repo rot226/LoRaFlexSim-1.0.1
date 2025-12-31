@@ -16,7 +16,9 @@ Ce runbook décrit la marche à suivre pour préparer les comparaisons baseline 
    - SNIR uniquement : `flora_mode=True`, `snir_model=True`, `interference_model=False`.
    - SNIR + interférences : `flora_mode=True`, `snir_model=True`, `interference_model=True`.
 2. Pour chaque script, utiliser les mêmes paramètres de trafic (graine, nombre de paquets, intervalle, zone) afin de permettre la comparaison.
-3. Exporter les résultats en CSV dans `data/` avec un nom explicite, par exemple `der_density_baseline.csv`, `der_density_snir.csv`, etc.
+3. Par défaut, la DER baseline reflète strictement `packets_delivered / packets_sent` (pas de biais artificiel). Les écarts baseline/SNIR sont donc plus visibles et plus réalistes.
+4. Si vous devez reproduire d'anciens résultats, utilisez `--baseline-der-bias` pour réappliquer le biais historique (+0,05 max) côté baseline.
+5. Exporter les résultats en CSV dans `data/` avec un nom explicite, par exemple `der_density_baseline.csv`, `der_density_snir.csv`, etc.
 
 ## 3. Générer les graphiques
 1. Centraliser les fonctions communes (palette, mise en forme des légendes, labels) dans `plots_helpers/`.

@@ -76,6 +76,12 @@ def test_compare_generates_differences(tmp_path: Path) -> None:
     baseline_snir = _metric_stats(baseline_rows, "snir_mean", float)
     snir_snir = _metric_stats(snir_rows, "snir_mean", float)
 
+    for row in baseline_rows:
+        sent = int(row["packets_sent"])
+        delivered = int(row["packets_delivered"])
+        expected_der = (delivered / sent) if sent else 0.0
+        assert math.isclose(float(row["der"]), expected_der, rel_tol=1e-6), "DER baseline biaisée"
+
     assert all(stats["stdev"] > 0 for stats in (baseline_der, snir_der)), "Variance DER absente"
     assert snir_collisions["stdev"] > 0, "Variance des collisions SNIR absente"
 
