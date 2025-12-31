@@ -3,7 +3,17 @@ from __future__ import annotations
 
 import math
 from collections import deque
+from dataclasses import dataclass
 from typing import Deque, Dict, List, Tuple
+
+
+@dataclass(frozen=True)
+class RewardSample:
+    success: float
+    snir: float
+    energy: float
+    collision: float
+    fairness: float | None
 
 
 class UCB1Bandit:
@@ -131,14 +141,11 @@ class LoRaSFSelectorUCB1:
         self.collision_penalty = collision_penalty
         self.snir_threshold_db = snir_threshold_db
         self.energy_normalization = energy_normalization
+        self._qos_windows: List[Deque[RewardSample]] = [
+            deque(maxlen=self.bandit.window_size) for _ in range(self.bandit.n_arms)
+        ]
 
-    def select_sf(self) -> str:
-        """Retourne le facteur d'étalement à utiliser."""
-
-        arm = self.bandit.select_arm()
-        return self.ARM_TO_SF[arm]
-
-    def reward_from_outcome(
+    def _compute_components(
         self,
         success: bool,
         *,
@@ -148,19 +155,10 @@ class LoRaSFSelectorUCB1:
         airtime_s: float | None = None,
         energy_j: float | None = None,
         collision: bool | None = None,
-        expected_der: float | None = None,
         local_der: float | None = None,
         fairness_index: float | None = None,
         energy_normalization: float | None = None,
-    ) -> float:
-        """Calcule une récompense combinant fiabilité, marge SNIR et coûts.
-
-        Les pondérations sont configurables via le constructeur. Le paramètre
-        ``snir_threshold_db`` permet d'utiliser un seuil spécifique, sinon la
-        valeur par défaut fournie au constructeur est employée.
-        """
-
-        expected = expected_der if expected_der is not None and expected_der > 0 else 1.0
+    ) -> RewardSample:
         success_component = local_der if local_der is not None else (1.0 if success else 0.0)
         success_component = min(max(success_component, 0.0), 1.0)
 
@@ -196,17 +194,91 @@ class LoRaSFSelectorUCB1:
         if fairness_index is not None:
             fairness_component = min(max(fairness_index, 0.0), 1.0)
 
-        reward = (
-            self.success_weight * success_component
-            + self.snir_margin_weight * snir_component
-            - self.energy_penalty_weight * energy_component
-            - self.collision_penalty * collision_component
+        return RewardSample(
+            success=success_component,
+            snir=snir_component,
+            energy=energy_component,
+            collision=collision_component,
+            fairness=fairness_component,
         )
-        if fairness_component is not None:
-            reward += self.fairness_weight * fairness_component
-        reward /= expected
 
+    def _mean_components(self, window: Deque[RewardSample]) -> RewardSample:
+        if not window:
+            return RewardSample(success=0.0, snir=0.0, energy=0.0, collision=0.0, fairness=None)
+        count = len(window)
+        success = sum(sample.success for sample in window) / count
+        snir = sum(sample.snir for sample in window) / count
+        energy = sum(sample.energy for sample in window) / count
+        collision = sum(sample.collision for sample in window) / count
+        fairness_values = [sample.fairness for sample in window if sample.fairness is not None]
+        fairness = None
+        if fairness_values:
+            fairness = sum(fairness_values) / len(fairness_values)
+        return RewardSample(
+            success=success,
+            snir=snir,
+            energy=energy,
+            collision=collision,
+            fairness=fairness,
+        )
+
+    def _combine_components(self, components: RewardSample, *, expected_der: float | None = None) -> float:
+        expected = expected_der if expected_der is not None and expected_der > 0 else 1.0
+        normalized_success = components.success
+        if expected > 0:
+            normalized_success = min(max(components.success / expected, 0.0), 1.0)
+
+        reward = (
+            self.success_weight * normalized_success
+            + self.snir_margin_weight * components.snir
+            - self.energy_penalty_weight * components.energy
+            - self.collision_penalty * components.collision
+        )
+        if components.fairness is not None:
+            reward += self.fairness_weight * components.fairness
         return reward
+
+    def select_sf(self) -> str:
+        """Retourne le facteur d'étalement à utiliser."""
+
+        arm = self.bandit.select_arm()
+        return self.ARM_TO_SF[arm]
+
+    def reward_from_outcome(
+        self,
+        success: bool,
+        *,
+        snir_db: float | None = None,
+        snir_threshold_db: float | None = None,
+        marginal_snir_margin_db: float | None = None,
+        airtime_s: float | None = None,
+        energy_j: float | None = None,
+        collision: bool | None = None,
+        expected_der: float | None = None,
+        local_der: float | None = None,
+        fairness_index: float | None = None,
+        energy_normalization: float | None = None,
+    ) -> float:
+        """Calcule une récompense combinant fiabilité, marge SNIR et coûts.
+
+        Les pondérations sont configurables via le constructeur. Le paramètre
+        ``snir_threshold_db`` permet d'utiliser un seuil spécifique, sinon la
+        valeur par défaut fournie au constructeur est employée.
+        """
+
+        components = self._compute_components(
+            success,
+            snir_db=snir_db,
+            snir_threshold_db=snir_threshold_db,
+            marginal_snir_margin_db=marginal_snir_margin_db,
+            airtime_s=airtime_s,
+            energy_j=energy_j,
+            collision=collision,
+            local_der=local_der,
+            fairness_index=fairness_index,
+            energy_normalization=energy_normalization,
+        )
+        return self._combine_components(components, expected_der=expected_der)
 
     def update(
         self,
@@ -228,7 +300,7 @@ class LoRaSFSelectorUCB1:
         """Met à jour l'état du bandit à partir du facteur d'étalement choisi."""
 
         arm = self.SF_TO_ARM[sf]
-        reward = self.reward_from_outcome(
+        sample = self._compute_components(
             success,
             snir_db=snir_db,
             snir_threshold_db=snir_threshold_db,
@@ -236,19 +308,24 @@ class LoRaSFSelectorUCB1:
             airtime_s=airtime_s,
             energy_j=energy_j,
             collision=collision,
-            expected_der=expected_der,
             local_der=local_der,
             fairness_index=fairness_index,
             energy_normalization=energy_normalization,
         )
+        window = self._qos_windows[arm]
+        window.append(sample)
+        window_components = self._mean_components(window)
+        window_reward = self._combine_components(window_components, expected_der=expected_der)
+
         weight = max(traffic_volume, 0.0) if traffic_volume is not None else 1.0
-        self.bandit.update(arm, reward, weight=weight)
-        return reward
+        self.bandit.update(arm, window_reward, weight=weight)
+        return window_reward
 
     def reset(self) -> None:
         """Réinitialise les statistiques internes du sélecteur."""
 
         self.bandit.reset()
+        self._qos_windows = [deque(maxlen=self.bandit.window_size) for _ in range(self.bandit.n_arms)]
 
     @property
     def reward_window_mean(self) -> List[float]:

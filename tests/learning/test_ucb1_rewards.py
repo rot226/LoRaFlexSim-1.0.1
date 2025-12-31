@@ -68,6 +68,40 @@ def test_reward_normalization_with_expected_der():
     assert reward == pytest.approx(0.5)
 
 
+def test_reward_qos_normalization_caps_success():
+    selector = LoRaSFSelectorUCB1(
+        success_weight=1.0,
+        snir_margin_weight=0.5,
+        snir_threshold_db=0.0,
+    )
+
+    reward = selector.reward_from_outcome(
+        True,
+        snir_db=1.0,
+        expected_der=0.5,
+    )
+
+    assert reward == pytest.approx(1.5)
+
+
+def test_reward_sliding_window_mean():
+    selector = LoRaSFSelectorUCB1(
+        success_weight=1.0,
+        snir_margin_weight=0.0,
+        energy_penalty_weight=0.0,
+        collision_penalty=0.0,
+        reward_window=2,
+    )
+
+    first = selector.update("SF7", success=True)
+    second = selector.update("SF7", success=False)
+    third = selector.update("SF7", success=True)
+
+    assert first == pytest.approx(1.0)
+    assert second == pytest.approx(0.5)
+    assert third == pytest.approx(0.5)
+
+
 def test_ucb1_bandit_weighted_statistics():
     bandit = UCB1Bandit(n_arms=1, window_size=5, traffic_weighted_mean=True)
 
