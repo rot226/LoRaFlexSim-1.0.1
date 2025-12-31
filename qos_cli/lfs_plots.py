@@ -343,7 +343,7 @@ def _extract_success_series(df: pd.DataFrame) -> Optional[pd.Series]:
 
 
 def _extract_snir_series(df: pd.DataFrame) -> Optional[pd.Series]:
-    for column in ["snir_dB", "snir_db", "snir", "snr", "snr_db", "snr_dB"]:
+    for column in ["snir_dB"]:
         if column in df.columns:
             series = pd.to_numeric(df[column], errors="coerce")
             if series.notna().any():
@@ -837,11 +837,6 @@ def plot_snir_cdf(
                 if not metric:
                     continue
                 snir_cdf = metric.snir_cdf
-                snr_cdf = metric.snr_cdf
-                is_fallback = False
-                if not snir_cdf and snr_cdf:
-                    is_fallback = True
-                    snir_cdf = snr_cdf
                 if not snir_cdf:
                     continue
                 state = _metric_snir_state(metric)
@@ -852,8 +847,6 @@ def plot_snir_cdf(
                 _, marker = method_styles[method]
                 color = SNIR_STATE_COLORS.get(state, "#7f7f7f")
                 label_state = SNIR_STATE_LABELS.get(state, state)
-                if is_fallback:
-                    label_state = f"{label_state}, SNR (fallback)"
                 ax.step(
                     xs,
                     ys,
@@ -866,7 +859,7 @@ def plot_snir_cdf(
                 ax.text(
                     0.5,
                     0.5,
-                    "SNIR/SNR data unavailable",
+                    "SNIR data unavailable",
                     ha="center",
                     va="center",
                     transform=ax.transAxes,
