@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 import math
 import sys
@@ -87,21 +88,28 @@ def _global_stats(simulator: Simulator) -> dict[str, float]:
     }
 
 
-def _run_single(window_mode: str) -> list[dict[str, object]]:
+def _run_single(
+    window_mode: str,
+    *,
+    num_nodes: int,
+    packets_per_node: int,
+    packet_interval: float,
+    payload_bytes: int,
+) -> list[dict[str, object]]:
     multichannel = _build_multichannel(window_mode)
     simulator = Simulator(
-        num_nodes=NUM_NODES,
+        num_nodes=num_nodes,
         num_gateways=1,
         area_size=5000.0,
         transmission_mode="Random",
-        packet_interval=PACKET_INTERVAL_S,
-        first_packet_interval=PACKET_INTERVAL_S,
-        packets_to_send=PACKETS_PER_NODE,
+        packet_interval=packet_interval,
+        first_packet_interval=packet_interval,
+        packets_to_send=packets_per_node,
         duty_cycle=0.01,
         mobility=False,
         channels=multichannel,
         channel_distribution="round-robin",
-        payload_size_bytes=PAYLOAD_BYTES,
+        payload_size_bytes=payload_bytes,
         flora_mode=True,
         seed=1,
     )
@@ -129,10 +137,23 @@ def _run_single(window_mode: str) -> list[dict[str, object]]:
     return rows
 
 
-def run_campaign() -> list[dict[str, object]]:
+def run_campaign(
+    *,
+    window_modes: Iterable[tuple[str, str]] = WINDOW_MODES,
+    num_nodes: int = NUM_NODES,
+    packets_per_node: int = PACKETS_PER_NODE,
+    packet_interval: float = PACKET_INTERVAL_S,
+    payload_bytes: int = PAYLOAD_BYTES,
+) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    for mode, label in WINDOW_MODES:
-        for row in _run_single(mode):
+    for mode, label in window_modes:
+        for row in _run_single(
+            mode,
+            num_nodes=num_nodes,
+            packets_per_node=packets_per_node,
+            packet_interval=packet_interval,
+            payload_bytes=payload_bytes,
+        ):
             row["window_label"] = label
             rows.append(row)
     return rows
@@ -160,7 +181,48 @@ def write_csv(rows: Iterable[dict[str, object]], path: Path) -> None:
             writer.writerow(row)
 
 
+def _parse_window_modes(raw: str | None) -> list[tuple[str, str]]:
+    if not raw:
+        return list(WINDOW_MODES)
+    modes: list[tuple[str, str]] = []
+    for mode in raw.split(","):
+        mode = mode.strip()
+        if mode:
+            modes.append((mode, mode))
+    if not modes:
+        raise ValueError("Les fenêtres SNIR doivent contenir au moins un mode valide.")
+    return modes
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--window-modes",
+        help="Modes de fenêtre SNIR séparés par des virgules (ex: packet,preamble).",
+    )
+    parser.add_argument("--num-nodes", type=int, default=NUM_NODES)
+    parser.add_argument("--packets-per-node", type=int, default=PACKETS_PER_NODE)
+    parser.add_argument("--packet-interval", type=float, default=PACKET_INTERVAL_S)
+    parser.add_argument("--payload-bytes", type=int, default=PAYLOAD_BYTES)
+    parser.add_argument("--output", type=Path, default=OUTPUT_PATH)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    window_modes = _parse_window_modes(args.window_modes)
+    dataset = run_campaign(
+        window_modes=window_modes,
+        num_nodes=args.num_nodes,
+        packets_per_node=args.packets_per_node,
+        packet_interval=args.packet_interval,
+        payload_bytes=args.payload_bytes,
+    )
+    write_csv(dataset, args.output)
+    print(f"Résultats enregistrés dans {args.output}")
+    return 0
+
+
 if __name__ == "__main__":
-    dataset = run_campaign()
-    write_csv(dataset, OUTPUT_PATH)
-    print(f"Résultats enregistrés dans {OUTPUT_PATH}")
+    raise SystemExit(main())
