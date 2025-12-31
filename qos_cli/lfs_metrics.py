@@ -330,7 +330,7 @@ def _compute_cdf_from_column(
 
 
 def compute_snir_cdf(df: Optional[pd.DataFrame]) -> List[Tuple[float, float]]:
-    return _compute_cdf_from_column(df, ["snir_dB", "snir_db", "snir"])
+    return _compute_cdf_from_column(df, ["snir_dB"])
 
 
 def compute_snr_cdf(df: Optional[pd.DataFrame]) -> List[Tuple[float, float]]:

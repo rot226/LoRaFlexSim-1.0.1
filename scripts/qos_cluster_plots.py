@@ -97,12 +97,6 @@ def _load_records(results_dir: Path) -> List[Dict[str, Any]]:
                             ]
                         except Exception:
                             record["snir_cdf"] = []
-                    if "snr_histogram_json" in row:
-                        try:
-                            hist = json.loads(row["snr_histogram_json"])
-                            record["snr_histogram"] = {float(bin_key): float(count) for bin_key, count in hist.items()}
-                        except Exception:
-                            record["snr_histogram"] = {}
                     if "snir_histogram_json" in row:
                         try:
                             hist = json.loads(row["snir_histogram_json"])

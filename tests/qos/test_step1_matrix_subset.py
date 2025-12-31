@@ -19,8 +19,8 @@ import run_step1_matrix  # noqa: E402  pylint: disable=wrong-import-position
 def _select_histogram_json(row: dict[str, str]) -> str:
     use_snir = row.get("use_snir") == "True"
     if use_snir:
-        return row.get("snir_histogram_json") or row["snr_histogram_json"]
-    return row["snr_histogram_json"]
+        return row["snir_histogram_json"]
+    return row["snir_histogram_json"]
 
 
 def _mean_snir(row: dict[str, str]) -> float:
