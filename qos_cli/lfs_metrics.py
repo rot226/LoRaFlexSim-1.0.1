@@ -58,6 +58,7 @@ class MethodScenarioMetrics:
     collisions: Optional[int]
     collision_rate: Optional[float]
     snir_cdf: List[Tuple[float, float]]
+    snr_cdf: List[Tuple[float, float]]
     energy_j: Optional[float]
     energy_per_delivery: Optional[float]
     energy_per_attempt: Optional[float]
@@ -291,23 +292,15 @@ def compute_collisions(df: Optional[pd.DataFrame]) -> Optional[int]:
     return int(pd.to_numeric(collision_series, errors="coerce").fillna(0).sum())
 
 
-def compute_snir_cdf(df: Optional[pd.DataFrame]) -> List[Tuple[float, float]]:
+def _compute_cdf_from_column(
+    df: Optional[pd.DataFrame], columns: Sequence[str]
+) -> List[Tuple[float, float]]:
     if df is None or df.empty:
         return []
-    snir_column = _find_column(
-        df.columns,
-        [
-            "snir_dB",
-            "snir_db",
-            "snir",
-            "snr",
-            "snr_db",
-            "snr_dB",
-        ],
-    )
-    if snir_column is None:
+    metric_column = _find_column(df.columns, columns)
+    if metric_column is None:
         return []
-    raw_series = df[snir_column]
+    raw_series = df[metric_column]
     available_mask = raw_series.notna() & raw_series.astype(str).str.strip().ne("")
     numeric_series = pd.to_numeric(raw_series, errors="coerce")
     values = numeric_series[available_mask & numeric_series.notna()].to_list()
@@ -334,6 +327,14 @@ def compute_snir_cdf(df: Optional[pd.DataFrame]) -> List[Tuple[float, float]]:
         upper = bin_edges[edge_index + 1]
         cdf.append((float(upper), cumulative / total_attempts if total_attempts else 0.0))
     return cdf
+
+
+def compute_snir_cdf(df: Optional[pd.DataFrame]) -> List[Tuple[float, float]]:
+    return _compute_cdf_from_column(df, ["snir_dB", "snir_db", "snir"])
+
+
+def compute_snr_cdf(df: Optional[pd.DataFrame]) -> List[Tuple[float, float]]:
+    return _compute_cdf_from_column(df, ["snr_dB", "snr_db", "snr"])
 
 
 def compute_energy(nodes_df: Optional[pd.DataFrame]) -> Optional[float]:
@@ -418,6 +419,7 @@ def load_metrics_for_method_scenario(
     pdr_global, der_global, delivered, attempted = compute_global_ratios(packets_df)
     collisions = compute_collisions(packets_df)
     snir_cdf = compute_snir_cdf(packets_df)
+    snr_cdf = compute_snr_cdf(packets_df)
     use_snir_flag, snir_state = _detect_snir_state(packets_df)
     energy_j = compute_energy(nodes_df)
     jain_index = compute_jain_index(packets_df)
@@ -466,6 +468,7 @@ def load_metrics_for_method_scenario(
         collisions=collisions,
         collision_rate=collision_rate,
         snir_cdf=snir_cdf,
+        snr_cdf=snr_cdf,
         energy_j=energy_j,
         energy_per_delivery=energy_per_delivery,
         energy_per_attempt=energy_per_attempt,
