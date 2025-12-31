@@ -30,7 +30,7 @@ def _metric_stats(rows: list[dict[str, str]], key: str, cast) -> dict[str, float
 def test_compare_generates_differences(tmp_path: Path) -> None:
     outdir = tmp_path / "snir_compare"
     algorithms = ["interference_only", "snir_interference"]
-    reps = 3
+    reps = 5
     script = Path(__file__).resolve().parents[2] / "experiments" / "snir_stage1_compare" / "scenarios" / "run_compare_stage1.py"
 
     result = subprocess.run(
@@ -69,6 +69,12 @@ def test_compare_generates_differences(tmp_path: Path) -> None:
     assert len(baseline_rows) == reps
     assert len(snir_rows) == reps
 
+    baseline_seeds = {int(row["seed"]) for row in baseline_rows}
+    snir_seeds = {int(row["seed"]) for row in snir_rows}
+    assert len(baseline_seeds) == reps
+    assert len(snir_seeds) == reps
+    assert len(baseline_seeds & snir_seeds) >= 4, "Répétitions insuffisantes sur plusieurs seeds"
+
     baseline_der = _metric_stats(baseline_rows, "der", float)
     snir_der = _metric_stats(snir_rows, "der", float)
     baseline_collisions = _metric_stats(baseline_rows, "collisions", int)
@@ -106,5 +112,28 @@ def test_compare_generates_differences(tmp_path: Path) -> None:
     assert collisions_delta >= 10, f"Delta collisions trop faible ({collisions_delta:.2f})"
     assert snir_delta >= 5.0, f"Delta SNIR moyen trop faible ({snir_delta:.2f})"
     assert ci_penalty >= 0, "Calcul d'intervalle de confiance incohérent"
+
+    baseline_by_seed = {int(row["seed"]): row for row in baseline_rows}
+    snir_by_seed = {int(row["seed"]): row for row in snir_rows}
+    seed_deltas: list[tuple[float, float, float]] = []
+    for seed in sorted(baseline_by_seed.keys() & snir_by_seed.keys()):
+        baseline_row = baseline_by_seed[seed]
+        snir_row = snir_by_seed[seed]
+        seed_deltas.append(
+            (
+                abs(float(baseline_row["der"]) - float(snir_row["der"])),
+                abs(float(baseline_row["collisions"]) - float(snir_row["collisions"])),
+                abs(float(baseline_row["snir_mean"]) - float(snir_row["snir_mean"])),
+            )
+        )
+
+    strong_seeds = sum(
+        1
+        for der_delta_seed, collisions_delta_seed, snir_delta_seed in seed_deltas
+        if der_delta_seed >= 0.02
+        and collisions_delta_seed >= 10
+        and snir_delta_seed >= 5.0
+    )
+    assert strong_seeds >= 3, "Deltas significatifs attendus sur plusieurs seeds"
     assert any(outdir.iterdir()), "Aucun fichier de métriques généré"
     assert result.stdout.strip(), "Sortie de script vide"

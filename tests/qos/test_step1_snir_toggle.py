@@ -15,8 +15,8 @@ if str(SCRIPTS_DIR) not in sys.path:
 import run_step1_matrix as step1_matrix
 
 
-MIN_SNIR_DELTA_DB = 4.0
-MIN_DER_PDR_DELTA = 0.06
+MIN_SNIR_DELTA_DB = 5.0
+MIN_DER_PDR_DELTA = 0.05
 MIN_COLLISION_DELTA = 5
 
 
