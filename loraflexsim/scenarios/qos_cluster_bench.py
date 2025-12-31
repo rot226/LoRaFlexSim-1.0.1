@@ -337,6 +337,28 @@ def _compute_additional_metrics(
     algorithm_label: str,
     mixra_solver: str,
 ) -> Dict[str, Any]:
+    def _build_histogram(values: List[float]) -> tuple[Dict[str, int], List[List[float]], int]:
+        histogram: Dict[str, int] = {}
+        if values:
+            min_bin = math.floor(min(values))
+            max_bin = math.ceil(max(values))
+            for value in values:
+                bin_key = str(int(math.floor(value)))
+                histogram[bin_key] = histogram.get(bin_key, 0) + 1
+            bins = list(range(min_bin, max_bin + 1))
+        else:
+            bins = list(range(-30, 31))
+            histogram = {str(b): 0 for b in bins}
+
+        total_samples = sum(histogram.values())
+        cdf: List[List[float]] = []
+        cumulative = 0
+        for bin_key in sorted(histogram, key=lambda x: float(x)):
+            cumulative += histogram[bin_key]
+            probability = cumulative / total_samples if total_samples > 0 else 0.0
+            cdf.append([float(bin_key), probability])
+        return histogram, cdf, total_samples
+
     payload_bits = PAYLOAD_BYTES * 8.0
     duration = float(getattr(simulator, "current_time", 0.0) or 0.0)
     if duration <= 0.0:
@@ -364,7 +386,7 @@ def _compute_additional_metrics(
     collisions_by_sf: Dict[int, int] = {}
     collisions_by_channel: Dict[int, int] = {}
     snr_values: List[float] = []
-    histogram: Dict[str, int] = {}
+    snir_values: List[float] = []
 
     for event in getattr(simulator, "events_log", []):
         result = event.get("result")
@@ -376,6 +398,9 @@ def _compute_additional_metrics(
             snr = event.get("snr_dB")
             if snr is not None:
                 snr_values.append(float(snr))
+            snir = event.get("snir_dB")
+            if snir is not None:
+                snir_values.append(float(snir))
         elif result == "Collision":
             collisions_by_sf[sf] = collisions_by_sf.get(sf, 0) + 1
             collisions_by_channel[channel_idx] = collisions_by_channel.get(channel_idx, 0) + 1
@@ -384,24 +409,8 @@ def _compute_additional_metrics(
         for channel_idx, count in channel_counts.items():
             channel_counts[channel_idx] = count * payload_bits / duration
 
-    if snr_values:
-        min_bin = math.floor(min(snr_values))
-        max_bin = math.ceil(max(snr_values))
-        for value in snr_values:
-            bin_key = str(int(math.floor(value)))
-            histogram[bin_key] = histogram.get(bin_key, 0) + 1
-        bins = list(range(min_bin, max_bin + 1))
-    else:
-        bins = list(range(-30, 31))
-        histogram = {str(b): 0 for b in bins}
-
-    total_samples = sum(histogram.values())
-    cdf: List[List[float]] = []
-    cumulative = 0
-    for bin_key in sorted(histogram, key=lambda x: float(x)):
-        cumulative += histogram[bin_key]
-        probability = cumulative / total_samples if total_samples > 0 else 0.0
-        cdf.append([float(bin_key), probability])
+    snr_histogram, snr_cdf, snr_samples = _build_histogram(snr_values)
+    snir_histogram, snir_cdf, snir_samples = _build_histogram(snir_values)
 
     metrics["throughput_sf_channel"] = throughput_map
     metrics["collision_breakdown"] = {
@@ -409,15 +418,20 @@ def _compute_additional_metrics(
         "by_sf": collisions_by_sf,
         "by_channel": collisions_by_channel,
     }
-    metrics["snr_histogram"] = histogram
-    metrics["snr_cdf"] = cdf
-    metrics["snr_samples"] = total_samples
+    metrics["snr_histogram"] = snr_histogram
+    metrics["snr_cdf"] = snr_cdf
+    metrics["snr_samples"] = snr_samples
+    metrics["snir_histogram"] = snir_histogram
+    metrics["snir_cdf"] = snir_cdf
+    metrics["snir_samples"] = snir_samples
     metrics["algorithm"] = algorithm_label
     metrics.setdefault("mixra_solver", getattr(simulator, "qos_mixra_solver", mixra_solver))
     metrics["throughput_sf_channel_json"] = json.dumps(throughput_map, ensure_ascii=False, sort_keys=True)
     metrics["collision_breakdown_json"] = json.dumps(metrics["collision_breakdown"], ensure_ascii=False, sort_keys=True)
-    metrics["snr_histogram_json"] = json.dumps(histogram, ensure_ascii=False, sort_keys=True)
-    metrics["snr_cdf_json"] = json.dumps(cdf, ensure_ascii=False)
+    metrics["snr_histogram_json"] = json.dumps(snr_histogram, ensure_ascii=False, sort_keys=True)
+    metrics["snr_cdf_json"] = json.dumps(snr_cdf, ensure_ascii=False)
+    metrics["snir_histogram_json"] = json.dumps(snir_histogram, ensure_ascii=False, sort_keys=True)
+    metrics["snir_cdf_json"] = json.dumps(snir_cdf, ensure_ascii=False)
     metrics["sf_distribution_json"] = json.dumps(metrics.get("sf_distribution", {}), ensure_ascii=False, sort_keys=True)
     return dict(metrics)
 

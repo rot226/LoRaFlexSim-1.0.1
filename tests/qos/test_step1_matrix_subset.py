@@ -16,14 +16,21 @@ if str(SCRIPTS_DIR) not in sys.path:
 import run_step1_matrix  # noqa: E402  pylint: disable=wrong-import-position
 
 
+def _select_histogram_json(row: dict[str, str]) -> str:
+    use_snir = row.get("use_snir") == "True"
+    if use_snir:
+        return row.get("snir_histogram_json") or row["snr_histogram_json"]
+    return row["snr_histogram_json"]
+
+
 def _mean_snir(row: dict[str, str]) -> float:
-    histogram = json.loads(row["snr_histogram_json"])
+    histogram = json.loads(_select_histogram_json(row))
     total = sum(histogram.values()) or 1
     return sum(float(bin_key) * count for bin_key, count in histogram.items()) / total
 
 
 def _snir_quantiles(row: dict[str, str], quantiles: Iterable[float]) -> dict[float, float]:
-    histogram = json.loads(row["snr_histogram_json"])
+    histogram = json.loads(_select_histogram_json(row))
     total = sum(histogram.values()) or 1
     cumulative = 0
     targets = sorted(set(quantiles))
@@ -240,4 +247,3 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
         assert abs(ref_snir_ma - cmp_snir_ma) <= 10.0, (
             f"Écart SNIR entre campagnes trop marqué pour SNIR={use_snir}: {abs(ref_snir_ma - cmp_snir_ma):.3f} dB"
         )
-

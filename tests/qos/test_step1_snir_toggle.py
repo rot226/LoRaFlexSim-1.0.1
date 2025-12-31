@@ -64,7 +64,11 @@ def test_step1_snir_toggle_generates_distinct_csv(tmp_path: Path) -> None:
         snir_state = row["snir_state"]
         snir_states.add(snir_state)
 
-        histogram = json.loads(row["snr_histogram_json"])
+        if use_snir:
+            histogram_source = row.get("snir_histogram_json") or row["snr_histogram_json"]
+        else:
+            histogram_source = row["snr_histogram_json"]
+        histogram = json.loads(histogram_source)
         total_samples = sum(histogram.values()) or 1
         mean_snir = sum(float(bin_key) * count for bin_key, count in histogram.items()) / total_samples
         mean_snir_by_state[use_snir].append(mean_snir)
