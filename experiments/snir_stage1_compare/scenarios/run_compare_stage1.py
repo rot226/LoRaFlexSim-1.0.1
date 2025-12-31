@@ -95,6 +95,7 @@ class SimulationResult:
     packet_interval_s: float
     rep: int
     seed: int
+    interference_enabled: bool
     packets_sent: int
     packets_attempted: int
     packets_delivered: int
@@ -114,6 +115,7 @@ class SimulationResult:
             "packet_interval_s": self.packet_interval_s,
             "rep": self.rep,
             "seed": self.seed,
+            "interference_enabled": self.interference_enabled,
             "packets_sent": self.packets_sent,
             "packets_attempted": self.packets_attempted,
             "packets_delivered": self.packets_delivered,
@@ -228,8 +230,18 @@ def _run_single(task: SimulationTask, *, baseline_der_bias: bool) -> SimulationR
     # tracker par une implémentation minimale qui retourne systématiquement
     # zéro afin de désactiver l'interférence sans modifier le reste du
     # pipeline de simulation.
-    if not preset.interference_model:
-        class _NullTracker:
+    interference_enabled = bool(preset.interference_model)
+    if not interference_enabled:
+        class _ConfigurableNullTracker:
+            def __init__(
+                self,
+                *,
+                log_events: list[dict] | None = None,
+                log_message: str = "interference_off",
+            ) -> None:
+                if log_events is not None:
+                    log_events.append({"event": log_message})
+
             def add(self, *_, **__):
                 return None
 
@@ -239,7 +251,9 @@ def _run_single(task: SimulationTask, *, baseline_der_bias: bool) -> SimulationR
             def total_interference(self, *_, **__):
                 return 0.0
 
-        simulator._interference_tracker = _NullTracker()
+        simulator._interference_tracker = _ConfigurableNullTracker(
+            log_events=simulator.events_log
+        )
     simulator.run()
     (
         sent,
@@ -266,6 +280,7 @@ def _run_single(task: SimulationTask, *, baseline_der_bias: bool) -> SimulationR
         packet_interval_s=task.packet_interval,
         rep=task.rep,
         seed=task.seed,
+        interference_enabled=interference_enabled,
         packets_sent=sent,
         packets_attempted=attempts,
         packets_delivered=delivered,
@@ -292,6 +307,7 @@ def _write_outputs(results: Iterable[SimulationResult], outdir: Path) -> None:
         "packet_interval_s",
         "rep",
         "seed",
+        "interference_enabled",
         "packets_sent",
         "packets_attempted",
         "packets_delivered",
