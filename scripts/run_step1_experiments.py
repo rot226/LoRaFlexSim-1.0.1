@@ -170,11 +170,7 @@ def _instantiate_simulator(
         },
     )
     simulator._interference_tracker = InterferenceTracker()
-    simulator.channel.use_snir = use_snir
-    multichannel = getattr(simulator, "multichannel", None)
-    if multichannel is not None:
-        for channel in getattr(multichannel, "channels", []):
-            setattr(channel, "use_snir", use_snir)
+    _sync_snir_state(simulator, use_snir)
     return simulator
 
 
@@ -199,11 +195,32 @@ def _snir_suffix(use_snir: bool) -> str:
     return "_snir-on" if use_snir else "_snir-off"
 
 
-def _effective_snir_state(simulator: Simulator, requested: bool) -> bool:
+def _sync_snir_state(simulator: Simulator, requested: bool) -> bool:
     channel = getattr(simulator, "channel", None)
     if channel is not None:
-        return bool(getattr(channel, "use_snir", requested))
-    return bool(getattr(simulator, "use_snir", requested))
+        setattr(channel, "use_snir", requested)
+    multichannel = getattr(simulator, "multichannel", None)
+    channels = list(getattr(multichannel, "channels", []) or [])
+    for sub_channel in channels:
+        setattr(sub_channel, "use_snir", requested)
+
+    observed_states: list[bool] = []
+    if channel is not None:
+        observed_states.append(bool(getattr(channel, "use_snir", requested)))
+    for sub_channel in channels:
+        observed_states.append(bool(getattr(sub_channel, "use_snir", requested)))
+
+    if not observed_states:
+        return bool(getattr(simulator, "use_snir", requested))
+
+    effective_state = observed_states[0]
+    if any(state != effective_state for state in observed_states):
+        raise ValueError("Les canaux SNIR ne sont pas synchronisés (états divergents détectés).")
+    if effective_state != requested:
+        raise ValueError(
+            "L'état SNIR effectif ne correspond pas à l'état demandé après synchronisation."
+        )
+    return effective_state
 
 
 def main(argv: list[str] | None = None) -> Mapping[str, object]:
@@ -233,7 +250,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
     _configure_clusters(manager, args.packet_interval)
     _apply_algorithm(args.algorithm, simulator, manager, args.mixra_solver)
 
-    effective_use_snir = _effective_snir_state(simulator, args.use_snir)
+    effective_use_snir = _sync_snir_state(simulator, args.use_snir)
 
     simulator.run(max_time=args.duration)
 
@@ -245,9 +262,10 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
             "random_seed": args.seed,
             "simulation_duration_s": getattr(simulator, "current_time", args.duration),
             "payload_bytes": PAYLOAD_BYTES,
-            "use_snir": effective_use_snir,
-            "with_snir": effective_use_snir,
-            "snir_state": STATE_LABELS.get(effective_use_snir, "snir_unknown"),
+            "use_snir": args.use_snir,
+            "with_snir": args.use_snir,
+            "snir_state": STATE_LABELS.get(args.use_snir, "snir_unknown"),
+            "snir_state_effective": STATE_LABELS.get(effective_use_snir, "snir_unknown"),
             "channel_config": str(args.channel_config) if args.channel_config else None,
             "snir_fading_std": getattr(simulator, "snir_fading_std", None),
             "noise_floor_std": getattr(simulator, "noise_floor_std", None),
@@ -280,4 +298,3 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
 
 if __name__ == "__main__":
     main()
-
