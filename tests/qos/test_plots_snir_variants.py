@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
+
+STUBS_DIR = Path(__file__).resolve().parents[1] / "stubs"
+if str(STUBS_DIR) in sys.path:
+    sys.path.remove(str(STUBS_DIR))
 
 sys.modules.pop("numpy", None)
 sys.modules.pop("numpy.random", None)
 sys.modules.pop("numpy.linalg", None)
 sys.modules.pop("numpy.exceptions", None)
-import numpy as np
 
-sys.modules["numpy"] = np
-sys.modules["numpy.random"] = np.random
+numpy = importlib.import_module("numpy")
+sys.modules["numpy"] = numpy
+sys.modules["numpy.random"] = numpy.random
+sys.modules["numpy.linalg"] = numpy.linalg
 
 import matplotlib
 from matplotlib.figure import Figure

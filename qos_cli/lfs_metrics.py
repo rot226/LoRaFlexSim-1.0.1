@@ -65,6 +65,9 @@ class MethodScenarioMetrics:
     jain_index: Optional[float]
     min_sf_share: Optional[float]
     loss_rate: Optional[float]
+    snir_mean: Optional[float] = None
+    snir_ci_low: Optional[float] = None
+    snir_ci_high: Optional[float] = None
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -337,6 +340,25 @@ def compute_snr_cdf(df: Optional[pd.DataFrame]) -> List[Tuple[float, float]]:
     return _compute_cdf_from_column(df, ["snr_dB", "snr_db", "snr"])
 
 
+def compute_snir_stats(
+    df: Optional[pd.DataFrame],
+) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+    if df is None or df.empty:
+        return None, None, None
+    snir_column = _find_column(df.columns, ["snir_dB"])
+    if snir_column is None:
+        return None, None, None
+    series = pd.to_numeric(df[snir_column], errors="coerce").dropna()
+    if series.empty:
+        return None, None, None
+    mean = float(series.mean())
+    if len(series) > 1:
+        margin = 1.96 * float(series.std(ddof=1)) / math.sqrt(len(series))
+    else:
+        margin = 0.0
+    return mean, mean - margin, mean + margin
+
+
 def compute_energy(nodes_df: Optional[pd.DataFrame]) -> Optional[float]:
     if nodes_df is None or nodes_df.empty:
         return None
@@ -420,6 +442,7 @@ def load_metrics_for_method_scenario(
     collisions = compute_collisions(packets_df)
     snir_cdf = compute_snir_cdf(packets_df)
     snr_cdf = compute_snr_cdf(packets_df)
+    snir_mean, snir_ci_low, snir_ci_high = compute_snir_stats(packets_df)
     use_snir_flag, snir_state = _detect_snir_state(packets_df)
     energy_j = compute_energy(nodes_df)
     jain_index = compute_jain_index(packets_df)
@@ -475,6 +498,9 @@ def load_metrics_for_method_scenario(
         jain_index=jain_index,
         min_sf_share=min_sf_share,
         loss_rate=loss_rate,
+        snir_mean=snir_mean,
+        snir_ci_low=snir_ci_low,
+        snir_ci_high=snir_ci_high,
     )
 
 

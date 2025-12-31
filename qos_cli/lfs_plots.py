@@ -179,6 +179,16 @@ def _ratio_confidence(successes: int, attempts: int) -> Tuple[float, float]:
     return max(0.0, p_hat - margin), min(1.0, p_hat + margin)
 
 
+def _ratio_ci_for_metric(metric: MethodScenarioMetrics) -> Tuple[float, float]:
+    return _ratio_confidence(metric.delivered, metric.attempted)
+
+
+def _snir_ci_for_metric(metric: MethodScenarioMetrics) -> Tuple[float, float]:
+    if metric.snir_ci_low is None or metric.snir_ci_high is None:
+        return float("nan"), float("nan")
+    return float(metric.snir_ci_low), float(metric.snir_ci_high)
+
+
 def _rolling_metrics(
     df: pd.DataFrame, window_size: float, window_mode: str
 ) -> pd.DataFrame:
@@ -493,6 +503,7 @@ def _plot_metric_with_snir_states(
     ylabel: str,
     filename_base: str,
     y_limits: Tuple[Optional[float], Optional[float]] | None = (0.0, 1.0),
+    ci_resolver: Optional[Callable[[MethodScenarioMetrics], Tuple[float, float]]] = None,
 ) -> List[Path]:
     if not scenarios or not metrics_by_method:
         return []
@@ -519,6 +530,21 @@ def _plot_metric_with_snir_states(
                     color=color,
                     label=f"{method} ({label_state})",
                 )
+                if ci_resolver is not None:
+                    lower: List[float] = []
+                    upper: List[float] = []
+                    method_metrics = metrics_by_method.get(method, {})
+                    for scenario in scenarios:
+                        metric = method_metrics.get(scenario)
+                        if metric is None or _metric_snir_state(metric) != state:
+                            lower.append(float("nan"))
+                            upper.append(float("nan"))
+                            continue
+                        ci_low, ci_high = ci_resolver(metric)
+                        lower.append(float(ci_low))
+                        upper.append(float(ci_high))
+                    if not _all_nan(lower) and not _all_nan(upper):
+                        ax.fill_between(x_positions, lower, upper, color=color, alpha=0.15)
                 plotted = True
 
         ax.set_xticks(x_positions, scenarios)
@@ -571,6 +597,7 @@ def plot_der(
         attribute="der_global",
         ylabel="Global DER",
         filename_base="der_global_vs_scenarios",
+        ci_resolver=_ratio_ci_for_metric,
     )
 
 
@@ -588,6 +615,26 @@ def plot_pdr(
         attribute="pdr_global",
         ylabel="Global PDR",
         filename_base="pdr_global_vs_scenarios",
+        ci_resolver=_ratio_ci_for_metric,
+    )
+
+
+def plot_snir_mean(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    out_dir: Path,
+) -> List[Path]:
+    """Trace le SNIR moyen en distinguant l'état SNIR."""
+
+    return _plot_metric_with_snir_states(
+        metrics_by_method,
+        scenarios,
+        out_dir,
+        attribute="snir_mean",
+        ylabel="SNIR moyen (dB)",
+        filename_base="snir_mean_vs_scenarios",
+        y_limits=None,
+        ci_resolver=_snir_ci_for_metric,
     )
 
 
@@ -822,77 +869,96 @@ def plot_snir_cdf(
     scenarios: Sequence[str],
     out_dir: Path,
 ) -> List[Path]:
-    """Génère les CDF SNIR par scénario avec une courbe par méthode."""
+    """Génère les CDF SNIR/SNR par scénario avec une courbe par méthode."""
 
     saved_paths: List[Path] = []
     method_styles = _style_mapping(sorted(metrics_by_method.keys()))
-    states_order = ["snir_on", "snir_off", "snir_unknown"]
 
-    for scenario in scenarios:
-        def render(state_filter: List[str], suffix: str, title: str) -> Optional[Path]:
-            fig, ax = plt.subplots(figsize=(6.5, 4.5))
-            has_data = False
-            for method in sorted(metrics_by_method.keys()):
-                metric = metrics_by_method[method].get(scenario)
-                if not metric:
-                    continue
-                snir_cdf = metric.snir_cdf
-                if not snir_cdf:
-                    continue
-                state = _metric_snir_state(metric)
-                if state_filter and state not in state_filter:
-                    continue
-                has_data = True
-                xs, ys = zip(*sorted(snir_cdf))
-                _, marker = method_styles[method]
-                color = SNIR_STATE_COLORS.get(state, "#7f7f7f")
-                label_state = SNIR_STATE_LABELS.get(state, state)
-                ax.step(
-                    xs,
-                    ys,
-                    where="post",
-                    label=f"{method} ({label_state})",
-                    color=color,
-                )
-                ax.plot([], [], marker=marker, color=color, linestyle="", label="")
-            if not has_data:
-                ax.text(
-                    0.5,
-                    0.5,
-                    "SNIR data unavailable",
-                    ha="center",
-                    va="center",
-                    transform=ax.transAxes,
-                )
-            ax.set_xlabel("SNIR (dB)")
-            ax.set_ylabel("CDF")
-            ax.set_ylim(0.0, 1.0)
-            ax.set_xlim(auto=True)
-            ax.grid(True, linestyle="--", alpha=0.4)
-            if title:
-                ax.set_title(title)
-            handles, labels = ax.get_legend_handles_labels()
-            filtered_handles = [h for h, l in zip(handles, labels) if l]
-            filtered_labels = [l for l in labels if l]
-            if filtered_handles:
-                ax.legend(filtered_handles, filtered_labels, loc="best")
-            fig.tight_layout()
+    def _plot_cdf(
+        *,
+        metric_label: str,
+        filename_prefix: str,
+        cdf_getter: Callable[[MethodScenarioMetrics], List[Tuple[float, float]]],
+        label_suffix: Optional[str] = None,
+    ) -> None:
+        for scenario in scenarios:
+            def render(state_filter: List[str], suffix: str, title: str) -> Optional[Path]:
+                fig, ax = plt.subplots(figsize=(6.5, 4.5))
+                has_data = False
+                for method in sorted(metrics_by_method.keys()):
+                    metric = metrics_by_method[method].get(scenario)
+                    if not metric:
+                        continue
+                    cdf = cdf_getter(metric)
+                    if not cdf:
+                        continue
+                    state = _metric_snir_state(metric)
+                    if state_filter and state not in state_filter:
+                        continue
+                    has_data = True
+                    xs, ys = zip(*sorted(cdf))
+                    _, marker = method_styles[method]
+                    color = SNIR_STATE_COLORS.get(state, "#7f7f7f")
+                    label_state = SNIR_STATE_LABELS.get(state, state)
+                    label = f"{method} ({label_state})"
+                    if label_suffix:
+                        label = f"{method} ({label_state}, {label_suffix})"
+                    ax.step(
+                        xs,
+                        ys,
+                        where="post",
+                        label=label,
+                        color=color,
+                    )
+                    ax.plot([], [], marker=marker, color=color, linestyle="", label="")
+                if not has_data:
+                    ax.text(
+                        0.5,
+                        0.5,
+                        f"{metric_label} data unavailable",
+                        ha="center",
+                        va="center",
+                        transform=ax.transAxes,
+                    )
+                ax.set_xlabel(f"{metric_label} (dB)")
+                ax.set_ylabel("CDF")
+                ax.set_ylim(0.0, 1.0)
+                ax.set_xlim(auto=True)
+                ax.grid(True, linestyle="--", alpha=0.4)
+                if title:
+                    ax.set_title(title)
+                handles, labels = ax.get_legend_handles_labels()
+                filtered_handles = [h for h, l in zip(handles, labels) if l]
+                filtered_labels = [l for l in labels if l]
+                if filtered_handles:
+                    ax.legend(filtered_handles, filtered_labels, loc="best")
+                fig.tight_layout()
 
-            filename = f"snir_cdf_{sanitize_filename(scenario)}{suffix}.png"
-            output_path = out_dir / filename
-            fig.savefig(output_path, dpi=150)
-            plt.close(fig)
-            saved_paths.append(output_path)
-            return output_path
+                filename = f"{filename_prefix}_{sanitize_filename(scenario)}{suffix}.png"
+                output_path = out_dir / filename
+                fig.savefig(output_path, dpi=150)
+                plt.close(fig)
+                saved_paths.append(output_path)
+                return output_path
 
-        saved_paths.extend(
             _render_snir_variants(
                 render,
-                on_title=f"SNIR CDF – {scenario} (SNIR activé)",
-                off_title=f"SNIR CDF – {scenario} (SNIR désactivé)",
-                mixed_title=f"SNIR CDF – {scenario} (superposé)",
+                on_title=f"{metric_label} CDF – {scenario} (SNIR activé)",
+                off_title=f"{metric_label} CDF – {scenario} (SNIR désactivé)",
+                mixed_title=f"{metric_label} CDF – {scenario} (superposé)",
             )
-        )
+
+    _plot_cdf(
+        metric_label="SNIR",
+        filename_prefix="snir_cdf",
+        cdf_getter=lambda metric: metric.snir_cdf,
+    )
+    _plot_cdf(
+        metric_label="SNR",
+        filename_prefix="snr_cdf",
+        cdf_getter=lambda metric: metric.snr_cdf,
+        label_suffix="SNR",
+    )
     return saved_paths
 
 
@@ -1025,6 +1091,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     plot_cluster_pdr(metrics_by_method, scenarios, out_dir)
     plot_pdr(metrics_by_method, scenarios, out_dir)
     plot_der(metrics_by_method, scenarios, out_dir)
+    plot_snir_mean(metrics_by_method, scenarios, out_dir)
     plot_collisions(metrics_by_method, scenarios, out_dir)
     plot_energy(metrics_by_method, scenarios, out_dir)
     plot_energy_snir(metrics_by_method, scenarios, out_dir)
