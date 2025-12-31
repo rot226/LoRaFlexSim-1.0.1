@@ -44,9 +44,12 @@ def test_snir_reproducibility_same_seed_and_change() -> None:
     series_first = _snir_series(seed=21, fading_std_db=None)
     series_second = _snir_series(seed=21, fading_std_db=None)
     _assert_same_sequence(series_second, series_first)
+    assert len(series_second) == len(series_first)
 
     changed_seed_series = _snir_series(seed=37, fading_std_db=None)
     assert changed_seed_series != series_first, "Les séries doivent diverger quand la graine change"
+    mean_gap = abs(statistics.mean(series_first) - statistics.mean(changed_seed_series))
+    assert mean_gap >= 0.5, f"Différence moyenne trop faible malgré un changement de seed (Δ={mean_gap:.2f} dB)"
 
 
 def test_snir_reproducibility_with_fading_variance() -> None:
