@@ -1601,6 +1601,8 @@ class Simulator:
             # Propagation du paquet vers chaque passerelle
             best_snr = None
             best_snir = None
+            best_noise_dBm = None
+            best_interference_mW = None
             for gw in self.gateways:
                 distance = node.distance_to(gw)
                 use_snir = bool(getattr(node.channel, "use_snir", True))
@@ -1704,6 +1706,8 @@ class Simulator:
                     best_snr = snr
                 if best_snir is None or snr_effective > best_snir:
                     best_snir = snr_effective
+                    best_noise_dBm = noise_dBm
+                    best_interference_mW = interference_mw
                 # Démarrer la réception à la passerelle (gestion des collisions et capture)
                 if self.capture_mode is not None:
                     capture_mode = self.capture_mode
@@ -1792,6 +1796,8 @@ class Simulator:
                 "rssi_dBm": best_rssi,
                 "snr_dB": best_snr,
                 "snir_dB": best_snir,
+                "noise_dBm": best_noise_dBm,
+                "interference_mW": best_interference_mW,
                 "result": None,
                 "gateway_id": None,
             }
@@ -1866,6 +1872,17 @@ class Simulator:
 
             entry["snr_dB"] = snr_value
             entry["rssi_dBm"] = rssi_value
+
+            if entry["result"] in {"Collision", "CollisionLoss"}:
+                snir_value = entry.get("snir_dB")
+                if snir_value is None or math.isnan(snir_value):
+                    snir_estimate = node.channel.estimate_snir_db(
+                        entry.get("rssi_dBm"),
+                        entry.get("noise_dBm"),
+                        entry.get("interference_mW"),
+                    )
+                    if snir_estimate is not None:
+                        entry["snir_dB"] = snir_estimate
 
             snir_value = entry.get("snir_dB")
             snir_for_node: float | None
