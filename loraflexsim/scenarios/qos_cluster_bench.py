@@ -363,6 +363,7 @@ def _compute_additional_metrics(
     duration = float(getattr(simulator, "current_time", 0.0) or 0.0)
     if duration <= 0.0:
         duration = 1.0
+    metrics.setdefault("collisions_snir", 0)
     total_sent = float(metrics.get("tx_attempted", 0.0) or 0.0)
     delivered = float(metrics.get("delivered", 0.0) or 0.0)
     metrics["DER"] = delivered / total_sent if total_sent > 0 else 0.0
