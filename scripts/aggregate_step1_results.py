@@ -15,7 +15,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from scripts.plot_step1_results import STATE_LABELS, _detect_snir
+from scripts.plot_step1_results import STATE_LABELS
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
 
 
@@ -113,9 +113,6 @@ def _load_records(results_dir: Path, strict_snir: bool) -> Tuple[List[Record], L
                     snir_flag = _parse_bool(row.get("use_snir"))
                 if snir_flag is None and snir_state in STATE_LABELS.values():
                     snir_flag = next((flag for flag, label in STATE_LABELS.items() if label == snir_state), None)
-                if snir_flag is None:
-                    snir_flag = _detect_snir(row, csv_path)
-
                 if snir_flag is not None and snir_state != STATE_LABELS.get(snir_flag):
                     raise ValueError(
                         f"Le fichier {csv_path} mélange snir_state={snir_state} "
