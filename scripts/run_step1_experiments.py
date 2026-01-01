@@ -195,6 +195,11 @@ def _snir_suffix(use_snir: bool) -> str:
     return "_snir-on" if use_snir else "_snir-off"
 
 
+def _ensure_collisions_snir(csv_row: Mapping[str, object]) -> None:
+    if "collisions_snir" not in csv_row:
+        raise ValueError("Le CSV exporté doit contenir le champ collisions_snir.")
+
+
 def _sync_snir_state(simulator: Simulator, requested: bool) -> bool:
     channel = getattr(simulator, "channel", None)
     if channel is not None:
@@ -276,6 +281,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
     )
     enriched = _compute_additional_metrics(simulator, dict(metrics), args.algorithm, args.mixra_solver)
     csv_row = _flatten_metrics(enriched)
+    _ensure_collisions_snir(csv_row)
 
     output_dir: Path = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
