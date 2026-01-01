@@ -144,6 +144,7 @@ def _load_step1_records(results_dir: Path, strict: bool = False) -> List[Dict[st
                         f"Aucun état SNIR explicite dans {csv_path}; la ligne sera ignorée pour les figures mixtes.",
                         RuntimeWarning,
                     )
+                    continue
                 record["use_snir"] = True if snir_state == "snir_on" else False if snir_state == "snir_off" else None
                 record["snir_state"] = snir_state
                 record["snir_detected"] = snir_detected
@@ -169,7 +170,7 @@ def _render_snir_variants(
     variants = [
         (["snir_on"], "_snir-on", on_title),
         (["snir_off"], "_snir-off", off_title),
-        (["snir_on", "snir_off", "snir_unknown"], "_snir-mixed", mixed_title),
+        (["snir_on", "snir_off"], "_snir-mixed", mixed_title),
     ]
     for states, suffix, title in variants:
         render(states, suffix, title)
@@ -237,6 +238,7 @@ def _load_summary_records(summary_path: Path, forced_state: str | None = None) -
                     f"Aucun état SNIR explicite dans {summary_path}; la ligne sera ignorée pour les figures mixtes.",
                     RuntimeWarning,
                 )
+                continue
             record["snir_detected"] = snir_detected
             records.append(record)
     return records

@@ -37,8 +37,21 @@ def test_missing_snir_state_excluded_from_mixed(tmp_path: Path) -> None:
     with pytest.warns(RuntimeWarning, match="Aucun état SNIR explicite"):
         records = plot_step1_results._load_step1_records(results_dir)
 
-    assert len(records) == 1
-    record = records[0]
-    assert record["snir_state"] is None
-    assert record["snir_detected"] is False
-    assert plot_step1_results._record_matches_state(record, "snir_unknown") is False
+    assert records == []
+
+
+def test_mixed_variants_exclude_snir_unknown() -> None:
+    seen_states: list[list[str]] = []
+
+    def render(states: list[str], suffix: str, title: str) -> None:
+        if suffix == "_snir-mixed":
+            seen_states.append(states)
+
+    plot_step1_results._render_snir_variants(
+        render,
+        on_title="SNIR activé",
+        off_title="SNIR désactivé",
+        mixed_title="SNIR mixte",
+    )
+
+    assert seen_states == [["snir_on", "snir_off"]]
