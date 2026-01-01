@@ -402,12 +402,11 @@ def _compute_additional_metrics(
         elif result == "Collision":
             collisions_by_sf[sf] = collisions_by_sf.get(sf, 0) + 1
             collisions_by_channel[channel_idx] = collisions_by_channel.get(channel_idx, 0) + 1
-        if event.get("heard"):
-            snir = event.get("snir_dB")
-            if snir is not None:
-                snir_value = float(snir)
-                if not math.isnan(snir_value):
-                    snir_values.append(snir_value)
+        snir = event.get("snir_dB")
+        if snir is not None:
+            snir_value = float(snir)
+            if not math.isnan(snir_value):
+                snir_values.append(snir_value)
 
     for sf, channel_counts in throughput_map.items():
         for channel_idx, count in channel_counts.items():

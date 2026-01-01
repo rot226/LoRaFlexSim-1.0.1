@@ -1046,6 +1046,18 @@ class Channel:
         signal_mW = 10 ** (rssi_dBm / 10.0)
         return 10 * math.log10(signal_mW / total_noise)
 
+    def estimate_collision_snir_db(
+        self,
+        rssi_dBm: float | None,
+        noise_dBm: float | None,
+        interference_mW: float | None = None,
+    ) -> float | None:
+        """Estime le SNIR (dB) lors d'une collision."""
+
+        if interference_mW is None:
+            interference_mW = getattr(self, "last_interference_mW", 0.0)
+        return self.estimate_snir_db(rssi_dBm, noise_dBm, interference_mW)
+
     # ------------------------------------------------------------------
     def qos_path_gain(self, distance: float) -> float:
         """Return :math:`g(d)` for the QoS radio model."""

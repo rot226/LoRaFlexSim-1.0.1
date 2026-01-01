@@ -1888,15 +1888,13 @@ class Simulator:
             entry["rssi_dBm"] = rssi_value
 
             if entry["result"] in {"Collision", "CollisionLoss"}:
-                snir_value = entry.get("snir_dB")
-                if snir_value is None or math.isnan(snir_value):
-                    snir_estimate = node.channel.estimate_snir_db(
-                        entry.get("rssi_dBm"),
-                        entry.get("noise_dBm"),
-                        entry.get("interference_mW"),
-                    )
-                    if snir_estimate is not None:
-                        entry["snir_dB"] = snir_estimate
+                snir_estimate = node.channel.estimate_collision_snir_db(
+                    entry.get("rssi_dBm"),
+                    entry.get("noise_dBm"),
+                    entry.get("interference_mW"),
+                )
+                if snir_estimate is not None:
+                    entry["snir_dB"] = snir_estimate
 
             snir_value = entry.get("snir_dB")
             snir_for_node: float | None
