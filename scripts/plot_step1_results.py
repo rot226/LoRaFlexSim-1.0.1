@@ -90,13 +90,25 @@ def _record_matches_state(record: Mapping[str, Any], state: str) -> bool:
     return record.get("snir_state") == state and record.get("snir_detected", True)
 
 
-def _load_step1_records(results_dir: Path) -> List[Dict[str, Any]]:
+def _load_step1_records(results_dir: Path, strict: bool = False) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     if not results_dir.exists():
         return records
     for csv_path in sorted(results_dir.rglob("*.csv")):
         with csv_path.open("r", encoding="utf8") as handle:
             reader = csv.DictReader(handle)
+            if strict:
+                required_columns = {"snir_state", "snir_mean", "snir_histogram_json"}
+                fieldnames = set(reader.fieldnames or [])
+                if not required_columns.issubset(fieldnames):
+                    warnings.warn(
+                        (
+                            "CSV ignoré (filtrage strict) : "
+                            f"{csv_path} ne contient pas {sorted(required_columns)}."
+                        ),
+                        RuntimeWarning,
+                    )
+                    continue
             for row in reader:
                 cluster_pdr: Dict[int, float] = {}
                 cluster_targets: Dict[int, float] = {}
@@ -230,18 +242,18 @@ def _load_summary_records(summary_path: Path, forced_state: str | None = None) -
     return records
 
 
-def _load_comparison_records(results_dir: Path, use_summary: bool) -> List[Dict[str, Any]]:
+def _load_comparison_records(results_dir: Path, use_summary: bool, strict: bool) -> List[Dict[str, Any]]:
     if use_summary:
         explicit_on = _load_summary_records(results_dir / "summary_snir_on.csv", forced_state="snir_on")
         explicit_off = _load_summary_records(results_dir / "summary_snir_off.csv", forced_state="snir_off")
         combined = _load_summary_records(results_dir / "summary.csv")
         records = explicit_on + explicit_off + combined
     else:
-        records = _load_step1_records(results_dir)
+        records = _load_step1_records(results_dir, strict=strict)
     return records
 
 
-def _load_raw_samples(raw_path: Path, fallback_dir: Path) -> List[Dict[str, Any]]:
+def _load_raw_samples(raw_path: Path, fallback_dir: Path, strict: bool) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     if raw_path.exists():
         with raw_path.open("r", encoding="utf8") as handle:
@@ -255,7 +267,7 @@ def _load_raw_samples(raw_path: Path, fallback_dir: Path) -> List[Dict[str, Any]
                 }
                 records.append(record)
     else:
-        records = _load_step1_records(fallback_dir)
+        records = _load_step1_records(fallback_dir, strict=strict)
     return records
 
 
@@ -730,6 +742,7 @@ def generate_step1_figures(
     use_summary: bool = False,
     plot_cdf: bool = False,
     compare_snir: bool = True,
+    strict: bool = False,
 ) -> None:
     if plt is None:
         print("matplotlib n'est pas disponible ; aucune figure générée.")
@@ -749,7 +762,7 @@ def generate_step1_figures(
             _plot_summary_bars(summary_records, extended_dir)
             comparison_records = summary_records
     else:
-        records = _load_step1_records(results_dir)
+        records = _load_step1_records(results_dir, strict=strict)
         if not records:
             print(f"Aucun CSV trouvé dans {results_dir} ; rien à tracer.")
             return
@@ -767,7 +780,7 @@ def generate_step1_figures(
         comparison_records = records
 
     if compare_snir:
-        comparison_records = _load_comparison_records(results_dir, use_summary)
+        comparison_records = _load_comparison_records(results_dir, use_summary, strict)
         if not comparison_records:
             print("Aucune donnée disponible pour comparer SNIR on/off.")
         else:
@@ -775,7 +788,7 @@ def generate_step1_figures(
 
     if plot_cdf:
         raw_path = results_dir / "raw_index.csv"
-        raw_records = _load_raw_samples(raw_path, results_dir)
+        raw_records = _load_raw_samples(raw_path, results_dir, strict)
         if not raw_records:
             print(f"Aucun échantillon brut trouvé dans {raw_path} ni dans {results_dir}.")
         else:
@@ -820,6 +833,14 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="compare_snir",
         help="Désactive les figures combinées SNIR on/off",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Applique un filtrage strict des CSV (snir_state, snir_mean, snir_histogram_json) "
+            "pour aligner la sélection sur les figures extended."
+        ),
+    )
     return parser
 
 
@@ -832,6 +853,7 @@ def main(argv: List[str] | None = None) -> None:
         args.use_summary,
         args.plot_cdf,
         args.compare_snir,
+        args.strict,
     )
 
 

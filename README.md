@@ -130,6 +130,8 @@ L'option `--compare-snir` est désormais activée par défaut (ajoutez
 toujours générées, notamment lorsque vous utilisez `--use-summary`. Les figures
 combinées `*_snir_compare_*.png` sont déposées dans `figures/step1/`, et les
 éventuelles CDF/figures étendues sont rangées dans `figures/step1/extended/`.
+Pour l'analyse, seules les figures présentes dans `figures/step1/extended/`
+sont recommandées.
 Les couleurs par défaut restent **rouge** pour SNIR activé et **bleu** pour
 SNIR désactivé (`#d62728` et `#1f77b4`), telles que définies dans
 `scripts/plot_step1_results.py`.【F:scripts/plot_step1_results.py†L16-L24】【F:scripts/plot_step1_results.py†L450-L520】
