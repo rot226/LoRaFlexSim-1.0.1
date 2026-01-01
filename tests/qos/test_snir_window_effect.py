@@ -11,7 +11,7 @@ def _read_cdf(path: Path) -> dict[str, list[tuple[float, float]]]:
     with path.open("r", encoding="utf8", newline="") as handle:
         reader = csv.DictReader(handle)
         for row in reader:
-            window = row["window"]
+            window = row.get("snir_window_mode") or row["window"]
             by_window.setdefault(window, []).append(
                 (float(row["snir_db"]), float(row["cdf"]))
             )

@@ -31,6 +31,9 @@ PACKET_INTERVAL_S = 900.0
 PACKETS_PER_NODE = 10
 PAYLOAD_BYTES = 20
 NUM_NODES = 6000
+QUICK_PACKET_INTERVAL_S = 120.0
+QUICK_PACKETS_PER_NODE = 3
+QUICK_NUM_NODES = 600
 WINDOW_MODES: tuple[tuple[str, str], ...] = (
     ("packet", "packet"),
     ("preamble", "preamble"),
@@ -125,6 +128,7 @@ def _run_single(
         rows.append(
             {
                 "window": window_mode,
+                "snir_window_mode": window_mode,
                 "snir_db": snir_db,
                 "cdf": probability,
                 "der": stats["der"],
@@ -167,6 +171,7 @@ def write_csv(rows: Iterable[dict[str, object]], path: Path) -> None:
             fieldnames=[
                 "window",
                 "window_label",
+                "snir_window_mode",
                 "snir_db",
                 "cdf",
                 "der",
@@ -205,6 +210,29 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Exécute rapidement les deux fenêtres principales (preamble vs packet).",
     )
+    parser.add_argument(
+        "--quick-run",
+        action="store_true",
+        help="Utilise des paramètres réduits pour une exécution rapide.",
+    )
+    parser.add_argument(
+        "--quick-num-nodes",
+        type=int,
+        default=QUICK_NUM_NODES,
+        help="Nombre de nœuds pour --quick-run.",
+    )
+    parser.add_argument(
+        "--quick-packets-per-node",
+        type=int,
+        default=QUICK_PACKETS_PER_NODE,
+        help="Nombre de paquets par nœud pour --quick-run.",
+    )
+    parser.add_argument(
+        "--quick-packet-interval",
+        type=float,
+        default=QUICK_PACKET_INTERVAL_S,
+        help="Intervalle des paquets (s) pour --quick-run.",
+    )
     parser.add_argument("--num-nodes", type=int, default=NUM_NODES)
     parser.add_argument("--packets-per-node", type=int, default=PACKETS_PER_NODE)
     parser.add_argument("--packet-interval", type=float, default=PACKET_INTERVAL_S)
@@ -220,11 +248,19 @@ def main(argv: list[str] | None = None) -> int:
         window_modes = [("packet", "packet"), ("preamble", "preamble")]
     else:
         window_modes = _parse_window_modes(args.window_modes)
+    if args.quick_run:
+        num_nodes = args.quick_num_nodes
+        packets_per_node = args.quick_packets_per_node
+        packet_interval = args.quick_packet_interval
+    else:
+        num_nodes = args.num_nodes
+        packets_per_node = args.packets_per_node
+        packet_interval = args.packet_interval
     dataset = run_campaign(
         window_modes=window_modes,
-        num_nodes=args.num_nodes,
-        packets_per_node=args.packets_per_node,
-        packet_interval=args.packet_interval,
+        num_nodes=num_nodes,
+        packets_per_node=packets_per_node,
+        packet_interval=packet_interval,
         payload_bytes=args.payload_bytes,
     )
     write_csv(dataset, args.output)
