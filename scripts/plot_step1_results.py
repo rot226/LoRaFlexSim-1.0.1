@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import warnings
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
@@ -66,22 +67,27 @@ def _parse_bool(value: Any) -> bool | None:
     return None
 
 
-def _detect_snir(row: Mapping[str, Any], path: Path) -> bool | None:
-    candidates = [
-        row.get("with_snir"),
-        row.get("use_snir"),
-        row.get("channel__use_snir"),
-        row.get("snir_enabled"),
-        row.get("snir"),
-    ]
-    for candidate in candidates:
-        parsed = _parse_bool(candidate)
+def _detect_snir_state(row: Mapping[str, Any]) -> Tuple[str | None, bool]:
+    snir_state_raw = row.get("snir_state")
+    if snir_state_raw is not None and str(snir_state_raw).strip() != "":
+        normalized = str(snir_state_raw).strip().lower()
+        if normalized in {"snir_on", "on", "true", "1", "yes", "y"}:
+            return "snir_on", True
+        if normalized in {"snir_off", "off", "false", "0", "no", "n"}:
+            return "snir_off", True
+        if normalized in {"snir_unknown", "unknown", "na", "n/a"}:
+            return "snir_unknown", True
+        return None, False
+
+    for key in ("use_snir", "with_snir"):
+        parsed = _parse_bool(row.get(key))
         if parsed is not None:
-            return parsed
-    for part in path.parts:
-        if "snir" in part.lower():
-            return True
-    return None
+            return STATE_LABELS.get(parsed, "snir_unknown"), True
+    return None, False
+
+
+def _record_matches_state(record: Mapping[str, Any], state: str) -> bool:
+    return record.get("snir_state") == state and record.get("snir_detected", True)
 
 
 def _load_step1_records(results_dir: Path) -> List[Dict[str, Any]]:
@@ -118,9 +124,15 @@ def _load_step1_records(results_dir: Path) -> List[Dict[str, Any]]:
                     "cluster_pdr": cluster_pdr,
                     "cluster_targets": cluster_targets,
                 }
-                snir_flag = _detect_snir(row, csv_path)
-                record["use_snir"] = snir_flag
-                record["snir_state"] = STATE_LABELS.get(snir_flag, "snir_unknown")
+                snir_state, snir_detected = _detect_snir_state(row)
+                if not snir_detected:
+                    warnings.warn(
+                        f"Aucun état SNIR explicite dans {csv_path}; la ligne sera ignorée pour les figures mixtes.",
+                        RuntimeWarning,
+                    )
+                record["use_snir"] = True if snir_state == "snir_on" else False if snir_state == "snir_off" else None
+                record["snir_state"] = snir_state
+                record["snir_detected"] = snir_detected
                 records.append(record)
     return records
 
@@ -200,11 +212,18 @@ def _load_summary_records(summary_path: Path, forced_state: str | None = None) -
                     record[key] = float(value or 0)
                 else:
                     record[key] = _parse_float(value)
-            snir_flag = _parse_bool(row.get("with_snir"))
-            if snir_flag is not None and not record.get("snir_state"):
-                record["snir_state"] = STATE_LABELS.get(snir_flag, "snir_unknown")
+            snir_state, snir_detected = _detect_snir_state(row)
+            if snir_detected and not record.get("snir_state"):
+                record["snir_state"] = snir_state
             if forced_state and not record.get("snir_state"):
                 record["snir_state"] = forced_state
+                snir_detected = True
+            if not snir_detected:
+                warnings.warn(
+                    f"Aucun état SNIR explicite dans {summary_path}; la ligne sera ignorée pour les figures mixtes.",
+                    RuntimeWarning,
+                )
+            record["snir_detected"] = snir_detected
             records.append(record)
     return records
 
@@ -255,7 +274,7 @@ def _plot_global_metric(
         for period in periods:
             fig, ax = plt.subplots(figsize=(6, 4))
             for state in states:
-                state_records = [r for r in records if r.get("snir_state") == state]
+                state_records = [r for r in records if _record_matches_state(r, state)]
                 if not state_records:
                     continue
                 for algo_idx, algorithm in enumerate(algorithms):
@@ -364,7 +383,11 @@ def _plot_summary_bars(records: List[Dict[str, Any]], figures_dir: Path) -> None
     }
 
     periods = sorted({r.get("packet_interval_s") for r in records})
-    snir_states = [state for state in ("snir_on", "snir_off", "snir_unknown") if state in {r.get("snir_state") for r in records}]
+    snir_states = [
+        state
+        for state in ("snir_on", "snir_off", "snir_unknown")
+        if state in {r.get("snir_state") for r in records if r.get("snir_detected", True)}
+    ]
     if not snir_states:
         return
 
@@ -395,7 +418,7 @@ def _plot_summary_bars(records: List[Dict[str, Any]], figures_dir: Path) -> None
                             for r in filtered
                             if r.get("num_nodes") == num_nodes
                             and r.get("algorithm") == algorithm
-                            and r.get("snir_state") == state
+                            and _record_matches_state(r, state)
                         ),
                         None,
                     )
@@ -437,6 +460,8 @@ def _plot_cdf(records: Sequence[Mapping[str, Any]], figures_dir: Path) -> None:
     by_algorithm: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
     for record in records:
         algo = str(record.get("algorithm") or "unknown")
+        if not record.get("snir_detected", True):
+            continue
         state = str(record.get("snir_state") or "snir_unknown")
         der = _parse_float(record.get("DER"))
         by_algorithm[algo][state].append(der)
@@ -482,7 +507,13 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
     algorithms = sorted({r["algorithm"] for r in records})
     def render(states: List[str], suffix: str, title: str) -> None:
         for period in periods:
-            filtered = [r for r in records if r["packet_interval_s"] == period and r.get("snir_state") in states]
+            filtered = [
+                r
+                for r in records
+                if r["packet_interval_s"] == period
+                and r.get("snir_state") in states
+                and r.get("snir_detected", True)
+            ]
             if not filtered:
                 continue
             fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 4), sharey=True)
@@ -491,7 +522,7 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
             for idx, cluster_id in enumerate(clusters):
                 ax = axes[idx]
                 for state in states:
-                    state_records = [r for r in filtered if r.get("snir_state") == state]
+                    state_records = [r for r in filtered if _record_matches_state(r, state)]
                     for algo_idx, algorithm in enumerate(algorithms):
                         algo_records = [r for r in state_records if r["algorithm"] == algorithm]
                         algo_records.sort(key=lambda item: item["num_nodes"])
@@ -611,7 +642,7 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
                         state_records = [
                             r
                             for r in period_records
-                            if (r.get("snir_state") or "snir_unknown") == state
+                            if _record_matches_state(r, state)
                         ]
                         state_records.sort(key=lambda item: _parse_float(item.get("num_nodes")))
                         xs = [_parse_float(item.get("num_nodes")) for item in state_records]
