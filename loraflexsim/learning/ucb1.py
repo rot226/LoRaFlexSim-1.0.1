@@ -131,8 +131,9 @@ class LoRaSFSelectorUCB1:
         reward_window: int = 20,
         traffic_weighted_mean: bool = False,
     ) -> None:
+        self.reward_window = max(1, reward_window)
         self.bandit = UCB1Bandit(
-            n_arms=6, window_size=reward_window, traffic_weighted_mean=traffic_weighted_mean
+            n_arms=6, window_size=self.reward_window, traffic_weighted_mean=traffic_weighted_mean
         )
         self.success_weight = success_weight
         self.snir_margin_weight = snir_margin_weight
@@ -142,7 +143,7 @@ class LoRaSFSelectorUCB1:
         self.snir_threshold_db = snir_threshold_db
         self.energy_normalization = energy_normalization
         self._qos_windows: List[Deque[RewardSample]] = [
-            deque(maxlen=self.bandit.window_size) for _ in range(self.bandit.n_arms)
+            deque(maxlen=self.reward_window) for _ in range(self.bandit.n_arms)
         ]
 
     def _compute_components(
@@ -325,7 +326,7 @@ class LoRaSFSelectorUCB1:
         """Réinitialise les statistiques internes du sélecteur."""
 
         self.bandit.reset()
-        self._qos_windows = [deque(maxlen=self.bandit.window_size) for _ in range(self.bandit.n_arms)]
+        self._qos_windows = [deque(maxlen=self.reward_window) for _ in range(self.bandit.n_arms)]
 
     @property
     def reward_window_mean(self) -> List[float]:

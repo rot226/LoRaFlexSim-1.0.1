@@ -24,6 +24,8 @@ PALETTE = [
     "#17becf",
 ]
 LINE_STYLES = ["-", "--", ":", "-."]
+SNIR_LABELS = {"snir_on": "SNIR activé", "snir_off": "SNIR désactivé", "snir_unknown": "SNIR inconnu"}
+SNIR_COLORS = {"snir_on": "#d62728", "snir_off": "#1f77b4", "snir_unknown": "#7f7f7f"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -54,6 +56,37 @@ def _ensure_columns(df: pd.DataFrame, required: Iterable[str], path: Path) -> No
     missing = [column for column in required if column not in df.columns]
     if missing:
         raise ValueError(f"Colonnes manquantes dans {path}: {', '.join(missing)}")
+
+
+def _parse_bool(value: object | None) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"", "none", "nan"}:
+        return None
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _detect_snir(row: pd.Series) -> str:
+    candidates = [row.get("with_snir"), row.get("use_snir"), row.get("snir_enabled"), row.get("snir")]
+    for candidate in candidates:
+        parsed = _parse_bool(candidate)
+        if parsed is not None:
+            return "snir_on" if parsed else "snir_off"
+    state = row.get("snir_state")
+    if isinstance(state, str) and state:
+        state_lower = state.lower()
+        if "on" in state_lower:
+            return "snir_on"
+        if "off" in state_lower:
+            return "snir_off"
+    return "snir_unknown"
 
 
 def _resolve_time(df: pd.DataFrame) -> pd.Series:
@@ -123,6 +156,47 @@ def _plot_metric(
     _save_plot(fig, output_dir, output_name)
 
 
+def _plot_metric_snir_overlay(
+    df: pd.DataFrame,
+    *,
+    metric: str,
+    title: str,
+    ylabel: str,
+    output_name: str,
+    clusters: list[int],
+    intervals: list[float],
+    output_dir: Path,
+) -> None:
+    fig, ax = plt.subplots(figsize=(7.0, 4.2))
+    for cluster in clusters:
+        for interval in intervals:
+            for snir_state in ("snir_off", "snir_on"):
+                subset = df[
+                    (df["cluster"] == cluster)
+                    & (df["packet_interval_s"] == interval)
+                    & (df["snir_state"] == snir_state)
+                ]
+                if subset.empty:
+                    continue
+                subset = subset.sort_values("time_s")
+                label = f"C{cluster} ({interval:.0f}s, {SNIR_LABELS[snir_state]})"
+                ax.plot(
+                    subset["time_s"],
+                    subset[metric],
+                    label=label,
+                    color=SNIR_COLORS[snir_state],
+                    linestyle=LINE_STYLES[int(intervals.index(interval)) % len(LINE_STYLES)],
+                    marker="o",
+                    markersize=3,
+                )
+    ax.set_title(title)
+    ax.set_xlabel("Temps (s)")
+    ax.set_ylabel(ylabel)
+    ax.grid(True, linestyle=":", alpha=0.5)
+    ax.legend(fontsize=8, ncol=2)
+    _save_plot(fig, output_dir, output_name)
+
+
 def run_plots(*, csv_path: Path, output_dir: Path, packet_intervals: list[float]) -> None:
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV introuvable: {csv_path}")
@@ -155,6 +229,8 @@ def run_plots(*, csv_path: Path, output_dir: Path, packet_intervals: list[float]
     intervals = sorted(df["packet_interval_s"].unique().tolist())
     colors, styles = _style_maps(clusters, intervals)
 
+    df["snir_state"] = df.apply(_detect_snir, axis=1)
+
     regret_frames = []
     for cluster in clusters:
         for interval in intervals:
@@ -167,6 +243,25 @@ def run_plots(*, csv_path: Path, output_dir: Path, packet_intervals: list[float]
             subset["cumulative_regret"] = subset["regret"].cumsum()
             regret_frames.append(subset)
     regret_df = pd.concat(regret_frames, ignore_index=True)
+    regret_snir_frames = []
+    for cluster in clusters:
+        for interval in intervals:
+            for snir_state in ("snir_off", "snir_on", "snir_unknown"):
+                subset = df[
+                    (df["cluster"] == cluster)
+                    & (df["packet_interval_s"] == interval)
+                    & (df["snir_state"] == snir_state)
+                ]
+                if subset.empty:
+                    continue
+                subset = subset.sort_values("time_s").copy()
+                best_reward = subset["reward_window_mean"].max()
+                subset["regret"] = best_reward - subset["reward_window_mean"]
+                subset["cumulative_regret"] = subset["regret"].cumsum()
+                regret_snir_frames.append(subset)
+    regret_snir_df = (
+        pd.concat(regret_snir_frames, ignore_index=True) if regret_snir_frames else regret_df.copy()
+    )
 
     _plot_metric(
         regret_df,
@@ -178,6 +273,26 @@ def run_plots(*, csv_path: Path, output_dir: Path, packet_intervals: list[float]
         intervals=intervals,
         colors=colors,
         styles=styles,
+        output_dir=output_dir,
+    )
+    _plot_metric_snir_overlay(
+        regret_snir_df,
+        metric="cumulative_regret",
+        title="Regret cumulé (SNIR activé/désactivé)",
+        ylabel="Regret cumulé",
+        output_name="ucb1_mab_cumulative_regret_snir_overlay.png",
+        clusters=clusters,
+        intervals=intervals,
+        output_dir=output_dir,
+    )
+    _plot_metric_snir_overlay(
+        df,
+        metric="reward_window_mean",
+        title="Récompense moyenne (SNIR activé/désactivé)",
+        ylabel="Récompense (fenêtre glissante)",
+        output_name="ucb1_mab_reward_vs_time_snir_overlay.png",
+        clusters=clusters,
+        intervals=intervals,
         output_dir=output_dir,
     )
     _plot_metric(

@@ -84,6 +84,19 @@ def test_reward_qos_normalization_caps_success():
     assert reward == pytest.approx(1.5)
 
 
+def test_reward_varies_with_snir_enabled():
+    selector = LoRaSFSelectorUCB1(
+        success_weight=1.0,
+        snir_margin_weight=0.4,
+        snir_threshold_db=0.0,
+    )
+
+    reward_snir_on = selector.reward_from_outcome(True, snir_db=1.5)
+    reward_snir_off = selector.reward_from_outcome(True, snir_db=None)
+
+    assert reward_snir_on > reward_snir_off
+
+
 def test_reward_sliding_window_mean():
     selector = LoRaSFSelectorUCB1(
         success_weight=1.0,
