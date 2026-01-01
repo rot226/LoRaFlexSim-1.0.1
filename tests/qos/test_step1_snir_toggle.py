@@ -16,9 +16,12 @@ import run_step1_matrix as step1_matrix
 import run_step1_experiments as step1_experiments
 
 
-MIN_SNIR_DELTA_DB = 5.0
-MIN_DER_PDR_DELTA = 0.05
-MIN_COLLISION_DELTA = 5
+MIN_SNIR_DELTA_DB = 6.0
+MIN_DER_PDR_DELTA = 0.07
+MIN_COLLISION_DELTA = 8
+MIN_COLLISION_CURVE_DELTA = 3.0
+MIN_PDR_CURVE_DELTA = 0.04
+MIN_DER_CURVE_DELTA = 0.04
 
 
 @pytest.mark.slow
@@ -94,6 +97,75 @@ def test_step1_snir_toggle_generates_distinct_csv(tmp_path: Path) -> None:
     assert abs(avg_der_on - avg_der_off) >= MIN_DER_PDR_DELTA
     assert abs(avg_pdr_on - avg_pdr_off) >= MIN_DER_PDR_DELTA
     assert abs(avg_collisions_on - avg_collisions_off) >= MIN_COLLISION_DELTA
+
+
+@pytest.mark.slow
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
+def test_step1_snir_toggle_curves_are_not_identical(tmp_path: Path) -> None:
+    results_dir = tmp_path / "step1_curves"
+    args = [
+        "--algos",
+        "adr",
+        "--with-snir",
+        "true",
+        "false",
+        "--seeds",
+        "1",
+        "--nodes",
+        "200",
+        "400",
+        "600",
+        "--packet-intervals",
+        "0.2",
+        "--duration",
+        "50",
+        "--results-dir",
+        str(results_dir),
+    ]
+
+    step1_matrix.main(args)
+
+    csv_paths = sorted(results_dir.glob("**/*.csv"))
+    assert csv_paths, "Aucun CSV généré pour comparer les courbes SNIR"
+
+    by_state: dict[bool, dict[int, dict[str, float]]] = {True: {}, False: {}}
+    for path in csv_paths:
+        with path.open(newline="", encoding="utf8") as handle:
+            row = next(csv.DictReader(handle))
+
+        use_snir = row["use_snir"] == "True"
+        nodes = int(float(row["num_nodes"]))
+        by_state[use_snir][nodes] = {
+            "pdr": float(row["PDR"]),
+            "der": float(row["DER"]),
+            "collisions": float(row["collisions"]),
+        }
+
+    assert by_state[True] and by_state[False], "Les deux états SNIR doivent fournir des points de courbe"
+
+    common_nodes = sorted(set(by_state[True]) & set(by_state[False]))
+    assert len(common_nodes) >= 3, "Au moins trois points sont nécessaires pour comparer les courbes SNIR"
+
+    def _avg_gap(metric: str) -> float:
+        gaps = [
+            abs(by_state[True][nodes][metric] - by_state[False][nodes][metric])
+            for nodes in common_nodes
+        ]
+        return sum(gaps) / len(gaps)
+
+    pdr_gap = _avg_gap("pdr")
+    der_gap = _avg_gap("der")
+    collisions_gap = _avg_gap("collisions")
+
+    assert pdr_gap >= MIN_PDR_CURVE_DELTA, (
+        f"Courbes PDR quasi identiques entre états SNIR (Δ moyen={pdr_gap:.3f})"
+    )
+    assert der_gap >= MIN_DER_CURVE_DELTA, (
+        f"Courbes DER quasi identiques entre états SNIR (Δ moyen={der_gap:.3f})"
+    )
+    assert collisions_gap >= MIN_COLLISION_CURVE_DELTA, (
+        f"Courbes de collisions quasi identiques entre états SNIR (Δ moyen={collisions_gap:.3f})"
+    )
 
 
 def test_sync_snir_state_rejects_divergence() -> None:
