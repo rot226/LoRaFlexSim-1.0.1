@@ -140,6 +140,8 @@ class Gateway:
         marginal_drop_prob: float = 0.0,
         residual_collision_prob: float = 0.0,
         residual_collision_load_scale: float = 1.0,
+        baseline_loss_rate: float = 0.0,
+        baseline_collision_rate: float = 0.0,
         use_snir: bool = True,
         snir_off_noise_prob: float = 0.0,
     ):
@@ -181,6 +183,10 @@ class Gateway:
             résiduelle lorsque la charge atteint ``residual_collision_load_scale``.
         :param residual_collision_load_scale: Nombre de transmissions
             concurrentes servant de référence pour saturer la collision résiduelle.
+        :param baseline_loss_rate: Perte résiduelle appliquée même sans collision
+            explicite.
+        :param baseline_collision_rate: Perte résiduelle additionnelle qui
+            augmente avec la charge (jusqu'à ``residual_collision_load_scale``).
         :param use_snir: Indique si le calcul SNIR est actif sur ce canal.
         :param snir_off_noise_prob: Probabilité minimale de perte aléatoire
             lorsque ``use_snir`` est désactivé.
@@ -270,8 +276,21 @@ class Gateway:
             self.active_by_event[event_id] = (key, new_transmission)
             return
 
+        def _load_factor(count: int) -> float:
+            scale = max(residual_collision_load_scale, 1.0)
+            return min(count / scale, 1.0)
+
+        def _baseline_drop_prob(count: int) -> float:
+            base = max(baseline_loss_rate, 0.0)
+            extra = max(baseline_collision_rate, 0.0) * _load_factor(count)
+            return base + extra
+
         if not interfering_transmissions:
             # Aucun paquet actif (ou chevauchement inférieur au seuil)
+            drop_prob = _baseline_drop_prob(len(concurrent_transmissions))
+            if drop_prob > 0.0 and self.rng.random() < drop_prob:
+                new_transmission["lost_flag"] = True
+                new_transmission["collision_reason"] = "baseline_loss"
             self.active_map.setdefault(key, []).append(new_transmission)
             self.active_by_event[event_id] = (key, new_transmission)
             logger.debug(
@@ -470,6 +489,13 @@ class Gateway:
                 capture = False
                 if failure_reason is None:
                     failure_reason = "snir_off_noise"
+
+        if capture and (baseline_loss_rate > 0.0 or baseline_collision_rate > 0.0):
+            drop_prob = _baseline_drop_prob(len(concurrent_transmissions))
+            if drop_prob > 0.0 and self.rng.random() < drop_prob:
+                capture = False
+                if failure_reason is None:
+                    failure_reason = "baseline_loss"
 
         if capture:
             # Apply preamble rule: the winning packet must have started

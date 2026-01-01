@@ -220,6 +220,8 @@ class Channel:
         use_flora_curves: bool = False,
         residual_collision_prob: float | None = None,
         residual_collision_load_scale: float = 4.0,
+        baseline_loss_rate: float | None = None,
+        baseline_collision_rate: float | None = None,
         snir_off_noise_prob: float = 0.01,
         tx_current_a: float = 0.0,
         rx_current_a: float = 0.0,
@@ -352,6 +354,13 @@ class Channel:
             ``use_snir`` est désactivé.
         :param residual_collision_load_scale: Nombre de transmissions
             concurrentes servant de référence pour saturer l'effet de charge.
+        :param baseline_loss_rate: Probabilité de perte résiduelle appliquée
+            même en l'absence de collisions explicites. Si ``None``, une valeur
+            minimale est utilisée lorsque ``use_snir`` est désactivé.
+        :param baseline_collision_rate: Probabilité de perte additionnelle qui
+            augmente avec la charge (jusqu'à ``residual_collision_load_scale``).
+            Si ``None``, une valeur minimale est utilisée lorsque
+            ``use_snir`` est désactivé.
         :param snir_off_noise_prob: Probabilité minimale de perte aléatoire
             appliquée lorsque ``use_snir`` est désactivé (bruit de fond).
         :param environment: Chaîne optionnelle pour charger un preset
@@ -493,6 +502,12 @@ class Channel:
             residual_collision_prob = 0.03 if use_snir is False else 0.0
         self.residual_collision_prob = float(residual_collision_prob)
         self.residual_collision_load_scale = float(residual_collision_load_scale)
+        if baseline_loss_rate is None:
+            baseline_loss_rate = 0.005 if use_snir is False else 0.0
+        if baseline_collision_rate is None:
+            baseline_collision_rate = 0.02 if use_snir is False else 0.0
+        self.baseline_loss_rate = float(baseline_loss_rate)
+        self.baseline_collision_rate = float(baseline_collision_rate)
         self.snir_off_noise_prob = float(snir_off_noise_prob)
         if flora_noise_path:
             self.flora_noise_table = self.parse_flora_noise_table(flora_noise_path)

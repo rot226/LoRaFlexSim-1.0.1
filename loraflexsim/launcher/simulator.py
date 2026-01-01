@@ -88,6 +88,8 @@ def _load_channel_overrides(path: str | Path | None) -> dict[str, float]:
         "capture_threshold_dB",
         "marginal_snir_margin_db",
         "marginal_snir_drop_prob",
+        "baseline_loss_rate",
+        "baseline_collision_rate",
     )
     for key in keys:
         try:
@@ -732,6 +734,10 @@ class Simulator:
                 channel.sensitivity_margin_dB = channel_overrides["sensitivity_margin_dB"]
                 if hasattr(channel, "_update_sensitivity"):
                     channel._update_sensitivity()
+            if "baseline_loss_rate" in channel_overrides:
+                channel.baseline_loss_rate = channel_overrides["baseline_loss_rate"]
+            if "baseline_collision_rate" in channel_overrides:
+                channel.baseline_collision_rate = channel_overrides["baseline_collision_rate"]
 
         channel_kwargs = {
             key: value
@@ -745,6 +751,8 @@ class Simulator:
                 "capture_threshold_dB",
                 "marginal_snir_margin_db",
                 "marginal_snir_drop_prob",
+                "baseline_loss_rate",
+                "baseline_collision_rate",
             }
         }
         # Activation ou non de la mobilité des nœuds
@@ -1759,6 +1767,12 @@ class Simulator:
                     residual_collision_load_scale=getattr(
                         node.channel, "residual_collision_load_scale", 1.0
                     ),
+                    baseline_loss_rate=getattr(
+                        node.channel, "baseline_loss_rate", 0.0
+                    ),
+                    baseline_collision_rate=getattr(
+                        node.channel, "baseline_collision_rate", 0.0
+                    ),
                     use_snir=use_snir,
                     snir_off_noise_prob=getattr(
                         node.channel, "snir_off_noise_prob", 0.0
@@ -2596,6 +2610,8 @@ class Simulator:
             "delivered": delivered,
             "collisions": self.packets_lost_collision,
             "collisions_snir": getattr(self, "packets_lost_snir", 0),
+            "baseline_loss_rate": getattr(self.channel, "baseline_loss_rate", 0.0),
+            "baseline_collision_rate": getattr(self.channel, "baseline_collision_rate", 0.0),
             "duplicates": self.network_server.duplicate_packets,
             "energy_J": self.total_energy_J,
             "energy_nodes_J": self.energy_nodes_J,
