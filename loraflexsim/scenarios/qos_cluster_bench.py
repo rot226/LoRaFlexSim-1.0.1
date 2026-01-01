@@ -424,9 +424,11 @@ def _compute_additional_metrics(
     metrics["snr_histogram"] = snr_histogram
     metrics["snr_cdf"] = snr_cdf
     metrics["snr_samples"] = snr_samples
+    metrics["snr_mean"] = _mean(snr_values)
     metrics["snir_histogram"] = snir_histogram
     metrics["snir_cdf"] = snir_cdf
     metrics["snir_samples"] = snir_samples
+    metrics["snir_mean"] = _mean(snir_values)
     metrics["algorithm"] = algorithm_label
     metrics.setdefault("mixra_solver", getattr(simulator, "qos_mixra_solver", mixra_solver))
     metrics["throughput_sf_channel_json"] = json.dumps(throughput_map, ensure_ascii=False, sort_keys=True)
