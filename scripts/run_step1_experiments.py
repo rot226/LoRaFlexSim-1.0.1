@@ -171,6 +171,7 @@ def _instantiate_simulator(
     )
     simulator._interference_tracker = InterferenceTracker()
     _sync_snir_state(simulator, use_snir)
+    _ensure_multichannel_snir_consistency(simulator)
     return simulator
 
 
@@ -198,6 +199,23 @@ def _snir_suffix(use_snir: bool) -> str:
 def _ensure_collisions_snir(csv_row: Mapping[str, object]) -> None:
     if "collisions_snir" not in csv_row:
         raise ValueError("Le CSV exporté doit contenir le champ collisions_snir.")
+
+
+def _ensure_snir_state_effective(csv_row: Mapping[str, object]) -> None:
+    if "snir_state_effective" not in csv_row:
+        raise ValueError("Le CSV exporté doit contenir le champ snir_state_effective.")
+
+
+def _ensure_multichannel_snir_consistency(simulator: Simulator) -> None:
+    multichannel = getattr(simulator, "multichannel", None)
+    channels = list(getattr(multichannel, "channels", []) or [])
+    if not channels:
+        return
+
+    states = [bool(getattr(channel, "use_snir", False)) for channel in channels]
+    baseline = states[0]
+    if any(state != baseline for state in states[1:]):
+        raise ValueError("Les canaux multichannel ne partagent pas le même état use_snir.")
 
 
 def _sync_snir_state(simulator: Simulator, requested: bool) -> bool:
@@ -282,6 +300,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
     enriched = _compute_additional_metrics(simulator, dict(metrics), args.algorithm, args.mixra_solver)
     csv_row = _flatten_metrics(enriched)
     _ensure_collisions_snir(csv_row)
+    _ensure_snir_state_effective(csv_row)
 
     output_dir: Path = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)

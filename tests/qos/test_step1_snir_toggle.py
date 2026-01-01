@@ -13,6 +13,7 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import run_step1_matrix as step1_matrix
+import run_step1_experiments as step1_experiments
 
 
 MIN_SNIR_DELTA_DB = 5.0
@@ -93,3 +94,27 @@ def test_step1_snir_toggle_generates_distinct_csv(tmp_path: Path) -> None:
     assert abs(avg_der_on - avg_der_off) >= MIN_DER_PDR_DELTA
     assert abs(avg_pdr_on - avg_pdr_off) >= MIN_DER_PDR_DELTA
     assert abs(avg_collisions_on - avg_collisions_off) >= MIN_COLLISION_DELTA
+
+
+def test_sync_snir_state_rejects_divergence() -> None:
+    class StickyChannel:
+        def __init__(self, value: bool) -> None:
+            self._use_snir = value
+
+        @property
+        def use_snir(self) -> bool:
+            return self._use_snir
+
+        @use_snir.setter
+        def use_snir(self, value: bool) -> None:
+            return None
+
+    class DummySimulator:
+        def __init__(self) -> None:
+            self.channel = StickyChannel(False)
+            self.multichannel = type("Multi", (), {"channels": [StickyChannel(False)]})()
+
+    simulator = DummySimulator()
+
+    with pytest.raises(ValueError, match="effectif"):
+        step1_experiments._sync_snir_state(simulator, True)
