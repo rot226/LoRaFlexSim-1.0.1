@@ -745,14 +745,24 @@ def generate_step1_figures(
     plot_cdf: bool = False,
     compare_snir: bool = True,
     strict: bool = False,
+    official: bool = False,
 ) -> None:
     if plt is None:
         print("matplotlib n'est pas disponible ; aucune figure générée.")
         return
 
     _apply_ieee_style()
+    if official and (not use_summary or not plot_cdf):
+        raise ValueError(
+            "Les figures officielles exigent --use-summary et --plot-cdf."
+        )
+
     output_dir = figures_dir / "step1"
     extended_dir = output_dir / "extended"
+    comparison_dir = extended_dir if official else output_dir
+    if official:
+        output_dir = extended_dir
+        extended_dir = output_dir
     comparison_records: List[Dict[str, Any]] = []
 
     if use_summary:
@@ -786,7 +796,7 @@ def generate_step1_figures(
         if not comparison_records:
             print("Aucune donnée disponible pour comparer SNIR on/off.")
         else:
-            _plot_snir_comparison(comparison_records, output_dir)
+            _plot_snir_comparison(comparison_records, comparison_dir)
 
     if plot_cdf:
         raw_path = results_dir / "raw_index.csv"
@@ -822,6 +832,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Active le tracé des CDF à partir de raw_index.csv ou des CSV bruts",
     )
     parser.add_argument(
+        "--official",
+        action="store_true",
+        help=(
+            "Génère les figures officielles dans figures/step1/extended/ "
+            "(nécessite --use-summary et --plot-cdf)."
+        ),
+    )
+    parser.add_argument(
         "--compare-snir",
         action="store_true",
         default=True,
@@ -849,6 +867,8 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: List[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    if args.official and (not args.use_summary or not args.plot_cdf):
+        parser.error("--official requiert --use-summary et --plot-cdf.")
     generate_step1_figures(
         args.results_dir,
         args.figures_dir,
@@ -856,6 +876,7 @@ def main(argv: List[str] | None = None) -> None:
         args.plot_cdf,
         args.compare_snir,
         args.strict,
+        args.official,
     )
 
 
