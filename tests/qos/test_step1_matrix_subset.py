@@ -74,6 +74,10 @@ def _collect_metrics(results_dir: Path) -> dict[bool, list[dict[str, float]]]:
             row = next(csv.DictReader(handle))
 
         use_snir = row["use_snir"] == "True"
+        if use_snir:
+            assert row.get("snir_mean") not in (None, ""), (
+                f"snir_mean manquant pour un scénario SNIR activé ({csv_path})"
+            )
         grouped[use_snir].append(
             {
                 "pdr": float(row["PDR"]),

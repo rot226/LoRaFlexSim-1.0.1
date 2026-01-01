@@ -108,7 +108,8 @@ def _load_step1_records(results_dir: Path) -> List[Dict[str, Any]]:
                         cluster_id = int(key.split("__")[-1])
                         cluster_targets[cluster_id] = _parse_float(value)
 
-                snir_candidate = row.get("snir_mean") or row.get("SNIR") or row.get("snir")
+                snir_candidate = row.get("snir_mean")
+                snr_candidate = row.get("snr_mean") or row.get("SNR") or row.get("snr")
                 record: Dict[str, Any] = {
                     "csv_path": csv_path,
                     "algorithm": row.get("algorithm", csv_path.parent.name),
@@ -117,6 +118,7 @@ def _load_step1_records(results_dir: Path) -> List[Dict[str, Any]]:
                     "PDR": _parse_float(row.get("PDR")),
                     "DER": _parse_float(row.get("DER")),
                     "snir_mean": _maybe_float(snir_candidate),
+                    "snr_mean": _maybe_float(snr_candidate),
                     "collisions": int(float(row.get("collisions", "0") or 0)),
                     "collisions_snir": int(float(row.get("collisions_snir", "0") or 0)),
                     "jain_index": _parse_float(row.get("jain_index")),
@@ -268,7 +270,7 @@ def _plot_global_metric(
         return
     periods = sorted({r["packet_interval_s"] for r in records})
     algorithms = sorted({r["algorithm"] for r in records})
-    error_metrics = {"PDR", "DER", "snir_mean", "SNIR"}
+    error_metrics = {"PDR", "DER", "snir_mean", "snr_mean", "SNIR", "SNR"}
 
     def render(states: List[str], suffix: str, title: str) -> None:
         for period in periods:
@@ -376,6 +378,7 @@ def _plot_summary_bars(records: List[Dict[str, Any]], figures_dir: Path) -> None
         "PDR": "PDR global",
         "DER": "DER global",
         "snir_mean": "SNIR moyen (dB)",
+        "snr_mean": "SNR moyen (dB)",
         "collisions": "Collisions",
         "collisions_snir": "Collisions (SNIR)",
         "jain_index": "Indice de Jain",
@@ -614,6 +617,7 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
         "PDR": "PDR global",
         "DER": "DER global",
         "snir_mean": "SNIR moyen (dB)",
+        "snr_mean": "SNR moyen (dB)",
         "collisions": "Collisions",
         "collisions_snir": "Collisions (SNIR)",
         "jain_index": "Indice de Jain",
@@ -634,7 +638,7 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
             for metric, ylabel in metrics.items():
                 if not any(f"{metric}_mean" in r or metric in r for r in period_records):
                     continue
-                error_metrics = {"PDR", "DER", "snir_mean", "SNIR"}
+                error_metrics = {"PDR", "DER", "snir_mean", "snr_mean", "SNIR", "SNR"}
 
                 def render(states: List[str], suffix: str, title: str) -> None:
                     fig, ax = plt.subplots(figsize=(7, 4.5))
@@ -758,6 +762,8 @@ def generate_step1_figures(
         _plot_global_metric(records, "throughput_bps", "Débit agrégé (bps)", "throughput", output_dir)
         if any(r.get("snir_mean") is not None for r in records):
             _plot_global_metric(records, "snir_mean", "SNIR moyen (dB)", "snir_mean", output_dir)
+        if any(r.get("snr_mean") is not None for r in records):
+            _plot_global_metric(records, "snr_mean", "SNR moyen (dB)", "snr_mean", output_dir)
         comparison_records = records
 
     if compare_snir:
