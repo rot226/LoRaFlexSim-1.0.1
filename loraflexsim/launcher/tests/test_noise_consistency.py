@@ -124,3 +124,10 @@ def test_collision_events_include_snir_db():
         snir = entry.get("snir_dB")
         assert snir is not None
         assert math.isfinite(float(snir))
+        estimated = channel.estimate_collision_snir_db(
+            entry.get("rssi_dBm"),
+            entry.get("noise_dBm"),
+            entry.get("interference_mW"),
+        )
+        assert estimated is not None
+        assert math.isclose(float(snir), float(estimated), rel_tol=1e-6)
