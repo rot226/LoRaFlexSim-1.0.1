@@ -44,6 +44,18 @@ def _parse_float(value: str | None, default: float = 0.0) -> float:
         return default
 
 
+def _maybe_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if text == "":
+        return None
+    try:
+        return int(float(text))
+    except ValueError:
+        return None
+
+
 def _maybe_float(value: Any) -> float | None:
     if value is None:
         return None
@@ -130,6 +142,7 @@ def _load_step1_records(results_dir: Path, strict: bool = False) -> List[Dict[st
                     "algorithm": row.get("algorithm", csv_path.parent.name),
                     "num_nodes": int(float(row.get("num_nodes", "0") or 0)),
                     "packet_interval_s": float(row.get("packet_interval_s", "0") or 0),
+                    "random_seed": _maybe_int(row.get("random_seed") or row.get("seed")),
                     "PDR": _parse_float(row.get("PDR")),
                     "DER": _parse_float(row.get("DER")),
                     "snir_mean": _maybe_float(snir_candidate),
@@ -227,6 +240,8 @@ def _load_summary_records(summary_path: Path, forced_state: str | None = None) -
             for key, value in row.items():
                 if key in {"algorithm", "snir_state"}:
                     record[key] = value
+                elif key in {"random_seed"}:
+                    record[key] = _maybe_int(value)
                 elif key in {"num_nodes"}:
                     record[key] = int(float(value or 0))
                 elif key in {"packet_interval_s"}:
@@ -605,6 +620,135 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
     )
 
 
+def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None:
+    if not records or plt is None:
+        return
+
+    metrics = {"PDR": "PDR", "DER": "DER"}
+    algorithms = sorted({str(r.get("algorithm") or "unknown") for r in records})
+    seeds = sorted({r.get("random_seed") for r in records if r.get("random_seed") is not None})
+    if not seeds:
+        warnings.warn(
+            "Aucune graine détectée pour les trajectoires (colonne random_seed/seed manquante).",
+            RuntimeWarning,
+        )
+        return
+
+    color_map = plt.get_cmap("tab20")
+    seed_colors = {
+        seed: color_map(idx % max(1, color_map.N)) for idx, seed in enumerate(seeds)
+    }
+    snir_styles = {
+        "snir_on": {"linestyle": "-", "marker": "o"},
+        "snir_off": {"linestyle": "--", "marker": "s"},
+    }
+
+    def plot_dimension(
+        *,
+        algorithm: str,
+        metric: str,
+        ylabel: str,
+        x_key: str,
+        fixed_key: str,
+        fixed_values: Sequence[float],
+        x_label: str,
+        filename_tag: str,
+    ) -> None:
+        for fixed_value in fixed_values:
+            fig, ax = plt.subplots(figsize=(7, 4.5))
+            collected_xs: List[float] = []
+            for seed in seeds:
+                for state, style in snir_styles.items():
+                    subset = [
+                        r
+                        for r in records
+                        if str(r.get("algorithm") or "unknown") == algorithm
+                        and r.get(fixed_key) == fixed_value
+                        and r.get("random_seed") == seed
+                        and _record_matches_state(r, state)
+                    ]
+                    subset.sort(key=lambda item: _parse_float(item.get(x_key)))
+                    xs = [_parse_float(item.get(x_key)) for item in subset]
+                    ys = [_select_metric_value(item, metric) for item in subset]
+                    if not xs:
+                        continue
+                    collected_xs.extend(xs)
+                    label = f"seed {seed} – {_snir_label(state)}"
+                    ax.plot(
+                        xs,
+                        ys,
+                        color=seed_colors.get(seed),
+                        label=label,
+                        linewidth=2,
+                        markersize=5.5,
+                        **style,
+                    )
+
+            if not ax.get_lines():
+                plt.close(fig)
+                continue
+
+            ax.set_xlabel(x_label)
+            ax.set_ylabel(ylabel)
+            fixed_label = (
+                f"{fixed_value:.0f}" if float(fixed_value).is_integer() else f"{fixed_value:g}"
+            )
+            if fixed_key == "packet_interval_s":
+                fixed_desc = f"période {fixed_label} s"
+            else:
+                fixed_desc = f"{fixed_label} nœuds"
+            ax.set_title(
+                f"Trajectoires {ylabel} – {algorithm} – {fixed_desc}"
+            )
+            integer_x = all(float(x).is_integer() for x in collected_xs)
+            _format_axes(ax, integer_x=integer_x)
+            if ax.get_legend_handles_labels()[0]:
+                ax.legend(ncol=2)
+
+            figures_dir.mkdir(parents=True, exist_ok=True)
+            output = figures_dir / (
+                f"step1_trajectories_{metric.lower()}_{filename_tag}_{algorithm}_{fixed_label}.png"
+            )
+            fig.tight_layout()
+            fig.savefig(output, dpi=180)
+            plt.close(fig)
+
+    for algorithm in algorithms:
+        algo_records = [
+            r for r in records if str(r.get("algorithm") or "unknown") == algorithm
+        ]
+        node_values = sorted({r.get("num_nodes") for r in algo_records if r.get("num_nodes") is not None})
+        period_values = sorted(
+            {r.get("packet_interval_s") for r in algo_records if r.get("packet_interval_s") is not None}
+        )
+        if len(node_values) <= 1 and len(period_values) <= 1:
+            continue
+
+        for metric, ylabel in metrics.items():
+            if len(node_values) > 1:
+                plot_dimension(
+                    algorithm=algorithm,
+                    metric=metric,
+                    ylabel=ylabel,
+                    x_key="num_nodes",
+                    fixed_key="packet_interval_s",
+                    fixed_values=period_values,
+                    x_label="Nombre de nœuds",
+                    filename_tag="nodes",
+                )
+            if len(period_values) > 1:
+                plot_dimension(
+                    algorithm=algorithm,
+                    metric=metric,
+                    ylabel=ylabel,
+                    x_key="packet_interval_s",
+                    fixed_key="num_nodes",
+                    fixed_values=node_values,
+                    x_label="Intervalle paquet (s)",
+                    filename_tag="interval",
+                )
+
+
 def _select_metric_value(record: Mapping[str, Any], metric: str) -> float:
     return _parse_float(record.get(f"{metric}_mean")) or _parse_float(record.get(metric))
 
@@ -749,6 +893,7 @@ def generate_step1_figures(
     figures_dir: Path,
     use_summary: bool = False,
     plot_cdf: bool = False,
+    plot_trajectories: bool = False,
     compare_snir: bool = True,
     strict: bool = False,
     official: bool = False,
@@ -767,6 +912,7 @@ def generate_step1_figures(
     output_dir = figures_dir / "step1"
     extended_dir = output_dir / "extended"
     comparison_dir = extended_dir if official or official_only else output_dir
+    trajectories_dir = extended_dir if use_summary or official or official_only else output_dir
     if official or official_only:
         output_dir = extended_dir
         extended_dir = output_dir
@@ -779,6 +925,8 @@ def generate_step1_figures(
             print(f"Aucun summary.csv trouvé dans {summary_path}; aucune barre générée.")
         else:
             _plot_summary_bars(summary_records, extended_dir)
+            if plot_trajectories:
+                _plot_trajectories(summary_records, trajectories_dir)
             comparison_records = summary_records
     elif not official_only:
         records = _load_step1_records(results_dir, strict=strict)
@@ -796,6 +944,8 @@ def generate_step1_figures(
             _plot_global_metric(records, "snir_mean", "SNIR moyen (dB)", "snir_mean", output_dir)
         if any(r.get("snr_mean") is not None for r in records):
             _plot_global_metric(records, "snr_mean", "SNR moyen (dB)", "snr_mean", output_dir)
+        if plot_trajectories:
+            _plot_trajectories(records, trajectories_dir)
         comparison_records = records
 
     if compare_snir:
@@ -837,6 +987,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--plot-cdf",
         action="store_true",
         help="Active le tracé des CDF à partir de raw_index.csv ou des CSV bruts",
+    )
+    parser.add_argument(
+        "--plot-trajectories",
+        action="store_true",
+        help="Ajoute les figures de trajectoires DER/PDR par seed (SNIR on/off superposés)",
     )
     parser.add_argument(
         "--official",
@@ -888,6 +1043,7 @@ def main(argv: List[str] | None = None) -> None:
         args.figures_dir,
         args.use_summary,
         args.plot_cdf,
+        args.plot_trajectories,
         args.compare_snir,
         args.strict,
         args.official,
