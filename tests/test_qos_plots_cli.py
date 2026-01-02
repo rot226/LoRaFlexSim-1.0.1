@@ -55,6 +55,7 @@ def test_cli_generates_all_snir_variants(tmp_path: Path) -> None:
         "pdr_global_vs_scenarios",
         "der_global_vs_scenarios",
         "snir_mean_vs_scenarios",
+        "snir_moving_average_vs_scenarios",
         f"snir_cdf_{lfs_plots.sanitize_filename(scenario)}",
         f"snr_cdf_{lfs_plots.sanitize_filename(scenario)}",
     ]
