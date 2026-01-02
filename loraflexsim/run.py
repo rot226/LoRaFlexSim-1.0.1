@@ -361,6 +361,7 @@ def simulate(
         energy_consumed,
         avg_delay,
         throughput_bps,
+        channel.baseline_loss_rate,
     )
 
 
@@ -753,7 +754,15 @@ def main(argv=None):
             seed = args.seed + i if args.seed is not None else i
             rng_manager = RngManager(seed)
 
-            delivered, collisions, pdr, energy, avg_delay, throughput = simulate(
+            (
+                delivered,
+                collisions,
+                pdr,
+                energy,
+                avg_delay,
+                throughput,
+                channel_loss,
+            ) = simulate(
                 args.nodes,
                 args.gateways,
                 args.mode,
@@ -772,7 +781,9 @@ def main(argv=None):
                 rng_manager=rng_manager,
                 non_orth_delta=matrix,
             )
-            results.append((delivered, collisions, pdr, energy, avg_delay, throughput))
+            results.append(
+                (delivered, collisions, pdr, energy, avg_delay, throughput, channel_loss)
+            )
             logging.info(
                 f"Run {i + 1}/{args.runs} : PDR={pdr:.2f}% , Paquets livrés={delivered}, Collisions={collisions}, "
                 f"Énergie consommée={energy:.3f} J, Délai moyen={avg_delay:.2f} unités de temps, "
@@ -796,24 +807,27 @@ def main(argv=None):
                 out_path = str(p.with_name(f"{p.stem}_{Path(matrix_path).stem}{p.suffix}"))
             with open(out_path, mode="w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(
-                    [
-                        "nodes",
-                        "gateways",
-                        "channels",
-                        "mode",
-                        "interval",
-                        "steps",
-                        "run",
-                        "delivered",
-                        "collisions",
-                        "PDR(%)",
-                        "energy_J",
-                        "avg_delay",
-                        "throughput_bps",
-                    ]
-                )
-                for run_idx, (d, c, p_val, e, ad, th) in enumerate(results, start=1):
+                    writer.writerow(
+                        [
+                            "nodes",
+                            "gateways",
+                            "channels",
+                            "mode",
+                            "interval",
+                            "steps",
+                            "run",
+                            "delivered",
+                            "collisions",
+                            "PDR(%)",
+                            "energy_J",
+                            "avg_delay",
+                            "throughput_bps",
+                            "baseline_loss_rate",
+                        ]
+                    )
+                for run_idx, (d, c, p_val, e, ad, th, blr) in enumerate(
+                    results, start=1
+                ):
                     writer.writerow(
                         [
                             args.nodes,
@@ -829,6 +843,7 @@ def main(argv=None):
                             f"{e:.3f}",
                             f"{ad:.2f}",
                             f"{th:.2f}",
+                            f"{blr:.6f}",
                         ]
                     )
             logging.info(f"Résultats enregistrés dans {out_path}")

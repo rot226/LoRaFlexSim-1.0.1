@@ -503,9 +503,9 @@ class Channel:
         self.residual_collision_prob = float(residual_collision_prob)
         self.residual_collision_load_scale = float(residual_collision_load_scale)
         if baseline_loss_rate is None:
-            baseline_loss_rate = 0.005 if use_snir is False else 0.0
+            baseline_loss_rate = 0.005 if use_snir is False else 0.001
         if baseline_collision_rate is None:
-            baseline_collision_rate = 0.02 if use_snir is False else 0.0
+            baseline_collision_rate = 0.02 if use_snir is False else 0.005
         self.baseline_loss_rate = float(baseline_loss_rate)
         self.baseline_collision_rate = float(baseline_collision_rate)
         self.snir_off_noise_prob = float(snir_off_noise_prob)
