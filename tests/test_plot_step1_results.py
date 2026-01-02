@@ -57,6 +57,114 @@ def test_mixed_variants_exclude_snir_unknown() -> None:
     assert seen_states == [["snir_on", "snir_off"]]
 
 
+def test_mixed_plot_filters_snir_unknown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    captures: list[tuple[str, list[str]]] = []
+
+    class _FakeLine:
+        def set_linewidth(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_markersize(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_markeredgewidth(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    class _FakeAxis:
+        def __init__(self) -> None:
+            self._labels: list[str] = []
+            self._lines: list[_FakeLine] = []
+
+        def plot(self, *_args: object, label: str | None = None, **_kwargs: object) -> None:
+            if label:
+                self._labels.append(label)
+            self._lines.append(_FakeLine())
+
+        def errorbar(self, *_args: object, label: str | None = None, **_kwargs: object) -> None:
+            if label:
+                self._labels.append(label)
+            self._lines.append(_FakeLine())
+
+        def set_xlabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_ylabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_title(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def legend(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def get_legend_handles_labels(self) -> tuple[list[_FakeLine], list[str]]:
+            return self._lines, self._labels
+
+    class _FakeFigure:
+        def __init__(self, axis: _FakeAxis) -> None:
+            self._axis = axis
+
+        def tight_layout(self) -> None:
+            return None
+
+        def savefig(self, output: Path, **_kwargs: object) -> None:
+            captures.append((str(output), list(self._axis._labels)))
+
+    class _FakePlt:
+        def subplots(self, **_kwargs: object) -> tuple[_FakeFigure, _FakeAxis]:
+            axis = _FakeAxis()
+            return _FakeFigure(axis), axis
+
+        def close(self, _fig: _FakeFigure) -> None:
+            return None
+
+    monkeypatch.setattr(plot_step1_results, "plt", _FakePlt())
+    monkeypatch.setattr(plot_step1_results, "_format_axes", lambda *_args, **_kwargs: None)
+
+    records = [
+        {
+            "algorithm": "algo",
+            "num_nodes": 10,
+            "packet_interval_s": 1.0,
+            "PDR": 0.9,
+            "snir_state": "snir_on",
+            "snir_detected": True,
+        },
+        {
+            "algorithm": "algo",
+            "num_nodes": 20,
+            "packet_interval_s": 1.0,
+            "PDR": 0.85,
+            "snir_state": "snir_off",
+            "snir_detected": True,
+        },
+        {
+            "algorithm": "algo",
+            "num_nodes": 30,
+            "packet_interval_s": 1.0,
+            "PDR": 0.5,
+            "snir_state": "snir_unknown",
+            "snir_detected": True,
+        },
+    ]
+
+    plot_step1_results._plot_global_metric(
+        records,
+        "PDR",
+        "PDR global",
+        "pdr_global",
+        tmp_path,
+    )
+
+    mixed_labels = [
+        labels for path, labels in captures if "_snir-mixed" in path
+    ]
+    assert mixed_labels, "Aucun tracé mixte n'a été généré."
+    assert all(
+        "SNIR inconnu" not in label for labels in mixed_labels for label in labels
+    )
+
+
 def test_official_run_outputs_only_extended(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     results_dir = tmp_path / "results" / "step1"
     results_dir.mkdir(parents=True)
