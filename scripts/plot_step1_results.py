@@ -23,7 +23,12 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
 DEFAULT_FIGURES_DIR = ROOT_DIR / "figures"
 
-__all__ = ["generate_step1_figures", "DEFAULT_RESULTS_DIR", "DEFAULT_FIGURES_DIR"]
+__all__ = [
+    "generate_step1_figures",
+    "plot_distribution_by_state",
+    "DEFAULT_RESULTS_DIR",
+    "DEFAULT_FIGURES_DIR",
+]
 
 STATE_LABELS = {True: "snir_on", False: "snir_off", None: "snir_unknown"}
 SNIR_COLORS = {"snir_on": "#d62728", "snir_off": "#1f77b4", "snir_unknown": "#7f7f7f"}
@@ -888,6 +893,64 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
                 )
 
 
+def plot_distribution_by_state(records: List[Dict[str, Any]], figures_dir: Path) -> None:
+    if not records or plt is None:
+        return
+
+    metrics = {
+        "snir_mean": "SNIR moyen (dB)",
+        "DER": "DER global",
+        "collisions": "Collisions",
+    }
+    states = ["snir_on", "snir_off"]
+
+    def collect_values(state: str, metric: str) -> List[float]:
+        values: List[float] = []
+        for record in records:
+            if not _record_matches_state(record, state):
+                continue
+            if metric == "snir_mean":
+                value = record.get("snir_mean")
+            elif metric == "DER":
+                value = record.get("DER") or record.get("DER_mean")
+            else:
+                value = record.get(metric)
+            if value is None or value == "":
+                continue
+            try:
+                values.append(float(value))
+            except (TypeError, ValueError):
+                continue
+        return values
+
+    for metric, ylabel in metrics.items():
+        grouped = [collect_values(state, metric) for state in states]
+        if not any(grouped):
+            continue
+        fig, ax = plt.subplots(figsize=(6.5, 4.2))
+        boxplot = ax.boxplot(
+            grouped,
+            labels=[_snir_label(state) for state in states],
+            patch_artist=True,
+            medianprops={"color": "#000000", "linewidth": 1.3},
+            boxprops={"linewidth": 1.2},
+            whiskerprops={"linewidth": 1.1},
+            capprops={"linewidth": 1.1},
+        )
+        for patch, state in zip(boxplot["boxes"], states):
+            patch.set_facecolor(_snir_color(state))
+            patch.set_alpha(0.5)
+        ax.set_ylabel(ylabel)
+        ax.set_xlabel("État SNIR")
+        ax.set_title(f"Distribution {ylabel} par état SNIR")
+        _format_axes(ax, integer_x=False)
+        figures_dir.mkdir(parents=True, exist_ok=True)
+        output = figures_dir / f"step1_distribution_{metric}.png"
+        fig.tight_layout()
+        fig.savefig(output, dpi=200)
+        plt.close(fig)
+
+
 def generate_step1_figures(
     results_dir: Path,
     figures_dir: Path,
@@ -954,6 +1017,7 @@ def generate_step1_figures(
             print("Aucune donnée disponible pour comparer SNIR on/off.")
         else:
             _plot_snir_comparison(comparison_records, comparison_dir)
+            plot_distribution_by_state(comparison_records, comparison_dir)
 
     if plot_cdf:
         raw_path = results_dir / "raw_index.csv"
