@@ -1,0 +1,249 @@
+"""Trace des radars QoS (DER, PDR, collisions, énergie, SNIR) normalisés.
+
+Le script produit un radar par algorithme en superposant les états SNIR activé
+et désactivé.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import math
+import statistics
+import sys
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+
+import matplotlib.pyplot as plt
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT_DIR))
+
+from scripts.plot_step1_results import (  # noqa: E402
+    SNIR_COLORS,
+    _apply_ieee_style,
+    _detect_snir_state,
+)
+
+DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
+DEFAULT_FIGURES_DIR = ROOT_DIR / "figures" / "step1" / "radar"
+
+METRICS = [
+    ("DER", "DER"),
+    ("PDR", "PDR"),
+    ("collisions", "Collisions"),
+    ("avg_energy_per_node_J", "Énergie moyenne (J)"),
+    ("snir_mean", "SNIR moyen (dB)"),
+]
+
+SNIR_STATES = ("snir_on", "snir_off")
+SNIR_LABELS = {
+    "snir_on": "SNIR activé",
+    "snir_off": "SNIR désactivé",
+}
+
+
+def _parse_float(value: Any, default: float | None = None) -> float | None:
+    if value is None:
+        return default
+    text = str(value).strip()
+    if text == "":
+        return default
+    try:
+        return float(text)
+    except ValueError:
+        return default
+
+
+def _extract_energy(row: Mapping[str, Any]) -> float | None:
+    for key in (
+        "avg_energy_per_node_J",
+        "energy_per_node",
+        "energy_nodes_J",
+        "energy_J",
+        "energy_j",
+        "energy_mean_J",
+    ):
+        value = _parse_float(row.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _load_qos_records(results_dir: Path, strict: bool) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    if not results_dir.exists():
+        return records
+    for csv_path in sorted(results_dir.rglob("*.csv")):
+        with csv_path.open("r", encoding="utf8") as handle:
+            reader = csv.DictReader(handle)
+            if strict:
+                required_columns = {"snir_state", "snir_mean"}
+                fieldnames = set(reader.fieldnames or [])
+                if not required_columns.issubset(fieldnames):
+                    continue
+            for row in reader:
+                snir_state, snir_detected = _detect_snir_state(row)
+                if not snir_detected or snir_state is None:
+                    continue
+                snir_candidate = (
+                    row.get("snir_mean")
+                    or row.get("SNIR")
+                    or row.get("snr_mean")
+                    or row.get("SNR")
+                )
+                record: Dict[str, Any] = {
+                    "algorithm": row.get("algorithm", csv_path.parent.name),
+                    "snir_state": snir_state,
+                    "DER": _parse_float(row.get("DER")),
+                    "PDR": _parse_float(row.get("PDR")),
+                    "collisions": _parse_float(row.get("collisions")),
+                    "avg_energy_per_node_J": _extract_energy(row),
+                    "snir_mean": _parse_float(snir_candidate),
+                }
+                records.append(record)
+    return records
+
+
+def _mean(values: Iterable[float | None]) -> float | None:
+    cleaned = [value for value in values if value is not None]
+    if not cleaned:
+        return None
+    return statistics.mean(cleaned)
+
+
+def _aggregate_by_algorithm(records: Sequence[Mapping[str, Any]]) -> Dict[str, Dict[str, Dict[str, float | None]]]:
+    grouped: Dict[str, Dict[str, Dict[str, float | None]]] = {}
+    by_algorithm: Dict[str, List[Mapping[str, Any]]] = {}
+    for record in records:
+        algorithm = str(record.get("algorithm") or "unknown")
+        by_algorithm.setdefault(algorithm, []).append(record)
+
+    for algorithm, algo_records in sorted(by_algorithm.items()):
+        grouped[algorithm] = {}
+        for state in SNIR_STATES:
+            state_records = [r for r in algo_records if r.get("snir_state") == state]
+            if not state_records:
+                continue
+            grouped[algorithm][state] = {
+                metric_key: _mean(r.get(metric_key) for r in state_records)
+                for metric_key, _ in METRICS
+            }
+    return grouped
+
+
+def _compute_normalization(
+    aggregated: Dict[str, Dict[str, Dict[str, float | None]]]
+) -> Dict[str, Tuple[float, float]]:
+    bounds: Dict[str, Tuple[float, float]] = {}
+    for metric_key, _ in METRICS:
+        values: List[float] = []
+        for states in aggregated.values():
+            for metrics in states.values():
+                value = metrics.get(metric_key)
+                if value is not None:
+                    values.append(value)
+        if values:
+            bounds[metric_key] = (min(values), max(values))
+        else:
+            bounds[metric_key] = (0.0, 0.0)
+    return bounds
+
+
+def _normalize(value: float | None, bounds: Tuple[float, float]) -> float | None:
+    if value is None:
+        return None
+    min_val, max_val = bounds
+    if math.isclose(min_val, max_val):
+        return 0.5
+    return (value - min_val) / (max_val - min_val)
+
+
+def _plot_radar(
+    algorithm: str,
+    metrics_by_state: Dict[str, Dict[str, float | None]],
+    bounds: Dict[str, Tuple[float, float]],
+    figures_dir: Path,
+) -> None:
+    labels = [label for _, label in METRICS]
+    metric_keys = [key for key, _ in METRICS]
+    angles = [n / len(metric_keys) * 2 * math.pi for n in range(len(metric_keys))]
+    angles += angles[:1]
+
+    fig, ax = plt.subplots(figsize=(6.8, 6.2), subplot_kw={"polar": True})
+    ax.set_theta_offset(math.pi / 2)
+    ax.set_theta_direction(-1)
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(labels)
+    ax.set_ylim(0, 1)
+    ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
+    ax.set_yticklabels(["0.2", "0.4", "0.6", "0.8", "1.0"])
+    ax.grid(True, linestyle=":", linewidth=0.8)
+
+    for state in SNIR_STATES:
+        metrics = metrics_by_state.get(state)
+        if not metrics:
+            continue
+        normalized = [_normalize(metrics.get(key), bounds[key]) for key in metric_keys]
+        if any(value is None for value in normalized):
+            continue
+        values = [float(value) for value in normalized]
+        values += values[:1]
+        color = SNIR_COLORS.get(state, "#333333")
+        ax.plot(angles, values, color=color, linewidth=2, label=SNIR_LABELS.get(state, state))
+        ax.fill(angles, values, color=color, alpha=0.2)
+
+    ax.set_title(f"Radar QoS – {algorithm}", y=1.1)
+    ax.legend(loc="upper right", bbox_to_anchor=(1.2, 1.1))
+
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    output_name = f"qos_radar_{algorithm.replace(' ', '_')}_snir_overlay.png"
+    fig.tight_layout()
+    fig.savefig(figures_dir / output_name, dpi=300)
+    plt.close(fig)
+
+
+def generate_qos_radars(results_dir: Path, figures_dir: Path, strict: bool) -> None:
+    records = _load_qos_records(results_dir, strict=strict)
+    if not records:
+        print(f"Aucun CSV trouvé dans {results_dir} ; aucun radar généré.")
+        return
+
+    _apply_ieee_style()
+    aggregated = _aggregate_by_algorithm(records)
+    bounds = _compute_normalization(aggregated)
+
+    for algorithm, metrics_by_state in aggregated.items():
+        _plot_radar(algorithm, metrics_by_state, bounds, figures_dir)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        default=DEFAULT_RESULTS_DIR,
+        help="Répertoire contenant les CSV QoS (étape 1)",
+    )
+    parser.add_argument(
+        "--figures-dir",
+        type=Path,
+        default=DEFAULT_FIGURES_DIR,
+        help="Répertoire de sortie des radars",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Ignore les CSV sans colonnes SNIR explicites (snir_state, snir_mean).",
+    )
+    return parser
+
+
+def main(argv: List[str] | None = None) -> None:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    generate_qos_radars(results_dir=args.results_dir, figures_dir=args.figures_dir, strict=args.strict)
+
+
+if __name__ == "__main__":
+    main()
