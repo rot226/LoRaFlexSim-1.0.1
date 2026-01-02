@@ -1056,7 +1056,13 @@ class Channel:
 
         if interference_mW is None:
             interference_mW = getattr(self, "last_interference_mW", 0.0)
-        return self.estimate_snir_db(rssi_dBm, noise_dBm, interference_mW)
+        if rssi_dBm is None:
+            rssi_dBm = getattr(self, "last_rssi_dBm", None)
+        if noise_dBm is None:
+            noise_dBm = getattr(self, "last_noise_dBm", None)
+        snir = self.estimate_snir_db(rssi_dBm, noise_dBm, interference_mW)
+        self.last_collision_snir_dB = snir
+        return snir
 
     # ------------------------------------------------------------------
     def qos_path_gain(self, distance: float) -> float:
