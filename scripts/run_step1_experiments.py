@@ -171,7 +171,7 @@ def _instantiate_simulator(
     )
     simulator._interference_tracker = InterferenceTracker()
     _sync_snir_state(simulator, use_snir)
-    _ensure_multichannel_snir_consistency(simulator)
+    _ensure_multichannel_snir_consistency(simulator, use_snir)
     return simulator
 
 
@@ -206,7 +206,10 @@ def _ensure_snir_state_effective(csv_row: Mapping[str, object]) -> None:
         raise ValueError("Le CSV exporté doit contenir le champ snir_state_effective.")
 
 
-def _ensure_multichannel_snir_consistency(simulator: Simulator) -> None:
+def _ensure_multichannel_snir_consistency(
+    simulator: Simulator,
+    requested: bool | None = None,
+) -> None:
     multichannel = getattr(simulator, "multichannel", None)
     channels = list(getattr(multichannel, "channels", []) or [])
     if not channels:
@@ -216,6 +219,10 @@ def _ensure_multichannel_snir_consistency(simulator: Simulator) -> None:
     baseline = states[0]
     if any(state != baseline for state in states[1:]):
         raise ValueError("Les canaux multichannel ne partagent pas le même état use_snir.")
+    if requested is not None and baseline != requested:
+        raise ValueError(
+            "L'état SNIR effectif du multichannel ne correspond pas à l'état demandé."
+        )
 
 
 def _sync_snir_state(simulator: Simulator, requested: bool) -> bool:
