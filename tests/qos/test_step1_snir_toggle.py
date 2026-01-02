@@ -190,3 +190,20 @@ def test_sync_snir_state_rejects_divergence() -> None:
 
     with pytest.raises(ValueError, match="effectif"):
         step1_experiments._sync_snir_state(simulator, True)
+
+
+def test_multichannel_snir_consistency_rejects_requested_mismatch() -> None:
+    class DummyChannel:
+        def __init__(self, value: bool) -> None:
+            self.use_snir = value
+
+    class DummySimulator:
+        def __init__(self) -> None:
+            self.multichannel = type(
+                "Multi", (), {"channels": [DummyChannel(False), DummyChannel(False)]}
+            )()
+
+    simulator = DummySimulator()
+
+    with pytest.raises(ValueError, match="effectif"):
+        step1_experiments._ensure_multichannel_snir_consistency(simulator, True)
