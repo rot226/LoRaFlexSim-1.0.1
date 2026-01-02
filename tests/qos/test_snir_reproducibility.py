@@ -27,8 +27,6 @@ def _snir_series(*, seed: int, fading_std_db: float | None) -> List[float]:
             continue
         snir = entry.get("snir_dB")
         if snir is None or not math.isfinite(snir):
-            snir = entry.get("snr_dB")
-        if snir is None or not math.isfinite(snir):
             continue
         values.append(float(snir))
 

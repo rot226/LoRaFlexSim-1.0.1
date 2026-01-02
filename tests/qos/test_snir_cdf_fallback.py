@@ -29,7 +29,7 @@ from qos_cli.lfs_metrics import MethodScenarioMetrics
 matplotlib.use("Agg")
 
 
-def test_plot_snir_cdf_snr_fallback_label(tmp_path: Path, monkeypatch) -> None:
+def test_plot_snir_cdf_does_not_mix_snr(tmp_path: Path, monkeypatch) -> None:
     scenario = "Scenario-SNR"
     output_dir = tmp_path / "figures"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -77,8 +77,12 @@ def test_plot_snir_cdf_snr_fallback_label(tmp_path: Path, monkeypatch) -> None:
     generated = lfs_plots.plot_snir_cdf(metrics_by_method, [scenario], output_dir)
     assert generated
 
-    mixed_path = output_dir / f"snr_cdf_{lfs_plots.sanitize_filename(scenario)}_snir-mixed.png"
-    labels = captured_legends.get(str(mixed_path), [])
-    assert labels, "La légende doit contenir la courbe de fallback."
-    assert any("SNR" in label for label in labels)
+    snir_path = output_dir / f"snir_cdf_{lfs_plots.sanitize_filename(scenario)}_snir-mixed.png"
+    snir_labels = captured_legends.get(str(snir_path), [])
+    assert not snir_labels, "Aucune courbe SNIR ne doit être tracée sans données SNIR."
+
+    snr_path = output_dir / f"snr_cdf_{lfs_plots.sanitize_filename(scenario)}_snir-mixed.png"
+    snr_labels = captured_legends.get(str(snr_path), [])
+    assert snr_labels, "La légende doit contenir la courbe SNR."
+    assert any("SNR" in label for label in snr_labels)
     assert not snir_cdf

@@ -405,7 +405,7 @@ def _compute_additional_metrics(
         snir = event.get("snir_dB")
         if snir is not None:
             snir_value = float(snir)
-            if not math.isnan(snir_value):
+            if math.isfinite(snir_value):
                 snir_values.append(snir_value)
 
     for sf, channel_counts in throughput_map.items():
