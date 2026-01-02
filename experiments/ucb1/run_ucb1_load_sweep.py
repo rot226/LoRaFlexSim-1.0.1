@@ -37,6 +37,7 @@ class ClusterMetrics:
     reward_variance: float
     reward_window_mean: float
     reward_window_variance: float
+    regret_cumulative: float
     der: float
     der_window: float
     pdr: float
@@ -172,6 +173,7 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
         der_all = total_success / total_attempts if total_attempts > 0 else 0.0
         success_rate_all = total_success / total_attempts if total_attempts > 0 else 0.0
 
+        window_rows: list[dict] = []
         for window_index in range(window_count):
             window_start = packet_interval * window_index
             window_end = packet_interval * (window_index + 1)
@@ -212,33 +214,40 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
                     (val - reward_window_mean) ** 2 for val in reward_window_values
                 ) / len(reward_window_values)
 
-            rows.append(
-                ClusterMetrics(
-                    num_nodes=len(sim.nodes),
-                    cluster=cluster_id,
-                    packet_interval_s=packet_interval,
-                    window_index=window_index,
-                    window_start_s=window_start,
-                    window_end_s=window_end,
-                    expected_attempts=expected_attempts,
-                    attempts=attempts,
-                    sf=avg_sf,
-                    reward_mean=reward_mean_all,
-                    reward_variance=reward_variance_all,
-                    reward_window_mean=reward_window_mean,
-                    reward_window_variance=reward_window_variance,
-                    der=der_all,
-                    der_window=der_window,
-                    pdr=pdr,
-                    snir_avg=snir_avg,
-                    snir_window_mean=snir_window_mean,
-                    energy_avg=energy_avg,
-                    energy_window_mean=energy_window_mean,
-                    success_rate=success_rate_all,
-                    success_rate_window=success_rate_window,
-                    emission_ratio=emission_ratio,
-                )
+            window_rows.append(
+                {
+                    "num_nodes": len(sim.nodes),
+                    "cluster": cluster_id,
+                    "packet_interval_s": packet_interval,
+                    "window_index": window_index,
+                    "window_start_s": window_start,
+                    "window_end_s": window_end,
+                    "expected_attempts": expected_attempts,
+                    "attempts": attempts,
+                    "sf": avg_sf,
+                    "reward_mean": reward_mean_all,
+                    "reward_variance": reward_variance_all,
+                    "reward_window_mean": reward_window_mean,
+                    "reward_window_variance": reward_window_variance,
+                    "der": der_all,
+                    "der_window": der_window,
+                    "pdr": pdr,
+                    "snir_avg": snir_avg,
+                    "snir_window_mean": snir_window_mean,
+                    "energy_avg": energy_avg,
+                    "energy_window_mean": energy_window_mean,
+                    "success_rate": success_rate_all,
+                    "success_rate_window": success_rate_window,
+                    "emission_ratio": emission_ratio,
+                }
             )
+
+        best_reward = max((row["reward_window_mean"] for row in window_rows), default=0.0)
+        cumulative_regret = 0.0
+        for row in window_rows:
+            cumulative_regret += best_reward - row["reward_window_mean"]
+            row["regret_cumulative"] = cumulative_regret
+            rows.append(ClusterMetrics(**row))
     return rows
 
 
@@ -286,6 +295,7 @@ def run_load_sweep(
                 "reward_variance",
                 "reward_window_mean",
                 "reward_window_variance",
+                "regret_cumulative",
                 "der",
                 "der_window",
                 "pdr",
@@ -314,6 +324,7 @@ def run_load_sweep(
                     f"{entry.reward_variance:.6f}",
                     f"{entry.reward_window_mean:.6f}",
                     f"{entry.reward_window_variance:.6f}",
+                    f"{entry.regret_cumulative:.6f}",
                     f"{entry.der:.6f}",
                     f"{entry.der_window:.6f}",
                     f"{entry.pdr:.6f}",
