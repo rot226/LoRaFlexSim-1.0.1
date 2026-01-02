@@ -79,10 +79,9 @@ def _detect_snir_state(row: Mapping[str, Any]) -> Tuple[str | None, bool]:
             return "snir_unknown", True
         return None, False
 
-    for key in ("use_snir", "with_snir"):
-        parsed = _parse_bool(row.get(key))
-        if parsed is not None:
-            return STATE_LABELS.get(parsed, "snir_unknown"), True
+    parsed = _parse_bool(row.get("use_snir"))
+    if parsed is not None:
+        return STATE_LABELS.get(parsed, "snir_unknown"), True
     return None, False
 
 
@@ -173,7 +172,10 @@ def _render_snir_variants(
         (["snir_on", "snir_off"], "_snir-mixed", mixed_title),
     ]
     for states, suffix, title in variants:
-        render(states, suffix, title)
+        filtered_states = states
+        if suffix == "_snir-mixed":
+            filtered_states = [state for state in states if state != "snir_unknown"]
+        render(filtered_states, suffix, title)
 
 
 def _format_axes(ax: Any, integer_x: bool = False) -> None:
