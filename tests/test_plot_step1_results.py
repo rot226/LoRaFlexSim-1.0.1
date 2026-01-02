@@ -219,6 +219,7 @@ def test_official_run_outputs_only_extended(tmp_path: Path, monkeypatch: pytest.
         plot_cdf=True,
         compare_snir=True,
         official=True,
+        official_only=True,
     )
 
     generated = list(figures_dir.rglob("*.png"))

@@ -1,4 +1,8 @@
-"""Génère les figures de l'étape 1 à partir des CSV produits par Tâche 4."""
+"""Génère les figures de l'étape 1 à partir des CSV produits par Tâche 4.
+
+Les figures standard (dans figures/step1/) ne sont plus recommandées ; privilégiez
+les figures étendues dans figures/step1/extended/.
+"""
 
 from __future__ import annotations
 
@@ -748,6 +752,7 @@ def generate_step1_figures(
     compare_snir: bool = True,
     strict: bool = False,
     official: bool = False,
+    official_only: bool = False,
 ) -> None:
     if plt is None:
         print("matplotlib n'est pas disponible ; aucune figure générée.")
@@ -761,8 +766,8 @@ def generate_step1_figures(
 
     output_dir = figures_dir / "step1"
     extended_dir = output_dir / "extended"
-    comparison_dir = extended_dir if official else output_dir
-    if official:
+    comparison_dir = extended_dir if official or official_only else output_dir
+    if official or official_only:
         output_dir = extended_dir
         extended_dir = output_dir
     comparison_records: List[Dict[str, Any]] = []
@@ -775,7 +780,7 @@ def generate_step1_figures(
         else:
             _plot_summary_bars(summary_records, extended_dir)
             comparison_records = summary_records
-    else:
+    elif not official_only:
         records = _load_step1_records(results_dir, strict=strict)
         if not records:
             print(f"Aucun CSV trouvé dans {results_dir} ; rien à tracer.")
@@ -842,6 +847,13 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--official-only",
+        action="store_true",
+        help=(
+            "Écrit uniquement dans figures/step1/extended/ (les figures standard ne sont pas recommandées)."
+        ),
+    )
+    parser.add_argument(
         "--compare-snir",
         action="store_true",
         default=True,
@@ -879,6 +891,7 @@ def main(argv: List[str] | None = None) -> None:
         args.compare_snir,
         args.strict,
         args.official,
+        args.official_only,
     )
 
 
