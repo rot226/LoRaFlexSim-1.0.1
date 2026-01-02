@@ -105,6 +105,7 @@ class SimulationResult:
     snir_mean: float
     snir_median: float
     sim_time_s: float
+    baseline_loss_rate: float
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -125,6 +126,7 @@ class SimulationResult:
             "snir_mean": self.snir_mean,
             "snir_median": self.snir_median,
             "sim_time_s": self.sim_time_s,
+            "baseline_loss_rate": self.baseline_loss_rate,
         }
 
 
@@ -267,6 +269,9 @@ def _run_single(task: SimulationTask) -> SimulationResult:
         include_snir=preset.snir_model,
         interference_model=preset.interference_model,
     )
+    baseline_loss_rate = float(
+        getattr(getattr(simulator, "channel", None), "baseline_loss_rate", 0.0) or 0.0
+    )
 
     return SimulationResult(
         algorithm=task.algorithm,
@@ -286,6 +291,7 @@ def _run_single(task: SimulationTask) -> SimulationResult:
         snir_mean=snir_mean,
         snir_median=snir_median,
         sim_time_s=sim_time,
+        baseline_loss_rate=baseline_loss_rate,
     )
 
 
@@ -313,6 +319,7 @@ def _write_outputs(results: Iterable[SimulationResult], outdir: Path) -> None:
         "snir_mean",
         "snir_median",
         "sim_time_s",
+        "baseline_loss_rate",
     ]
 
     for algorithm, rows in by_algo.items():
