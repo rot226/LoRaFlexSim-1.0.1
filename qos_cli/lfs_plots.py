@@ -189,6 +189,13 @@ def _snir_ci_for_metric(metric: MethodScenarioMetrics) -> Tuple[float, float]:
     return float(metric.snir_ci_low), float(metric.snir_ci_high)
 
 
+def _moving_average(values: Sequence[float], window_size: int) -> List[float]:
+    if window_size <= 1:
+        return [float(value) for value in values]
+    series = pd.Series(values, dtype=float)
+    return series.rolling(window=window_size, min_periods=1).mean().tolist()
+
+
 def _rolling_metrics(
     df: pd.DataFrame, window_size: float, window_mode: str
 ) -> pd.DataFrame:
@@ -329,6 +336,13 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         choices=["packets", "duration"],
         default="packets",
         help="Définit l'alignement de la fenêtre glissante : par nombre de paquets ou par durée (s).",
+    )
+    parser.add_argument(
+        "--moving-average-window",
+        dest="moving_average_window",
+        type=int,
+        default=3,
+        help="Taille de la fenêtre de moyenne mobile (par nombre de scénarios).",
     )
     return parser.parse_args(argv)
 
@@ -635,6 +649,87 @@ def plot_snir_mean(
         filename_base="snir_mean_vs_scenarios",
         y_limits=None,
         ci_resolver=_snir_ci_for_metric,
+    )
+
+
+def plot_snir_moving_average(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    out_dir: Path,
+    *,
+    window_size: int,
+) -> List[Path]:
+    """Trace la moyenne mobile du SNIR moyen en distinguant l'état SNIR."""
+
+    if not scenarios or not metrics_by_method:
+        return []
+
+    window_size = max(1, int(window_size))
+    x_positions = list(range(len(scenarios)))
+    values_by_state = _values_by_snir_state(metrics_by_method, scenarios, "snir_mean")
+
+    aggregated_by_state: Dict[str, List[float]] = {}
+    for state, method_values in values_by_state.items():
+        scenario_values: List[float] = []
+        for idx in range(len(scenarios)):
+            values = [
+                series[idx]
+                for series in method_values.values()
+                if idx < len(series) and not math.isnan(series[idx])
+            ]
+            scenario_values.append(float(np.mean(values)) if values else float("nan"))
+        aggregated_by_state[state] = _moving_average(scenario_values, window_size)
+
+    window_label = f"fenêtre {window_size} scénarios"
+
+    def render(states_to_plot: List[str], suffix: str, title: str) -> Optional[Path]:
+        fig, ax = plt.subplots(figsize=(max(6.0, 2.5 * len(scenarios)), 4.5))
+        plotted = False
+        for state in states_to_plot:
+            values = aggregated_by_state.get(state, [])
+            if not values or _all_nan(values):
+                continue
+            color = SNIR_STATE_COLORS.get(state, "#7f7f7f")
+            label_state = SNIR_STATE_LABELS.get(state, state)
+            marker = "o" if state == "snir_on" else "s"
+            ax.plot(
+                x_positions,
+                values,
+                marker=marker,
+                color=color,
+                label=label_state,
+            )
+            plotted = True
+
+        ax.set_xticks(x_positions, scenarios)
+        ax.set_xlabel("Scenario")
+        ax.set_ylabel("SNIR moyen (dB)")
+        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+        ax.set_title(title or f"SNIR moyen mobile ({window_label})")
+        if plotted:
+            ax.legend(loc="best", title=window_label)
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "SNIR moyen indisponible",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+        fig.tight_layout()
+
+        filename = f"snir_moving_average_vs_scenarios{suffix}.png"
+        output_path = out_dir / filename
+        fig.savefig(output_path, dpi=150)
+        plt.close(fig)
+        return output_path
+
+    return _render_snir_variants(
+        render,
+        on_title=f"SNIR moyen mobile – SNIR activé ({window_label})",
+        off_title=f"SNIR moyen mobile – SNIR désactivé ({window_label})",
+        mixed_title=f"SNIR moyen mobile – superposé ({window_label})",
     )
 
 
@@ -1092,6 +1187,12 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     plot_pdr(metrics_by_method, scenarios, out_dir)
     plot_der(metrics_by_method, scenarios, out_dir)
     plot_snir_mean(metrics_by_method, scenarios, out_dir)
+    plot_snir_moving_average(
+        metrics_by_method,
+        scenarios,
+        out_dir,
+        window_size=int(args.moving_average_window),
+    )
     plot_collisions(metrics_by_method, scenarios, out_dir)
     plot_energy(metrics_by_method, scenarios, out_dir)
     plot_energy_snir(metrics_by_method, scenarios, out_dir)
