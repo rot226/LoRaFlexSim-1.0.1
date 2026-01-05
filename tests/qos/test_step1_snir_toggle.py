@@ -16,14 +16,16 @@ import run_step1_matrix as step1_matrix
 import run_step1_experiments as step1_experiments
 
 
-MIN_SNIR_DELTA_DB = 8.0
-MIN_DER_PDR_DELTA = 0.08
-MIN_COLLISION_DELTA = 10
-MIN_COLLISION_CURVE_DELTA = 4.0
-MIN_COLLISION_POINT_DELTA = 1.0
-MIN_PDR_CURVE_DELTA = 0.05
-MIN_DER_CURVE_DELTA = 0.05
-MIN_SNIR_CURVE_DELTA_DB = 4.0
+MIN_SNIR_DELTA_DB = 10.0
+MIN_DER_PDR_DELTA = 0.1
+MIN_COLLISION_DELTA = 12.0
+MIN_COLLISION_MIN_DELTA = 2.0
+MIN_COLLISION_CURVE_DELTA = 5.0
+MIN_COLLISION_POINT_DELTA = 2.0
+MIN_PDR_CURVE_DELTA = 0.06
+MIN_DER_CURVE_DELTA = 0.06
+MIN_SNIR_CURVE_DELTA_DB = 5.0
+MIN_COMBINED_CURVE_DISTANCE = 1.2
 
 
 def _mean_snir(histogram_source: str) -> float:
@@ -97,10 +99,18 @@ def test_step1_snir_toggle_generates_distinct_csv(tmp_path: Path) -> None:
     avg_pdr_off = sum(pdr_by_state[False]) / len(pdr_by_state[False])
     avg_collisions_on = sum(collisions_by_state[True]) / len(collisions_by_state[True])
     avg_collisions_off = sum(collisions_by_state[False]) / len(collisions_by_state[False])
+    min_collision_gap = min(
+        abs(on - off)
+        for on in collisions_by_state[True]
+        for off in collisions_by_state[False]
+    )
 
     assert abs(avg_der_on - avg_der_off) >= MIN_DER_PDR_DELTA
     assert abs(avg_pdr_on - avg_pdr_off) >= MIN_DER_PDR_DELTA
     assert abs(avg_collisions_on - avg_collisions_off) >= MIN_COLLISION_DELTA
+    assert min_collision_gap >= MIN_COLLISION_MIN_DELTA, (
+        f"Δ collisions minimal trop faible entre états SNIR (Δ min={min_collision_gap:.3f})"
+    )
 
 
 @pytest.mark.slow
@@ -231,6 +241,71 @@ def test_step1_snir_toggle_snir_curves_are_not_identical(tmp_path: Path) -> None
     avg_gap = sum(gaps) / len(gaps)
     assert avg_gap >= MIN_SNIR_CURVE_DELTA_DB, (
         f"Courbes SNIR on/off quasi identiques (Δ moyen={avg_gap:.2f} dB)"
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
+def test_step1_snir_toggle_combined_curves_diverge(tmp_path: Path) -> None:
+    results_dir = tmp_path / "step1_combined_curves"
+    args = [
+        "--algos",
+        "adr",
+        "--with-snir",
+        "true",
+        "false",
+        "--seeds",
+        "1",
+        "--nodes",
+        "150",
+        "300",
+        "450",
+        "--packet-intervals",
+        "0.2",
+        "--duration",
+        "50",
+        "--results-dir",
+        str(results_dir),
+    ]
+
+    step1_matrix.main(args)
+
+    csv_paths = sorted(results_dir.glob("**/*.csv"))
+    assert csv_paths, "Aucun CSV généré pour comparer les courbes combinées SNIR"
+
+    by_state: dict[bool, dict[int, dict[str, float]]] = {True: {}, False: {}}
+    for path in csv_paths:
+        with path.open(newline="", encoding="utf8") as handle:
+            row = next(csv.DictReader(handle))
+
+        use_snir = row["use_snir"] == "True"
+        nodes = int(float(row["num_nodes"]))
+        by_state[use_snir][nodes] = {
+            "pdr": float(row["PDR"]),
+            "der": float(row["DER"]),
+            "collisions": float(row["collisions"]),
+            "mean_snir": _mean_snir(row["snir_histogram_json"]),
+        }
+
+    common_nodes = sorted(set(by_state[True]) & set(by_state[False]))
+    assert len(common_nodes) >= 3, "Au moins trois points sont nécessaires pour comparer les courbes SNIR"
+
+    distances = []
+    for nodes in common_nodes:
+        on_metrics = by_state[True][nodes]
+        off_metrics = by_state[False][nodes]
+        distance = (
+            abs(on_metrics["pdr"] - off_metrics["pdr"])
+            + abs(on_metrics["der"] - off_metrics["der"])
+            + abs(on_metrics["collisions"] - off_metrics["collisions"]) / 10.0
+            + abs(on_metrics["mean_snir"] - off_metrics["mean_snir"]) / 10.0
+        )
+        distances.append(distance)
+
+    avg_distance = sum(distances) / len(distances)
+    assert avg_distance >= MIN_COMBINED_CURVE_DISTANCE, (
+        "Courbes SNIR on/off trop similaires (distance combinée moyenne="
+        f"{avg_distance:.2f})"
     )
 
 

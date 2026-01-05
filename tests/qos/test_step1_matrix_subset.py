@@ -148,9 +148,13 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
     snir_gap_threshold = 6.0
     # Seuils non nuls pour éviter les écarts arbitraires : avec 1 graine, des durées
     # de 45–60 s et des charges modérées (32/64 ou 48/96 noeuds), on s'attend à des
-    # écarts SNIR de 4 à 6 dB, des variations PDR/DER d'au moins 5 points, et une
-    # différence de collisions d'au moins ~5 (variance suffisante sans allonger le test).
-    min_snir_gap_between_states = 4.0
+    # écarts SNIR de 4 à 6 dB selon la densité, des variations PDR/DER d'au moins
+    # 5 points, et une différence de collisions d'au moins ~5 (variance suffisante
+    # sans allonger le test).
+    min_snir_gap_by_campaign = {
+        "subset": 4.0,
+        "subset_dense": 6.0,
+    }
     min_rate_gap_between_states = 0.05
     min_collision_gap_between_states = 5.0
     min_collision_mean_gap_between_states = 1.0
@@ -216,6 +220,7 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
             }
 
         mean_gap = abs(state_means[True]["mean_snir"] - state_means[False]["mean_snir"])
+        min_snir_gap_between_states = min_snir_gap_by_campaign[campaign_name]
         assert mean_gap >= min_snir_gap_between_states, (
             f"Écart moyen de SNIR insuffisant entre états ({campaign_name}): {mean_gap:.2f} dB"
         )
