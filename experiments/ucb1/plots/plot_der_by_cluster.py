@@ -25,9 +25,11 @@ import pandas as pd
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_STEP1 = ROOT_DIR / "results" / "step1" / "summary.csv"
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_density_metrics.csv"
+DEFAULT_BASELINE = Path(__file__).resolve().parents[1] / "ucb1_baseline_metrics.csv"
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "plots" / "ucb1_der_vs_step1.png"
 SNIR_LABELS = {"snir_on": "SNIR activé", "snir_off": "SNIR désactivé", "snir_unknown": "SNIR inconnu"}
 SNIR_COLORS = {"snir_on": "#d62728", "snir_off": "#1f77b4", "snir_unknown": "#7f7f7f"}
+MIXRA_OPT_ALIASES = {"mixra_opt", "mixraopt", "mixra-opt", "mixra opt", "opt"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,6 +45,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_UCB1,
         help="CSV UCB1 issu du balayage de densité.",
+    )
+    parser.add_argument(
+        "--baseline-csv",
+        type=Path,
+        default=DEFAULT_BASELINE,
+        help="CSV baseline (MixRA-Opt) issu de run_baseline_comparison.py.",
     )
     parser.add_argument(
         "--output",
@@ -83,6 +91,18 @@ def _parse_bool(value: object | None) -> bool | None:
     if text in {"0", "false", "no", "n", "off"}:
         return False
     return None
+
+
+def _normalize_algorithm(value: object | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    normalized = text.lower().replace("-", "_").replace(" ", "_")
+    if normalized in MIXRA_OPT_ALIASES:
+        return "mixra_opt"
+    return text
 
 
 def _detect_snir(row: Mapping[str, object], path: Path | None) -> str:
@@ -203,6 +223,40 @@ def _load_ucb1(path: Path) -> pd.DataFrame:
     return df
 
 
+def _load_baseline(path: Path) -> pd.DataFrame:
+    if not path or not path.exists():
+        print(f"Avertissement : CSV baseline introuvable ({path}), section ignorée.")
+        return pd.DataFrame()
+    df = pd.read_csv(path)
+    required = {"cluster", "num_nodes", "der", "algorithm"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Colonnes manquantes dans {path}: {', '.join(sorted(missing))}")
+
+    records: list[dict[str, object]] = []
+    for row in df.to_dict(orient="records"):
+        algorithm = _normalize_algorithm(row.get("algorithm"))
+        if algorithm != "mixra_opt":
+            continue
+        try:
+            num_nodes = float(row.get("num_nodes"))
+            cluster = int(float(row.get("cluster")))
+            der = float(row.get("der"))
+        except (TypeError, ValueError):
+            continue
+        records.append(
+            {
+                "source": "MixRA-Opt",
+                "cluster": cluster,
+                "num_nodes": num_nodes,
+                "der": der,
+                "snir_state": "snir_unknown",
+            }
+        )
+
+    return pd.DataFrame(records)
+
+
 def _parse_time_windows(raw_windows: Sequence[str]) -> list[tuple[float, float]]:
     parsed: list[tuple[float, float]] = []
     for raw in raw_windows:
@@ -254,6 +308,7 @@ def _plot_der(df: pd.DataFrame, output: Path) -> None:
     style_by_source = {
         "Step1/QoS": {"linestyle": "-", "marker": "o"},
         "UCB1": {"linestyle": "--", "marker": "D"},
+        "MixRA-Opt": {"linestyle": ":", "marker": "s"},
     }
     for (source, snir_state, cluster_id), subset in df.groupby(["source", "snir_state", "cluster"], sort=True):
         subset = subset.sort_values("num_nodes")
@@ -278,7 +333,14 @@ def _plot_der(df: pd.DataFrame, output: Path) -> None:
 def main() -> None:
     args = parse_args()
     time_windows = _parse_time_windows(args.time_window)
-    combined = pd.concat([_load_step1(args.step1_csv), _load_ucb1(args.ucb1_csv)], ignore_index=True)
+    combined = pd.concat(
+        [
+            _load_step1(args.step1_csv),
+            _load_ucb1(args.ucb1_csv),
+            _load_baseline(args.baseline_csv),
+        ],
+        ignore_index=True,
+    )
     combined = _filter_windows(combined, time_windows, args.window_index)
     if combined.empty:
         raise SystemExit("Aucune donnée exploitable pour tracer la figure.")

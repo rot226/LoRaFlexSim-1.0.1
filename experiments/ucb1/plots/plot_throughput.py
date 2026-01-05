@@ -18,15 +18,23 @@ import pandas as pd
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_STEP1 = ROOT_DIR / "results" / "step1" / "summary.csv"
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_density_metrics.csv"
+DEFAULT_BASELINE = Path(__file__).resolve().parents[1] / "ucb1_baseline_metrics.csv"
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "plots" / "ucb1_throughput_vs_step1.png"
 SNIR_LABELS = {"snir_on": "SNIR activé", "snir_off": "SNIR désactivé", "snir_unknown": "SNIR inconnu"}
 SNIR_COLORS = {"snir_on": "#d62728", "snir_off": "#1f77b4", "snir_unknown": "#7f7f7f"}
+MIXRA_OPT_ALIASES = {"mixra_opt", "mixraopt", "mixra-opt", "mixra opt", "opt"}
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Débit global et par cluster – Step1/QoS vs UCB1.")
     parser.add_argument("--step1-csv", type=Path, default=DEFAULT_STEP1, help="CSV Step1/QoS (summary ou brut).")
     parser.add_argument("--ucb1-csv", type=Path, default=DEFAULT_UCB1, help="CSV UCB1 du balayage de densité.")
+    parser.add_argument(
+        "--baseline-csv",
+        type=Path,
+        default=DEFAULT_BASELINE,
+        help="CSV baseline (MixRA-Opt) issu de run_baseline_comparison.py.",
+    )
     parser.add_argument(
         "--metric",
         choices=["success_rate", "der", "pdr"],
@@ -55,6 +63,18 @@ def _parse_bool(value: object | None) -> bool | None:
     if text in {"0", "false", "no", "n", "off"}:
         return False
     return None
+
+
+def _normalize_algorithm(value: object | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    normalized = text.lower().replace("-", "_").replace(" ", "_")
+    if normalized in MIXRA_OPT_ALIASES:
+        return "mixra_opt"
+    return text
 
 
 def _detect_snir(row: Mapping[str, object], path: Path | None) -> str:
@@ -178,9 +198,65 @@ def _load_ucb1(path: Path, metric: str) -> pd.DataFrame:
     return pd.concat([df, global_df], ignore_index=True)
 
 
+def _load_baseline(path: Path, metric: str) -> pd.DataFrame:
+    if not path or not path.exists():
+        print(f"Avertissement : CSV baseline introuvable ({path}), section ignorée.")
+        return pd.DataFrame()
+    df = pd.read_csv(path)
+    metric = metric if metric in df.columns else next((col for col in ("der", "pdr", "success_rate") if col in df.columns), None)
+    if metric is None:
+        raise ValueError(f"Impossible de trouver les colonnes de débit dans {path}")
+    required = {"cluster", "num_nodes", metric, "algorithm"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Colonnes manquantes dans {path}: {', '.join(sorted(missing))}")
+
+    records: List[dict] = []
+    for row in df.to_dict(orient="records"):
+        algorithm = _normalize_algorithm(row.get("algorithm"))
+        if algorithm != "mixra_opt":
+            continue
+        try:
+            num_nodes = float(row.get("num_nodes"))
+            cluster = int(float(row.get("cluster")))
+            value = float(row.get(metric))
+        except (TypeError, ValueError):
+            continue
+        records.append(
+            {
+                "source": "MixRA-Opt",
+                "cluster": cluster,
+                "num_nodes": num_nodes,
+                "value": value,
+                "snir_state": "snir_unknown",
+            }
+        )
+
+    if not records:
+        return pd.DataFrame()
+    baseline_df = pd.DataFrame(records)
+    global_rows: List[dict] = []
+    for (num_nodes, snir_state), group in baseline_df.groupby(["num_nodes", "snir_state"], sort=False):
+        global_rows.append(
+            {
+                "source": "MixRA-Opt",
+                "cluster": "Global",
+                "num_nodes": num_nodes,
+                "value": float(group["value"].mean()),
+                "snir_state": snir_state,
+            }
+        )
+    global_df = pd.DataFrame(global_rows)
+    return pd.concat([baseline_df, global_df], ignore_index=True)
+
+
 def _plot(df: pd.DataFrame, output: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
-    style_by_source = {"Step1/QoS": {"linestyle": "-", "marker": "o"}, "UCB1": {"linestyle": "--", "marker": "D"}}
+    style_by_source = {
+        "Step1/QoS": {"linestyle": "-", "marker": "o"},
+        "UCB1": {"linestyle": "--", "marker": "D"},
+        "MixRA-Opt": {"linestyle": ":", "marker": "s"},
+    }
     for (source, snir_state, cluster_id), subset in df.groupby(["source", "snir_state", "cluster"], sort=True):
         subset = subset.sort_values("num_nodes")
         color = SNIR_COLORS.get(snir_state, SNIR_COLORS["snir_unknown"])
@@ -207,6 +283,7 @@ def main() -> None:
     combined = pd.concat([
         _load_step1(args.step1_csv),
         _load_ucb1(args.ucb1_csv, args.metric),
+        _load_baseline(args.baseline_csv, args.metric),
     ], ignore_index=True)
     if combined.empty:
         raise SystemExit("Aucune donnée exploitable pour tracer la figure.")

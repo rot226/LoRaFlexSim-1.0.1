@@ -296,3 +296,114 @@ def test_extended_summary_includes_mixra_opt_series(
     plot_step1_results._plot_summary_bars(records, tmp_path)
 
     assert any("mixra_opt" in label for label in captured_labels)
+
+
+def test_cli_includes_mixra_opt_in_standard_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    results_dir = tmp_path / "step1"
+    results_dir.mkdir()
+    csv_path = results_dir / "results.csv"
+
+    _write_csv(
+        csv_path,
+        [
+            {
+                "algorithm": "Opt",
+                "snir_state": "snir_on",
+                "num_nodes": "10",
+                "packet_interval_s": "60",
+                "PDR": "0.92",
+                "DER": "0.88",
+            },
+            {
+                "algorithm": "Opt",
+                "snir_state": "snir_off",
+                "num_nodes": "10",
+                "packet_interval_s": "60",
+                "PDR": "0.85",
+                "DER": "0.8",
+            },
+        ],
+    )
+
+    captures: list[tuple[str, list[str]]] = []
+
+    class _FakeLine:
+        def set_linewidth(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_markersize(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_markeredgewidth(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    class _FakeAxis:
+        def __init__(self) -> None:
+            self._labels: list[str] = []
+            self._lines: list[_FakeLine] = []
+
+        def plot(self, *_args: object, label: str | None = None, **_kwargs: object) -> None:
+            if label:
+                self._labels.append(label)
+            self._lines.append(_FakeLine())
+
+        def errorbar(self, *_args: object, label: str | None = None, **_kwargs: object) -> None:
+            if label:
+                self._labels.append(label)
+            self._lines.append(_FakeLine())
+
+        def set_xlabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_ylabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_title(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def legend(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def get_legend_handles_labels(self) -> tuple[list[_FakeLine], list[str]]:
+            return self._lines, self._labels
+
+    class _FakeFigure:
+        def __init__(self, axis: _FakeAxis) -> None:
+            self._axis = axis
+
+        def tight_layout(self) -> None:
+            return None
+
+        def savefig(self, output: Path, **_kwargs: object) -> None:
+            captures.append((str(output), list(self._axis._labels)))
+
+    class _FakePlt:
+        def subplots(self, **_kwargs: object) -> tuple[_FakeFigure, _FakeAxis]:
+            axis = _FakeAxis()
+            return _FakeFigure(axis), axis
+
+        def close(self, _fig: _FakeFigure) -> None:
+            return None
+
+    monkeypatch.setattr(plot_step1_results, "plt", _FakePlt())
+    monkeypatch.setattr(plot_step1_results, "_format_axes", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(plot_step1_results, "_apply_ieee_style", lambda: None)
+    monkeypatch.setattr(plot_step1_results, "plot_distribution_by_state", lambda *_args, **_kwargs: None)
+
+    plot_step1_results.main(
+        [
+            "--results-dir",
+            str(results_dir),
+            "--figures-dir",
+            str(tmp_path / "figures"),
+        ]
+    )
+
+    assert any(
+        "mixra_opt" in label for _, labels in captures for label in labels
+    ), "mixra_opt absent des labels des figures standard."
+    assert any(
+        "algo_mixra_opt" in path for path, _ in captures
+    ), "Aucun fichier SNIR compare pour mixra_opt."
