@@ -140,6 +140,7 @@ def _select_signal_mean(record: Mapping[str, Any]) -> Tuple[float | None, str]:
 
 def _load_step1_records(results_dir: Path, strict: bool = False) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
+    snir_unknown_rows = 0
     if not results_dir.exists():
         return records
     for csv_path in sorted(results_dir.rglob("*.csv")):
@@ -200,11 +201,21 @@ def _load_step1_records(results_dir: Path, strict: bool = False) -> List[Dict[st
                 record["use_snir"] = True if snir_state == "snir_on" else False if snir_state == "snir_off" else None
                 record["snir_state"] = snir_state
                 record["snir_detected"] = snir_detected
+                if snir_state == "snir_unknown":
+                    snir_unknown_rows += 1
                 if record["use_snir"] is True and record.get("snir_mean") is None:
                     raise ValueError(
                         f"SNIR activé sans snir_mean dans {csv_path} (seed {record.get('random_seed')})."
                     )
                 records.append(record)
+    if snir_unknown_rows:
+        warnings.warn(
+            (
+                f"{snir_unknown_rows} ligne(s) snir_unknown détectée(s) dans {results_dir}; "
+                "elles sont exclues des figures mixtes."
+            ),
+            RuntimeWarning,
+        )
     return records
 
 
@@ -270,6 +281,7 @@ def _metric_error_bounds(record: Mapping[str, Any], metric: str, value: float) -
 
 def _load_summary_records(summary_path: Path, forced_state: str | None = None) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
+    snir_unknown_rows = 0
     if not summary_path.exists():
         return records
 
@@ -306,7 +318,17 @@ def _load_summary_records(summary_path: Path, forced_state: str | None = None) -
             elif record.get("snir_state") == "snir_off":
                 record["use_snir"] = False
             record["snir_detected"] = snir_detected
+            if record.get("snir_state") == "snir_unknown":
+                snir_unknown_rows += 1
             records.append(record)
+    if snir_unknown_rows:
+        warnings.warn(
+            (
+                f"{snir_unknown_rows} ligne(s) snir_unknown détectée(s) dans {summary_path}; "
+                "elles sont exclues des figures mixtes."
+            ),
+            RuntimeWarning,
+        )
     return records
 
 
