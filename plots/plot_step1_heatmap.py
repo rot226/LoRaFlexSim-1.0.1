@@ -2,7 +2,7 @@
 
 Le script génère des matrices (x = intervalle, y = nœuds) pour deux états
 SNIR (on/off) empilés, avec une légende colorée adaptée aux publications
-IEEE.
+IEEE. Par défaut, les heatmaps sont filtrées sur l'algorithme mixra_opt.
 """
 
 from __future__ import annotations
@@ -198,7 +198,7 @@ def generate_heatmaps(
     if algorithm:
         selected_algorithms = [algorithm]
     else:
-        selected_algorithms = sorted({str(record.get("algorithm") or "unknown") for record in records})
+        selected_algorithms = ["mixra_opt"]
 
     for algo in selected_algorithms:
         algo_records = [record for record in records if str(record.get("algorithm") or "unknown") == algo]
@@ -229,7 +229,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--algorithm",
-        help="Filtre optionnel sur l'algorithme à tracer",
+        default="mixra_opt",
+        help="Filtre sur l'algorithme à tracer (par défaut : mixra_opt)",
     )
     parser.add_argument(
         "--strict",
