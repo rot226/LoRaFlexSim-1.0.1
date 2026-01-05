@@ -15,7 +15,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from scripts.plot_step1_results import STATE_LABELS
+from scripts.plot_step1_results import STATE_LABELS, _normalize_algorithm_name
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
 
 
@@ -123,10 +123,13 @@ def _load_records(results_dir: Path, strict_snir: bool) -> Tuple[List[Record], L
                         f"Impossible de déterminer l'état SNIR pour {csv_path}; utilisez des fichiers explicites."
                     )
 
+                algorithm = _normalize_algorithm_name(row.get("algorithm"))
+                if not algorithm:
+                    algorithm = _normalize_algorithm_name(csv_path.parent.name) or csv_path.parent.name
                 record: Record = {
                     "run_id": run_id,
                     "csv_path": csv_path,
-                    "algorithm": row.get("algorithm", csv_path.parent.name),
+                    "algorithm": algorithm,
                     "num_nodes": _parse_int(row.get("num_nodes")),
                     "packet_interval_s": _parse_float(row.get("packet_interval_s")),
                     "random_seed": _parse_int(row.get("random_seed")),
