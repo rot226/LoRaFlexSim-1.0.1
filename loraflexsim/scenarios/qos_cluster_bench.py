@@ -388,6 +388,7 @@ def _compute_additional_metrics(
     collisions_by_channel: Dict[int, int] = {}
     snr_values: List[float] = []
     snir_values: List[float] = []
+    use_snir = _effective_snir_state(simulator, bool(getattr(simulator, "use_snir", False)))
 
     for event in getattr(simulator, "events_log", []):
         result = event.get("result")
@@ -402,11 +403,12 @@ def _compute_additional_metrics(
         elif result == "Collision":
             collisions_by_sf[sf] = collisions_by_sf.get(sf, 0) + 1
             collisions_by_channel[channel_idx] = collisions_by_channel.get(channel_idx, 0) + 1
-        snir = event.get("snir_dB")
-        if snir is not None:
-            snir_value = float(snir)
-            if math.isfinite(snir_value):
-                snir_values.append(snir_value)
+        if use_snir:
+            snir = event.get("snir_dB")
+            if snir is not None:
+                snir_value = float(snir)
+                if math.isfinite(snir_value):
+                    snir_values.append(snir_value)
 
     for sf, channel_counts in throughput_map.items():
         for channel_idx, count in channel_counts.items():
