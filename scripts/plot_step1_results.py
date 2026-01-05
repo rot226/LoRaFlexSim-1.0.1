@@ -126,6 +126,18 @@ def _record_matches_state(record: Mapping[str, Any], state: str) -> bool:
     return record.get("snir_state") == state and record.get("snir_detected", True)
 
 
+def _select_signal_mean(record: Mapping[str, Any]) -> Tuple[float | None, str]:
+    use_snir = record.get("use_snir")
+    if use_snir is True:
+        return _maybe_float(record.get("snir_mean")), "snir_mean"
+    if use_snir is False:
+        return _maybe_float(record.get("snr_mean")), "snr_mean"
+    snir_value = _maybe_float(record.get("snir_mean"))
+    if snir_value is not None:
+        return snir_value, "snir_mean"
+    return _maybe_float(record.get("snr_mean")), "snr_mean"
+
+
 def _load_step1_records(results_dir: Path, strict: bool = False) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     if not results_dir.exists():
@@ -188,6 +200,10 @@ def _load_step1_records(results_dir: Path, strict: bool = False) -> List[Dict[st
                 record["use_snir"] = True if snir_state == "snir_on" else False if snir_state == "snir_off" else None
                 record["snir_state"] = snir_state
                 record["snir_detected"] = snir_detected
+                if record["use_snir"] is True and record.get("snir_mean") is None:
+                    raise ValueError(
+                        f"SNIR activé sans snir_mean dans {csv_path} (seed {record.get('random_seed')})."
+                    )
                 records.append(record)
     return records
 
@@ -285,6 +301,10 @@ def _load_summary_records(summary_path: Path, forced_state: str | None = None) -
                     RuntimeWarning,
                 )
                 continue
+            if record.get("snir_state") == "snir_on":
+                record["use_snir"] = True
+            elif record.get("snir_state") == "snir_off":
+                record["use_snir"] = False
             record["snir_detected"] = snir_detected
             records.append(record)
     return records
@@ -350,13 +370,19 @@ def _plot_global_metric(
                     xs: List[int] = []
                     ys: List[float] = []
                     used_items: List[Dict[str, Any]] = []
+                    used_error_metrics: List[str] = []
                     for item in data:
-                        raw_value = item.get(metric)
+                        if metric == "snir_mean":
+                            raw_value, error_metric = _select_signal_mean(item)
+                        else:
+                            raw_value = item.get(metric)
+                            error_metric = metric
                         if raw_value is None:
                             continue
                         xs.append(item["num_nodes"])
                         ys.append(_parse_float(raw_value))
                         used_items.append(item)
+                        used_error_metrics.append(error_metric)
                     if not xs:
                         continue
                     marker = MARKER_CYCLE[algo_idx % len(MARKER_CYCLE)]
@@ -368,8 +394,8 @@ def _plot_global_metric(
                     if metric in error_metrics:
                         lower: List[float] = []
                         upper: List[float] = []
-                        for item, value in zip(used_items, ys):
-                            error = _metric_error_bounds(item, metric, value)
+                        for item, value, error_metric in zip(used_items, ys, used_error_metrics):
+                            error = _metric_error_bounds(item, error_metric, value)
                             if error is None:
                                 lower.append(float("nan"))
                                 upper.append(float("nan"))
@@ -486,8 +512,17 @@ def _plot_summary_bars(records: List[Dict[str, Any]], figures_dir: Path) -> None
                         ),
                         None,
                     )
-                    values.append(match.get(f"{metric}_mean", 0.0) if match else 0.0)
-                    errors.append(match.get(f"{metric}_std", 0.0) if match else 0.0)
+                    if match:
+                        if metric == "snir_mean":
+                            signal_value, error_metric = _select_signal_mean(match)
+                            values.append(signal_value or 0.0)
+                            errors.append(_maybe_float(match.get(f"{error_metric}_std")) or 0.0)
+                        else:
+                            values.append(match.get(f"{metric}_mean", 0.0))
+                            errors.append(_maybe_float(match.get(f"{metric}_std")) or 0.0)
+                    else:
+                        values.append(0.0)
+                        errors.append(0.0)
 
                 ax.bar(
                     offsets,
@@ -776,6 +811,9 @@ def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None
 
 
 def _select_metric_value(record: Mapping[str, Any], metric: str) -> float:
+    if metric == "snir_mean":
+        value, _error_metric = _select_signal_mean(record)
+        return _parse_float(value)
     return _parse_float(record.get(f"{metric}_mean")) or _parse_float(record.get(metric))
 
 
@@ -931,7 +969,7 @@ def plot_distribution_by_state(records: List[Dict[str, Any]], figures_dir: Path)
             if not _record_matches_state(record, state):
                 continue
             if metric == "snir_mean":
-                value = record.get("snir_mean")
+                value, _error_metric = _select_signal_mean(record)
             elif metric == "DER":
                 value = record.get("DER") or record.get("DER_mean")
             else:
@@ -1024,7 +1062,7 @@ def generate_step1_figures(
         _plot_global_metric(records, "collisions_snir", "Collisions (SNIR)", "collisions_snir", output_dir)
         _plot_global_metric(records, "jain_index", "Indice de Jain", "jain_index", output_dir)
         _plot_global_metric(records, "throughput_bps", "Débit agrégé (bps)", "throughput", output_dir)
-        if any(r.get("snir_mean") is not None for r in records):
+        if any((r.get("snir_mean") is not None or r.get("snr_mean") is not None) for r in records):
             _plot_global_metric(records, "snir_mean", "SNIR moyen (dB)", "snir_mean", output_dir)
         if any(r.get("snr_mean") is not None for r in records):
             _plot_global_metric(records, "snr_mean", "SNR moyen (dB)", "snr_mean", output_dir)
