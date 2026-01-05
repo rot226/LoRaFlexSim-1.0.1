@@ -38,6 +38,22 @@ SNIR_LABELS = {
     "snir_unknown": "SNIR inconnu",
 }
 MARKER_CYCLE = ["o", "s", "^", "D", "v", "P", "X"]
+MIXRA_OPT_ALIASES = {"mixra_opt", "mixraopt", "mixra-opt", "mixra opt"}
+MIXRA_H_ALIASES = {"mixra_h", "mixrah", "mixra-h", "mixra h"}
+
+
+def _normalize_algorithm_name(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    normalized = text.lower().replace("-", "_").replace(" ", "_")
+    if normalized in MIXRA_OPT_ALIASES:
+        return "mixra_opt"
+    if normalized in MIXRA_H_ALIASES:
+        return "mixra_h"
+    return text
 
 
 def _parse_float(value: str | None, default: float = 0.0) -> float:
@@ -142,9 +158,12 @@ def _load_step1_records(results_dir: Path, strict: bool = False) -> List[Dict[st
 
                 snir_candidate = row.get("snir_mean")
                 snr_candidate = row.get("snr_mean") or row.get("SNR") or row.get("snr")
+                algorithm = _normalize_algorithm_name(row.get("algorithm"))
+                if not algorithm:
+                    algorithm = _normalize_algorithm_name(csv_path.parent.name) or csv_path.parent.name
                 record: Dict[str, Any] = {
                     "csv_path": csv_path,
-                    "algorithm": row.get("algorithm", csv_path.parent.name),
+                    "algorithm": algorithm,
                     "num_nodes": int(float(row.get("num_nodes", "0") or 0)),
                     "packet_interval_s": float(row.get("packet_interval_s", "0") or 0),
                     "random_seed": _maybe_int(row.get("random_seed") or row.get("seed")),
@@ -253,6 +272,7 @@ def _load_summary_records(summary_path: Path, forced_state: str | None = None) -
                     record[key] = float(value or 0)
                 else:
                     record[key] = _parse_float(value)
+            record["algorithm"] = _normalize_algorithm_name(record.get("algorithm")) or record.get("algorithm")
             snir_state, snir_detected = _detect_snir_state(row)
             if snir_detected and not record.get("snir_state"):
                 record["snir_state"] = snir_state
@@ -287,8 +307,9 @@ def _load_raw_samples(raw_path: Path, fallback_dir: Path, strict: bool) -> List[
         with raw_path.open("r", encoding="utf8") as handle:
             reader = csv.DictReader(handle)
             for row in reader:
+                algorithm = _normalize_algorithm_name(row.get("algorithm")) or row.get("algorithm")
                 record: Dict[str, Any] = {
-                    "algorithm": row.get("algorithm"),
+                    "algorithm": algorithm,
                     "snir_state": row.get("snir_state", "snir_unknown"),
                     "packet_interval_s": _parse_float(row.get("packet_interval_s")),
                     "DER": _parse_float(row.get("DER")),

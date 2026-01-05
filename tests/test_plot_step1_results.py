@@ -226,3 +226,73 @@ def test_official_run_outputs_only_extended(tmp_path: Path, monkeypatch: pytest.
     assert generated, "Aucune figure officielle n'a été générée."
     assert all("extended" in path.parts for path in generated)
     assert not list((figures_dir / "step1").glob("*.png"))
+
+
+def test_extended_summary_includes_mixra_opt_series(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    summary_path = tmp_path / "summary.csv"
+    _write_csv(
+        summary_path,
+        [
+            {
+                "algorithm": "MixRA-Opt",
+                "snir_state": "snir_on",
+                "num_nodes": "10",
+                "packet_interval_s": "60",
+                "PDR_mean": "0.9",
+                "PDR_std": "0.01",
+            }
+        ],
+    )
+
+    records = plot_step1_results._load_summary_records(summary_path)
+    assert any(record.get("algorithm") == "mixra_opt" for record in records)
+
+    captured_labels: list[str] = []
+
+    class _FakeAxis:
+        def __init__(self) -> None:
+            self._labels: list[str] = []
+
+        def bar(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_xticks(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_xticklabels(self, labels: list[str], *_args: object, **_kwargs: object) -> None:
+            captured_labels.extend(labels)
+
+        def set_ylabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_title(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def legend(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def get_legend_handles_labels(self) -> tuple[list[object], list[str]]:
+            return [object()], ["snir"]
+
+    class _FakeFigure:
+        def tight_layout(self) -> None:
+            return None
+
+        def savefig(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    class _FakePlt:
+        def subplots(self, **_kwargs: object) -> tuple[_FakeFigure, _FakeAxis]:
+            return _FakeFigure(), _FakeAxis()
+
+        def close(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    monkeypatch.setattr(plot_step1_results, "plt", _FakePlt())
+    monkeypatch.setattr(plot_step1_results, "_format_axes", lambda *_args, **_kwargs: None)
+
+    plot_step1_results._plot_summary_bars(records, tmp_path)
+
+    assert any("mixra_opt" in label for label in captured_labels)
