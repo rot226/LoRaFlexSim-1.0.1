@@ -1070,7 +1070,10 @@ def generate_step1_figures(
         else:
             _plot_summary_bars(summary_records, extended_dir)
             if plot_trajectories:
-                _plot_trajectories(summary_records, trajectories_dir)
+                trajectory_records = _load_step1_records(results_dir, strict=strict)
+                if not trajectory_records:
+                    trajectory_records = summary_records
+                _plot_trajectories(trajectory_records, trajectories_dir)
             comparison_records = summary_records
     elif not official_only:
         records = _load_step1_records(results_dir, strict=strict)
