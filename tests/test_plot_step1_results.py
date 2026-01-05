@@ -561,3 +561,130 @@ def test_cli_includes_mixra_opt_in_standard_outputs(
     assert any(
         "algo_mixra_opt" in path for path, _ in captures
     ), "Aucun fichier SNIR compare pour mixra_opt."
+
+
+def test_plot_trajectories_includes_mixra_opt_series(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    results_dir = tmp_path / "step1"
+    results_dir.mkdir()
+    csv_path = results_dir / "results.csv"
+
+    _write_csv(
+        csv_path,
+        [
+            {
+                "algorithm": "Opt",
+                "snir_state": "snir_on",
+                "num_nodes": "10",
+                "packet_interval_s": "60",
+                "random_seed": "1",
+                "PDR": "0.9",
+                "DER": "0.8",
+                "snir_mean": "5.0",
+            },
+            {
+                "algorithm": "Opt",
+                "snir_state": "snir_off",
+                "num_nodes": "10",
+                "packet_interval_s": "60",
+                "random_seed": "1",
+                "PDR": "0.85",
+                "DER": "0.75",
+                "snr_mean": "4.0",
+            },
+            {
+                "algorithm": "Opt",
+                "snir_state": "snir_on",
+                "num_nodes": "20",
+                "packet_interval_s": "60",
+                "random_seed": "1",
+                "PDR": "0.88",
+                "DER": "0.78",
+                "snir_mean": "5.5",
+            },
+            {
+                "algorithm": "Opt",
+                "snir_state": "snir_off",
+                "num_nodes": "20",
+                "packet_interval_s": "60",
+                "random_seed": "1",
+                "PDR": "0.82",
+                "DER": "0.7",
+                "snr_mean": "3.5",
+            },
+        ],
+    )
+
+    records = plot_step1_results._load_step1_records(results_dir)
+    assert any(record.get("algorithm") == "mixra_opt" for record in records)
+
+    captures: list[tuple[str, list[str]]] = []
+
+    class _FakeAxis:
+        def __init__(self) -> None:
+            self._labels: list[str] = []
+            self._lines: list[object] = []
+
+        def plot(self, *_args: object, label: str | None = None, **_kwargs: object) -> None:
+            if label:
+                self._labels.append(label)
+            self._lines.append(object())
+
+        def set_xlabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_ylabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_title(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def legend(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def get_legend_handles_labels(self) -> tuple[list[object], list[str]]:
+            return self._lines, self._labels
+
+        def get_lines(self) -> list[object]:
+            return self._lines
+
+    class _FakeFigure:
+        def __init__(self, axis: _FakeAxis) -> None:
+            self._axis = axis
+
+        def tight_layout(self) -> None:
+            return None
+
+        def savefig(self, output: Path, **_kwargs: object) -> None:
+            captures.append((str(output), list(self._axis._labels)))
+
+    class _FakePlt:
+        def subplots(self, **_kwargs: object) -> tuple[_FakeFigure, _FakeAxis]:
+            axis = _FakeAxis()
+            return _FakeFigure(axis), axis
+
+        def close(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def get_cmap(self, *_args: object, **_kwargs: object) -> object:
+            class _Map:
+                N = 10
+
+                def __call__(self, idx: int) -> tuple[float, float, float, float]:
+                    return (0.0, 0.0, 0.0, 1.0)
+
+            return _Map()
+
+    monkeypatch.setattr(plot_step1_results, "plt", _FakePlt())
+    monkeypatch.setattr(plot_step1_results, "_format_axes", lambda *_args, **_kwargs: None)
+
+    plot_step1_results._plot_trajectories(records, tmp_path)
+
+    assert any("mixra_opt" in path for path, _ in captures)
+    assert any(
+        "SNIR activé" in label for _, labels in captures for label in labels
+    )
+    assert any(
+        "SNIR désactivé" in label for _, labels in captures for label in labels
+    )
