@@ -38,7 +38,7 @@ SNIR_LABELS = {
     "snir_unknown": "SNIR inconnu",
 }
 MARKER_CYCLE = ["o", "s", "^", "D", "v", "P", "X"]
-MIXRA_OPT_ALIASES = {"mixra_opt", "mixraopt", "mixra-opt", "mixra opt"}
+MIXRA_OPT_ALIASES = {"mixra_opt", "mixraopt", "mixra-opt", "mixra opt", "opt"}
 MIXRA_H_ALIASES = {"mixra_h", "mixrah", "mixra-h", "mixra h"}
 
 
