@@ -112,6 +112,7 @@ def plot_regret(*, csv_path: Path, output_path: Path, packet_intervals: list[flo
                     & (df["packet_interval_s"] == interval)
                     & (df["snir_state"] == snir_state)
                 ]
+                subset = subset.dropna(subset=["time_s", "regret_cumulative"])
                 if subset.empty:
                     continue
                 subset = subset.sort_values("time_s")
@@ -129,7 +130,8 @@ def plot_regret(*, csv_path: Path, output_path: Path, packet_intervals: list[flo
     ax.set_xlabel("Temps (s)")
     ax.set_ylabel("Regret cumulé")
     ax.grid(True, linestyle=":", alpha=0.5)
-    ax.legend(fontsize=8, ncol=2)
+    if ax.get_legend_handles_labels()[1]:
+        ax.legend(fontsize=8, ncol=2)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()

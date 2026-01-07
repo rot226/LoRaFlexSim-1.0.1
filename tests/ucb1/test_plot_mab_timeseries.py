@@ -36,25 +36,43 @@ matplotlib.use("Agg")
 
 def _load_plot_module() -> object:
     root_dir = Path(__file__).resolve().parents[2]
-    module_path = root_dir / "experiments" / "ucb1" / "plots" / "plot_regret.py"
-    spec = importlib.util.spec_from_file_location("plot_regret", module_path)
+    module_path = root_dir / "experiments" / "ucb1" / "plots" / "plot_mab_timeseries.py"
+    spec = importlib.util.spec_from_file_location("plot_mab_timeseries", module_path)
     if spec is None or spec.loader is None:
-        raise RuntimeError("Impossible de charger plot_regret.")
+        raise RuntimeError("Impossible de charger plot_mab_timeseries.")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-def test_plot_regret_includes_snir_curves(tmp_path: Path, monkeypatch) -> None:
-    plot_regret = _load_plot_module()
-    csv_path = tmp_path / "ucb1_regret.csv"
-    output_path = tmp_path / "ucb1_regret.png"
+def test_plot_mab_timeseries_has_labels(tmp_path: Path, monkeypatch) -> None:
+    plot_module = _load_plot_module()
+    csv_path = tmp_path / "ucb1_timeseries.csv"
+    output_dir = tmp_path / "plots"
 
     rows = [
-        {"cluster": 1, "packet_interval_s": 600.0, "window_index": 0, "window_start_s": 0.0, "regret_cumulative": 0.1, "snir_state": "snir_off"},
-        {"cluster": 1, "packet_interval_s": 600.0, "window_index": 1, "window_start_s": 600.0, "regret_cumulative": 0.2, "snir_state": "snir_off"},
-        {"cluster": 1, "packet_interval_s": 600.0, "window_index": 0, "window_start_s": 0.0, "regret_cumulative": 0.05, "snir_state": "snir_on"},
-        {"cluster": 1, "packet_interval_s": 600.0, "window_index": 1, "window_start_s": 600.0, "regret_cumulative": 0.12, "snir_state": "snir_on"},
+        {
+            "cluster": 1,
+            "packet_interval_s": 600.0,
+            "window_index": 0,
+            "window_start_s": 0.0,
+            "reward_window_mean": 0.8,
+            "der_window": 0.5,
+            "snir_window_mean": 7.5,
+            "energy_window_mean": 0.12,
+            "snir_state": "snir_on",
+        },
+        {
+            "cluster": 1,
+            "packet_interval_s": 600.0,
+            "window_index": 1,
+            "window_start_s": 600.0,
+            "reward_window_mean": 0.7,
+            "der_window": 0.6,
+            "snir_window_mean": 7.1,
+            "energy_window_mean": 0.11,
+            "snir_state": "snir_on",
+        },
     ]
 
     with csv_path.open("w", newline="", encoding="utf8") as handle:
@@ -72,13 +90,11 @@ def test_plot_regret_includes_snir_curves(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(Figure, "savefig", _spy_savefig)
 
-    generated = plot_regret.plot_regret(
+    plot_module.run_plots(
         csv_path=csv_path,
-        output_path=output_path,
+        output_dir=output_dir,
         packet_intervals=[],
     )
 
-    assert generated.is_file()
-    assert generated.stat().st_size > 0
-    assert any(plot_regret.SNIR_LABELS["snir_on"] in label for label in captured_labels)
-    assert any(plot_regret.SNIR_LABELS["snir_off"] in label for label in captured_labels)
+    assert output_dir.is_dir()
+    assert captured_labels
