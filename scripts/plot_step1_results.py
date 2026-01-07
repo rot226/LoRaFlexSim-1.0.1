@@ -760,7 +760,15 @@ def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None
         return
 
     metrics = {"PDR": "PDR", "DER": "DER"}
-    algorithms = _unique_algorithms(records)
+    def normalize_algorithm(value: Any) -> str:
+        normalized = _normalize_algorithm_name(value)
+        if normalized:
+            return normalized
+        if value is not None and str(value).strip():
+            return str(value)
+        return "unknown"
+
+    algorithms = sorted({normalize_algorithm(r.get("algorithm")) for r in records})
     seeds = sorted({r.get("random_seed") for r in records if r.get("random_seed") is not None})
     if not seeds:
         warnings.warn(
@@ -797,7 +805,7 @@ def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None
                     subset = [
                         r
                         for r in records
-                        if str(r.get("algorithm") or "unknown") == algorithm
+                        if normalize_algorithm(r.get("algorithm")) == algorithm
                         and r.get(fixed_key) == fixed_value
                         and r.get("random_seed") == seed
                         and _record_matches_state(r, state)
