@@ -683,6 +683,136 @@ def test_cli_includes_mixra_opt_in_standard_outputs(
     ), "Aucun fichier SNIR compare pour mixra_opt."
 
 
+def test_cli_includes_mixra_opt_in_all_global_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    results_dir = tmp_path / "step1"
+    results_dir.mkdir()
+    csv_path = results_dir / "results.csv"
+
+    _write_csv(
+        csv_path,
+        [
+            {
+                "algorithm": "Opt",
+                "snir_state": "snir_on",
+                "num_nodes": "10",
+                "packet_interval_s": "60",
+                "PDR": "0.92",
+                "DER": "0.88",
+                "snir_mean": "5.0",
+                "collisions": "2",
+                "collisions_snir": "1",
+            },
+            {
+                "algorithm": "Opt",
+                "snir_state": "snir_off",
+                "num_nodes": "10",
+                "packet_interval_s": "60",
+                "PDR": "0.85",
+                "DER": "0.8",
+                "snr_mean": "4.0",
+                "collisions": "4",
+                "collisions_snir": "3",
+            },
+        ],
+    )
+
+    captures: list[tuple[str, list[str]]] = []
+
+    class _FakeLine:
+        def set_linewidth(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_markersize(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_markeredgewidth(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    class _FakeAxis:
+        def __init__(self) -> None:
+            self._labels: list[str] = []
+            self._lines: list[_FakeLine] = []
+
+        def plot(self, *_args: object, label: str | None = None, **_kwargs: object) -> None:
+            if label:
+                self._labels.append(label)
+            self._lines.append(_FakeLine())
+
+        def errorbar(self, *_args: object, label: str | None = None, **_kwargs: object) -> None:
+            if label:
+                self._labels.append(label)
+            self._lines.append(_FakeLine())
+
+        def set_xlabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_ylabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_title(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def legend(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def get_legend_handles_labels(self) -> tuple[list[_FakeLine], list[str]]:
+            return self._lines, self._labels
+
+    class _FakeFigure:
+        def __init__(self, axis: _FakeAxis) -> None:
+            self._axis = axis
+
+        def tight_layout(self) -> None:
+            return None
+
+        def savefig(self, output: Path, **_kwargs: object) -> None:
+            captures.append((str(output), list(self._axis._labels)))
+
+    class _FakePlt:
+        def subplots(self, **_kwargs: object) -> tuple[_FakeFigure, _FakeAxis]:
+            axis = _FakeAxis()
+            return _FakeFigure(axis), axis
+
+        def close(self, _fig: _FakeFigure) -> None:
+            return None
+
+    monkeypatch.setattr(plot_step1_results, "plt", _FakePlt())
+    monkeypatch.setattr(plot_step1_results, "_format_axes", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(plot_step1_results, "_apply_ieee_style", lambda: None)
+    monkeypatch.setattr(plot_step1_results, "_plot_cluster_pdr", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(plot_step1_results, "plot_distribution_by_state", lambda *_args, **_kwargs: None)
+
+    plot_step1_results.main(
+        [
+            "--results-dir",
+            str(results_dir),
+            "--figures-dir",
+            str(tmp_path / "figures"),
+        ]
+    )
+
+    expected_prefixes = [
+        "step1_pdr_global",
+        "step1_der_global",
+        "step1_collisions",
+        "step1_collisions_snir",
+        "step1_snir_mean",
+    ]
+
+    for prefix in expected_prefixes:
+        matching = [
+            labels
+            for path, labels in captures
+            if prefix in path
+        ]
+        assert matching, f"Aucune sortie générée pour {prefix}."
+        assert any(
+            "mixra_opt" in label for labels in matching for label in labels
+        ), f"mixra_opt absent des labels pour {prefix}."
+
+
 def test_plot_trajectories_includes_mixra_opt_series(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

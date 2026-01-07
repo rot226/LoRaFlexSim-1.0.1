@@ -121,6 +121,15 @@ def _extract_cluster_values(row: Mapping[str, object]) -> Dict[int, float]:
     return values
 
 
+def _resolve_summary_path(step1_path: Path) -> Path | None:
+    if step1_path and step1_path.name == "summary.csv" and step1_path.exists():
+        return step1_path
+    candidate = step1_path.parent / "summary.csv"
+    if candidate.exists():
+        return candidate
+    return None
+
+
 def _load_step1(path: Path) -> pd.DataFrame:
     if not path or not path.exists():
         print(f"Avertissement : CSV Step1 introuvable ({path}), section ignorée.")
@@ -153,6 +162,54 @@ def _load_step1(path: Path) -> pd.DataFrame:
                     continue
                 records.append({
                     "source": "Step1/QoS",
+                    "cluster": "Global",
+                    "num_nodes": x_value,
+                    "value": global_value,
+                    "snir_state": snir_state,
+                })
+                break
+
+    tidy = pd.DataFrame(records)
+    return tidy.dropna(subset=["num_nodes", "value"])
+
+
+def _load_mixra_opt_baseline_from_summary(summary_path: Path | None) -> pd.DataFrame:
+    if not summary_path or not summary_path.exists():
+        return pd.DataFrame()
+    df = pd.read_csv(summary_path)
+    if "algorithm" not in df.columns:
+        print(f"Avertissement : summary.csv sans colonne algorithm ({summary_path}).")
+        return pd.DataFrame()
+    df = df.copy()
+    df["algorithm_norm"] = df["algorithm"].apply(_normalize_algorithm)
+    df = df[df["algorithm_norm"] == "mixra_opt"]
+    if df.empty:
+        return pd.DataFrame()
+    records: List[dict] = []
+    for row in df.to_dict(orient="records"):
+        snir_state = _detect_snir(row, summary_path)
+        try:
+            x_value = float(row.get("num_nodes"))
+        except (TypeError, ValueError):
+            x_value = None
+        clusters = _extract_cluster_values(row)
+        for cluster_id, value in clusters.items():
+            records.append({
+                "source": "MixRA-Opt",
+                "cluster": cluster_id,
+                "num_nodes": x_value,
+                "value": value,
+                "snir_state": snir_state,
+            })
+
+        for global_key in ("DER_mean", "DER", "PDR", "PDR_mean"):
+            if global_key in row:
+                try:
+                    global_value = float(row[global_key])
+                except (TypeError, ValueError):
+                    continue
+                records.append({
+                    "source": "MixRA-Opt",
                     "cluster": "Global",
                     "num_nodes": x_value,
                     "value": global_value,
@@ -280,10 +337,14 @@ def _plot(df: pd.DataFrame, output: Path) -> None:
 
 def main() -> None:
     args = parse_args()
+    summary_path = _resolve_summary_path(args.step1_csv)
+    baseline_summary = _load_mixra_opt_baseline_from_summary(summary_path)
+    baseline_csv = pd.DataFrame() if not baseline_summary.empty else _load_baseline(args.baseline_csv, args.metric)
     combined = pd.concat([
         _load_step1(args.step1_csv),
         _load_ucb1(args.ucb1_csv, args.metric),
-        _load_baseline(args.baseline_csv, args.metric),
+        baseline_summary,
+        baseline_csv,
     ], ignore_index=True)
     if combined.empty:
         raise SystemExit("Aucune donnée exploitable pour tracer la figure.")

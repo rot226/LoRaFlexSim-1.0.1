@@ -24,6 +24,7 @@ DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "plots" / "ucb1_load_vs_step1.png"
 SNIR_LABELS = {"snir_on": "SNIR activé", "snir_off": "SNIR désactivé", "snir_unknown": "SNIR inconnu"}
 SNIR_COLORS = {"snir_on": "#d62728", "snir_off": "#1f77b4", "snir_unknown": "#7f7f7f"}
+MIXRA_OPT_ALIASES = {"mixra_opt", "mixraopt", "mixra-opt", "mixra opt", "opt"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,6 +53,18 @@ def _parse_bool(value: object | None) -> bool | None:
     if text in {"0", "false", "no", "n", "off"}:
         return False
     return None
+
+
+def _normalize_algorithm(value: object | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    normalized = text.lower().replace("-", "_").replace(" ", "_")
+    if normalized in MIXRA_OPT_ALIASES:
+        return "mixra_opt"
+    return text
 
 
 def _detect_snir(row: Mapping[str, object], path: Path | None) -> str:
@@ -98,6 +111,15 @@ def _extract_cluster_values(row: Mapping[str, object]) -> Dict[int, float]:
     return values
 
 
+def _resolve_summary_path(step1_path: Path) -> Path | None:
+    if step1_path and step1_path.name == "summary.csv" and step1_path.exists():
+        return step1_path
+    candidate = step1_path.parent / "summary.csv"
+    if candidate.exists():
+        return candidate
+    return None
+
+
 def _load_step1(path: Path) -> pd.DataFrame:
     if not path or not path.exists():
         print(f"Avertissement : CSV Step1 introuvable ({path}), section ignorée.")
@@ -117,6 +139,41 @@ def _load_step1(path: Path) -> pd.DataFrame:
         for cluster_id, value in clusters.items():
             records.append({
                 "source": "Step1/QoS",
+                "cluster": cluster_id,
+                "packet_interval": x_value,
+                "der": value,
+                "snir_state": snir_state,
+            })
+    tidy = pd.DataFrame(records)
+    return tidy.dropna(subset=["packet_interval", "der"])
+
+
+def _load_mixra_opt_baseline_from_summary(summary_path: Path | None) -> pd.DataFrame:
+    if not summary_path or not summary_path.exists():
+        return pd.DataFrame()
+    df = pd.read_csv(summary_path)
+    if "algorithm" not in df.columns:
+        print(f"Avertissement : summary.csv sans colonne algorithm ({summary_path}).")
+        return pd.DataFrame()
+    df = df.copy()
+    df["algorithm_norm"] = df["algorithm"].apply(_normalize_algorithm)
+    df = df[df["algorithm_norm"] == "mixra_opt"]
+    if df.empty:
+        return pd.DataFrame()
+    records: List[dict] = []
+    for row in df.to_dict(orient="records"):
+        snir_state = _detect_snir(row, summary_path)
+        x_value = row.get("packet_interval_s")
+        if x_value is None:
+            x_value = row.get("packet_interval")
+        try:
+            x_value = float(x_value)
+        except (TypeError, ValueError):
+            x_value = None
+        clusters = _extract_cluster_values(row)
+        for cluster_id, value in clusters.items():
+            records.append({
+                "source": "MixRA-Opt",
                 "cluster": cluster_id,
                 "packet_interval": x_value,
                 "der": value,
@@ -149,7 +206,11 @@ def _load_ucb1(path: Path) -> pd.DataFrame:
 
 def _plot(df: pd.DataFrame, output: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
-    style_by_source = {"Step1/QoS": {"linestyle": "-", "marker": "o"}, "UCB1": {"linestyle": "--", "marker": "D"}}
+    style_by_source = {
+        "Step1/QoS": {"linestyle": "-", "marker": "o"},
+        "UCB1": {"linestyle": "--", "marker": "D"},
+        "MixRA-Opt": {"linestyle": ":", "marker": "s"},
+    }
     for (source, snir_state, cluster_id), subset in df.groupby(["source", "snir_state", "cluster"], sort=True):
         subset = subset.sort_values("packet_interval")
         color = SNIR_COLORS.get(snir_state, SNIR_COLORS["snir_unknown"])
@@ -172,7 +233,16 @@ def _plot(df: pd.DataFrame, output: Path) -> None:
 
 def main() -> None:
     args = parse_args()
-    combined = pd.concat([_load_step1(args.step1_csv), _load_ucb1(args.ucb1_csv)], ignore_index=True)
+    summary_path = _resolve_summary_path(args.step1_csv)
+    baseline_summary = _load_mixra_opt_baseline_from_summary(summary_path)
+    combined = pd.concat(
+        [
+            _load_step1(args.step1_csv),
+            _load_ucb1(args.ucb1_csv),
+            baseline_summary,
+        ],
+        ignore_index=True,
+    )
     if combined.empty:
         raise SystemExit("Aucune donnée exploitable pour tracer la figure.")
     _plot(combined, args.output)

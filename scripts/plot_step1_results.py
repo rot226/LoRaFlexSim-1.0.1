@@ -229,7 +229,17 @@ def _snir_color(state: str | None) -> str:
 
 
 def _unique_algorithms(records: Iterable[Mapping[str, Any]]) -> List[str]:
-    return sorted({str(record.get("algorithm") or "unknown") for record in records})
+    algorithms: set[str] = set()
+    for record in records:
+        raw_value = record.get("algorithm")
+        normalized = _normalize_algorithm_name(raw_value)
+        if normalized:
+            algorithms.add(normalized)
+        elif raw_value:
+            algorithms.add(str(raw_value))
+        else:
+            algorithms.add("unknown")
+    return sorted(algorithms)
 
 
 def _filter_records_for_algorithm(
