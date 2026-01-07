@@ -40,6 +40,7 @@ SNIR_LABELS = {
 MARKER_CYCLE = ["o", "s", "^", "D", "v", "P", "X"]
 MIXRA_OPT_ALIASES = {"mixra_opt", "mixraopt", "mixra-opt", "mixra opt", "opt"}
 MIXRA_H_ALIASES = {"mixra_h", "mixrah", "mixra-h", "mixra h"}
+EXTENDED_ALGORITHM = "mixra_opt"
 
 
 def _normalize_algorithm_name(value: Any) -> str | None:
@@ -229,6 +230,25 @@ def _snir_color(state: str | None) -> str:
 
 def _unique_algorithms(records: Iterable[Mapping[str, Any]]) -> List[str]:
     return sorted({str(record.get("algorithm") or "unknown") for record in records})
+
+
+def _filter_records_for_algorithm(
+    records: Iterable[Mapping[str, Any]], algorithm: str | None
+) -> List[Dict[str, Any]]:
+    if not algorithm:
+        return [dict(record) for record in records]
+    normalized = _normalize_algorithm_name(algorithm) or str(algorithm)
+    filtered = [
+        dict(record)
+        for record in records
+        if _normalize_algorithm_name(record.get("algorithm")) == normalized
+    ]
+    if not filtered:
+        warnings.warn(
+            f"Aucune donnée trouvée pour l'algorithme {normalized}.",
+            RuntimeWarning,
+        )
+    return filtered
 
 
 def _render_snir_variants(
@@ -483,9 +503,18 @@ def _plot_global_metric(
     )
 
 
-def _plot_summary_bars(records: List[Dict[str, Any]], figures_dir: Path) -> None:
+def _plot_summary_bars(
+    records: List[Dict[str, Any]],
+    figures_dir: Path,
+    forced_algorithm: str | None = None,
+) -> None:
     if not records or plt is None:
         return
+
+    if forced_algorithm:
+        records = _filter_records_for_algorithm(records, forced_algorithm)
+        if not records:
+            return
 
     metrics = {
         "PDR": "PDR global",
@@ -578,9 +607,18 @@ def _plot_summary_bars(records: List[Dict[str, Any]], figures_dir: Path) -> None
             plt.close(fig)
 
 
-def _plot_cdf(records: Sequence[Mapping[str, Any]], figures_dir: Path) -> None:
+def _plot_cdf(
+    records: Sequence[Mapping[str, Any]],
+    figures_dir: Path,
+    forced_algorithm: str | None = None,
+) -> None:
     if not records or plt is None:
         return
+
+    if forced_algorithm:
+        records = _filter_records_for_algorithm(records, forced_algorithm)
+        if not records:
+            return
 
     by_algorithm: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
     for record in records:
@@ -604,7 +642,7 @@ def _plot_cdf(records: Sequence[Mapping[str, Any]], figures_dir: Path) -> None:
                 sorted_values,
                 y,
                 where="post",
-                label=_snir_label(state),
+                label=f"{algorithm} – {_snir_label(state)}",
                 color=_snir_color(state),
                 linewidth=2,
             )
@@ -978,9 +1016,18 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
                 )
 
 
-def plot_distribution_by_state(records: List[Dict[str, Any]], figures_dir: Path) -> None:
+def plot_distribution_by_state(
+    records: List[Dict[str, Any]],
+    figures_dir: Path,
+    forced_algorithm: str | None = None,
+) -> None:
     if not records or plt is None:
         return
+
+    if forced_algorithm:
+        records = _filter_records_for_algorithm(records, forced_algorithm)
+        if not records:
+            return
 
     metrics = {
         "snir_mean": "SNIR moyen (dB)",
@@ -1072,7 +1119,11 @@ def generate_step1_figures(
         if not summary_records:
             print(f"Aucun summary.csv trouvé dans {summary_path}; aucune barre générée.")
         else:
-            _plot_summary_bars(summary_records, extended_dir)
+            _plot_summary_bars(
+                summary_records,
+                extended_dir,
+                forced_algorithm=EXTENDED_ALGORITHM,
+            )
             if plot_trajectories:
                 trajectory_records = _load_step1_records(results_dir, strict=strict)
                 if not trajectory_records:
@@ -1105,7 +1156,14 @@ def generate_step1_figures(
             print("Aucune donnée disponible pour comparer SNIR on/off.")
         else:
             _plot_snir_comparison(comparison_records, comparison_dir)
-            plot_distribution_by_state(comparison_records, comparison_dir)
+            forced_algorithm = (
+                EXTENDED_ALGORITHM if comparison_dir == extended_dir else None
+            )
+            plot_distribution_by_state(
+                comparison_records,
+                comparison_dir,
+                forced_algorithm=forced_algorithm,
+            )
 
     if plot_cdf:
         raw_path = results_dir / "raw_index.csv"
@@ -1113,7 +1171,11 @@ def generate_step1_figures(
         if not raw_records:
             print(f"Aucun échantillon brut trouvé dans {raw_path} ni dans {results_dir}.")
         else:
-            _plot_cdf(raw_records, extended_dir)
+            _plot_cdf(
+                raw_records,
+                extended_dir,
+                forced_algorithm=EXTENDED_ALGORITHM,
+            )
 
 
 def _build_parser() -> argparse.ArgumentParser:
