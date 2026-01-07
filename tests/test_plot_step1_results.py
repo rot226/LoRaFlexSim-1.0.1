@@ -346,11 +346,19 @@ def test_official_run_outputs_only_extended(tmp_path: Path, monkeypatch: pytest.
         ],
     )
 
-    def _fake_plot_summary_bars(records: list[dict[str, object]], figures_path: Path) -> None:
+    def _fake_plot_summary_bars(
+        records: list[dict[str, object]],
+        figures_path: Path,
+        forced_algorithm: str | None = None,
+    ) -> None:
         figures_path.mkdir(parents=True, exist_ok=True)
         (figures_path / "summary.png").write_text("summary")
 
-    def _fake_plot_cdf(records: list[dict[str, object]], figures_path: Path) -> None:
+    def _fake_plot_cdf(
+        records: list[dict[str, object]],
+        figures_path: Path,
+        forced_algorithm: str | None = None,
+    ) -> None:
         figures_path.mkdir(parents=True, exist_ok=True)
         (figures_path / "cdf.png").write_text("cdf")
 
@@ -378,6 +386,41 @@ def test_official_run_outputs_only_extended(tmp_path: Path, monkeypatch: pytest.
     assert generated, "Aucune figure officielle n'a été générée."
     assert all("extended" in path.parts for path in generated)
     assert not list((figures_dir / "step1").glob("*.png"))
+
+
+def test_summary_csv_does_not_exclude_mixra_opt(tmp_path: Path) -> None:
+    results_dir = tmp_path / "results" / "step1"
+    results_dir.mkdir(parents=True)
+    _write_csv(
+        results_dir / "summary.csv",
+        [
+            {
+                "algorithm": "MixRA-Opt",
+                "snir_state": "snir_on",
+                "num_nodes": "10",
+                "packet_interval_s": "60",
+                "PDR_mean": "0.9",
+            }
+        ],
+    )
+    _write_csv(
+        results_dir / "summary_snir_on.csv",
+        [
+            {
+                "algorithm": "adr",
+                "snir_state": "snir_on",
+                "num_nodes": "10",
+                "packet_interval_s": "60",
+                "PDR_mean": "0.8",
+            }
+        ],
+    )
+
+    records = plot_step1_results._load_comparison_records(
+        results_dir, use_summary=True, strict=False
+    )
+
+    assert any(record.get("algorithm") == "mixra_opt" for record in records)
 
 
 def test_extended_summary_includes_mixra_opt_series(
@@ -448,6 +491,83 @@ def test_extended_summary_includes_mixra_opt_series(
     plot_step1_results._plot_summary_bars(records, tmp_path)
 
     assert any("mixra_opt" in label for label in captured_labels)
+
+
+def test_extended_cdf_legend_includes_mixra_opt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captures: list[list[str]] = []
+
+    class _FakeAxis:
+        def __init__(self) -> None:
+            self._labels: list[str] = []
+            self._lines: list[object] = []
+
+        def step(self, *_args: object, label: str | None = None, **_kwargs: object) -> None:
+            if label:
+                self._labels.append(label)
+            self._lines.append(object())
+
+        def set_xlabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_ylabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_title(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def legend(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def get_legend_handles_labels(self) -> tuple[list[object], list[str]]:
+            return self._lines, self._labels
+
+    class _FakeFigure:
+        def __init__(self, axis: _FakeAxis) -> None:
+            self._axis = axis
+
+        def tight_layout(self) -> None:
+            return None
+
+        def savefig(self, *_args: object, **_kwargs: object) -> None:
+            captures.append(list(self._axis._labels))
+
+    class _FakePlt:
+        def subplots(self, **_kwargs: object) -> tuple[_FakeFigure, _FakeAxis]:
+            axis = _FakeAxis()
+            return _FakeFigure(axis), axis
+
+        def close(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    monkeypatch.setattr(plot_step1_results, "plt", _FakePlt())
+    monkeypatch.setattr(plot_step1_results, "_format_axes", lambda *_args, **_kwargs: None)
+
+    records = [
+        {
+            "algorithm": "mixra_opt",
+            "snir_state": "snir_on",
+            "snir_detected": True,
+            "DER": 0.1,
+        },
+        {
+            "algorithm": "adr",
+            "snir_state": "snir_on",
+            "snir_detected": True,
+            "DER": 0.2,
+        },
+    ]
+
+    plot_step1_results._plot_cdf(
+        records,
+        tmp_path,
+        forced_algorithm="mixra_opt",
+    )
+
+    assert any(
+        "mixra_opt" in label for labels in captures for label in labels
+    ), "mixra_opt absent de la légende CDF étendue."
 
 
 def test_cli_includes_mixra_opt_in_standard_outputs(
