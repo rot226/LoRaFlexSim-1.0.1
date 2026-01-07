@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import warnings
 from pathlib import Path
 
 import pytest
@@ -961,6 +962,38 @@ def test_plot_trajectories_includes_mixra_opt_series(
     assert any(
         "SNIR désactivé" in label for _, labels in captures for label in labels
     )
+
+
+def test_plot_distribution_by_state_has_no_deprecation_warning(tmp_path: Path) -> None:
+    pytest.importorskip("matplotlib")
+    if plot_step1_results.plt is None:
+        pytest.skip("Matplotlib indisponible dans cet environnement.")
+
+    records = [
+        {
+            "snir_state": "snir_on",
+            "snir_detected": True,
+            "snir_mean": 5.0,
+            "DER": 0.8,
+            "collisions": 1,
+        },
+        {
+            "snir_state": "snir_off",
+            "snir_detected": True,
+            "snir_mean": 3.5,
+            "DER": 0.7,
+            "collisions": 2,
+        },
+    ]
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+        plot_step1_results.plot_distribution_by_state(records, tmp_path)
+
+    deprecations = [
+        warning for warning in caught if issubclass(warning.category, DeprecationWarning)
+    ]
+    assert not deprecations, "Aucun warning de dépréciation ne doit être émis."
 
 
 def test_global_metric_deduplicates_algorithm_labels(
