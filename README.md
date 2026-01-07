@@ -138,6 +138,8 @@ python scripts/plot_step1_results.py --official --use-summary --plot-cdf
 
 Dans ce mode, toutes les figures sont déposées exclusivement dans
 `figures/step1/extended/`, qui constitue désormais la **source officielle**.
+Seules les figures présentes dans `figures/step1/extended/` sont considérées
+comme **IEEE-ready**.
 Les couleurs par défaut restent **rouge** pour SNIR activé et **bleu** pour
 SNIR désactivé (`#d62728` et `#1f77b4`), telles que définies dans
 `scripts/plot_step1_results.py`.【F:scripts/plot_step1_results.py†L16-L24】【F:scripts/plot_step1_results.py†L450-L520】
@@ -146,6 +148,8 @@ SNIR désactivé (`#d62728` et `#1f77b4`), telles que définies dans
 
 Si vous souhaitez enchaîner l'exécution de la matrice, son agrégation puis le
 tracé comparatif, le workflow complet se résume à :
+
+**Step 1 (simulations + agrégation)** puis **Step 2 (plots)** :
 
 ```bash
 python scripts/run_step1_matrix.py --algos adr apra mixra_h mixra_opt --with-snir true false --seeds 1 2 3 --nodes 1000 5000 --packet-intervals 300 600
@@ -169,6 +173,14 @@ python scripts/validate_snir_plots.py
 Le script exécute deux simulations courtes (SNIR activé/désactivé), agrège
 les CSV puis s'assure qu'au moins une figure `*_snir_compare_*.png` est
 générée dans `figures/step1/`.
+
+**Version PowerShell (Windows 11, Step 1 + Step 2 + plots)** :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_step1_matrix_windows.ps1
+python scripts/aggregate_step1_results.py --strict-snir-detection
+python scripts/plot_step1_results.py --compare-snir --use-summary
+```
 
 ### Banc QoS par clusters
 
