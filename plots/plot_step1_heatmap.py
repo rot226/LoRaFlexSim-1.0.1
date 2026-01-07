@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT_DIR))
 from scripts.plot_step1_results import (  # noqa: E402
     _apply_ieee_style,
     _load_step1_records,
+    _select_signal_mean,
 )
 
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
@@ -41,8 +42,11 @@ SNIR_TITLES = {
 }
 
 
-def _metric_value(record: Mapping[str, float | int | str | None], metric_key: str) -> float | None:
-    value = record.get(metric_key)
+def _metric_value(record: Mapping[str, object], metric_key: str) -> float | None:
+    if metric_key == "snir_mean":
+        value, _error_metric = _select_signal_mean(record)
+    else:
+        value = record.get(metric_key)
     if value is None:
         return None
     try:
@@ -51,7 +55,7 @@ def _metric_value(record: Mapping[str, float | int | str | None], metric_key: st
         return None
 
 
-def _aggregate_values(records: Iterable[Mapping[str, float | int | str]], metric_key: str) -> float | None:
+def _aggregate_values(records: Iterable[Mapping[str, object]], metric_key: str) -> float | None:
     values: List[float] = []
     for record in records:
         value = _metric_value(record, metric_key)

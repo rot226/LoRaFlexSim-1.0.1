@@ -105,6 +105,29 @@ def test_missing_snir_mean_raises_for_snir_on(tmp_path: Path) -> None:
         plot_step1_results._load_step1_records(results_dir)
 
 
+def test_missing_snir_mean_raises_for_use_snir_true(tmp_path: Path) -> None:
+    results_dir = tmp_path / "step1"
+    results_dir.mkdir()
+    csv_path = results_dir / "results.csv"
+
+    _write_csv(
+        csv_path,
+        [
+            {
+                "algorithm": "adr",
+                "num_nodes": "10",
+                "packet_interval_s": "1",
+                "use_snir": "true",
+                "PDR": "0.9",
+                "DER": "0.8",
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="snir_mean"):
+        plot_step1_results._load_step1_records(results_dir)
+
+
 def test_mixed_plot_filters_snir_unknown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     captures: list[tuple[str, list[str]]] = []
 
