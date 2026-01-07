@@ -964,6 +964,112 @@ def test_plot_trajectories_includes_mixra_opt_series(
     )
 
 
+def test_plot_trajectories_has_seed_series(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    results_dir = tmp_path / "step1"
+    results_dir.mkdir()
+    csv_path = results_dir / "results.csv"
+
+    rows = []
+    for seed in (1, 2):
+        for nodes in (10, 20):
+            rows.append(
+                {
+                    "algorithm": "Opt",
+                    "snir_state": "snir_on",
+                    "num_nodes": str(nodes),
+                    "packet_interval_s": "60",
+                    "random_seed": str(seed),
+                    "PDR": "0.9",
+                    "DER": "0.8",
+                    "snir_mean": "5.0",
+                }
+            )
+            rows.append(
+                {
+                    "algorithm": "Opt",
+                    "snir_state": "snir_off",
+                    "num_nodes": str(nodes),
+                    "packet_interval_s": "60",
+                    "random_seed": str(seed),
+                    "PDR": "0.85",
+                    "DER": "0.75",
+                    "snr_mean": "4.0",
+                }
+            )
+
+    _write_csv(csv_path, rows)
+    records = plot_step1_results._load_step1_records(results_dir)
+
+    series_lengths: dict[str, list[int]] = {}
+
+    class _FakeAxis:
+        def __init__(self) -> None:
+            self._lines: list[object] = []
+
+        def plot(self, xs: list[float], *_args: object, label: str | None = None, **_kwargs: object) -> None:
+            if label:
+                series_lengths.setdefault(label, []).append(len(xs))
+            self._lines.append(object())
+
+        def set_xlabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_ylabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_title(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def legend(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def get_legend_handles_labels(self) -> tuple[list[object], list[str]]:
+            return self._lines, list(series_lengths)
+
+        def get_lines(self) -> list[object]:
+            return self._lines
+
+    class _FakeFigure:
+        def __init__(self, axis: _FakeAxis) -> None:
+            self._axis = axis
+
+        def tight_layout(self) -> None:
+            return None
+
+        def savefig(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    class _FakePlt:
+        def subplots(self, **_kwargs: object) -> tuple[_FakeFigure, _FakeAxis]:
+            axis = _FakeAxis()
+            return _FakeFigure(axis), axis
+
+        def close(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def get_cmap(self, *_args: object, **_kwargs: object) -> object:
+            class _Map:
+                N = 10
+
+                def __call__(self, idx: int) -> tuple[float, float, float, float]:
+                    return (0.0, 0.0, 0.0, 1.0)
+
+            return _Map()
+
+    monkeypatch.setattr(plot_step1_results, "plt", _FakePlt())
+    monkeypatch.setattr(plot_step1_results, "_format_axes", lambda *_args, **_kwargs: None)
+
+    plot_step1_results._plot_trajectories(records, tmp_path)
+
+    for seed in (1, 2):
+        for state_label in ("SNIR activé", "SNIR désactivé"):
+            label = f"seed {seed} – {state_label}"
+            assert label in series_lengths
+            assert any(length >= 2 for length in series_lengths[label])
+
+
 def test_plot_distribution_by_state_has_no_deprecation_warning(tmp_path: Path) -> None:
     pytest.importorskip("matplotlib")
     if plot_step1_results.plt is None:
