@@ -23,6 +23,7 @@ from scripts.plot_step1_results import (  # noqa: E402
     _apply_ieee_style,
     _detect_snir_state,
     _normalize_algorithm_name,
+    _select_signal_mean,
 )
 
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
@@ -33,7 +34,7 @@ METRICS = [
     ("PDR", "PDR"),
     ("collisions", "Collisions"),
     ("avg_energy_per_node_J", "Énergie moyenne (J)"),
-    ("snir_mean", "SNIR moyen (dB)"),
+    ("snir_mean", "SNIR/SNR moyen (dB)"),
 ]
 
 SNIR_STATES = ("snir_on", "snir_off")
@@ -86,18 +87,15 @@ def _load_qos_records(results_dir: Path, strict: bool) -> List[Dict[str, Any]]:
                 snir_state, snir_detected = _detect_snir_state(row)
                 if not snir_detected or snir_state is None:
                     continue
-                snir_candidate = (
-                    row.get("snir_mean")
-                    or row.get("SNIR")
-                    or row.get("snr_mean")
-                    or row.get("SNR")
-                )
+                snir_candidate = row.get("snir_mean") or row.get("SNIR")
+                snr_candidate = row.get("snr_mean") or row.get("SNR") or row.get("snr")
                 algorithm = _normalize_algorithm_name(row.get("algorithm"))
                 if not algorithm:
                     algorithm = (
                         _normalize_algorithm_name(csv_path.parent.name)
                         or csv_path.parent.name
                     )
+                use_snir = True if snir_state == "snir_on" else False if snir_state == "snir_off" else None
                 record: Dict[str, Any] = {
                     "algorithm": algorithm,
                     "snir_state": snir_state,
@@ -106,6 +104,8 @@ def _load_qos_records(results_dir: Path, strict: bool) -> List[Dict[str, Any]]:
                     "collisions": _parse_float(row.get("collisions")),
                     "avg_energy_per_node_J": _extract_energy(row),
                     "snir_mean": _parse_float(snir_candidate),
+                    "snr_mean": _parse_float(snr_candidate),
+                    "use_snir": use_snir,
                 }
                 records.append(record)
     return records
@@ -132,10 +132,14 @@ def _aggregate_by_state(
         ]
         if not state_records:
             continue
-        metrics_by_state[state] = {
-            metric_key: _mean(r.get(metric_key) for r in state_records)
-            for metric_key, _ in METRICS
-        }
+        metrics: Dict[str, float | None] = {}
+        for metric_key, _label in METRICS:
+            if metric_key == "snir_mean":
+                values = [_select_signal_mean(r)[0] for r in state_records]
+            else:
+                values = [r.get(metric_key) for r in state_records]
+            metrics[metric_key] = _mean(values)
+        metrics_by_state[state] = metrics
     return metrics_by_state
 
 

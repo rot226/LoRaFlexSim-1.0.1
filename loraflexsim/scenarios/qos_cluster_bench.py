@@ -416,6 +416,7 @@ def _compute_additional_metrics(
 
     snr_histogram, snr_cdf, snr_samples = _build_histogram(snr_values)
     snir_histogram, snir_cdf, snir_samples = _build_histogram(snir_values)
+    snir_mean = _mean(snir_values) if use_snir else None
 
     metrics["throughput_sf_channel"] = throughput_map
     metrics["collision_breakdown"] = {
@@ -430,7 +431,7 @@ def _compute_additional_metrics(
     metrics["snir_histogram"] = snir_histogram
     metrics["snir_cdf"] = snir_cdf
     metrics["snir_samples"] = snir_samples
-    metrics["snir_mean"] = _mean(snir_values)
+    metrics["snir_mean"] = snir_mean
     metrics["algorithm"] = algorithm_label
     metrics.setdefault("mixra_solver", getattr(simulator, "qos_mixra_solver", mixra_solver))
     metrics["throughput_sf_channel_json"] = json.dumps(throughput_map, ensure_ascii=False, sort_keys=True)
