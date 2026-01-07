@@ -227,6 +227,10 @@ def _snir_color(state: str | None) -> str:
     return SNIR_COLORS.get(state or "snir_unknown", SNIR_COLORS["snir_unknown"])
 
 
+def _unique_algorithms(records: Iterable[Mapping[str, Any]]) -> List[str]:
+    return sorted({str(record.get("algorithm") or "unknown") for record in records})
+
+
 def _render_snir_variants(
     render: Any,
     *,
@@ -372,7 +376,7 @@ def _plot_global_metric(
     if not records or plt is None:
         return
     periods = sorted({r["packet_interval_s"] for r in records})
-    algorithms = sorted({r["algorithm"] for r in records})
+    algorithms = _unique_algorithms(records)
     error_metrics = {"PDR", "DER", "snir_mean", "snr_mean", "SNIR", "SNR"}
 
     def render(states: List[str], suffix: str, title: str) -> None:
@@ -625,7 +629,7 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
     if not clusters:
         return
     periods = sorted({r["packet_interval_s"] for r in records})
-    algorithms = sorted({r["algorithm"] for r in records})
+    algorithms = _unique_algorithms(records)
     def render(states: List[str], suffix: str, title: str) -> None:
         for period in periods:
             filtered = [
@@ -708,7 +712,7 @@ def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None
         return
 
     metrics = {"PDR": "PDR", "DER": "DER"}
-    algorithms = sorted({str(r.get("algorithm") or "unknown") for r in records})
+    algorithms = _unique_algorithms(records)
     seeds = sorted({r.get("random_seed") for r in records if r.get("random_seed") is not None})
     if not seeds:
         warnings.warn(

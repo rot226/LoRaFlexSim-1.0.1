@@ -688,3 +688,109 @@ def test_plot_trajectories_includes_mixra_opt_series(
     assert any(
         "SNIR désactivé" in label for _, labels in captures for label in labels
     )
+
+
+def test_global_metric_deduplicates_algorithm_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captures: list[tuple[str, list[str]]] = []
+
+    class _FakeLine:
+        def set_linewidth(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_markersize(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_markeredgewidth(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    class _FakeAxis:
+        def __init__(self) -> None:
+            self._labels: list[str] = []
+            self._lines: list[_FakeLine] = []
+
+        def plot(self, *_args: object, label: str | None = None, **_kwargs: object) -> None:
+            if label:
+                self._labels.append(label)
+            self._lines.append(_FakeLine())
+
+        def errorbar(self, *_args: object, label: str | None = None, **_kwargs: object) -> None:
+            if label:
+                self._labels.append(label)
+            self._lines.append(_FakeLine())
+
+        def set_xlabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_ylabel(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def set_title(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def legend(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def get_legend_handles_labels(self) -> tuple[list[_FakeLine], list[str]]:
+            return self._lines, self._labels
+
+    class _FakeFigure:
+        def __init__(self, axis: _FakeAxis) -> None:
+            self._axis = axis
+
+        def tight_layout(self) -> None:
+            return None
+
+        def savefig(self, output: Path, **_kwargs: object) -> None:
+            captures.append((str(output), list(self._axis._labels)))
+
+    class _FakePlt:
+        def subplots(self, **_kwargs: object) -> tuple[_FakeFigure, _FakeAxis]:
+            axis = _FakeAxis()
+            return _FakeFigure(axis), axis
+
+        def close(self, _fig: _FakeFigure) -> None:
+            return None
+
+    monkeypatch.setattr(plot_step1_results, "plt", _FakePlt())
+    monkeypatch.setattr(plot_step1_results, "_format_axes", lambda *_args, **_kwargs: None)
+
+    records = [
+        {
+            "algorithm": "dup",
+            "num_nodes": 10,
+            "packet_interval_s": 1.0,
+            "PDR": 0.9,
+            "snir_state": "snir_on",
+            "snir_detected": True,
+        },
+        {
+            "algorithm": "dup",
+            "num_nodes": 20,
+            "packet_interval_s": 1.0,
+            "PDR": 0.85,
+            "snir_state": "snir_on",
+            "snir_detected": True,
+        },
+        {
+            "algorithm": "autre",
+            "num_nodes": 10,
+            "packet_interval_s": 1.0,
+            "PDR": 0.8,
+            "snir_state": "snir_on",
+            "snir_detected": True,
+        },
+    ]
+
+    plot_step1_results._plot_global_metric(
+        records,
+        "PDR",
+        "PDR global",
+        "pdr_global",
+        tmp_path,
+    )
+
+    assert captures, "Aucune figure n'a été générée."
+    for _path, labels in captures:
+        assert len(labels) == len(set(labels)), "Les algorithmes doivent être uniques par figure."
