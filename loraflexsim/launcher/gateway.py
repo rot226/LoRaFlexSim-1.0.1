@@ -183,8 +183,8 @@ class Gateway:
             résiduelle lorsque la charge atteint ``residual_collision_load_scale``.
         :param residual_collision_load_scale: Nombre de transmissions
             concurrentes servant de référence pour saturer la collision résiduelle.
-        :param baseline_loss_rate: Perte résiduelle appliquée même sans collision
-            explicite.
+        :param baseline_loss_rate: Perte résiduelle minimale appliquée même sans
+            collision explicite, et qui croît avec la charge.
         :param baseline_collision_rate: Perte résiduelle additionnelle qui
             augmente avec la charge (jusqu'à ``residual_collision_load_scale``).
         :param use_snir: Indique si le calcul SNIR est actif sur ce canal.
@@ -281,9 +281,11 @@ class Gateway:
             return min(count / scale, 1.0)
 
         def _baseline_drop_prob(count: int) -> float:
+            load_factor = _load_factor(count)
             base = max(baseline_loss_rate, 0.0)
-            extra = max(baseline_collision_rate, 0.0) * _load_factor(count)
-            return base + extra
+            min_loss = base * (1.0 + load_factor)
+            extra = max(baseline_collision_rate, 0.0) * load_factor
+            return min_loss + extra
 
         if not interfering_transmissions:
             # Aucun paquet actif (ou chevauchement inférieur au seuil)
