@@ -140,6 +140,7 @@ def generate_distributions(
     figures_dir: Path,
     algorithm: str | None,
     strict: bool,
+    ieee_mode: bool,
 ) -> None:
     if plt is None:
         print("matplotlib n'est pas disponible ; aucune distribution générée.")
@@ -148,6 +149,10 @@ def generate_distributions(
     _apply_ieee_style()
     records = _load_step1_records(results_dir, strict=strict)
     if not records:
+        if ieee_mode:
+            raise FileNotFoundError(
+                f"Aucun CSV trouvé dans {results_dir} (mode IEEE)."
+            )
         print(f"Aucun CSV trouvé dans {results_dir} ; aucune figure générée.")
         return
 
@@ -159,6 +164,10 @@ def generate_distributions(
     for algo in algorithms:
         algo_records = [record for record in records if str(record.get("algorithm") or "unknown") == algo]
         if not algo_records:
+            if ieee_mode:
+                raise ValueError(
+                    f"Aucune donnée pour l'algorithme {algo} (mode IEEE)."
+                )
             print(f"Aucune donnée pour l'algorithme {algo}.")
             continue
         for metric, label in METRICS.items():
@@ -192,6 +201,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "comme pour les figures extended."
         ),
     )
+    parser.add_argument(
+        "--ieee",
+        action="store_true",
+        help="Échoue si les CSV requis sont absents (mode IEEE).",
+    )
     return parser
 
 
@@ -203,6 +217,7 @@ def main(argv: List[str] | None = None) -> None:
         figures_dir=args.figures_dir,
         algorithm=args.algorithm,
         strict=args.strict,
+        ieee_mode=args.ieee,
     )
 
 

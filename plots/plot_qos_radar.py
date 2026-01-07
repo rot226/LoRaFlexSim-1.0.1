@@ -215,15 +215,24 @@ def generate_qos_radars(
     figures_dir: Path,
     strict: bool,
     algorithm: str,
+    ieee_mode: bool,
 ) -> None:
     records = _load_qos_records(results_dir, strict=strict)
     if not records:
+        if ieee_mode:
+            raise FileNotFoundError(
+                f"Aucun CSV trouvé dans {results_dir} (mode IEEE)."
+            )
         print(f"Aucun CSV trouvé dans {results_dir} ; aucun radar généré.")
         return
 
     _apply_ieee_style()
     metrics_by_state = _aggregate_by_state(records, algorithm=algorithm)
     if not metrics_by_state:
+        if ieee_mode:
+            raise ValueError(
+                f"Aucun enregistrement trouvé pour l'algorithme {algorithm} (mode IEEE)."
+            )
         print(f"Aucun enregistrement trouvé pour l'algorithme {algorithm}.")
         return
     bounds = _compute_normalization(metrics_by_state)
@@ -256,6 +265,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default="mixra_opt",
         help="Algorithme à tracer (par défaut : mixra_opt).",
     )
+    parser.add_argument(
+        "--ieee",
+        action="store_true",
+        help="Échoue si les CSV requis sont absents (mode IEEE).",
+    )
     return parser
 
 
@@ -267,6 +281,7 @@ def main(argv: List[str] | None = None) -> None:
         figures_dir=args.figures_dir,
         strict=args.strict,
         algorithm=args.algorithm,
+        ieee_mode=args.ieee,
     )
 
 
