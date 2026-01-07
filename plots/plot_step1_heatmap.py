@@ -204,6 +204,13 @@ def generate_heatmaps(
         print(f"Aucun CSV trouvé dans {results_dir} ; aucune heatmap générée.")
         return
 
+    algorithms = {str(record.get("algorithm") or "") for record in records}
+    if "mixra_opt" not in algorithms:
+        warning = "Aucune donnée pour l'algorithme mixra_opt n'a été détectée."
+        if ieee_mode:
+            raise ValueError(f"{warning} (mode IEEE).")
+        print(warning, file=sys.stderr)
+
     if algorithm:
         selected_algorithms = [algorithm]
     else:
