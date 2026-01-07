@@ -1125,8 +1125,16 @@ def generate_step1_figures(
 
     if use_summary:
         summary_path = results_dir / "summary.csv"
+        if (official or official_only) and not summary_path.exists():
+            raise FileNotFoundError(
+                f"summary.csv requis pour le mode IEEE, introuvable : {summary_path}"
+            )
         summary_records = _load_summary_records(summary_path)
         if not summary_records:
+            if official or official_only:
+                raise FileNotFoundError(
+                    f"Aucun enregistrement trouvé dans {summary_path} (mode IEEE)."
+                )
             print(f"Aucun summary.csv trouvé dans {summary_path}; aucune barre générée.")
         else:
             _plot_summary_bars(
@@ -1177,8 +1185,16 @@ def generate_step1_figures(
 
     if plot_cdf:
         raw_path = results_dir / "raw_index.csv"
+        if (official or official_only) and not raw_path.exists():
+            raise FileNotFoundError(
+                f"raw_index.csv requis pour le mode IEEE, introuvable : {raw_path}"
+            )
         raw_records = _load_raw_samples(raw_path, results_dir, strict)
         if not raw_records:
+            if official or official_only:
+                raise FileNotFoundError(
+                    f"Aucun échantillon brut trouvé dans {raw_path} (mode IEEE)."
+                )
             print(f"Aucun échantillon brut trouvé dans {raw_path} ni dans {results_dir}.")
         else:
             _plot_cdf(

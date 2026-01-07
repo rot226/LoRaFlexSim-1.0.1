@@ -186,6 +186,7 @@ def generate_heatmaps(
     metric: str,
     algorithm: str | None,
     strict: bool,
+    ieee_mode: bool,
 ) -> None:
     if plt is None:
         print("matplotlib n'est pas disponible ; aucune heatmap générée.")
@@ -196,6 +197,10 @@ def generate_heatmaps(
 
     records = _load_step1_records(results_dir, strict=strict)
     if not records:
+        if ieee_mode:
+            raise FileNotFoundError(
+                f"Aucun CSV trouvé dans {results_dir} (mode IEEE)."
+            )
         print(f"Aucun CSV trouvé dans {results_dir} ; aucune heatmap générée.")
         return
 
@@ -207,6 +212,10 @@ def generate_heatmaps(
     for algo in selected_algorithms:
         algo_records = [record for record in records if str(record.get("algorithm") or "unknown") == algo]
         if not algo_records:
+            if ieee_mode:
+                raise ValueError(
+                    f"Aucune donnée pour l'algorithme {algo} (mode IEEE)."
+                )
             continue
         _plot_heatmaps(algo_records, metric_key, metric_label, algo, figures_dir)
 
@@ -244,6 +253,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "comme pour les figures extended."
         ),
     )
+    parser.add_argument(
+        "--ieee",
+        action="store_true",
+        help="Échoue si les CSV requis sont absents (mode IEEE).",
+    )
     return parser
 
 
@@ -256,6 +270,7 @@ def main(argv: List[str] | None = None) -> None:
         metric=args.metric,
         algorithm=args.algorithm,
         strict=args.strict,
+        ieee_mode=args.ieee,
     )
 
 
