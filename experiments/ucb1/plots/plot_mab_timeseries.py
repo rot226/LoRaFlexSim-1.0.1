@@ -135,6 +135,7 @@ def _plot_metric(
     for cluster in clusters:
         for interval in intervals:
             subset = df[(df["cluster"] == cluster) & (df["packet_interval_s"] == interval)]
+            subset = subset.dropna(subset=["time_s", metric])
             if subset.empty:
                 continue
             subset = subset.sort_values("time_s")
@@ -152,7 +153,8 @@ def _plot_metric(
     ax.set_xlabel("Temps (s)")
     ax.set_ylabel(ylabel)
     ax.grid(True, linestyle=":", alpha=0.5)
-    ax.legend(fontsize=8, ncol=2)
+    if ax.get_legend_handles_labels()[1]:
+        ax.legend(fontsize=8, ncol=2)
     _save_plot(fig, output_dir, output_name)
 
 
@@ -176,6 +178,7 @@ def _plot_metric_snir_overlay(
                     & (df["packet_interval_s"] == interval)
                     & (df["snir_state"] == snir_state)
                 ]
+                subset = subset.dropna(subset=["time_s", metric])
                 if subset.empty:
                     continue
                 subset = subset.sort_values("time_s")
@@ -193,7 +196,8 @@ def _plot_metric_snir_overlay(
     ax.set_xlabel("Temps (s)")
     ax.set_ylabel(ylabel)
     ax.grid(True, linestyle=":", alpha=0.5)
-    ax.legend(fontsize=8, ncol=2)
+    if ax.get_legend_handles_labels()[1]:
+        ax.legend(fontsize=8, ncol=2)
     _save_plot(fig, output_dir, output_name)
 
 
