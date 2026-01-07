@@ -1072,7 +1072,7 @@ def plot_distribution_by_state(
         fig, ax = plt.subplots(figsize=(6.5, 4.2))
         boxplot = ax.boxplot(
             grouped,
-            labels=[_snir_label(state) for state in states],
+            tick_labels=[_snir_label(state) for state in states],
             patch_artist=True,
             medianprops={"color": "#000000", "linewidth": 1.3},
             boxprops={"linewidth": 1.2},
