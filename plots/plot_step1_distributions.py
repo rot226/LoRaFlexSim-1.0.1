@@ -1,8 +1,8 @@
 """Trace des boxplots/violons pour les distributions des métriques de l'étape 1.
 
-Le script génère une figure par métrique, comparant les états SNIR (on/off)
-avec un boxplot et un violon côte à côte. Par défaut, il filtre sur
-l'algorithme mixra_opt pour garantir sa présence dans chaque figure.
+Le script génère une figure par métrique et par algorithme, comparant les
+états SNIR (on/off) avec un boxplot et un violon côte à côte. Chaque algorithme
+est traité une seule fois afin d'éviter les duplications.
 """
 
 from __future__ import annotations
@@ -135,10 +135,32 @@ def _plot_distribution(
     plt.close(fig)
 
 
+def _unique_algorithms(algorithms: Iterable[str]) -> tuple[List[str], List[str]]:
+    unique: List[str] = []
+    seen: set[str] = set()
+    duplicates: List[str] = []
+    for algorithm in algorithms:
+        if algorithm in seen:
+            duplicates.append(algorithm)
+            continue
+        seen.add(algorithm)
+        unique.append(algorithm)
+    return unique, duplicates
+
+
+def _parse_algorithms(values: Sequence[str] | None) -> List[str]:
+    if not values:
+        return []
+    algorithms: List[str] = []
+    for value in values:
+        algorithms.extend([item.strip() for item in value.split(",") if item.strip()])
+    return algorithms
+
+
 def generate_distributions(
     results_dir: Path,
     figures_dir: Path,
-    algorithm: str | None,
+    algorithms: Sequence[str] | None,
     strict: bool,
     ieee_mode: bool,
 ) -> None:
@@ -156,12 +178,27 @@ def generate_distributions(
         print(f"Aucun CSV trouvé dans {results_dir} ; aucune figure générée.")
         return
 
-    if algorithm:
-        algorithms = [algorithm]
+    requested_algorithms = _parse_algorithms(algorithms)
+    if requested_algorithms:
+        algorithms_to_plot, duplicates = _unique_algorithms(requested_algorithms)
+        if duplicates:
+            duplicates_list = ", ".join(sorted(set(duplicates)))
+            print(
+                "Algorithmes dupliqués ignorés : "
+                f"{duplicates_list}."
+            )
     else:
-        algorithms = ["mixra_opt"]
+        discovered = [
+            str(record.get("algorithm") or "unknown")
+            for record in records
+        ]
+        algorithms_to_plot, _duplicates = _unique_algorithms(discovered)
 
-    for algo in algorithms:
+    if not algorithms_to_plot:
+        print("Aucun algorithme trouvé ; aucune distribution générée.")
+        return
+
+    for algo in algorithms_to_plot:
         algo_records = [record for record in records if str(record.get("algorithm") or "unknown") == algo]
         if not algo_records:
             if ieee_mode:
@@ -190,8 +227,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--algorithm",
-        default="mixra_opt",
-        help="Filtre sur l'algorithme à tracer (par défaut : mixra_opt)",
+        action="append",
+        help=(
+            "Algorithme(s) à tracer (option répétable, liste séparée par des virgules). "
+            "Par défaut, tous les algorithmes présents sont utilisés."
+        ),
     )
     parser.add_argument(
         "--strict",
@@ -215,7 +255,7 @@ def main(argv: List[str] | None = None) -> None:
     generate_distributions(
         results_dir=args.results_dir,
         figures_dir=args.figures_dir,
-        algorithm=args.algorithm,
+        algorithms=args.algorithm,
         strict=args.strict,
         ieee_mode=args.ieee,
     )
