@@ -25,6 +25,7 @@ class RunMetrics:
     attempted: int
     failures_collision: int
     failures_no_signal: int
+    baseline_loss_rate: float
     pdr_ci95: float
     der_ci95: float
     cluster_pdr: Dict[str, float]
@@ -52,6 +53,7 @@ class RunMetrics:
             "pdr_ci95": self.pdr_ci95,
             "der_ci95": self.der_ci95,
             "collisions": self.collisions,
+            "baseline_loss_rate": self.baseline_loss_rate,
             "mixra_solver": self.mixra_solver or "",
             "cluster_pdr_json": json.dumps(self.cluster_pdr, ensure_ascii=False, sort_keys=True),
             "cluster_targets_json": json.dumps(
@@ -118,6 +120,7 @@ def compute_run_metrics(
 
     failures_collision = collisions
     failures_no_signal = int(base_metrics.get("packets_lost_no_signal", 0) or 0)
+    baseline_loss_rate = float(base_metrics.get("baseline_loss_rate", 0.0) or 0.0)
 
     snir_values: List[float] = []
     snir_by_result: List[Tuple[float, str]] = []
@@ -179,6 +182,7 @@ def compute_run_metrics(
         attempted=attempted,
         failures_collision=failures_collision,
         failures_no_signal=failures_no_signal,
+        baseline_loss_rate=baseline_loss_rate,
         pdr_ci95=pdr_ci95,
         der_ci95=der_ci95,
         collisions=collisions,
@@ -210,4 +214,3 @@ def load_cluster_ids(results: Sequence[RunMetrics]) -> List[str]:
     for result in results:
         cluster_ids.update(result.cluster_pdr.keys())
     return sorted(cluster_ids, key=lambda value: int(value))
-

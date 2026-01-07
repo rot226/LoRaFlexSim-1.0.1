@@ -354,9 +354,10 @@ class Channel:
             ``use_snir`` est désactivé.
         :param residual_collision_load_scale: Nombre de transmissions
             concurrentes servant de référence pour saturer l'effet de charge.
-        :param baseline_loss_rate: Probabilité de perte résiduelle appliquée
-            même en l'absence de collisions explicites. Si ``None``, une valeur
-            minimale est utilisée lorsque ``use_snir`` est désactivé.
+        :param baseline_loss_rate: Probabilité minimale de perte résiduelle
+            appliquée même en l'absence de collisions explicites, et qui peut
+            augmenter avec la charge. Si ``None``, une valeur minimale est
+            utilisée lorsque ``use_snir`` est désactivé.
         :param baseline_collision_rate: Probabilité de perte additionnelle qui
             augmente avec la charge (jusqu'à ``residual_collision_load_scale``).
             Si ``None``, une valeur minimale est utilisée lorsque
