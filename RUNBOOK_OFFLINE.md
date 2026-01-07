@@ -5,9 +5,9 @@ reproduire les CSV Step 1, générer les figures étendues et lancer les tests
 SNIR/QoS. Aucune connexion réseau n’est requise.
 
 > **Note IEEE** : seules les figures situées dans `figures/step1/extended/` sont
-> considérées comme validées IEEE.
+> considérées comme **IEEE-ready**.
 
-## 1) Générer les CSV Step 1
+## 1) Step 1 — Générer les CSV
 
 ```bash
 python scripts/run_step1_matrix.py --algos adr apra mixra_h mixra_opt --with-snir true false --seeds 1 2 3 --nodes 1000 5000 --packet-intervals 300 600
@@ -18,7 +18,7 @@ Résultats attendus :
 - CSV bruts : `results/step1/<snir_state>/seed_<seed>/`.
 - CSV agrégés : `results/step1/summary.csv` et `results/step1/raw_index.csv`.
 
-## 2) Générer les figures « extended »
+## 2) Step 2 — Générer les plots (figures « extended »)
 
 ```bash
 python scripts/plot_step1_results.py --official --use-summary --plot-cdf
@@ -47,14 +47,14 @@ pytest tests/test_qos_validation_script.py
 
 > Exécuter ces commandes dans un terminal PowerShell (Windows 11).
 
-### 1) Générer les CSV Step 1
+### 1) Step 1 — Générer les CSV
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/run_step1_matrix_windows.ps1
 python scripts/aggregate_step1_results.py --strict-snir-detection
 ```
 
-### 2) Générer les figures « extended »
+### 2) Step 2 — Générer les plots (figures « extended »)
 
 ```powershell
 python scripts/plot_step1_results.py --official --use-summary --plot-cdf
