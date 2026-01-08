@@ -398,9 +398,6 @@ def _collect_packets(
             "snir_dB",
             "snir_db",
             "snir",
-            "snr",
-            "snr_db",
-            "snr_dB",
         ):
             if column in df.columns:
                 df[column] = float("nan")
