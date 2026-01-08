@@ -52,6 +52,20 @@ La commande `python -m qos_cli.lfs_run` exécute directement une simulation LoRa
    paramètres au besoin puis exécutez chaque ligne pour lancer automatiquement LoRaFlexSim avec la
    configuration correspondante.
 
+   ### Forcer l'état SNIR (CLI ou YAML)
+
+   Chaque scénario peut forcer l'état SNIR via `snir_enabled: true|false` ou `propagation.phy_profile`
+   dans `qos_cli/scenarios.yaml`. Les options CLI surchargent ensuite la valeur YAML.
+
+   Exemple pour le même scénario et la même graine :
+   ```bash
+   python -m qos_cli.lfs_run --scenario S0 --method MixRA_Opt --seed 42 \
+       --snir on --out results/S0/MixRA_Opt/snir_on_seed42
+
+   python -m qos_cli.lfs_run --scenario S0 --method MixRA_Opt --seed 42 \
+       --disable-snir --out results/S0/MixRA_Opt/snir_off_seed42
+   ```
+
 3. **Collecter les métriques**
    Une fois toutes les simulations terminées et les résultats disponibles dans `results/`, exécutez :
    ```bash

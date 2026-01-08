@@ -34,6 +34,7 @@ scenarios:
     description: Réseau clairsemé avec trafic ponctuel.
     N: 60
     period: 900
+    snir_enabled: false
     clusters:
       cluster_low:
         share: 0.1
