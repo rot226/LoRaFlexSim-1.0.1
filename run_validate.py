@@ -26,6 +26,8 @@ TARGET_ALGOS = {"MixRA-H", "MixRA-Opt"}
 BASELINE_ALGOS = {"ADR", "APRA-like"}
 DEFAULT_DURATION_S = 4 * 3600.0
 PDR_TOLERANCE = 0.02
+SNIR_PDR_MARGIN = 0.02
+SNIR_PDR_EPSILON = 1e-6
 
 
 @dataclass(frozen=True)
@@ -62,8 +64,15 @@ def _run_single(
     seed: int,
     duration_s: float,
     solver_mode: str,
+    *,
+    use_snir: bool = True,
 ) -> RunMetrics:
-    simulator = bench._create_simulator(scenario.num_nodes, scenario.period_s, seed)
+    simulator = bench._create_simulator(
+        scenario.num_nodes,
+        scenario.period_s,
+        seed,
+        use_snir=use_snir,
+    )
     manager = QoSManager()
     _apply_algorithm(spec, simulator, manager, solver_mode)
     simulator.run(max_time=duration_s)
@@ -147,11 +156,48 @@ def _evaluate_targets(
     return table, notes
 
 
+def _evaluate_snir_checks(
+    results_on: Mapping[Tuple[str, str], RunMetrics],
+    results_off: Mapping[Tuple[str, str], RunMetrics],
+) -> Dict[str, Dict[str, object]]:
+    margin_failures: List[str] = []
+    off_pdr_failures: List[str] = []
+    for scenario in SCENARIOS:
+        for algorithm in ALGORITHM_LABELS.values():
+            key = (scenario.name, algorithm)
+            on_entry = results_on.get(key)
+            off_entry = results_off.get(key)
+            if on_entry is None or off_entry is None:
+                margin_failures.append(f"{scenario.name}/{algorithm}: résultat manquant")
+                off_pdr_failures.append(f"{scenario.name}/{algorithm}: résultat manquant")
+                continue
+            gap = off_entry.pdr_global - on_entry.pdr_global
+            if gap + 1e-9 < SNIR_PDR_MARGIN:
+                margin_failures.append(
+                    f"{scenario.name}/{algorithm}: PDR off {off_entry.pdr_global:.3f} vs on {on_entry.pdr_global:.3f}"
+                )
+            if off_entry.pdr_global >= 1.0 - SNIR_PDR_EPSILON:
+                off_pdr_failures.append(
+                    f"{scenario.name}/{algorithm}: PDR off {off_entry.pdr_global:.3f}"
+                )
+    return {
+        "snir_margin": {
+            "status": "PASS" if not margin_failures else "FAIL",
+            "details": margin_failures,
+        },
+        "snir_off_pdr": {
+            "status": "PASS" if not off_pdr_failures else "FAIL",
+            "details": off_pdr_failures,
+        },
+    }
+
+
 def _write_summary(
     table: Mapping[str, Mapping[str, str]],
     notes: Mapping[str, Sequence[str]],
     output_dir: Path,
     solver_notes: Sequence[str],
+    snir_checks: Mapping[str, Mapping[str, object]],
 ) -> Path:
     lines: List[str] = []
     lines.append("Validation QoS clusters – résumé")
@@ -168,6 +214,29 @@ def _write_summary(
         lines.append("Solveurs MixRA-Opt :")
         for note in solver_notes:
             lines.append(f"- {note}")
+    if snir_checks:
+        lines.append("")
+        lines.append("Contrôles SNIR")
+        lines.append("")
+        lines.append("Check | Statut | Détails")
+        lines.append("--- | --- | ---")
+        margin_details = "; ".join(snir_checks.get("snir_margin", {}).get("details", []) or [])
+        margin_status = snir_checks.get("snir_margin", {}).get("status", "FAIL")
+        lines.append(
+            "PDR(snir_on) < PDR(snir_off) − marge ({:.2f}) | {} | {}".format(
+                SNIR_PDR_MARGIN,
+                margin_status,
+                margin_details if margin_details else "-",
+            )
+        )
+        off_details = "; ".join(snir_checks.get("snir_off_pdr", {}).get("details", []) or [])
+        off_status = snir_checks.get("snir_off_pdr", {}).get("status", "FAIL")
+        lines.append(
+            "PDR(snir_off) < 1.0 (charges réalistes) | {} | {}".format(
+                off_status,
+                off_details if off_details else "-",
+            )
+        )
     summary_path = output_dir / "SUMMARY.txt"
     summary_path.write_text("\n".join(lines), encoding="utf8")
     return summary_path
@@ -183,6 +252,7 @@ def run_pipeline(
     specs = _load_algorithms()
     output_dir.mkdir(parents=True, exist_ok=True)
     results: List[RunMetrics] = []
+    snir_off_results: List[RunMetrics] = []
     solver_notes: List[str] = []
     for scenario_index, scenario in enumerate(SCENARIOS):
         for algo_index, spec in enumerate(specs):
@@ -194,23 +264,36 @@ def run_pipeline(
                 solver_notes.append(
                     f"{scenario.name}: MixRA-Opt -> {solver_used}"
                 )
+            snir_off_result = _run_single(
+                scenario,
+                spec,
+                combo_seed,
+                duration_s,
+                solver_mode,
+                use_snir=False,
+            )
+            snir_off_results.append(snir_off_result)
     mapping = {(item.scenario, item.algorithm): item for item in results}
+    mapping_off = {(item.scenario, item.algorithm): item for item in snir_off_results}
     table, notes = _evaluate_targets(mapping)
+    snir_checks = _evaluate_snir_checks(mapping, mapping_off)
     csv_path = output_dir / "metrics.csv"
     with csv_path.open("w", newline="", encoding="utf8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(results[0].to_csv_row().keys()))
         writer.writeheader()
         for item in results:
             writer.writerow(item.to_csv_row())
-    summary_path = _write_summary(table, notes, output_dir, solver_notes)
+    summary_path = _write_summary(table, notes, output_dir, solver_notes, snir_checks)
     figures = generate_plots(results, output_dir, scenario_order=[s.name for s in SCENARIOS])
     return {
         "results": results,
+        "snir_off_results": snir_off_results,
         "csv_path": csv_path,
         "summary_path": summary_path,
         "figures": figures,
         "status_table": table,
         "notes": notes,
+        "snir_checks": snir_checks,
     }
 
 
