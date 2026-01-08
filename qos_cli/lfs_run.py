@@ -166,6 +166,23 @@ def _ensure_mapping(name: str, value: object) -> Mapping[str, object]:
     return value
 
 
+def _parse_optional_float(
+    mapping: Mapping[str, object],
+    key: str,
+    *,
+    context: str,
+) -> Optional[float]:
+    if key not in mapping:
+        return None
+    value = mapping.get(key)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Valeur invalide pour '{context}.{key}': {value!r}") from exc
+
+
 def _parse_common(common: Mapping[str, object]) -> Tuple[dict, dict, List[int]]:
     gateway = _ensure_mapping("common.gateway", common.get("gateway", {}))
     channels_cfg = _ensure_mapping("common.channels", common.get("channels", {}))
@@ -220,6 +237,20 @@ def _build_channels(
         snir_model=enhanced,
     )
 
+    override_keys = (
+        "baseline_loss_rate",
+        "baseline_collision_rate",
+        "residual_collision_prob",
+        "snir_off_noise_prob",
+        "snir_fading_std",
+        "marginal_snir_margin_db",
+        "marginal_snir_drop_prob",
+    )
+    global_overrides = {
+        key: _parse_optional_float(propagation_cfg, key, context="propagation")
+        for key in override_keys
+    }
+
     channels: List[Channel] = []
     channel_map: dict[str, int] = {}
     capture_threshold = float(propagation_cfg.get("capture_threshold_db", 1.0))
@@ -229,6 +260,13 @@ def _build_channels(
             raise ValueError(f"Le canal '{name}' doit être un dictionnaire.")
         frequency = float(payload.get("frequency_hz", 868_100_000.0))
         bandwidth = float(payload.get("bandwidth_hz", 125_000.0))
+        channel_overrides: dict[str, float] = {}
+        for key in override_keys:
+            value = _parse_optional_float(payload, key, context=f"canal '{name}'")
+            if value is None:
+                value = global_overrides.get(key)
+            if value is not None:
+                channel_overrides[key] = value
         channel = Channel(
             frequency_hz=frequency,
             bandwidth=bandwidth,
@@ -238,6 +276,7 @@ def _build_channels(
             multipath_taps=4,
             fast_fading_std=0.0,
             variable_noise_std=variable_noise,
+            **channel_overrides,
         )
         channel.channel_index = index
         channel.orthogonal_sf = False
