@@ -407,9 +407,15 @@ def _collect_packets(
     node_clusters = {getattr(node, "id", None): getattr(node, "qos_cluster_id", None) for node in simulator.nodes}
     df["cluster_id"] = df["node_id"].map(node_clusters)
     df["cluster"] = df["cluster_id"].map(lambda cid: cluster_lookup.get(cid) if cid is not None else None)
-    result_series = df["result"].astype(str).str.lower()
+    result_series = df["result"].astype(str).str.strip().str.lower()
     df["delivered"] = result_series.eq("success")
-    df["collision"] = result_series.eq("collision")
+    df["collision"] = result_series.isin({"collisionloss", "collision"})
+    df["no_coverage"] = result_series.eq("nocoverage")
+    loss_reason = None
+    df["loss_reason"] = loss_reason
+    df.loc[df["collision"], "loss_reason"] = "collision"
+    df.loc[df["no_coverage"], "loss_reason"] = "no_coverage"
+    df.loc[~df["delivered"] & df["loss_reason"].isna(), "loss_reason"] = "other"
     if "snr_dB" in df.columns and "snir_dB" not in df.columns:
         df["snir_dB"] = df["snr_dB"]
     return df

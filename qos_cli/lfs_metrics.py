@@ -6,7 +6,8 @@ CSV exportés par le banc de simulation :
 * Chaque scénario est stocké dans ``<racine_resultats>/<methode>/<scenario>/``.
 * Les transmissions sont listées dans ``packets.csv`` avec au minimum un
   identifiant de cluster (``cluster`` ou ``cluster_id``) et un indicateur de
-  succès (colonne booléenne ou statut textuel ``delivered``/``collision``).
+  succès (colonne booléenne ou statut textuel ``delivered``/``collision``),
+  éventuellement complétés par ``no_coverage`` et ``loss_reason``.
 * Les caractéristiques des nœuds résident dans ``nodes.csv`` et exposent
   l'énergie consommée (``energy_J`` ou ``energy``) et le facteur d'étalement
   (``sf`` ou ``spreading_factor``).
@@ -187,10 +188,12 @@ def _extract_collision_series(df: pd.DataFrame) -> Optional[pd.Series]:
             if pd.api.types.is_numeric_dtype(series):
                 return pd.to_numeric(series, errors="coerce")
             return series.astype(str).str.lower().isin({"true", "1", "yes"}).astype(int)
+    if "loss_reason" in df.columns:
+        return df["loss_reason"].astype(str).str.strip().str.lower().eq("collision").astype(int)
     status_column = _find_column(df.columns, ["status", "result", "outcome", "rx_status"])
     if status_column is not None:
         statuses = df[status_column].astype(str).str.lower()
-        return statuses.isin({"collision", "collided", "fail_collision"}).astype(int)
+        return statuses.isin({"collision", "collisionloss", "collided", "fail_collision"}).astype(int)
     return None
 
 
