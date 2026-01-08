@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import argparse
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Dict, List, MutableMapping, Optional, Tuple
@@ -68,6 +68,10 @@ class MethodScenarioMetrics:
     jain_index: Optional[float]
     min_sf_share: Optional[float]
     loss_rate: Optional[float]
+    snir_mean_by_sf: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    snir_mean_by_cluster: Dict[str, float] = field(default_factory=dict)
+    pdr_by_snir_bin: List[Tuple[float, float]] = field(default_factory=list)
+    distance_to_gw: Optional[float] = None
     snir_mean: Optional[float] = None
     snir_ci_low: Optional[float] = None
     snir_ci_high: Optional[float] = None
@@ -111,6 +115,39 @@ def load_yaml_config(path: Path) -> Mapping[str, Mapping[str, object]]:
         content = yaml.safe_load(handle)
     scenarios = content.get("scenarios", {}) if isinstance(content, Mapping) else {}
     return scenarios  # type: ignore[return-value]
+
+
+def _parse_gateway_position(payload: object) -> Optional[Tuple[float, float]]:
+    if isinstance(payload, (list, tuple)) and len(payload) >= 2:
+        try:
+            return float(payload[0]), float(payload[1])
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def load_gateway_position(path: Optional[Path]) -> Optional[Tuple[float, float]]:
+    if path is None or not path.is_file():
+        return None
+    with path.open("r", encoding="utf-8") as handle:
+        content = yaml.safe_load(handle)
+    if not isinstance(content, Mapping):
+        return None
+    common_cfg = content.get("common", {})
+    if isinstance(common_cfg, Mapping):
+        gateway_cfg = common_cfg.get("gateway", {})
+        if isinstance(gateway_cfg, Mapping):
+            position = gateway_cfg.get("position_m")
+            parsed = _parse_gateway_position(position)
+            if parsed is not None:
+                return parsed
+    gateway_cfg = content.get("gateway", {})
+    if isinstance(gateway_cfg, Mapping):
+        position = gateway_cfg.get("position_m")
+        parsed = _parse_gateway_position(position)
+        if parsed is not None:
+            return parsed
+    return None
 
 
 def discover_methods(root: Path) -> List[str]:
@@ -396,6 +433,122 @@ def compute_snir_stats(
     return mean, mean - margin, mean + margin
 
 
+def _normalize_sf_key(value: float) -> str:
+    if float(value).is_integer():
+        return str(int(value))
+    return f"{value:.1f}".rstrip("0").rstrip(".")
+
+
+def compute_snir_mean_by_sf(df: Optional[pd.DataFrame]) -> Dict[str, Dict[str, float]]:
+    if df is None or df.empty:
+        return {}
+    snir_column = _find_column(df.columns, ["snir_dB"])
+    sf_column = _find_column(df.columns, ["sf", "spreading_factor", "SF", "assigned_sf"])
+    if snir_column is None or sf_column is None:
+        return {}
+    snir_series = pd.to_numeric(df[snir_column], errors="coerce")
+    sf_series = pd.to_numeric(df[sf_column], errors="coerce")
+    grouped = (
+        pd.DataFrame({"snir": snir_series, "sf": sf_series})
+        .dropna()
+        .groupby("sf")["snir"]
+    )
+    result: Dict[str, Dict[str, float]] = {}
+    for sf_value, values in grouped:
+        if values.empty:
+            continue
+        key = _normalize_sf_key(float(sf_value))
+        result[key] = {
+            "mean": float(values.mean()),
+            "median": float(values.median()),
+        }
+    return dict(sorted(result.items(), key=lambda item: item[0]))
+
+
+def compute_snir_mean_by_cluster(df: Optional[pd.DataFrame]) -> Dict[str, float]:
+    if df is None or df.empty:
+        return {}
+    snir_column = _find_column(df.columns, ["snir_dB"])
+    cluster_column = _find_column(
+        df.columns,
+        ["cluster", "cluster_id", "clusterId", "ring", "qos_cluster"],
+    )
+    if snir_column is None or cluster_column is None:
+        return {}
+    snir_series = pd.to_numeric(df[snir_column], errors="coerce")
+    grouped = (
+        pd.DataFrame({"snir": snir_series, "cluster": df[cluster_column]})
+        .dropna(subset=["snir"])
+        .groupby("cluster")["snir"]
+    )
+    result: Dict[str, float] = {}
+    for cluster_value, values in grouped:
+        if values.empty:
+            continue
+        result[str(cluster_value)] = float(values.mean())
+    return dict(sorted(result.items(), key=lambda item: item[0]))
+
+
+def compute_pdr_by_snir_bins(
+    df: Optional[pd.DataFrame],
+    *,
+    bin_width: float = 1.0,
+) -> List[Tuple[float, float]]:
+    if df is None or df.empty:
+        return []
+    snir_column = _find_column(df.columns, ["snir_dB"])
+    success_series = _extract_success_series(df)
+    if snir_column is None or success_series is None:
+        return []
+    snir_series = pd.to_numeric(df[snir_column], errors="coerce")
+    series = pd.DataFrame({"snir": snir_series, "success": success_series}).dropna()
+    if series.empty:
+        return []
+    values = series["snir"].to_list()
+    minimum = math.floor(min(values))
+    maximum = math.ceil(max(values))
+    if minimum == maximum:
+        pdr_value = float(series["success"].mean())
+        return [(float(minimum), pdr_value)]
+    bin_edges = [minimum + i * bin_width for i in range(int((maximum - minimum) / bin_width) + 1)]
+    bin_edges.append(maximum)
+    totals = [0 for _ in range(len(bin_edges) - 1)]
+    successes = [0.0 for _ in range(len(bin_edges) - 1)]
+    for snir_value, success_value in series[["snir", "success"]].itertuples(index=False):
+        index = min(int((snir_value - minimum) / bin_width), len(totals) - 1)
+        totals[index] += 1
+        successes[index] += float(success_value)
+    result: List[Tuple[float, float]] = []
+    for idx, total in enumerate(totals):
+        if total <= 0:
+            continue
+        center = (bin_edges[idx] + bin_edges[idx + 1]) / 2.0
+        result.append((float(center), float(successes[idx] / total)))
+    return result
+
+
+def compute_distance_to_gateway(
+    df: Optional[pd.DataFrame],
+    gateway_position: Optional[Tuple[float, float]],
+) -> Optional[float]:
+    if df is None or df.empty or gateway_position is None:
+        return None
+    x_column = _find_column(df.columns, ["final_x"])
+    y_column = _find_column(df.columns, ["final_y"])
+    if x_column is None or y_column is None:
+        return None
+    x_series = pd.to_numeric(df[x_column], errors="coerce")
+    y_series = pd.to_numeric(df[y_column], errors="coerce")
+    coords = pd.DataFrame({"x": x_series, "y": y_series}).dropna()
+    if coords.empty:
+        return None
+    gx, gy = gateway_position
+    distances = ((coords["x"] - gx) ** 2 + (coords["y"] - gy) ** 2) ** 0.5
+    if distances.empty:
+        return None
+    return float(distances.mean())
+
+
 def compute_energy(nodes_df: Optional[pd.DataFrame]) -> Optional[float]:
     if nodes_df is None or nodes_df.empty:
         return None
@@ -469,6 +622,7 @@ def load_metrics_for_method_scenario(
     scenario: str,
     *,
     cluster_targets: Optional[Mapping[str, object]] = None,
+    gateway_position: Optional[Tuple[float, float]] = None,
 ) -> MethodScenarioMetrics:
     scenario_dir = root / method / scenario
     packets_df = read_dataframe(scenario_dir / "packets.csv")
@@ -481,6 +635,10 @@ def load_metrics_for_method_scenario(
     snir_cdf = compute_snir_cdf(packets_df)
     snr_cdf = compute_snr_cdf(packets_df)
     snir_mean, snir_ci_low, snir_ci_high = compute_snir_stats(packets_df)
+    snir_mean_by_sf = compute_snir_mean_by_sf(packets_df)
+    snir_mean_by_cluster = compute_snir_mean_by_cluster(packets_df)
+    pdr_by_snir_bin = compute_pdr_by_snir_bins(packets_df)
+    distance_to_gw = compute_distance_to_gateway(packets_df, gateway_position)
     use_snir_flag, snir_state = _detect_snir_state(packets_df)
     energy_j = compute_energy(nodes_df)
     jain_index = compute_jain_index(packets_df)
@@ -538,6 +696,10 @@ def load_metrics_for_method_scenario(
         jain_index=jain_index,
         min_sf_share=min_sf_share,
         loss_rate=loss_rate,
+        snir_mean_by_sf=snir_mean_by_sf,
+        snir_mean_by_cluster=snir_mean_by_cluster,
+        pdr_by_snir_bin=pdr_by_snir_bin,
+        distance_to_gw=distance_to_gw,
         snir_mean=snir_mean,
         snir_ci_low=snir_ci_low,
         snir_ci_high=snir_ci_high,
@@ -547,6 +709,7 @@ def load_metrics_for_method_scenario(
 def load_all_metrics(
     root: Path,
     scenarios_cfg: Optional[Mapping[str, Mapping[str, object]]] = None,
+    gateway_position: Optional[Tuple[float, float]] = None,
 ) -> Dict[Tuple[str, str], MethodScenarioMetrics]:
     metrics: Dict[Tuple[str, str], MethodScenarioMetrics] = {}
     for method in discover_methods(root):
@@ -559,6 +722,7 @@ def load_all_metrics(
                 method,
                 scenario,
                 cluster_targets=cluster_targets_from_config(scenario_cfg),
+                gateway_position=gateway_position,
             )
     return metrics
 
@@ -779,7 +943,8 @@ def write_summary(
 def main(argv: Optional[Sequence[str]] = None) -> None:
     args = parse_args(argv)
     scenarios_cfg = load_yaml_config(args.config)
-    all_metrics = load_all_metrics(args.root, scenarios_cfg)
+    gateway_position = load_gateway_position(args.config)
+    all_metrics = load_all_metrics(args.root, scenarios_cfg, gateway_position=gateway_position)
     write_summary(args.summary, scenarios_cfg, all_metrics)
 
 

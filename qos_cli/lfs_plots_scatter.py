@@ -16,6 +16,7 @@ try:  # pragma: no cover - dépend du mode d'exécution
         MethodScenarioMetrics,
         cluster_targets_from_config,
         load_all_metrics,
+        load_gateway_position,
         load_yaml_config,
     )
 except ImportError:  # pragma: no cover - fallback pour exécution directe
@@ -23,6 +24,7 @@ except ImportError:  # pragma: no cover - fallback pour exécution directe
         MethodScenarioMetrics,
         cluster_targets_from_config,
         load_all_metrics,
+        load_gateway_position,
         load_yaml_config,
     )
 
@@ -476,12 +478,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         raise FileNotFoundError(f"Dossier de résultats introuvable : {args.root}")
 
     scenarios_cfg: Optional[Mapping[str, Mapping[str, object]]] = None
+    gateway_position: Optional[Tuple[float, float]] = None
     if args.config is not None:
         if not args.config.exists():
             raise FileNotFoundError(f"Fichier de configuration introuvable : {args.config}")
         scenarios_cfg = load_yaml_config(args.config)
+        gateway_position = load_gateway_position(args.config)
 
-    all_metrics = load_all_metrics(args.root, scenarios_cfg)
+    all_metrics = load_all_metrics(args.root, scenarios_cfg, gateway_position=gateway_position)
     if not all_metrics:
         raise RuntimeError("Aucune métrique détectée – vérifiez la structure des résultats.")
 
@@ -516,4 +520,3 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
 if __name__ == "__main__":  # pragma: no cover - exécution CLI
     main()
-
