@@ -391,6 +391,8 @@ def _collect_packets(
     df = simulator.get_events_dataframe()
     if df is None or df.empty:
         return df
+    if "snir_state" not in df.columns:
+        df["snir_state"] = "snir_on" if phy_profile.use_snir else "snir_off"
     if phy_profile.name == "qos_original":
         for column in (
             "snir_dB",

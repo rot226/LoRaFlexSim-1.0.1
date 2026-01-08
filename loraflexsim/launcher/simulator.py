@@ -2799,6 +2799,20 @@ class Simulator:
         df["acks_received"] = df["node_id"].apply(
             lambda nid: node_dict[nid].acks_received
         )
+        if "snir_state" not in df.columns:
+            use_snir = getattr(self, "use_snir", None)
+            if use_snir is None:
+                channel_states = {
+                    getattr(getattr(node, "channel", None), "use_snir", None)
+                    for node in self.nodes
+                }
+                channel_states.discard(None)
+                if len(channel_states) == 1:
+                    use_snir = channel_states.pop()
+            if isinstance(use_snir, bool):
+                df["snir_state"] = "snir_on" if use_snir else "snir_off"
+            else:
+                df["snir_state"] = None
         # Colonnes d'intérêt dans un ordre lisible
         columns_order = [
             "event_id",
@@ -2831,6 +2845,10 @@ class Simulator:
             "energy_J",
             "rssi_dBm",
             "snr_dB",
+            "snir_dB",
+            "noise_dBm",
+            "interference_mW",
+            "snir_state",
             "result",
             "gateway_id",
         ]
