@@ -31,6 +31,7 @@ réels du simulateur.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -117,16 +118,19 @@ def load_yaml_config(path: Path) -> Mapping[str, Mapping[str, object]]:
     return scenarios  # type: ignore[return-value]
 
 
-def _parse_gateway_position(payload: object) -> Optional[Tuple[float, float]]:
+def _parse_gateway_position(payload: object) -> Optional[Tuple[float, float, float]]:
     if isinstance(payload, (list, tuple)) and len(payload) >= 2:
         try:
-            return float(payload[0]), float(payload[1])
+            x = float(payload[0])
+            y = float(payload[1])
+            z = float(payload[2]) if len(payload) >= 3 else 0.0
+            return x, y, z
         except (TypeError, ValueError):
             return None
     return None
 
 
-def load_gateway_position(path: Optional[Path]) -> Optional[Tuple[float, float]]:
+def load_gateway_position(path: Optional[Path]) -> Optional[Tuple[float, float, float]]:
     if path is None or not path.is_file():
         return None
     with path.open("r", encoding="utf-8") as handle:
@@ -148,6 +152,32 @@ def load_gateway_position(path: Optional[Path]) -> Optional[Tuple[float, float]]
         if parsed is not None:
             return parsed
     return None
+
+
+def load_run_metadata(
+    path: Path,
+) -> Tuple[Optional[Tuple[float, float, float]], Optional[str]]:
+    if not path.is_file():
+        return None, None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, None
+    if not isinstance(payload, Mapping):
+        return None, None
+    gateway = payload.get("gateway")
+    gw_position = None
+    if isinstance(gateway, Mapping):
+        try:
+            x = float(gateway.get("x"))
+            y = float(gateway.get("y"))
+            z = float(gateway.get("z", 0.0))
+            gw_position = (x, y, z)
+        except (TypeError, ValueError):
+            gw_position = None
+    phy_profile = payload.get("phy_profile")
+    phy_profile_str = str(phy_profile) if phy_profile is not None else None
+    return gw_position, phy_profile_str
 
 
 def discover_methods(root: Path) -> List[str]:
@@ -528,22 +558,34 @@ def compute_pdr_by_snir_bins(
 
 
 def compute_distance_to_gateway(
-    df: Optional[pd.DataFrame],
-    gateway_position: Optional[Tuple[float, float]],
+    nodes_df: Optional[pd.DataFrame],
+    gateway_position: Optional[Tuple[float, float, float]],
 ) -> Optional[float]:
-    if df is None or df.empty or gateway_position is None:
+    if nodes_df is None or nodes_df.empty or gateway_position is None:
         return None
-    x_column = _find_column(df.columns, ["final_x"])
-    y_column = _find_column(df.columns, ["final_y"])
+    x_column = _find_column(nodes_df.columns, ["final_x", "x"])
+    y_column = _find_column(nodes_df.columns, ["final_y", "y"])
     if x_column is None or y_column is None:
         return None
-    x_series = pd.to_numeric(df[x_column], errors="coerce")
-    y_series = pd.to_numeric(df[y_column], errors="coerce")
+    z_column = _find_column(nodes_df.columns, ["final_z", "z", "altitude"])
+    x_series = pd.to_numeric(nodes_df[x_column], errors="coerce")
+    y_series = pd.to_numeric(nodes_df[y_column], errors="coerce")
     coords = pd.DataFrame({"x": x_series, "y": y_series}).dropna()
     if coords.empty:
         return None
-    gx, gy = gateway_position
-    distances = ((coords["x"] - gx) ** 2 + (coords["y"] - gy) ** 2) ** 0.5
+    gx, gy, gz = gateway_position
+    if z_column is None:
+        distances = ((coords["x"] - gx) ** 2 + (coords["y"] - gy) ** 2) ** 0.5
+    else:
+        z_series = pd.to_numeric(nodes_df[z_column], errors="coerce")
+        coords = coords.assign(z=z_series).dropna(subset=["z"])
+        if coords.empty:
+            return None
+        distances = (
+            (coords["x"] - gx) ** 2
+            + (coords["y"] - gy) ** 2
+            + (coords["z"] - gz) ** 2
+        ) ** 0.5
     if distances.empty:
         return None
     return float(distances.mean())
@@ -622,11 +664,13 @@ def load_metrics_for_method_scenario(
     scenario: str,
     *,
     cluster_targets: Optional[Mapping[str, object]] = None,
-    gateway_position: Optional[Tuple[float, float]] = None,
+    gateway_position: Optional[Tuple[float, float, float]] = None,
 ) -> MethodScenarioMetrics:
     scenario_dir = root / method / scenario
     packets_df = read_dataframe(scenario_dir / "packets.csv")
     nodes_df = read_dataframe(scenario_dir / "nodes.csv")
+    metadata_gateway, _phy_profile = load_run_metadata(scenario_dir / "metadata.json")
+    effective_gateway = metadata_gateway or gateway_position
 
     cluster_pdr = compute_cluster_pdr(packets_df)
     pdr_global, der_global, delivered, attempted = compute_global_ratios(packets_df)
@@ -638,7 +682,7 @@ def load_metrics_for_method_scenario(
     snir_mean_by_sf = compute_snir_mean_by_sf(packets_df)
     snir_mean_by_cluster = compute_snir_mean_by_cluster(packets_df)
     pdr_by_snir_bin = compute_pdr_by_snir_bins(packets_df)
-    distance_to_gw = compute_distance_to_gateway(packets_df, gateway_position)
+    distance_to_gw = compute_distance_to_gateway(nodes_df, effective_gateway)
     use_snir_flag, snir_state = _detect_snir_state(packets_df)
     energy_j = compute_energy(nodes_df)
     jain_index = compute_jain_index(packets_df)
@@ -709,7 +753,7 @@ def load_metrics_for_method_scenario(
 def load_all_metrics(
     root: Path,
     scenarios_cfg: Optional[Mapping[str, Mapping[str, object]]] = None,
-    gateway_position: Optional[Tuple[float, float]] = None,
+    gateway_position: Optional[Tuple[float, float, float]] = None,
 ) -> Dict[Tuple[str, str], MethodScenarioMetrics]:
     metrics: Dict[Tuple[str, str], MethodScenarioMetrics] = {}
     for method in discover_methods(root):
@@ -888,6 +932,7 @@ def format_metrics(metrics: MethodScenarioMetrics) -> str:
     energy_per_delivery = (
         "N/A" if metrics.energy_per_delivery is None else f"{metrics.energy_per_delivery:.3f} J/msg"
     )
+    distance = "N/A" if metrics.distance_to_gw is None else f"{metrics.distance_to_gw:.1f} m"
     gap_min = (
         "N/A"
         if not metrics.pdr_gap_by_cluster
@@ -898,6 +943,7 @@ def format_metrics(metrics: MethodScenarioMetrics) -> str:
         f"PDR={fmt(metrics.pdr_global)} | DER={fmt(metrics.der_global)} | "
         f"Collisions={collision} (rate={collision_rate}, destructive={collision_destructive}, captured={collision_captured}) | "
         f"Jain={fmt(metrics.jain_index)} | "
+        f"DistanceGW={distance} | "
         f"Energie={energy} (per delivery={energy_per_delivery}) | GapMin={gap_min} | "
         f"SFmin={sf_percentage}"
     )

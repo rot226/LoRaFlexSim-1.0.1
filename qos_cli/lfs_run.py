@@ -366,7 +366,9 @@ def _scenario_duration(period: float, explicit: Optional[float]) -> float:
     return float(period * DEFAULT_DURATION_FACTOR)
 
 
-def _prepare_gateway(simulator: Simulator, gateway_cfg: Mapping[str, object]) -> None:
+def _prepare_gateway(
+    simulator: Simulator, gateway_cfg: Mapping[str, object]
+) -> Tuple[float, float, float]:
     position = gateway_cfg.get("position_m", [simulator.area_size / 2.0, simulator.area_size / 2.0, 15.0])
     if isinstance(position, Sequence) and len(position) >= 3:
         x, y, z = (float(position[0]), float(position[1]), float(position[2]))
@@ -381,6 +383,7 @@ def _prepare_gateway(simulator: Simulator, gateway_cfg: Mapping[str, object]) ->
         rx_gain = gateway_cfg.get("rx_gain_db")
         if rx_gain is not None:
             gateway.rx_gain_dB = float(rx_gain)
+    return x, y, z
 
 
 def _collect_packets(
@@ -498,7 +501,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     simulator.snir_model = phy_profile.snir_model
     simulator.interference_model = phy_profile.interference_model
     simulator.flora_capture = phy_profile.flora_capture
-    _prepare_gateway(simulator, gateway_cfg)
+    gw_x, gw_y, gw_z = _prepare_gateway(simulator, gateway_cfg)
 
     manager = ScenarioQoSManager()
     arrival_rate = 1.0 / period if period > 0.0 else 0.0
@@ -517,6 +520,14 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
 
     out_dir = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
+    metadata_payload = {
+        "gateway": {"x": gw_x, "y": gw_y, "z": gw_z},
+        "phy_profile": phy_profile.name,
+    }
+    (out_dir / "metadata.json").write_text(
+        json.dumps(metadata_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
     cluster_lookup = {cluster.cluster_id: names[index] for index, cluster in enumerate(manager.clusters)}
 
