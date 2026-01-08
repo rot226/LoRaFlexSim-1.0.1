@@ -67,11 +67,22 @@ La commande `python -m qos_cli.lfs_run` exécute directement une simulation LoRa
    - `pdr_clusters_vs_scenarios.png` : PDR détaillé par cluster pour chaque méthode.
    - `pdr_global_vs_scenarios.png` : PDR global (livraisons ÷ tentatives) par scénario et par méthode.
    - `der_global_vs_scenarios.png` : taux de livraison descendant (DER) par scénario.
+   - `pdr_global_vs_nodes.png` : PDR global en fonction du nombre de nœuds (par méthode).
+   - `der_global_vs_nodes.png` : DER global en fonction du nombre de nœuds (par méthode).
+   - `pdr_clusters_vs_nodes.png` : PDR par cluster en fonction du nombre de nœuds (par méthode).
    - `collisions_vs_scenarios.png` : nombre total de collisions montantes observées par scénario.
+   - `collision_rates_vs_nodes.png` : taux de collisions destructives/capture en fonction du nombre de nœuds.
    - `energy_total_vs_scenarios.png` : énergie totale consommée par les nœuds (somme en joules) par scénario.
+   - `energy_per_node_vs_pdr.png` : énergie moyenne par nœud vs PDR global.
+   - `energy_per_node_vs_snir.png` : énergie moyenne par nœud vs SNIR moyen.
    - `jain_index_vs_scenarios.png` : indice de Jain pour qualifier l’équité de la distribution de trafic.
    - `min_sf_share_vs_scenarios.png` : part de nœuds utilisant le facteur d’étalement minimal.
+   - `snir_mean_by_sf_vs_nodes.png` : SNIR moyen par SF en fonction du nombre de nœuds (par méthode).
+   - `snir_mean_by_cluster_vs_nodes.png` : SNIR moyen par cluster en fonction du nombre de nœuds (par méthode).
    - `snir_cdf_<scénario>.png` : courbes CDF du SNIR pour chaque scénario (une image par scénario).
+   - `pdr_vs_snir_<scénario>.png` : PDR vs SNIR (bins SNIR), une courbe par méthode.
+   - `pdr_vs_snir_<scénario>_cluster_<cluster>.png` : PDR vs SNIR par cluster, une courbe par méthode.
+   - `effective_sf_vs_distance.png` : SF effectif moyen en fonction de la distance au GW (ADR vs SNIR-aware).
 
    Pour compléter ces courbes par une visualisation surfacique des performances (nombre de nœuds × période), utilisez la CLI dédiée :
    ```bash
