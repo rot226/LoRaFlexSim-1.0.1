@@ -58,6 +58,8 @@ class MethodScenarioMetrics:
     der_global: Optional[float]
     collisions: Optional[int]
     collision_rate: Optional[float]
+    collision_destructive: Optional[int]
+    collision_captured: Optional[int]
     snir_cdf: List[Tuple[float, float]]
     snr_cdf: List[Tuple[float, float]]
     energy_j: Optional[float]
@@ -298,6 +300,38 @@ def compute_collisions(df: Optional[pd.DataFrame]) -> Optional[int]:
     return int(pd.to_numeric(collision_series, errors="coerce").fillna(0).sum())
 
 
+def compute_collision_breakdown(
+    df: Optional[pd.DataFrame],
+) -> Tuple[Optional[int], Optional[int]]:
+    if df is None or df.empty:
+        return None, None
+    result_column = _find_column(df.columns, ["result", "status", "outcome", "rx_status"])
+    collision_reason_column = _find_column(df.columns, ["collision_reason", "collisionReason"])
+    if result_column is None:
+        return None, None
+
+    result_series = df[result_column].astype(str).str.strip().str.lower()
+    success_values = {"success", "delivered", "ok", "received"}
+    collision_values = {"collision", "collisionloss", "fail_collision", "collided"}
+
+    collision_reason_series = (
+        df[collision_reason_column].astype(str).str.strip().str.lower()
+        if collision_reason_column is not None
+        else pd.Series([""] * len(df.index), index=df.index)
+    )
+    capture_values = {"capture", "captured", "collision_capture"}
+    has_reason = collision_reason_series.notna() & collision_reason_series.ne("") & collision_reason_series.ne("nan")
+
+    captured_mask = result_series.isin(success_values) & collision_reason_series.isin(capture_values)
+    destructive_mask = result_series.isin(collision_values) | (
+        has_reason & ~captured_mask & ~result_series.isin(success_values)
+    )
+
+    collision_destructive = int(destructive_mask.sum())
+    collision_captured = int(captured_mask.sum())
+    return collision_destructive, collision_captured
+
+
 def _compute_cdf_from_column(
     df: Optional[pd.DataFrame], columns: Sequence[str]
 ) -> List[Tuple[float, float]]:
@@ -443,6 +477,7 @@ def load_metrics_for_method_scenario(
     cluster_pdr = compute_cluster_pdr(packets_df)
     pdr_global, der_global, delivered, attempted = compute_global_ratios(packets_df)
     collisions = compute_collisions(packets_df)
+    collision_destructive, collision_captured = compute_collision_breakdown(packets_df)
     snir_cdf = compute_snir_cdf(packets_df)
     snr_cdf = compute_snr_cdf(packets_df)
     snir_mean, snir_ci_low, snir_ci_high = compute_snir_stats(packets_df)
@@ -493,6 +528,8 @@ def load_metrics_for_method_scenario(
         der_global=der_global,
         collisions=collisions,
         collision_rate=collision_rate,
+        collision_destructive=collision_destructive,
+        collision_captured=collision_captured,
         snir_cdf=snir_cdf,
         snr_cdf=snr_cdf,
         energy_j=energy_j,
@@ -673,6 +710,16 @@ def format_metrics(metrics: MethodScenarioMetrics) -> str:
     )
     energy = "N/A" if metrics.energy_j is None else f"{metrics.energy_j:.3f} J"
     collision = "N/A" if metrics.collisions is None else str(metrics.collisions)
+    collision_destructive = (
+        "N/A"
+        if metrics.collision_destructive is None
+        else str(metrics.collision_destructive)
+    )
+    collision_captured = (
+        "N/A"
+        if metrics.collision_captured is None
+        else str(metrics.collision_captured)
+    )
     collision_rate = fmt(metrics.collision_rate)
     energy_per_delivery = (
         "N/A" if metrics.energy_per_delivery is None else f"{metrics.energy_per_delivery:.3f} J/msg"
@@ -685,7 +732,8 @@ def format_metrics(metrics: MethodScenarioMetrics) -> str:
 
     return (
         f"PDR={fmt(metrics.pdr_global)} | DER={fmt(metrics.der_global)} | "
-        f"Collisions={collision} (rate={collision_rate}) | Jain={fmt(metrics.jain_index)} | "
+        f"Collisions={collision} (rate={collision_rate}, destructive={collision_destructive}, captured={collision_captured}) | "
+        f"Jain={fmt(metrics.jain_index)} | "
         f"Energie={energy} (per delivery={energy_per_delivery}) | GapMin={gap_min} | "
         f"SFmin={sf_percentage}"
     )

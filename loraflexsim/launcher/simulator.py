@@ -1814,6 +1814,7 @@ class Simulator:
                 "interference_mW": best_interference_mW,
                 "result": None,
                 "gateway_id": None,
+                "collision_reason": None,
             }
             self.events_log.append(log_entry)
             self._events_log_map[event_id] = log_entry
@@ -1869,6 +1870,9 @@ class Simulator:
                 self.network_server.event_gateway.get(event_id, None)
                 if delivered
                 else None
+            )
+            entry["collision_reason"] = self.network_server.collision_reasons.get(
+                event_id
             )
 
             snr_value = entry.get("snr_dB")
@@ -2851,6 +2855,7 @@ class Simulator:
             "snir_state",
             "result",
             "gateway_id",
+            "collision_reason",
         ]
         for col in columns_order:
             if col not in df.columns:

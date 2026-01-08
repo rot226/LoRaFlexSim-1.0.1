@@ -522,6 +522,8 @@ class Gateway:
                     t['lost_flag'] = False  # gagnant
                 else:
                     t['lost_flag'] = True   # perdants
+            if strongest.get("collision_reason") is None:
+                strongest["collision_reason"] = "capture"
             # Ajouter la transmission la plus forte si c'est la nouvelle (sinon elle est déjà dans active_transmissions)
             if strongest is new_transmission:
                 new_transmission['lost_flag'] = False
@@ -570,6 +572,8 @@ class Gateway:
                 self.active_map[key].remove(t)
             except (ValueError, KeyError):
                 pass
+            if t.get('collision_reason'):
+                network_server.register_collision_reason(event_id, t['collision_reason'])
             if not t['lost_flag']:
                 network_server.schedule_receive(
                     event_id,
@@ -583,8 +587,6 @@ class Gateway:
                     f"Gateway {self.id}: successfully received event {event_id} from node {node_id}."
                 )
             else:
-                if t.get('collision_reason'):
-                    network_server.register_collision_reason(event_id, t['collision_reason'])
                 logger.debug(
                     f"Gateway {self.id}: event {event_id} from node {node_id} was lost and not received."
                 )
