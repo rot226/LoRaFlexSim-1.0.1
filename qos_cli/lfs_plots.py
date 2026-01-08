@@ -17,12 +17,14 @@ try:  # pragma: no cover - dépend du mode d'exécution
     from .lfs_metrics import (
         MethodScenarioMetrics,
         load_all_metrics,
+        load_gateway_position,
         load_yaml_config,
     )
 except ImportError:  # pragma: no cover - fallback pour exécution directe
     from lfs_metrics import (
         MethodScenarioMetrics,
         load_all_metrics,
+        load_gateway_position,
         load_yaml_config,
     )
 
@@ -1167,12 +1169,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         raise FileNotFoundError(f"Dossier de résultats introuvable : {metrics_root}")
 
     scenarios_cfg: Optional[Mapping[str, Mapping[str, object]]] = None
+    gateway_position: Optional[Tuple[float, float]] = None
     if config_path is not None:
         if not config_path.exists():
             raise FileNotFoundError(f"Fichier de configuration introuvable : {config_path}")
         scenarios_cfg = load_yaml_config(config_path)
+        gateway_position = load_gateway_position(config_path)
 
-    all_metrics = load_all_metrics(metrics_root, scenarios_cfg)
+    all_metrics = load_all_metrics(metrics_root, scenarios_cfg, gateway_position=gateway_position)
     if not all_metrics:
         raise RuntimeError("Aucune métrique détectée – vérifiez la structure des résultats.")
 

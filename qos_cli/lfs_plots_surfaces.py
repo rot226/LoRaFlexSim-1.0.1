@@ -16,6 +16,7 @@ try:  # pragma: no cover - dépend du mode d'exécution
         MethodScenarioMetrics,
         cluster_targets_from_config,
         load_all_metrics,
+        load_gateway_position,
         load_yaml_config,
     )
 except ImportError:  # pragma: no cover - fallback pour exécution directe
@@ -23,8 +24,10 @@ except ImportError:  # pragma: no cover - fallback pour exécution directe
         MethodScenarioMetrics,
         cluster_targets_from_config,
         load_all_metrics,
+        load_gateway_position,
         load_yaml_config,
     )
+
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     """Construit l'espace de noms des arguments pour la CLI."""
 
@@ -246,7 +249,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     args.out.mkdir(parents=True, exist_ok=True)
 
     scenarios_cfg = load_yaml_config(args.config)
-    all_metrics = load_all_metrics(args.root, scenarios_cfg)
+    gateway_position = load_gateway_position(args.config)
+    all_metrics = load_all_metrics(args.root, scenarios_cfg, gateway_position=gateway_position)
     metrics_by_method = _group_metrics_by_method(all_metrics)
 
     available_scenarios = {scenario for _, scenario in all_metrics.keys()}
