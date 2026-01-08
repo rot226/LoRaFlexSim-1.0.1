@@ -21,19 +21,34 @@ import matplotlib
 import pandas as pd
 import pytest
 
+from qos_cli import lfs_metrics
 from qos_cli import lfs_plots
 
 
 matplotlib.use("Agg")
 
 
-def _write_packets(path: Path, *, snir_state: str, snir_values: list[float]) -> None:
+def _write_packets(
+    path: Path,
+    *,
+    snir_state: str,
+    snir_values: list[float] | None = None,
+    snr_values: list[float] | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    rows = [
-        {"delivered": 1, "snir_state": snir_state, "snir_dB": snir_values[0], "node_id": 1, "cluster": "A"},
-        {"delivered": 0, "snir_state": snir_state, "snir_dB": snir_values[1], "node_id": 2, "cluster": "A"},
-        {"delivered": 1, "snir_state": snir_state, "snir_dB": snir_values[2], "node_id": 1, "cluster": "B"},
+    base_rows = [
+        {"delivered": 1, "snir_state": snir_state, "node_id": 1, "cluster": "A"},
+        {"delivered": 0, "snir_state": snir_state, "node_id": 2, "cluster": "A"},
+        {"delivered": 1, "snir_state": snir_state, "node_id": 1, "cluster": "B"},
     ]
+    rows = []
+    for idx, row in enumerate(base_rows):
+        payload = dict(row)
+        if snir_values is not None:
+            payload["snir_dB"] = snir_values[idx]
+        if snr_values is not None:
+            payload["snr_dB"] = snr_values[idx]
+        rows.append(payload)
     with path.open("w", newline="", encoding="utf8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
         writer.writeheader()
@@ -45,8 +60,16 @@ def test_cli_generates_all_snir_variants(tmp_path: Path) -> None:
     out_dir = tmp_path / "figures"
     scenario = "Scenario-Alpha"
 
-    _write_packets(metrics_root / "algo_on" / scenario / "packets.csv", snir_state="snir_on", snir_values=[7.0, 5.5, 6.2])
-    _write_packets(metrics_root / "algo_off" / scenario / "packets.csv", snir_state="snir_off", snir_values=[1.5, 2.0, 0.5])
+    _write_packets(
+        metrics_root / "algo_on" / scenario / "packets.csv",
+        snir_state="snir_on",
+        snir_values=[7.0, 5.5, 6.2],
+    )
+    _write_packets(
+        metrics_root / "algo_off" / scenario / "packets.csv",
+        snir_state="snir_off",
+        snr_values=[1.5, 2.0, 0.5],
+    )
 
     lfs_plots.main(["--in", str(metrics_root), "--out", str(out_dir)])
 
@@ -65,6 +88,11 @@ def test_cli_generates_all_snir_variants(tmp_path: Path) -> None:
             path = out_dir / f"{base}{suffix}"
             assert path.is_file(), f"Fichier manquant: {path}"
             assert path.stat().st_size > 0, f"Fichier vide: {path}"
+
+    metrics = lfs_metrics.load_all_metrics(metrics_root)
+    assert metrics[("algo_on", scenario)].snir_state == "snir_on"
+    assert metrics[("algo_off", scenario)].snir_state == "snir_off"
+    assert metrics[("algo_off", scenario)].snr_cdf, "La CDF SNR doit rester disponible en SNIR off"
 
 
 def test_rolling_metrics_respects_window_size() -> None:

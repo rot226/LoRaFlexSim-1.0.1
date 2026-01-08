@@ -394,8 +394,9 @@ def _collect_packets(
     df = simulator.get_events_dataframe()
     if df is None or df.empty:
         return df
-    if "snir_state" not in df.columns:
-        df["snir_state"] = "snir_on" if phy_profile.use_snir else "snir_off"
+    snir_state = "snir_on" if phy_profile.use_snir else "snir_off"
+    df["use_snir"] = bool(phy_profile.use_snir)
+    df["snir_state"] = snir_state
     if phy_profile.name == "qos_original":
         for column in (
             "snir_dB",
@@ -416,7 +417,9 @@ def _collect_packets(
     df.loc[df["collision"], "loss_reason"] = "collision"
     df.loc[df["no_coverage"], "loss_reason"] = "no_coverage"
     df.loc[~df["delivered"] & df["loss_reason"].isna(), "loss_reason"] = "other"
-    if "snr_dB" in df.columns and "snir_dB" not in df.columns:
+    if not phy_profile.use_snir and "snr_dB" in df.columns and "snir_dB" not in df.columns:
+        # En mode SNIR désactivé, le simulateur ne calcule que le SNR ; on
+        # réplique donc la colonne pour conserver des courbes SNIR/SNR cohérentes.
         df["snir_dB"] = df["snr_dB"]
     return df
 
