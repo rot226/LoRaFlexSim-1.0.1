@@ -126,6 +126,27 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         help="Graine aléatoire pour l'initialisation du simulateur.",
     )
+    snir_group = parser.add_mutually_exclusive_group()
+    snir_group.add_argument(
+        "--snir",
+        choices=("on", "off", "auto"),
+        default="auto",
+        help="Force l'activation SNIR (on/off) ou laisse la config YAML (auto).",
+    )
+    snir_group.add_argument(
+        "--enable-snir",
+        action="store_const",
+        const="on",
+        dest="snir",
+        help="Alias pour --snir on.",
+    )
+    snir_group.add_argument(
+        "--disable-snir",
+        action="store_const",
+        const="off",
+        dest="snir",
+        help="Alias pour --snir off.",
+    )
     return parser
 
 
@@ -182,9 +203,14 @@ def _parse_clusters(
 def _build_channels(
     channels_cfg: Mapping[str, object],
     propagation_cfg: Mapping[str, object],
+    snir_override: Optional[bool] = None,
 ) -> Tuple[MultiChannel, dict[str, int], PhyProfile]:
     raw_profile = propagation_cfg.get("phy_profile", "qos_original")
     profile_name = str(raw_profile).strip().lower() if raw_profile is not None else ""
+    if snir_override is True:
+        profile_name = "snir_enhanced"
+    elif snir_override is False:
+        profile_name = "qos_original"
     enhanced = profile_name == "snir_enhanced"
     profile = PhyProfile(
         name="snir_enhanced" if enhanced else "qos_original",
@@ -366,6 +392,22 @@ def _scenario_duration(period: float, explicit: Optional[float]) -> float:
     return float(period * DEFAULT_DURATION_FACTOR)
 
 
+def _parse_snir_override(raw_value: object, *, source: str) -> Optional[bool]:
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, bool):
+        return raw_value
+    if isinstance(raw_value, str):
+        normalized = raw_value.strip().lower()
+        if normalized in {"on", "true", "1", "yes"}:
+            return True
+        if normalized in {"off", "false", "0", "no"}:
+            return False
+        if normalized in {"auto", ""}:
+            return None
+    raise ValueError(f"Valeur SNIR invalide ({source}): {raw_value!r}")
+
+
 def _prepare_gateway(
     simulator: Simulator, gateway_cfg: Mapping[str, object]
 ) -> Tuple[float, float, float]:
@@ -468,6 +510,14 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
 
     gateway_cfg, channels_cfg, _ = _parse_common(common_cfg)
     propagation_cfg = _ensure_mapping("common.propagation", common_cfg.get("propagation", {}))
+    scenario_propagation_raw = scenario_cfg.get("propagation")
+    if scenario_propagation_raw is not None:
+        scenario_propagation = _ensure_mapping(
+            f"scenario '{args.scenario}'.propagation", scenario_propagation_raw
+        )
+        merged_propagation = dict(propagation_cfg)
+        merged_propagation.update(scenario_propagation)
+        propagation_cfg = merged_propagation
     clusters_cfg = _ensure_mapping("clusters", scenario_cfg.get("clusters", {}))
 
     names, shares, targets, limits_payload = _parse_clusters(clusters_cfg)
@@ -476,7 +526,14 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     num_nodes = int(scenario_cfg.get("N", 120))
     duration = _scenario_duration(period, args.duration)
 
-    multichannel, channel_map, phy_profile = _build_channels(channels_cfg, propagation_cfg)
+    snir_override = _parse_snir_override(scenario_cfg.get("snir_enabled"), source="scénario")
+    snir_override_cli = _parse_snir_override(args.snir, source="CLI")
+    if snir_override_cli is not None:
+        snir_override = snir_override_cli
+
+    multichannel, channel_map, phy_profile = _build_channels(
+        channels_cfg, propagation_cfg, snir_override
+    )
 
     simulator = Simulator(
         num_nodes=num_nodes,
