@@ -394,6 +394,119 @@ def _extract_time_series(df: pd.DataFrame) -> Optional[pd.Series]:
     return None
 
 
+def _find_column(columns: Sequence[str], candidates: Sequence[str]) -> Optional[str]:
+    for candidate in candidates:
+        if candidate in columns:
+            return candidate
+    return None
+
+
+def _load_nodes_df(root: Path, method: str, scenario: str) -> Optional[pd.DataFrame]:
+    path = root / method / scenario / "nodes.csv"
+    if not path.is_file():
+        return None
+    return pd.read_csv(path)
+
+
+def _load_packets_df(root: Path, method: str, scenario: str) -> Optional[pd.DataFrame]:
+    path = root / method / scenario / "packets.csv"
+    if not path.is_file():
+        return None
+    return pd.read_csv(path)
+
+
+def _extract_node_count(nodes_df: Optional[pd.DataFrame]) -> Optional[int]:
+    if nodes_df is None or nodes_df.empty:
+        return None
+    node_column = _find_column(
+        list(nodes_df.columns),
+        ["node_id", "device", "device_id", "end_device", "devaddr"],
+    )
+    if node_column is None:
+        return int(len(nodes_df.index))
+    return int(nodes_df[node_column].nunique())
+
+
+def _extract_mean_sf(nodes_df: Optional[pd.DataFrame]) -> Optional[float]:
+    if nodes_df is None or nodes_df.empty:
+        return None
+    sf_column = _find_column(
+        list(nodes_df.columns),
+        ["sf", "spreading_factor", "SF", "assigned_sf"],
+    )
+    if sf_column is None:
+        return None
+    sf_values = pd.to_numeric(nodes_df[sf_column], errors="coerce").dropna()
+    if sf_values.empty:
+        return None
+    return float(sf_values.mean())
+
+
+def _scenario_nodes_from_config(
+    scenarios_cfg: Optional[Mapping[str, Mapping[str, object]]],
+    scenario: str,
+) -> Optional[int]:
+    if scenarios_cfg is None:
+        return None
+    scenario_cfg = scenarios_cfg.get(scenario)
+    if not isinstance(scenario_cfg, Mapping):
+        return None
+    for key in ["N", "n", "nodes", "node_count", "nb_nodes"]:
+        if key not in scenario_cfg:
+            continue
+        try:
+            return int(float(scenario_cfg[key]))
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _scenario_nodes_from_name(scenario: str) -> Optional[int]:
+    match = re.search(r"N(\d+)", scenario)
+    if match:
+        try:
+            return int(match.group(1))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _scenario_node_counts(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    metrics_root: Path,
+    scenarios_cfg: Optional[Mapping[str, Mapping[str, object]]],
+) -> Dict[str, Optional[int]]:
+    counts: Dict[str, Optional[int]] = {}
+    methods = sorted(metrics_by_method.keys())
+    for scenario in scenarios:
+        count = _scenario_nodes_from_config(scenarios_cfg, scenario)
+        if count is None:
+            for method in methods:
+                nodes_df = _load_nodes_df(metrics_root, method, scenario)
+                count = _extract_node_count(nodes_df)
+                if count is not None:
+                    break
+        if count is None:
+            count = _scenario_nodes_from_name(scenario)
+        counts[scenario] = count
+    return counts
+
+
+def _ordered_scenarios_by_nodes(
+    scenarios: Sequence[str],
+    node_counts: Mapping[str, Optional[int]],
+) -> List[str]:
+    sortable: List[Tuple[int, str]] = []
+    for scenario in scenarios:
+        count = node_counts.get(scenario)
+        if count is None:
+            continue
+        sortable.append((count, scenario))
+    sortable.sort(key=lambda item: (item[0], item[1]))
+    return [scenario for _, scenario in sortable]
+
+
 def build_method_mapping(
     metrics: Mapping[Tuple[str, str], MethodScenarioMetrics]
 ) -> Dict[str, Dict[str, MethodScenarioMetrics]]:
@@ -505,6 +618,366 @@ def plot_cluster_pdr(
     fig.tight_layout()
 
     output_path = out_dir / "pdr_clusters_vs_scenarios.png"
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
+
+
+def plot_pdr_vs_nodes(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    node_counts: Mapping[str, Optional[int]],
+    out_dir: Path,
+) -> Optional[Path]:
+    if not scenarios or not metrics_by_method:
+        return None
+    ordered = _ordered_scenarios_by_nodes(scenarios, node_counts)
+    if not ordered:
+        return None
+    x_values = [node_counts[scenario] for scenario in ordered]
+    fig, ax = plt.subplots(figsize=(7.0, 4.5))
+    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
+    plotted = False
+
+    for method in sorted(metrics_by_method.keys()):
+        values: List[float] = []
+        for scenario in ordered:
+            metric = metrics_by_method.get(method, {}).get(scenario)
+            value = metric.pdr_global if metric else None
+            values.append(float(value) if value is not None else float("nan"))
+        if not values or _all_nan(values):
+            continue
+        color, marker = method_styles[method]
+        ax.plot(x_values, values, marker=marker, color=color, label=method)
+        plotted = True
+
+    ax.set_xlabel("Nombre de nœuds")
+    ax.set_ylabel("PDR global")
+    ax.set_ylim(0.0, 1.0)
+    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+    if plotted:
+        ax.legend(loc="best")
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "PDR indisponible",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+    fig.tight_layout()
+
+    output_path = out_dir / "pdr_global_vs_nodes.png"
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
+
+
+def plot_der_vs_nodes(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    node_counts: Mapping[str, Optional[int]],
+    out_dir: Path,
+) -> Optional[Path]:
+    if not scenarios or not metrics_by_method:
+        return None
+    ordered = _ordered_scenarios_by_nodes(scenarios, node_counts)
+    if not ordered:
+        return None
+    x_values = [node_counts[scenario] for scenario in ordered]
+    fig, ax = plt.subplots(figsize=(7.0, 4.5))
+    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
+    plotted = False
+
+    for method in sorted(metrics_by_method.keys()):
+        values: List[float] = []
+        for scenario in ordered:
+            metric = metrics_by_method.get(method, {}).get(scenario)
+            value = metric.der_global if metric else None
+            values.append(float(value) if value is not None else float("nan"))
+        if not values or _all_nan(values):
+            continue
+        color, marker = method_styles[method]
+        ax.plot(x_values, values, marker=marker, color=color, label=method)
+        plotted = True
+
+    ax.set_xlabel("Nombre de nœuds")
+    ax.set_ylabel("DER global")
+    ax.set_ylim(0.0, 1.0)
+    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+    if plotted:
+        ax.legend(loc="best")
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "DER indisponible",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+    fig.tight_layout()
+
+    output_path = out_dir / "der_global_vs_nodes.png"
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
+
+
+def plot_cluster_pdr_vs_nodes(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    node_counts: Mapping[str, Optional[int]],
+    out_dir: Path,
+) -> Optional[Path]:
+    if not scenarios or not metrics_by_method:
+        return None
+    ordered = _ordered_scenarios_by_nodes(scenarios, node_counts)
+    if not ordered:
+        return None
+
+    methods = sorted(metrics_by_method.keys())
+    fig, axes = plt.subplots(
+        nrows=len(methods),
+        ncols=1,
+        sharex=True,
+        figsize=(7.0, max(3.5, 2.5 * len(methods))),
+    )
+    if len(methods) == 1:
+        axes = [axes]  # type: ignore[assignment]
+
+    x_values = [node_counts[scenario] for scenario in ordered]
+    method_styles = _style_mapping(methods)
+
+    for ax, method in zip(axes, methods):
+        method_metrics = metrics_by_method.get(method, {})
+        clusters = sorted(
+            {
+                cluster
+                for metric in method_metrics.values()
+                for cluster in metric.cluster_pdr.keys()
+            }
+        )
+        cluster_styles = _style_mapping(clusters)
+        if not clusters:
+            ax.text(
+                0.5,
+                0.5,
+                "No cluster PDR data",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+            ax.set_ylabel("PDR")
+            ax.set_ylim(0.0, 1.0)
+            continue
+        for cluster in clusters:
+            values: List[float] = []
+            for scenario in ordered:
+                metric = method_metrics.get(scenario)
+                values.append(metric.cluster_pdr.get(cluster, float("nan")) if metric else float("nan"))
+            if _all_nan(values):
+                continue
+            color, marker = cluster_styles[str(cluster)]
+            ax.plot(
+                x_values,
+                values,
+                marker=marker,
+                color=color,
+                label=str(cluster),
+            )
+        ax.set_ylabel("PDR")
+        ax.set_ylim(0.0, 1.0)
+        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(loc="best", fontsize="small")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "Clusters unavailable",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+    for ax, method in zip(axes, methods):
+        color, _ = method_styles[method]
+        ax.spines["left"].set_color(color)
+        ax.spines["left"].set_linewidth(1.2)
+
+    axes[-1].set_xlabel("Nombre de nœuds")
+    fig.tight_layout()
+
+    output_path = out_dir / "pdr_clusters_vs_nodes.png"
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
+
+
+def plot_snir_mean_vs_nodes_by_sf(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    node_counts: Mapping[str, Optional[int]],
+    out_dir: Path,
+) -> Optional[Path]:
+    if not scenarios or not metrics_by_method:
+        return None
+    ordered = _ordered_scenarios_by_nodes(scenarios, node_counts)
+    if not ordered:
+        return None
+
+    methods = sorted(metrics_by_method.keys())
+    fig, axes = plt.subplots(
+        nrows=len(methods),
+        ncols=1,
+        sharex=True,
+        figsize=(7.0, max(3.5, 2.5 * len(methods))),
+    )
+    if len(methods) == 1:
+        axes = [axes]  # type: ignore[assignment]
+
+    x_values = [node_counts[scenario] for scenario in ordered]
+    method_styles = _style_mapping(methods)
+
+    for ax, method in zip(axes, methods):
+        method_metrics = metrics_by_method.get(method, {})
+        sfs = sorted(
+            {
+                sf
+                for metric in method_metrics.values()
+                for sf in metric.snir_mean_by_sf.keys()
+            },
+            key=lambda value: float(value) if str(value).replace(".", "").isdigit() else str(value),
+        )
+        sf_styles = _style_mapping(sfs)
+        if not sfs:
+            ax.text(
+                0.5,
+                0.5,
+                "No SNIR/SF data",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+            ax.set_ylabel("SNIR (dB)")
+            continue
+        for sf in sfs:
+            values: List[float] = []
+            for scenario in ordered:
+                metric = method_metrics.get(scenario)
+                value = None
+                if metric:
+                    value = metric.snir_mean_by_sf.get(sf, {}).get("mean")
+                values.append(float(value) if value is not None else float("nan"))
+            if _all_nan(values):
+                continue
+            color, marker = sf_styles[str(sf)]
+            ax.plot(
+                x_values,
+                values,
+                marker=marker,
+                color=color,
+                label=f"SF {sf}",
+            )
+        ax.set_ylabel("SNIR moyen (dB)")
+        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(loc="best", fontsize="small")
+    for ax, method in zip(axes, methods):
+        color, _ = method_styles[method]
+        ax.spines["left"].set_color(color)
+        ax.spines["left"].set_linewidth(1.2)
+
+    axes[-1].set_xlabel("Nombre de nœuds")
+    fig.tight_layout()
+
+    output_path = out_dir / "snir_mean_by_sf_vs_nodes.png"
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
+
+
+def plot_snir_mean_vs_nodes_by_cluster(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    node_counts: Mapping[str, Optional[int]],
+    out_dir: Path,
+) -> Optional[Path]:
+    if not scenarios or not metrics_by_method:
+        return None
+    ordered = _ordered_scenarios_by_nodes(scenarios, node_counts)
+    if not ordered:
+        return None
+
+    methods = sorted(metrics_by_method.keys())
+    fig, axes = plt.subplots(
+        nrows=len(methods),
+        ncols=1,
+        sharex=True,
+        figsize=(7.0, max(3.5, 2.5 * len(methods))),
+    )
+    if len(methods) == 1:
+        axes = [axes]  # type: ignore[assignment]
+
+    x_values = [node_counts[scenario] for scenario in ordered]
+    method_styles = _style_mapping(methods)
+
+    for ax, method in zip(axes, methods):
+        method_metrics = metrics_by_method.get(method, {})
+        clusters = sorted(
+            {
+                cluster
+                for metric in method_metrics.values()
+                for cluster in metric.snir_mean_by_cluster.keys()
+            }
+        )
+        cluster_styles = _style_mapping(clusters)
+        if not clusters:
+            ax.text(
+                0.5,
+                0.5,
+                "No SNIR/cluster data",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+            ax.set_ylabel("SNIR (dB)")
+            continue
+        for cluster in clusters:
+            values: List[float] = []
+            for scenario in ordered:
+                metric = method_metrics.get(scenario)
+                value = None
+                if metric:
+                    value = metric.snir_mean_by_cluster.get(cluster)
+                values.append(float(value) if value is not None else float("nan"))
+            if _all_nan(values):
+                continue
+            color, marker = cluster_styles[str(cluster)]
+            ax.plot(
+                x_values,
+                values,
+                marker=marker,
+                color=color,
+                label=str(cluster),
+            )
+        ax.set_ylabel("SNIR moyen (dB)")
+        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(loc="best", fontsize="small")
+    for ax, method in zip(axes, methods):
+        color, _ = method_styles[method]
+        ax.spines["left"].set_color(color)
+        ax.spines["left"].set_linewidth(1.2)
+
+    axes[-1].set_xlabel("Nombre de nœuds")
+    fig.tight_layout()
+
+    output_path = out_dir / "snir_mean_by_cluster_vs_nodes.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
     return output_path
@@ -1059,6 +1532,412 @@ def plot_snir_cdf(
     return saved_paths
 
 
+def _compute_pdr_by_snir_bins(
+    df: Optional[pd.DataFrame],
+    *,
+    bin_width: float = 1.0,
+    cluster_value: Optional[str] = None,
+) -> List[Tuple[float, float]]:
+    if df is None or df.empty:
+        return []
+    filtered = df
+    if cluster_value is not None:
+        cluster_column = _find_column(
+            list(df.columns),
+            ["cluster", "cluster_id", "clusterId", "ring", "qos_cluster"],
+        )
+        if cluster_column is None:
+            return []
+        filtered = df[df[cluster_column].astype(str) == str(cluster_value)]
+        if filtered.empty:
+            return []
+    snir_series = _extract_snir_series(filtered)
+    success_series = _extract_success_series(filtered)
+    if snir_series is None or success_series is None:
+        return []
+    series = pd.DataFrame({"snir": snir_series, "success": success_series}).dropna()
+    if series.empty:
+        return []
+    values = series["snir"].to_list()
+    minimum = math.floor(min(values))
+    maximum = math.ceil(max(values))
+    if minimum == maximum:
+        pdr_value = float(series["success"].mean())
+        return [(float(minimum), pdr_value)]
+    bin_edges = [minimum + i * bin_width for i in range(int((maximum - minimum) / bin_width) + 1)]
+    bin_edges.append(maximum)
+    totals = [0 for _ in range(len(bin_edges) - 1)]
+    successes = [0.0 for _ in range(len(bin_edges) - 1)]
+    for snir_value, success_value in series[["snir", "success"]].itertuples(index=False):
+        index = min(int((snir_value - minimum) / bin_width), len(totals) - 1)
+        totals[index] += 1
+        successes[index] += float(success_value)
+    result: List[Tuple[float, float]] = []
+    for idx, total in enumerate(totals):
+        if total <= 0:
+            continue
+        center = (bin_edges[idx] + bin_edges[idx + 1]) / 2.0
+        result.append((float(center), float(successes[idx] / total)))
+    return result
+
+
+def plot_pdr_vs_snir_by_method(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    out_dir: Path,
+) -> List[Path]:
+    saved: List[Path] = []
+    if not scenarios or not metrics_by_method:
+        return saved
+
+    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
+
+    for scenario in scenarios:
+        fig, ax = plt.subplots(figsize=(6.5, 4.5))
+        plotted = False
+        for method in sorted(metrics_by_method.keys()):
+            metric = metrics_by_method[method].get(scenario)
+            if metric is None or not metric.pdr_by_snir_bin:
+                continue
+            xs, ys = zip(*sorted(metric.pdr_by_snir_bin))
+            color, marker = method_styles[method]
+            ax.plot(xs, ys, label=method, color=color, marker=marker)
+            plotted = True
+        ax.set_xlabel("SNIR (dB)")
+        ax.set_ylabel("PDR")
+        ax.set_ylim(0.0, 1.0)
+        ax.grid(True, linestyle="--", alpha=0.4)
+        ax.set_title(f"PDR vs SNIR – {scenario}")
+        if plotted:
+            ax.legend(loc="best")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "PDR vs SNIR indisponible",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+        fig.tight_layout()
+
+        filename = f"pdr_vs_snir_{sanitize_filename(scenario)}.png"
+        output_path = out_dir / filename
+        fig.savefig(output_path, dpi=150)
+        plt.close(fig)
+        saved.append(output_path)
+    return saved
+
+
+def plot_pdr_vs_snir_by_cluster(
+    metrics_root: Path,
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    out_dir: Path,
+) -> List[Path]:
+    saved: List[Path] = []
+    if not scenarios or not metrics_by_method:
+        return saved
+
+    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
+
+    for scenario in scenarios:
+        data_per_method: Dict[str, pd.DataFrame] = {}
+        clusters: List[str] = []
+        for method in sorted(metrics_by_method.keys()):
+            df = _load_packets_df(metrics_root, method, scenario)
+            if df is None or df.empty:
+                continue
+            data_per_method[method] = df
+            cluster_column = _find_column(
+                list(df.columns),
+                ["cluster", "cluster_id", "clusterId", "ring", "qos_cluster"],
+            )
+            if cluster_column is None:
+                continue
+            cluster_values = (
+                df[cluster_column]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+            clusters.extend(cluster_values)
+
+        unique_clusters = sorted({cluster for cluster in clusters})
+        for cluster in unique_clusters:
+            fig, ax = plt.subplots(figsize=(6.5, 4.5))
+            plotted = False
+            for method, df in data_per_method.items():
+                bins = _compute_pdr_by_snir_bins(df, cluster_value=cluster)
+                if not bins:
+                    continue
+                xs, ys = zip(*sorted(bins))
+                color, marker = method_styles[method]
+                ax.plot(xs, ys, label=method, color=color, marker=marker)
+                plotted = True
+            ax.set_xlabel("SNIR (dB)")
+            ax.set_ylabel("PDR")
+            ax.set_ylim(0.0, 1.0)
+            ax.grid(True, linestyle="--", alpha=0.4)
+            ax.set_title(f"PDR vs SNIR – {scenario} (cluster {cluster})")
+            if plotted:
+                ax.legend(loc="best")
+            else:
+                ax.text(
+                    0.5,
+                    0.5,
+                    "PDR vs SNIR indisponible",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                )
+            fig.tight_layout()
+
+            filename = f"pdr_vs_snir_{sanitize_filename(scenario)}_cluster_{sanitize_filename(cluster)}.png"
+            output_path = out_dir / filename
+            fig.savefig(output_path, dpi=150)
+            plt.close(fig)
+            saved.append(output_path)
+    return saved
+
+
+def plot_collision_rates_vs_nodes(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    node_counts: Mapping[str, Optional[int]],
+    out_dir: Path,
+) -> Optional[Path]:
+    if not scenarios or not metrics_by_method:
+        return None
+    ordered = _ordered_scenarios_by_nodes(scenarios, node_counts)
+    if not ordered:
+        return None
+
+    x_values = [node_counts[scenario] for scenario in ordered]
+    fig, ax = plt.subplots(figsize=(7.0, 4.5))
+    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
+    plotted = False
+
+    for method in sorted(metrics_by_method.keys()):
+        destructive_values: List[float] = []
+        captured_values: List[float] = []
+        for scenario in ordered:
+            metric = metrics_by_method.get(method, {}).get(scenario)
+            if metric is None or metric.attempted <= 0:
+                destructive_values.append(float("nan"))
+                captured_values.append(float("nan"))
+                continue
+            destructive = metric.collision_destructive
+            captured = metric.collision_captured
+            destructive_values.append(
+                float(destructive) / metric.attempted if destructive is not None else float("nan")
+            )
+            captured_values.append(
+                float(captured) / metric.attempted if captured is not None else float("nan")
+            )
+        color, marker = method_styles[method]
+        if not _all_nan(destructive_values):
+            ax.plot(
+                x_values,
+                destructive_values,
+                marker=marker,
+                color=color,
+                linestyle="-",
+                label=f"{method} (destructive)",
+            )
+            plotted = True
+        if not _all_nan(captured_values):
+            ax.plot(
+                x_values,
+                captured_values,
+                marker=marker,
+                color=color,
+                linestyle="--",
+                label=f"{method} (capture)",
+            )
+            plotted = True
+
+    ax.set_xlabel("Nombre de nœuds")
+    ax.set_ylabel("Taux de collisions")
+    ax.set_ylim(0.0, 1.0)
+    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+    if plotted:
+        ax.legend(loc="best", fontsize="small")
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "Taux de collisions indisponible",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+    fig.tight_layout()
+
+    output_path = out_dir / "collision_rates_vs_nodes.png"
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
+
+
+def plot_energy_vs_qos(
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    node_counts: Mapping[str, Optional[int]],
+    out_dir: Path,
+) -> List[Path]:
+    saved: List[Path] = []
+    if not scenarios or not metrics_by_method:
+        return saved
+
+    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
+
+    def _plot(y_attr: str, ylabel: str, filename: str) -> Optional[Path]:
+        fig, ax = plt.subplots(figsize=(6.5, 4.5))
+        plotted = False
+        for method in sorted(metrics_by_method.keys()):
+            xs: List[float] = []
+            ys: List[float] = []
+            for scenario in scenarios:
+                metric = metrics_by_method.get(method, {}).get(scenario)
+                node_count = node_counts.get(scenario)
+                if metric is None or node_count is None or node_count <= 0:
+                    continue
+                if metric.energy_j is None:
+                    continue
+                energy_per_node = metric.energy_j / node_count
+                y_value = getattr(metric, y_attr, None)
+                if y_value is None:
+                    continue
+                xs.append(float(energy_per_node))
+                ys.append(float(y_value))
+            if not xs or not ys:
+                continue
+            color, marker = method_styles[method]
+            ax.plot(xs, ys, marker=marker, color=color, linestyle="", label=method)
+            plotted = True
+        ax.set_xlabel("Énergie moyenne par nœud (J)")
+        ax.set_ylabel(ylabel)
+        if y_attr in {"pdr_global"}:
+            ax.set_ylim(0.0, 1.0)
+        ax.grid(True, linestyle="--", alpha=0.4)
+        if plotted:
+            ax.legend(loc="best")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "Données énergie/QoS indisponibles",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+        fig.tight_layout()
+        output_path = out_dir / filename
+        fig.savefig(output_path, dpi=150)
+        plt.close(fig)
+        return output_path
+
+    output = _plot("pdr_global", "PDR global", "energy_per_node_vs_pdr.png")
+    if output:
+        saved.append(output)
+    output = _plot("snir_mean", "SNIR moyen (dB)", "energy_per_node_vs_snir.png")
+    if output:
+        saved.append(output)
+    return saved
+
+
+def plot_effective_sf_vs_distance(
+    metrics_root: Path,
+    metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
+    scenarios: Sequence[str],
+    out_dir: Path,
+) -> Optional[Path]:
+    if not scenarios or not metrics_by_method:
+        return None
+
+    distances: Dict[str, float] = {}
+    for scenario in scenarios:
+        distance_value = None
+        for method in sorted(metrics_by_method.keys()):
+            metric = metrics_by_method.get(method, {}).get(scenario)
+            if metric and metric.distance_to_gw is not None:
+                distance_value = float(metric.distance_to_gw)
+                break
+        if distance_value is not None:
+            distances[scenario] = distance_value
+
+    if not distances:
+        return None
+
+    category_values: Dict[str, Dict[str, List[float]]] = {
+        "ADR": {},
+        "SNIR-aware": {},
+    }
+
+    for method in sorted(metrics_by_method.keys()):
+        for scenario in scenarios:
+            metric = metrics_by_method.get(method, {}).get(scenario)
+            if metric is None:
+                continue
+            nodes_df = _load_nodes_df(metrics_root, method, scenario)
+            mean_sf = _extract_mean_sf(nodes_df)
+            if mean_sf is None:
+                continue
+            category: Optional[str] = None
+            if "adr" in method.lower():
+                category = "ADR"
+            elif _metric_snir_state(metric) == "snir_on":
+                category = "SNIR-aware"
+            if category is None:
+                continue
+            category_values.setdefault(category, {})
+            category_values[category].setdefault(scenario, []).append(mean_sf)
+
+    fig, ax = plt.subplots(figsize=(6.5, 4.5))
+    plotted = False
+    category_styles = {
+        "ADR": (COLORS[0], "o"),
+        "SNIR-aware": (COLORS[3], "s"),
+    }
+
+    for category, scenario_values in category_values.items():
+        points: List[Tuple[float, float]] = []
+        for scenario, values in scenario_values.items():
+            if scenario not in distances or not values:
+                continue
+            points.append((distances[scenario], float(np.mean(values))))
+        if not points:
+            continue
+        points.sort(key=lambda item: item[0])
+        xs, ys = zip(*points)
+        color, marker = category_styles.get(category, (COLORS[0], "o"))
+        ax.plot(xs, ys, marker=marker, color=color, label=category)
+        plotted = True
+
+    ax.set_xlabel("Distance moyenne au GW (m)")
+    ax.set_ylabel("SF effectif moyen")
+    ax.grid(True, linestyle="--", alpha=0.4)
+    if plotted:
+        ax.legend(loc="best")
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "SF effectif indisponible",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+    fig.tight_layout()
+
+    output_path = out_dir / "effective_sf_vs_distance.png"
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
+
+
 def _plot_rolling_metric_for_scenario(
     metric: str,
     data_per_method: Mapping[str, pd.DataFrame],
@@ -1184,6 +2063,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     scenarios = ordered_scenarios(all_metrics, scenarios_cfg)
     if not scenarios:
         scenarios = sorted({scenario for _, scenario in all_metrics.keys()})
+    node_counts = _scenario_node_counts(metrics_by_method, scenarios, metrics_root, scenarios_cfg)
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1204,6 +2084,16 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     plot_jain_index_snir(metrics_by_method, scenarios, out_dir)
     plot_min_sf_share(metrics_by_method, scenarios, out_dir)
     plot_snir_cdf(metrics_by_method, scenarios, out_dir)
+    plot_pdr_vs_nodes(metrics_by_method, scenarios, node_counts, out_dir)
+    plot_der_vs_nodes(metrics_by_method, scenarios, node_counts, out_dir)
+    plot_cluster_pdr_vs_nodes(metrics_by_method, scenarios, node_counts, out_dir)
+    plot_snir_mean_vs_nodes_by_sf(metrics_by_method, scenarios, node_counts, out_dir)
+    plot_snir_mean_vs_nodes_by_cluster(metrics_by_method, scenarios, node_counts, out_dir)
+    plot_pdr_vs_snir_by_method(metrics_by_method, scenarios, out_dir)
+    plot_pdr_vs_snir_by_cluster(metrics_root, metrics_by_method, scenarios, out_dir)
+    plot_effective_sf_vs_distance(metrics_root, metrics_by_method, scenarios, out_dir)
+    plot_collision_rates_vs_nodes(metrics_by_method, scenarios, node_counts, out_dir)
+    plot_energy_vs_qos(metrics_by_method, scenarios, node_counts, out_dir)
     plot_rolling_qos(
         metrics_by_method,
         metrics_root,
