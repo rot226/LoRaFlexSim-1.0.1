@@ -54,6 +54,7 @@ CLUSTER_PROPORTIONS = [0.1, 0.3, 0.6]
 CLUSTER_TARGETS = [0.9, 0.8, 0.7]
 PACKET_INTERVALS = [300.0, 600.0, 900.0]
 RESULTS_PATH = ROOT / "experiments" / "ucb1" / "ucb1_load_metrics.csv"
+DECISION_LOG_PATH = ROOT / "experiments" / "ucb1" / "ucb1_decision_log.csv"
 DEFAULT_NODE_COUNT = 5000
 
 
@@ -82,6 +83,45 @@ def _assign_clusters(sim: Simulator) -> dict[int, int]:
     return assignments
 
 
+def _safe_float(value: object | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(parsed):
+        return None
+    return parsed
+
+
+def _event_reward(event: dict, *, node, sim: Simulator) -> float:
+    success = event.get("result") == "Success"
+    selector = getattr(node, "sf_selector", None) if node else None
+    if selector is None:
+        return 1.0 if success else 0.0
+
+    snir_db = _safe_float(event.get("snir_dB"))
+    airtime = float(event.get("end_time", 0.0) or 0.0) - float(event.get("start_time", 0.0) or 0.0)
+    expected_der = None
+    qos_config = getattr(sim, "qos_clusters_config", {}) or {}
+    qos_cluster_id = getattr(node, "qos_cluster_id", None) if node else None
+    if qos_cluster_id is not None:
+        expected_der = qos_config.get(qos_cluster_id, {}).get("pdr_target")
+
+    return selector.reward_from_outcome(
+        success,
+        snir_db=snir_db,
+        snir_threshold_db=None,
+        marginal_snir_margin_db=getattr(node.channel, "marginal_snir_margin_db", None) if node else None,
+        airtime_s=airtime,
+        energy_j=event.get("energy_J"),
+        collision=event.get("result") != "Success" and event.get("heard"),
+        expected_der=expected_der,
+        local_der=getattr(node, "pdr", None) if node else None,
+    )
+
+
 def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> list[ClusterMetrics]:
     metrics = sim.get_metrics()
     rows: list[ClusterMetrics] = []
@@ -89,37 +129,6 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
     packet_interval = float(getattr(sim, "packet_interval", 0.0) or 0.0)
     packets_to_send = int(getattr(sim, "packets_to_send", 0) or 0)
     node_map = {node.id: node for node in sim.nodes}
-
-    def _event_reward(event: dict) -> float | None:
-        node = node_map.get(event.get("node_id"))
-        selector = getattr(node, "sf_selector", None) if node else None
-        if selector is None:
-            return None
-
-        success = event.get("result") == "Success"
-        snir_db = event.get("snir_dB")
-        try:
-            snir_db = None if snir_db is None or math.isnan(float(snir_db)) else float(snir_db)
-        except (TypeError, ValueError):
-            snir_db = None
-        airtime = float(event.get("end_time", 0.0) or 0.0) - float(event.get("start_time", 0.0) or 0.0)
-        expected_der = None
-        qos_config = getattr(sim, "qos_clusters_config", {}) or {}
-        qos_cluster_id = getattr(node, "qos_cluster_id", None) if node else None
-        if qos_cluster_id is not None:
-            expected_der = qos_config.get(qos_cluster_id, {}).get("pdr_target")
-
-        return selector.reward_from_outcome(
-            success,
-            snir_db=snir_db,
-            snir_threshold_db=None,
-            marginal_snir_margin_db=getattr(node.channel, "marginal_snir_margin_db", None) if node else None,
-            airtime_s=airtime,
-            energy_j=event.get("energy_J"),
-            collision=event.get("result") != "Success" and event.get("heard"),
-            expected_der=expected_der,
-            local_der=getattr(node, "pdr", None) if node else None,
-        )
 
     def _bandit_reward_stats(nodes: list) -> tuple[float, float]:
         reward_means: list[float] = []
@@ -202,7 +211,9 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
             ]
             energy_window_mean = sum(energy_values) / len(energy_values) if energy_values else 0.0
 
-            reward_window_values = [val for val in (_event_reward(ev) for ev in window_events) if val is not None]
+            reward_window_values = [
+                _event_reward(ev, node=node_map.get(ev.get("node_id")), sim=sim) for ev in window_events
+            ]
             reward_window_mean = (
                 sum(reward_window_values) / len(reward_window_values)
                 if reward_window_values
@@ -251,6 +262,67 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
     return rows
 
 
+def _collect_decision_log(
+    sim: Simulator, assignments: dict[int, int], packet_interval: float
+) -> list[dict[str, object]]:
+    events = list(getattr(sim, "events_log", []) or [])
+    node_map = {node.id: node for node in sim.nodes}
+    payload_bits = float(getattr(sim, "payload_size_bytes", 0.0) or 0.0) * 8.0
+    decision_idx = 0
+    per_node_attempts: dict[int, int] = {}
+    per_cluster_attempts: dict[int, int] = {}
+    per_cluster_delivered: dict[int, int] = {}
+    rows: list[dict[str, object]] = []
+
+    def _event_key(ev: dict) -> tuple[float, int]:
+        return (float(ev.get("start_time", 0.0) or 0.0), int(ev.get("event_id", 0) or 0))
+
+    for event in sorted(events, key=_event_key):
+        node_id = event.get("node_id")
+        if node_id is None:
+            continue
+        cluster_id = assignments.get(node_id)
+        if cluster_id is None:
+            continue
+        node = node_map.get(node_id)
+        per_node_attempts[node_id] = per_node_attempts.get(node_id, 0) + 1
+        per_cluster_attempts[cluster_id] = per_cluster_attempts.get(cluster_id, 0) + 1
+        success = event.get("result") == "Success"
+        if success:
+            per_cluster_delivered[cluster_id] = per_cluster_delivered.get(cluster_id, 0) + 1
+
+        airtime = float(event.get("end_time", 0.0) or 0.0) - float(event.get("start_time", 0.0) or 0.0)
+        throughput = payload_bits / airtime if success and airtime > 0 else 0.0
+        pdr = (
+            per_cluster_delivered.get(cluster_id, 0) / per_cluster_attempts[cluster_id]
+            if per_cluster_attempts.get(cluster_id)
+            else 0.0
+        )
+        reward = _event_reward(event, node=node, sim=sim)
+        policy = "ml" if getattr(node, "learning_method", None) == "ucb1" else "heuristic"
+
+        rows.append(
+            {
+                "episode_idx": per_node_attempts[node_id],
+                "decision_idx": decision_idx,
+                "time_s": float(event.get("start_time", 0.0) or 0.0),
+                "reward": reward,
+                "pdr": pdr,
+                "throughput": throughput,
+                "snir_db": _safe_float(event.get("snir_dB")),
+                "sf": int(event.get("sf") or getattr(node, "sf", 0)),
+                "tx_power": float(getattr(node, "tx_power", 0.0) or 0.0),
+                "policy": policy,
+                "cluster": cluster_id,
+                "num_nodes": len(sim.nodes),
+                "packet_interval_s": packet_interval,
+                "energy_j": _safe_float(event.get("energy_J")) or 0.0,
+            }
+        )
+        decision_idx += 1
+    return rows
+
+
 def run_load_sweep(
     intervals: Iterable[float] = PACKET_INTERVALS,
     *,
@@ -258,8 +330,10 @@ def run_load_sweep(
     packets_per_node: int = 5,
     seed: int = 1,
     output_path: Path = RESULTS_PATH,
+    decision_log_path: Path = DECISION_LOG_PATH,
 ) -> None:
     rows: list[ClusterMetrics] = []
+    decision_rows: list[dict[str, object]] = []
     for index, packet_interval in enumerate(intervals):
         sim = Simulator(
             num_nodes=num_nodes,
@@ -276,6 +350,7 @@ def run_load_sweep(
         assignments = _assign_clusters(sim)
         sim.run()
         rows.extend(_collect_cluster_metrics(sim, assignments))
+        decision_rows.extend(_collect_decision_log(sim, assignments, packet_interval))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf8") as handle:
@@ -337,6 +412,48 @@ def run_load_sweep(
                     f"{entry.emission_ratio:.6f}",
                 ]
             )
+
+    if decision_rows:
+        decision_log_path.parent.mkdir(parents=True, exist_ok=True)
+        with decision_log_path.open("w", newline="", encoding="utf8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(
+                [
+                    "episode_idx",
+                    "decision_idx",
+                    "time_s",
+                    "reward",
+                    "pdr",
+                    "throughput",
+                    "snir_db",
+                    "sf",
+                    "tx_power",
+                    "policy",
+                    "cluster",
+                    "num_nodes",
+                    "packet_interval_s",
+                    "energy_j",
+                ]
+            )
+            for row in decision_rows:
+                writer.writerow(
+                    [
+                        row["episode_idx"],
+                        row["decision_idx"],
+                        f"{row['time_s']:.6f}",
+                        f"{row['reward']:.6f}",
+                        f"{row['pdr']:.6f}",
+                        f"{row['throughput']:.6f}",
+                        "" if row["snir_db"] is None else f"{row['snir_db']:.6f}",
+                        row["sf"],
+                        f"{row['tx_power']:.3f}",
+                        row["policy"],
+                        row["cluster"],
+                        row["num_nodes"],
+                        f"{row['packet_interval_s']:.6f}",
+                        f"{row['energy_j']:.6f}",
+                    ]
+                )
 
 
 if __name__ == "__main__":
