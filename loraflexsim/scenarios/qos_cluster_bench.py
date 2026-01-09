@@ -238,6 +238,7 @@ def _create_simulator(
     seed: int,
     *,
     use_snir: bool = True,
+    pure_poisson_mode: bool = False,
     channel_config: str | Path | None = None,
     channel_overrides: Mapping[str, object] | None = None,
 ) -> Simulator:
@@ -260,7 +261,7 @@ def _create_simulator(
         seed=seed,
         capture_mode="advanced",
         phy_model="omnet",
-        pure_poisson_mode=True,
+        pure_poisson_mode=pure_poisson_mode,
         channel_config=channel_config,
         snir_fading_std=None,
         noise_floor_std=None,

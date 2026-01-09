@@ -676,6 +676,31 @@ class Simulator:
                 min_interference_time = 5.0
             if self.first_packet_min_delay == 0.0:
                 self.first_packet_min_delay = 5.0
+        if not pure_poisson_mode:
+            if detection_threshold_dBm == -float("inf"):
+                sensitivity_candidates: list[float] = []
+                for ch in provided_channels:
+                    sensitivity = getattr(ch, "sensitivity_dBm", None)
+                    if isinstance(sensitivity, dict):
+                        sensitivity_candidates.extend(sensitivity.values())
+                detection_threshold_dBm = (
+                    min(sensitivity_candidates)
+                    if sensitivity_candidates
+                    else Channel.flora_energy_threshold(125000.0)
+                )
+            if energy_detection_dBm == -float("inf"):
+                floors = [
+                    ch.energy_detection_dBm
+                    for ch in provided_channels
+                    if ch.energy_detection_dBm != -float("inf")
+                ]
+                energy_detection_dBm = (
+                    min(floors)
+                    if floors
+                    else Channel.FLORA_ENERGY_DETECTION_DBM
+                )
+            if min_interference_time == float("inf"):
+                min_interference_time = 0.0
         if pure_poisson_mode:
             duty_cycle = None
             detection_threshold_dBm = -float("inf")

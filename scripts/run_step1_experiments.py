@@ -133,6 +133,19 @@ def _build_parser() -> argparse.ArgumentParser:
         default="auto",
         help="Solveur utilisé pour MixRA-Opt",
     )
+    poisson_group = parser.add_mutually_exclusive_group()
+    poisson_group.add_argument(
+        "--pure-poisson",
+        action="store_true",
+        dest="pure_poisson",
+        help="Active le mode Poisson pur (par défaut : désactivé)",
+    )
+    poisson_group.add_argument(
+        "--no-pure-poisson",
+        action="store_false",
+        dest="pure_poisson",
+        help="Désactive le mode Poisson pur (par défaut)",
+    )
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -140,6 +153,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Répertoire de sortie pour les fichiers CSV",
     )
     parser.add_argument("--quiet", action="store_true", help="Réduit les impressions de progression")
+    parser.set_defaults(pure_poisson=False)
     return parser
 
 
@@ -149,6 +163,7 @@ def _instantiate_simulator(
     seed: int,
     use_snir: bool,
     *,
+    pure_poisson: bool = False,
     channel_config: Path | None = None,
     fading_std_db: float | None = None,
     noise_floor_std_db: float | None = None,
@@ -160,6 +175,7 @@ def _instantiate_simulator(
         nodes,
         packet_interval,
         seed,
+        pure_poisson_mode=pure_poisson,
         channel_config=channel_config,
         channel_overrides={
             "snir_fading_std": fading_std_db,
@@ -261,6 +277,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
         "[RUN] "
         f"algo={args.algorithm} use_snir={args.use_snir} seed={args.seed} "
         f"nodes={args.nodes} interval={args.packet_interval:g}s "
+        f"pure_poisson={args.pure_poisson} "
         f"fading={args.fading_std_db or 'config'}dB noise_std={args.noise_floor_std_db or 'config'}dB"
     )
 
@@ -269,6 +286,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
         args.packet_interval,
         args.seed,
         args.use_snir,
+        pure_poisson=args.pure_poisson,
         channel_config=args.channel_config,
         fading_std_db=args.fading_std_db,
         noise_floor_std_db=args.noise_floor_std_db,
