@@ -558,7 +558,7 @@ def main(argv=None):
             fast=args.fast,
             sample_size=args.sample_size,
         )
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         parser.error(str(exc))
     if (adjusted_nodes, adjusted_steps) != (args.nodes, args.steps):
         logging.info(
@@ -807,24 +807,24 @@ def main(argv=None):
                 out_path = str(p.with_name(f"{p.stem}_{Path(matrix_path).stem}{p.suffix}"))
             with open(out_path, mode="w", newline="") as f:
                 writer = csv.writer(f)
-                    writer.writerow(
-                        [
-                            "nodes",
-                            "gateways",
-                            "channels",
-                            "mode",
-                            "interval",
-                            "steps",
-                            "run",
-                            "delivered",
-                            "collisions",
-                            "PDR(%)",
-                            "energy_J",
-                            "avg_delay",
-                            "throughput_bps",
-                            "baseline_loss_rate",
-                        ]
-                    )
+                writer.writerow(
+                    [
+                        "nodes",
+                        "gateways",
+                        "channels",
+                        "mode",
+                        "interval",
+                        "steps",
+                        "run",
+                        "delivered",
+                        "collisions",
+                        "PDR(%)",
+                        "energy_J",
+                        "avg_delay",
+                        "throughput_bps",
+                        "baseline_loss_rate",
+                    ]
+                )
                 for run_idx, (d, c, p_val, e, ad, th, blr) in enumerate(
                     results, start=1
                 ):
