@@ -31,9 +31,13 @@ class RunMetrics:
     cluster_pdr: Dict[str, float]
     cluster_targets: Dict[str, float]
     cluster_gaps: Dict[str, float]
+    mean_snir: float
+    mean_snr: float
     snir_values: List[float]
+    snr_values: List[float]
     snir_by_result: List[Tuple[float, str]]
     snir_cdf: List[Tuple[float, float]]
+    snr_cdf: List[Tuple[float, float]]
     mixra_solver: str | None
 
     def to_csv_row(self) -> Dict[str, object]:
@@ -60,8 +64,12 @@ class RunMetrics:
                 self.cluster_targets, ensure_ascii=False, sort_keys=True
             ),
             "cluster_gaps_json": json.dumps(self.cluster_gaps, ensure_ascii=False, sort_keys=True),
+            "mean_snir": self.mean_snir,
+            "mean_snr": self.mean_snr,
             "snir_samples": len(self.snir_values),
+            "snr_samples": len(self.snr_values),
             "snir_cdf_json": json.dumps(self.snir_cdf, ensure_ascii=False),
+            "snr_cdf_json": json.dumps(self.snr_cdf, ensure_ascii=False),
         }
         return row
 
@@ -123,8 +131,10 @@ def compute_run_metrics(
     baseline_loss_rate = float(base_metrics.get("baseline_loss_rate", 0.0) or 0.0)
 
     snir_values: List[float] = []
+    snr_values: List[float] = []
     snir_by_result: List[Tuple[float, str]] = []
-    snir_keys = ("snir_dB", "snir_db", "snr_dB", "snr_db", "snir", "snr")
+    snir_keys = ("snir_dB", "snir_db", "snir")
+    snr_keys = ("snr_dB", "snr_db", "snr")
     for event in events:
         snir_value = None
         for key in snir_keys:
@@ -132,17 +142,29 @@ def compute_run_metrics(
             if candidate is not None:
                 snir_value = candidate
                 break
+        snr_value = None
+        for key in snr_keys:
+            candidate = event.get(key)
+            if candidate is not None:
+                snr_value = candidate
+                break
         result_str = str(event.get("result", "")).strip()
-        if snir_value is None and not result_str:
+        if snir_value is None and snr_value is None and not result_str:
             continue
         try:
             snir_float = float(snir_value) if snir_value is not None else float("nan")
         except (TypeError, ValueError):
             snir_float = float("nan")
+        try:
+            snr_float = float(snr_value) if snr_value is not None else float("nan")
+        except (TypeError, ValueError):
+            snr_float = float("nan")
         if snir_float == snir_float:
             snir_values.append(snir_float)
             if result_str:
                 snir_by_result.append((snir_float, result_str))
+        if snr_float == snr_float:
+            snr_values.append(snr_float)
 
         if result_str:
             lowered = result_str.lower()
@@ -154,6 +176,9 @@ def compute_run_metrics(
                 failures_no_signal += 1
             attempted += 1
     snir_cdf = _compute_cdf(snir_values)
+    snr_cdf = _compute_cdf(snr_values)
+    mean_snir = sum(snir_values) / len(snir_values) if snir_values else 0.0
+    mean_snr = sum(snr_values) / len(snr_values) if snr_values else 0.0
 
     mixra_solver = base_metrics.get("mixra_solver")
     if isinstance(mixra_solver, str):
@@ -189,9 +214,13 @@ def compute_run_metrics(
         cluster_pdr=cluster_pdr,
         cluster_targets=cluster_targets,
         cluster_gaps=cluster_gaps,
+        mean_snir=mean_snir,
+        mean_snr=mean_snr,
         snir_values=snir_values,
+        snr_values=snr_values,
         snir_by_result=snir_by_result,
         snir_cdf=snir_cdf,
+        snr_cdf=snr_cdf,
         mixra_solver=mixra_solver_str,
     )
     return result
