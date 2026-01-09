@@ -73,9 +73,11 @@ def _parse_snir_states(raw: str | None) -> Sequence[bool]:
 def _apply_snir_config(sim: Simulator, use_snir: bool) -> None:
     sim.use_snir = bool(use_snir)
     multichannel = getattr(sim, "multichannel", None)
-    if multichannel is None:
-        return
-    for channel in multichannel.channels:
+    if multichannel is not None:
+        for channel in multichannel.channels:
+            channel.use_snir = bool(use_snir)
+    channel = getattr(sim, "channel", None)
+    if channel is not None:
         channel.use_snir = bool(use_snir)
 
 
