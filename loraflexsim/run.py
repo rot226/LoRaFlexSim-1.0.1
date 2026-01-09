@@ -366,6 +366,7 @@ def simulate(
 
 
 def main(argv=None):
+    argv_list = list(argv) if argv is not None else sys.argv[1:]
     parser = argparse.ArgumentParser(
         description="LoRaFlexSim – Mode CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -529,7 +530,7 @@ def main(argv=None):
     )
 
     # Preliminary parse to load configuration defaults
-    pre_args, _ = parser.parse_known_args(argv)
+    pre_args, _ = parser.parse_known_args(argv_list)
     if pre_args.config and Path(pre_args.config).is_file():
         cp = configparser.ConfigParser()
         cp.read(pre_args.config)
@@ -537,10 +538,13 @@ def main(argv=None):
             mu = float(cp["simulation"]["mu_send"])
             parser.set_defaults(interval=mu, first_interval=mu)
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(argv_list)
 
     if args.debug_rx:
         logging.getLogger().setLevel(logging.DEBUG)
+
+    if "--first-interval" not in argv_list and args.first_interval != args.interval:
+        args.first_interval = args.interval
 
     if args.long_range_auto and not (1 <= len(args.long_range_auto) <= 2):
         parser.error("--long-range-auto attend 1 ou 2 valeurs (surface, distance optionnelle)")
