@@ -216,7 +216,8 @@ def _build_multichannel(channel_kwargs: Mapping[str, object] | None = None) -> M
             channel_index=idx,
             advanced_capture=True,
             multipath_taps=4,
-            fast_fading_std=0.0,
+            fast_fading_std=1.0,
+            snir_fading_std=1.5,
             variable_noise_std=0.5,
         )
         channel.orthogonal_sf = False

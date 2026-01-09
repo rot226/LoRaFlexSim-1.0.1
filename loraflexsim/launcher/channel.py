@@ -70,6 +70,8 @@ class Channel:
     """Représente le canal de propagation radio pour LoRa."""
 
     SPEED_OF_LIGHT = 299_792_458.0
+    RAYLEIGH_DB_MEAN = 20 / math.log(10) * 0.5 * (math.log(2.0) - math.euler_gamma)
+    RAYLEIGH_DB_STD = 20 / math.log(10) * (math.pi / (2.0 * math.sqrt(6.0)))
     FLORA_ENERGY_DETECTION_DBM = -90.0
     ENV_PRESETS = {
         "urban": (2.08, 3.57, 127.41, 40.0),
@@ -856,7 +858,7 @@ class Channel:
         if self.tx_power_std > 0:
             rssi += self.rng.normal(0, self.tx_power_std)
         if self.fast_fading_std > 0:
-            rssi += self.rng.normal(0, self.fast_fading_std)
+            rssi += self._rayleigh_fading_db(self.fast_fading_std)
         if self.multipath_taps > 1:
             rssi += self._multipath_fading_db()
         if self.time_variation_std > 0:
@@ -1158,7 +1160,17 @@ class Channel:
 
         if self.snir_fading_std <= 0.0:
             return 0.0
-        return float(self.rng.normal(0.0, self.snir_fading_std))
+        return self._rayleigh_fading_db(self.snir_fading_std)
+
+    def _rayleigh_fading_db(self, std_db: float) -> float:
+        """Return a Rayleigh fading term in dB with the desired standard deviation."""
+
+        if std_db <= 0.0:
+            return 0.0
+        amp = float(self.rng.rayleigh(scale=1.0))
+        amp_db = 20 * math.log10(max(amp, 1e-12))
+        normalized = (amp_db - self.RAYLEIGH_DB_MEAN) / self.RAYLEIGH_DB_STD
+        return normalized * std_db
 
     def set_rng(self, rng) -> None:
         """Attach a new RNG to the channel and correlated helpers."""

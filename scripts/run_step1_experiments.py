@@ -133,6 +133,21 @@ def _build_parser() -> argparse.ArgumentParser:
         default="auto",
         help="Solveur utilisé pour MixRA-Opt",
     )
+    fading_group = parser.add_mutually_exclusive_group()
+    fading_group.add_argument(
+        "--rayleigh",
+        action="store_const",
+        dest="fading_model",
+        const="rayleigh",
+        help="Active un fading Rayleigh (fast_fading_std/snir_fading_std)",
+    )
+    fading_group.add_argument(
+        "--shadowing",
+        action="store_const",
+        dest="fading_model",
+        const="shadowing",
+        help="Active un shadowing log-normal (désactive le fading rapide)",
+    )
     poisson_group = parser.add_mutually_exclusive_group()
     poisson_group.add_argument(
         "--pure-poisson",
@@ -153,7 +168,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Répertoire de sortie pour les fichiers CSV",
     )
     parser.add_argument("--quiet", action="store_true", help="Réduit les impressions de progression")
-    parser.set_defaults(pure_poisson=False)
+    parser.set_defaults(pure_poisson=False, fading_model="rayleigh")
     return parser
 
 
@@ -170,20 +185,31 @@ def _instantiate_simulator(
     capture_threshold_db: float | None = None,
     marginal_snir_margin_db: float | None = None,
     marginal_snir_drop_prob: float | None = None,
+    fading_model: str = "rayleigh",
 ) -> Simulator:
+    channel_overrides: dict[str, object | None] = {
+        "snir_fading_std": fading_std_db,
+        "noise_floor_std": noise_floor_std_db,
+        "capture_threshold_dB": capture_threshold_db,
+        "marginal_snir_margin_db": marginal_snir_margin_db,
+        "marginal_snir_drop_prob": marginal_snir_drop_prob,
+    }
+    if fading_model == "rayleigh":
+        if channel_overrides.get("shadowing_std") is None:
+            channel_overrides["shadowing_std"] = 0.0
+    elif fading_model == "shadowing":
+        if channel_overrides.get("fast_fading_std") is None:
+            channel_overrides["fast_fading_std"] = 0.0
+        if channel_overrides.get("snir_fading_std") is None:
+            channel_overrides["snir_fading_std"] = 0.0
+
     simulator = _create_simulator(
         nodes,
         packet_interval,
         seed,
         pure_poisson_mode=pure_poisson,
         channel_config=channel_config,
-        channel_overrides={
-            "snir_fading_std": fading_std_db,
-            "noise_floor_std": noise_floor_std_db,
-            "capture_threshold_dB": capture_threshold_db,
-            "marginal_snir_margin_db": marginal_snir_margin_db,
-            "marginal_snir_drop_prob": marginal_snir_drop_prob,
-        },
+        channel_overrides=channel_overrides,
     )
     simulator._interference_tracker = InterferenceTracker()
     _sync_snir_state(simulator, use_snir)
@@ -278,7 +304,9 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
         f"algo={args.algorithm} use_snir={args.use_snir} seed={args.seed} "
         f"nodes={args.nodes} interval={args.packet_interval:g}s "
         f"pure_poisson={args.pure_poisson} "
-        f"fading={args.fading_std_db or 'config'}dB noise_std={args.noise_floor_std_db or 'config'}dB"
+        f"fading={args.fading_std_db or 'config'}dB "
+        f"noise_std={args.noise_floor_std_db or 'config'}dB "
+        f"mode={args.fading_model}"
     )
 
     simulator = _instantiate_simulator(
@@ -293,6 +321,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
         capture_threshold_db=args.capture_threshold_db,
         marginal_snir_margin_db=args.marginal_snir_margin_db,
         marginal_snir_drop_prob=args.marginal_snir_drop_prob,
+        fading_model=args.fading_model,
     )
     manager = QoSManager()
     _configure_clusters(manager, args.packet_interval)
