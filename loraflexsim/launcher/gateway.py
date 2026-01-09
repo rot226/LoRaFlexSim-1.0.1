@@ -352,7 +352,7 @@ class Gateway:
             for t in colliders:
                 t['rssi'] += float(self.rng.normal(0.0, snir_fading_std))
 
-        if capture_mode in {"advanced", "omnet"} and noise_floor is not None:
+        if capture_mode in {"advanced", "omnet"} and noise_floor is not None and use_snir:
             def _snr(i: int) -> float:
                 rssi_i = colliders[i]['rssi']
                 total = 10 ** (noise_floor / 10)
@@ -454,11 +454,18 @@ class Gateway:
             if capture and not _enough_preamble(strongest, colliders):
                 capture = False
 
-        strongest_snir = strongest.get('snir')
-        if strongest_snir is None and noise_floor is not None:
-            strongest_snir = strongest.get('rssi')
-            if strongest_snir is not None:
-                strongest_snir -= noise_floor
+        if use_snir:
+            strongest_snir = strongest.get('snir')
+            if strongest_snir is None and noise_floor is not None:
+                strongest_snir = strongest.get('rssi')
+                if strongest_snir is not None:
+                    strongest_snir -= noise_floor
+        else:
+            strongest_snir = None
+            if noise_floor is not None:
+                strongest_snir = strongest.get('rssi')
+                if strongest_snir is not None:
+                    strongest_snir -= noise_floor
 
         snir_threshold = threshold_fn(strongest.get('sf', sf))
         snir_failure = False
