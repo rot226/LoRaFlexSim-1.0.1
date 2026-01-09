@@ -150,8 +150,8 @@ def _plot_performance(
     algorithms: Sequence[str],
 ) -> None:
     metrics = [
-        ("pdr_mean", "pdr_ci95", "PDR moyenne"),
-        ("throughput_mean", "throughput_ci95", "Débit moyen (bps)"),
+        ("pdr_mean", "pdr_ci95", "Average PDR"),
+        ("throughput_mean", "throughput_ci95", "Average throughput (bps)"),
     ]
     fig, axes = plt.subplots(nrows=len(metrics), ncols=2, figsize=(12, 4.5 * len(metrics)), sharex=True)
     if len(metrics) == 1:
@@ -187,8 +187,8 @@ def _plot_performance(
             ax.grid(True, linestyle=":", alpha=0.4)
             if row_idx == 0 and ax.get_legend_handles_labels()[1]:
                 ax.legend(fontsize=8, ncol=2)
-    axes[-1][0].set_xlabel("Épisode / round")
-    axes[-1][1].set_xlabel("Épisode / round")
+    axes[-1][0].set_xlabel("Round")
+    axes[-1][1].set_xlabel("Round")
     _save_plot(fig, output_dir, "step2_performance_rounds.png")
 
 
@@ -198,9 +198,9 @@ def _plot_convergence(
     algorithms: Sequence[str],
 ) -> None:
     metrics = [
-        ("reward_mean", "reward_ci95", "Récompense moyenne"),
-        ("pdr_mean", "pdr_ci95", "PDR moyenne"),
-        ("throughput_mean", "throughput_ci95", "Débit moyen (bps)"),
+        ("reward_mean", "reward_ci95", "Average reward"),
+        ("pdr_mean", "pdr_ci95", "Average PDR"),
+        ("throughput_mean", "throughput_ci95", "Average throughput (bps)"),
     ]
     fig, axes = plt.subplots(nrows=len(metrics), ncols=2, figsize=(12, 4.5 * len(metrics)), sharex=True)
     if len(metrics) == 1:
@@ -236,8 +236,8 @@ def _plot_convergence(
             ax.grid(True, linestyle=":", alpha=0.4)
             if row_idx == 0 and ax.get_legend_handles_labels()[1]:
                 ax.legend(fontsize=8, ncol=2)
-    axes[-1][0].set_xlabel("Épisode")
-    axes[-1][1].set_xlabel("Épisode")
+    axes[-1][0].set_xlabel("Episode")
+    axes[-1][1].set_xlabel("Episode")
     _save_plot(fig, output_dir, "step2_convergence_ci95.png")
 
 
@@ -283,7 +283,7 @@ def _plot_distribution(
 
         axes[row_idx][0].set_title(f"{SNIR_TITLES.get(state, state)} - SF")
         axes[row_idx][1].set_title(f"{SNIR_TITLES.get(state, state)} - TX Power")
-        axes[row_idx][0].set_ylabel("Part (0-1)")
+        axes[row_idx][0].set_ylabel("Share (0–1)")
         axes[row_idx][0].grid(True, linestyle=":", alpha=0.4)
         axes[row_idx][1].grid(True, linestyle=":", alpha=0.4)
         if axes[row_idx][0].get_legend_handles_labels()[1]:
