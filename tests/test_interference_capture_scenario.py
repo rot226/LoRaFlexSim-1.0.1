@@ -57,6 +57,7 @@ def _run_trial(
             rssi=rssi_dbm,
             end_time=end[event_id - 1],
             capture_threshold=capture_threshold_db,
+            required_snr_db_by_sf={7: capture_threshold_db},
             current_time=start[event_id - 1],
             frequency=868e6,
             noise_floor=noise,

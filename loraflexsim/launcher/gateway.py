@@ -7,6 +7,7 @@ from .non_orth_delta import (
     load_non_orth_delta,
 )
 from .energy_profiles import EnergyProfile, FLORA_PROFILE, EnergyAccumulator
+from .server import REQUIRED_SNR
 
 # Default energy profile for gateways (same as nodes by default)
 DEFAULT_ENERGY_PROFILE = FLORA_PROFILE
@@ -130,6 +131,7 @@ class Gateway:
         bandwidth: float = 125e3,
         noise_floor: float | None = None,
         snir: float | None = None,
+        required_snr_db_by_sf: dict[int, float] | float | None = None,
         capture_mode: str = "basic",
         flora_phy=None,
         orthogonal_sf: bool = True,
@@ -160,6 +162,8 @@ class Gateway:
             valeur ne sont pas considérées comme en collision.
         :param noise_floor: Niveau de bruit pour le calcul du SNR (mode avancé).
         :param snir: SNIR déjà calculé pour ce paquet (optionnel).
+        :param required_snr_db_by_sf: Seuils SNIR requis par SF pour la
+            validation de décodage.
         :param capture_mode: "basic" pour l'ancien comportement, "advanced" pour
             un calcul basé sur le SNR.
         :param flora_phy: Instance ``FloraPHY`` lorsque ``capture_mode`` vaut
@@ -200,13 +204,27 @@ class Gateway:
             return
 
         if callable(capture_threshold):
-            threshold_fn = lambda sf_val: float(capture_threshold(sf_val))
+            capture_threshold_fn = lambda sf_val: float(capture_threshold(sf_val))
         elif isinstance(capture_threshold, dict):
-            threshold_fn = lambda sf_val: float(
+            capture_threshold_fn = lambda sf_val: float(
                 capture_threshold.get(sf_val, capture_threshold.get("default", 0.0))
             )
         else:
-            threshold_fn = lambda _sf: float(capture_threshold)
+            capture_threshold_fn = lambda _sf: float(capture_threshold)
+
+        snir_threshold_source = (
+            required_snr_db_by_sf if required_snr_db_by_sf is not None else REQUIRED_SNR
+        )
+        if callable(snir_threshold_source):
+            snir_threshold_fn = lambda sf_val: float(snir_threshold_source(sf_val))
+        elif isinstance(snir_threshold_source, dict):
+            snir_threshold_fn = lambda sf_val: float(
+                snir_threshold_source.get(
+                    sf_val, snir_threshold_source.get("default", -float("inf"))
+                )
+            )
+        else:
+            snir_threshold_fn = lambda _sf: float(snir_threshold_source)
 
         key = (sf, frequency)
         symbol_duration = (2 ** sf) / bandwidth
@@ -438,7 +456,7 @@ class Gateway:
             for t, metric in zip(colliders, metrics):
                 if t is strongest:
                     continue
-                threshold = threshold_fn(strongest.get('sf', sf))
+                threshold = capture_threshold_fn(strongest.get('sf', sf))
                 if not orthogonal_sf and matrix is not None:
                     sf_w = strongest.get('sf', sf)
                     sf_i = t.get('sf', sf)
@@ -467,7 +485,7 @@ class Gateway:
                 if strongest_snir is not None:
                     strongest_snir -= noise_floor
 
-        snir_threshold = threshold_fn(strongest.get('sf', sf))
+        snir_threshold = snir_threshold_fn(strongest.get('sf', sf))
         snir_failure = False
         failure_reason = None
         if strongest_snir is not None and strongest_snir < snir_threshold:
