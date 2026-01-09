@@ -10,9 +10,10 @@ from __future__ import annotations
 import csv
 import os
 import sys
+import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, os.fspath(ROOT))
@@ -33,12 +34,49 @@ class ClusterMetrics:
     pdr: float
     snir_avg: float
     success_rate: float
+    snir_state: str
+    use_snir: bool
 
 
 CLUSTER_PROPORTIONS = [0.1, 0.3, 0.6]
 CLUSTER_TARGETS = [0.9, 0.8, 0.7]
 DEFAULT_NODE_SWEEP = [2000, 5000, 8000, 11000, 15000]
 RESULTS_PATH = ROOT / "experiments" / "ucb1" / "ucb1_density_metrics.csv"
+DEFAULT_SNIR_STATES: tuple[bool, ...] = (False, True)
+SNIR_STATE_LABELS = {False: "snir_off", True: "snir_on"}
+
+
+def _parse_snir_states(raw: str | None) -> Sequence[bool]:
+    if raw is None:
+        return DEFAULT_SNIR_STATES
+    tokens = [token.strip().lower() for token in raw.split(",") if token.strip()]
+    if not tokens:
+        raise ValueError("Aucun état SNIR fourni.")
+    mapping = {
+        "on": True,
+        "off": False,
+        "true": True,
+        "false": False,
+        "1": True,
+        "0": False,
+        "snir_on": True,
+        "snir_off": False,
+    }
+    states: list[bool] = []
+    for token in tokens:
+        if token not in mapping:
+            raise ValueError(f"État SNIR invalide: {token}")
+        states.append(mapping[token])
+    return tuple(states)
+
+
+def _apply_snir_state(sim: Simulator, use_snir: bool) -> None:
+    sim.use_snir = bool(use_snir)
+    multichannel = getattr(sim, "multichannel", None)
+    if multichannel is None:
+        return
+    for channel in multichannel.channels:
+        channel.use_snir = bool(use_snir)
 
 
 def _assign_clusters(sim: Simulator) -> dict[int, int]:
@@ -69,7 +107,13 @@ def _assign_clusters(sim: Simulator) -> dict[int, int]:
     return assignments
 
 
-def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> list[ClusterMetrics]:
+def _collect_cluster_metrics(
+    sim: Simulator,
+    assignments: dict[int, int],
+    *,
+    snir_state: str,
+    use_snir: bool,
+) -> list[ClusterMetrics]:
     """Calcule les métriques par cluster après simulation."""
 
     metrics = sim.get_metrics()
@@ -110,6 +154,8 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
                 pdr=pdr,
                 snir_avg=snir_avg,
                 success_rate=success_rate,
+                snir_state=snir_state,
+                use_snir=use_snir,
             )
         )
     return cluster_rows
@@ -122,58 +168,89 @@ def run_density_sweep(
     packets_per_node: int = 5,
     seed: int = 1,
     output_path: Path = RESULTS_PATH,
+    use_snir_states: Sequence[bool] | None = None,
 ) -> None:
     """Exécute le balayage de densité et écrit le CSV."""
 
-    rows: list[ClusterMetrics] = []
-    for index, num_nodes in enumerate(node_counts):
-        sim = Simulator(
-            num_nodes=num_nodes,
-            num_gateways=1,
-            area_size=2000.0,
-            transmission_mode="Random",
-            packet_interval=packet_interval,
-            first_packet_interval=packet_interval,
-            packets_to_send=packets_per_node,
-            adr_node=False,
-            adr_server=False,
-            seed=seed + index,
-        )
-        assignments = _assign_clusters(sim)
-        sim.run()
-        rows.extend(_collect_cluster_metrics(sim, assignments))
+    snir_states = tuple(use_snir_states) if use_snir_states is not None else DEFAULT_SNIR_STATES
+    output_dir = output_path.parent
+    metrics_name = output_path.name
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="", encoding="utf8") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(
-            [
-                "num_nodes",
-                "cluster",
-                "sf",
-                "reward_mean",
-                "reward_variance",
-                "der",
-                "pdr",
-                "snir_avg",
-                "success_rate",
-            ]
-        )
-        for entry in rows:
+    for use_snir in snir_states:
+        snir_state = SNIR_STATE_LABELS.get(bool(use_snir), "snir_unknown")
+        rows: list[ClusterMetrics] = []
+        for index, num_nodes in enumerate(node_counts):
+            sim = Simulator(
+                num_nodes=num_nodes,
+                num_gateways=1,
+                area_size=2000.0,
+                transmission_mode="Random",
+                packet_interval=packet_interval,
+                first_packet_interval=packet_interval,
+                packets_to_send=packets_per_node,
+                adr_node=False,
+                adr_server=False,
+                seed=seed + index,
+            )
+            _apply_snir_state(sim, bool(use_snir))
+            assignments = _assign_clusters(sim)
+            sim.run()
+            rows.extend(
+                _collect_cluster_metrics(
+                    sim,
+                    assignments,
+                    snir_state=snir_state,
+                    use_snir=bool(use_snir),
+                )
+            )
+
+        state_dir = output_dir / snir_state
+        state_dir.mkdir(parents=True, exist_ok=True)
+        output_path_state = state_dir / metrics_name
+        with output_path_state.open("w", newline="", encoding="utf8") as handle:
+            writer = csv.writer(handle)
             writer.writerow(
                 [
-                    entry.num_nodes,
-                    entry.cluster,
-                    f"{entry.sf:.6f}",
-                    f"{entry.reward_mean:.6f}",
-                    f"{entry.reward_variance:.6f}",
-                    f"{entry.der:.6f}",
-                    f"{entry.pdr:.6f}",
-                    f"{entry.snir_avg:.6f}",
-                    f"{entry.success_rate:.6f}",
+                    "num_nodes",
+                    "cluster",
+                    "sf",
+                    "reward_mean",
+                    "reward_variance",
+                    "der",
+                    "pdr",
+                    "snir_avg",
+                    "success_rate",
+                    "snir_state",
+                    "use_snir",
                 ]
             )
+            for entry in rows:
+                writer.writerow(
+                    [
+                        entry.num_nodes,
+                        entry.cluster,
+                        f"{entry.sf:.6f}",
+                        f"{entry.reward_mean:.6f}",
+                        f"{entry.reward_variance:.6f}",
+                        f"{entry.der:.6f}",
+                        f"{entry.pdr:.6f}",
+                        f"{entry.snir_avg:.6f}",
+                        f"{entry.success_rate:.6f}",
+                        entry.snir_state,
+                        str(entry.use_snir).lower(),
+                    ]
+                )
 
 
 if __name__ == "__main__":
-    run_density_sweep()
+    parser = argparse.ArgumentParser(
+        description="Balayage de densité UCB1 avec bascule SNIR."
+    )
+    parser.add_argument(
+        "--snir-states",
+        type=str,
+        default=None,
+        help="États SNIR séparés par des virgules (on,off,true,false,snir_on,snir_off).",
+    )
+    args = parser.parse_args()
+    run_density_sweep(use_snir_states=_parse_snir_states(args.snir_states))

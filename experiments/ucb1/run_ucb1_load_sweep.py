@@ -8,13 +8,14 @@ indice de fenêtre, avec des moyennes pondérées par le nombre de tentatives
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import math
 import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, os.fspath(ROOT))
@@ -48,6 +49,8 @@ class ClusterMetrics:
     success_rate: float
     success_rate_window: float
     emission_ratio: float
+    snir_state: str
+    use_snir: bool
 
 
 CLUSTER_PROPORTIONS = [0.1, 0.3, 0.6]
@@ -56,6 +59,41 @@ PACKET_INTERVALS = [300.0, 600.0, 900.0]
 RESULTS_PATH = ROOT / "experiments" / "ucb1" / "ucb1_load_metrics.csv"
 DECISION_LOG_PATH = ROOT / "experiments" / "ucb1" / "ucb1_decision_log.csv"
 DEFAULT_NODE_COUNT = 5000
+DEFAULT_SNIR_STATES: tuple[bool, ...] = (False, True)
+SNIR_STATE_LABELS = {False: "snir_off", True: "snir_on"}
+
+
+def _parse_snir_states(raw: str | None) -> Sequence[bool]:
+    if raw is None:
+        return DEFAULT_SNIR_STATES
+    tokens = [token.strip().lower() for token in raw.split(",") if token.strip()]
+    if not tokens:
+        raise ValueError("Aucun état SNIR fourni.")
+    mapping = {
+        "on": True,
+        "off": False,
+        "true": True,
+        "false": False,
+        "1": True,
+        "0": False,
+        "snir_on": True,
+        "snir_off": False,
+    }
+    states: list[bool] = []
+    for token in tokens:
+        if token not in mapping:
+            raise ValueError(f"État SNIR invalide: {token}")
+        states.append(mapping[token])
+    return tuple(states)
+
+
+def _apply_snir_state(sim: Simulator, use_snir: bool) -> None:
+    sim.use_snir = bool(use_snir)
+    multichannel = getattr(sim, "multichannel", None)
+    if multichannel is None:
+        return
+    for channel in multichannel.channels:
+        channel.use_snir = bool(use_snir)
 
 
 def _assign_clusters(sim: Simulator) -> dict[int, int]:
@@ -122,7 +160,13 @@ def _event_reward(event: dict, *, node, sim: Simulator) -> float:
     )
 
 
-def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> list[ClusterMetrics]:
+def _collect_cluster_metrics(
+    sim: Simulator,
+    assignments: dict[int, int],
+    *,
+    snir_state: str,
+    use_snir: bool,
+) -> list[ClusterMetrics]:
     metrics = sim.get_metrics()
     rows: list[ClusterMetrics] = []
     events = list(getattr(sim, "events_log", []) or [])
@@ -250,6 +294,8 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
                     "success_rate": success_rate_all,
                     "success_rate_window": success_rate_window,
                     "emission_ratio": emission_ratio,
+                    "snir_state": snir_state,
+                    "use_snir": use_snir,
                 }
             )
 
@@ -263,7 +309,12 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
 
 
 def _collect_decision_log(
-    sim: Simulator, assignments: dict[int, int], packet_interval: float
+    sim: Simulator,
+    assignments: dict[int, int],
+    packet_interval: float,
+    *,
+    snir_state: str,
+    use_snir: bool,
 ) -> list[dict[str, object]]:
     events = list(getattr(sim, "events_log", []) or [])
     node_map = {node.id: node for node in sim.nodes}
@@ -317,6 +368,8 @@ def _collect_decision_log(
                 "num_nodes": len(sim.nodes),
                 "packet_interval_s": packet_interval,
                 "energy_j": _safe_float(event.get("energy_J")) or 0.0,
+                "snir_state": snir_state,
+                "use_snir": use_snir,
             }
         )
         decision_idx += 1
@@ -331,130 +384,177 @@ def run_load_sweep(
     seed: int = 1,
     output_path: Path = RESULTS_PATH,
     decision_log_path: Path = DECISION_LOG_PATH,
+    use_snir_states: Sequence[bool] | None = None,
 ) -> None:
-    rows: list[ClusterMetrics] = []
-    decision_rows: list[dict[str, object]] = []
-    for index, packet_interval in enumerate(intervals):
-        sim = Simulator(
-            num_nodes=num_nodes,
-            num_gateways=1,
-            area_size=2000.0,
-            transmission_mode="Random",
-            packet_interval=packet_interval,
-            first_packet_interval=packet_interval,
-            packets_to_send=packets_per_node,
-            adr_node=False,
-            adr_server=False,
-            seed=seed + index,
-        )
-        assignments = _assign_clusters(sim)
-        sim.run()
-        rows.extend(_collect_cluster_metrics(sim, assignments))
-        decision_rows.extend(_collect_decision_log(sim, assignments, packet_interval))
+    snir_states = tuple(use_snir_states) if use_snir_states is not None else DEFAULT_SNIR_STATES
+    output_dir = output_path.parent
+    decision_dir = decision_log_path.parent
+    metrics_name = output_path.name
+    decision_name = decision_log_path.name
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="", encoding="utf8") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(
-            [
-                "num_nodes",
-                "cluster",
-                "packet_interval_s",
-                "window_index",
-                "window_start_s",
-                "window_end_s",
-                "expected_attempts",
-                "attempts",
-                "sf",
-                "reward_mean",
-                "reward_variance",
-                "reward_window_mean",
-                "reward_window_variance",
-                "regret_cumulative",
-                "der",
-                "der_window",
-                "pdr",
-                "snir_avg",
-                "snir_window_mean",
-                "energy_avg",
-                "energy_window_mean",
-                "success_rate",
-                "success_rate_window",
-                "emission_ratio",
-            ]
-        )
-        for entry in rows:
-            writer.writerow(
-                [
-                    entry.num_nodes,
-                    entry.cluster,
-                    f"{entry.packet_interval_s:.6f}",
-                    entry.window_index,
-                    f"{entry.window_start_s:.6f}",
-                    f"{entry.window_end_s:.6f}",
-                    entry.expected_attempts,
-                    entry.attempts,
-                    f"{entry.sf:.6f}",
-                    f"{entry.reward_mean:.6f}",
-                    f"{entry.reward_variance:.6f}",
-                    f"{entry.reward_window_mean:.6f}",
-                    f"{entry.reward_window_variance:.6f}",
-                    f"{entry.regret_cumulative:.6f}",
-                    f"{entry.der:.6f}",
-                    f"{entry.der_window:.6f}",
-                    f"{entry.pdr:.6f}",
-                    f"{entry.snir_avg:.6f}",
-                    f"{entry.snir_window_mean:.6f}",
-                    f"{entry.energy_avg:.6f}",
-                    f"{entry.energy_window_mean:.6f}",
-                    f"{entry.success_rate:.6f}",
-                    f"{entry.success_rate_window:.6f}",
-                    f"{entry.emission_ratio:.6f}",
-                ]
+    for use_snir in snir_states:
+        snir_state = SNIR_STATE_LABELS.get(bool(use_snir), "snir_unknown")
+        rows: list[ClusterMetrics] = []
+        decision_rows: list[dict[str, object]] = []
+        for index, packet_interval in enumerate(intervals):
+            sim = Simulator(
+                num_nodes=num_nodes,
+                num_gateways=1,
+                area_size=2000.0,
+                transmission_mode="Random",
+                packet_interval=packet_interval,
+                first_packet_interval=packet_interval,
+                packets_to_send=packets_per_node,
+                adr_node=False,
+                adr_server=False,
+                seed=seed + index,
+            )
+            _apply_snir_state(sim, bool(use_snir))
+            assignments = _assign_clusters(sim)
+            sim.run()
+            rows.extend(
+                _collect_cluster_metrics(
+                    sim,
+                    assignments,
+                    snir_state=snir_state,
+                    use_snir=bool(use_snir),
+                )
+            )
+            decision_rows.extend(
+                _collect_decision_log(
+                    sim,
+                    assignments,
+                    packet_interval,
+                    snir_state=snir_state,
+                    use_snir=bool(use_snir),
+                )
             )
 
-    if decision_rows:
-        decision_log_path.parent.mkdir(parents=True, exist_ok=True)
-        with decision_log_path.open("w", newline="", encoding="utf8") as handle:
+        state_dir = output_dir / snir_state
+        state_dir.mkdir(parents=True, exist_ok=True)
+        output_path_state = state_dir / metrics_name
+        with output_path_state.open("w", newline="", encoding="utf8") as handle:
             writer = csv.writer(handle)
             writer.writerow(
                 [
-                    "episode_idx",
-                    "decision_idx",
-                    "time_s",
-                    "reward",
-                    "pdr",
-                    "throughput",
-                    "snir_db",
-                    "sf",
-                    "tx_power",
-                    "policy",
-                    "cluster",
                     "num_nodes",
+                    "cluster",
                     "packet_interval_s",
-                    "energy_j",
+                    "window_index",
+                    "window_start_s",
+                    "window_end_s",
+                    "expected_attempts",
+                    "attempts",
+                    "sf",
+                    "reward_mean",
+                    "reward_variance",
+                    "reward_window_mean",
+                    "reward_window_variance",
+                    "regret_cumulative",
+                    "der",
+                    "der_window",
+                    "pdr",
+                    "snir_avg",
+                    "snir_window_mean",
+                    "energy_avg",
+                    "energy_window_mean",
+                    "success_rate",
+                    "success_rate_window",
+                    "emission_ratio",
+                    "snir_state",
+                    "use_snir",
                 ]
             )
-            for row in decision_rows:
+            for entry in rows:
                 writer.writerow(
                     [
-                        row["episode_idx"],
-                        row["decision_idx"],
-                        f"{row['time_s']:.6f}",
-                        f"{row['reward']:.6f}",
-                        f"{row['pdr']:.6f}",
-                        f"{row['throughput']:.6f}",
-                        "" if row["snir_db"] is None else f"{row['snir_db']:.6f}",
-                        row["sf"],
-                        f"{row['tx_power']:.3f}",
-                        row["policy"],
-                        row["cluster"],
-                        row["num_nodes"],
-                        f"{row['packet_interval_s']:.6f}",
-                        f"{row['energy_j']:.6f}",
+                        entry.num_nodes,
+                        entry.cluster,
+                        f"{entry.packet_interval_s:.6f}",
+                        entry.window_index,
+                        f"{entry.window_start_s:.6f}",
+                        f"{entry.window_end_s:.6f}",
+                        entry.expected_attempts,
+                        entry.attempts,
+                        f"{entry.sf:.6f}",
+                        f"{entry.reward_mean:.6f}",
+                        f"{entry.reward_variance:.6f}",
+                        f"{entry.reward_window_mean:.6f}",
+                        f"{entry.reward_window_variance:.6f}",
+                        f"{entry.regret_cumulative:.6f}",
+                        f"{entry.der:.6f}",
+                        f"{entry.der_window:.6f}",
+                        f"{entry.pdr:.6f}",
+                        f"{entry.snir_avg:.6f}",
+                        f"{entry.snir_window_mean:.6f}",
+                        f"{entry.energy_avg:.6f}",
+                        f"{entry.energy_window_mean:.6f}",
+                        f"{entry.success_rate:.6f}",
+                        f"{entry.success_rate_window:.6f}",
+                        f"{entry.emission_ratio:.6f}",
+                        entry.snir_state,
+                        str(entry.use_snir).lower(),
                     ]
                 )
 
+        if decision_rows:
+            decision_state_dir = decision_dir / snir_state
+            decision_state_dir.mkdir(parents=True, exist_ok=True)
+            decision_log_path_state = decision_state_dir / decision_name
+            with decision_log_path_state.open("w", newline="", encoding="utf8") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(
+                    [
+                        "episode_idx",
+                        "decision_idx",
+                        "time_s",
+                        "reward",
+                        "pdr",
+                        "throughput",
+                        "snir_db",
+                        "sf",
+                        "tx_power",
+                        "policy",
+                        "cluster",
+                        "num_nodes",
+                        "packet_interval_s",
+                        "energy_j",
+                        "snir_state",
+                        "use_snir",
+                    ]
+                )
+                for row in decision_rows:
+                    writer.writerow(
+                        [
+                            row["episode_idx"],
+                            row["decision_idx"],
+                            f"{row['time_s']:.6f}",
+                            f"{row['reward']:.6f}",
+                            f"{row['pdr']:.6f}",
+                            f"{row['throughput']:.6f}",
+                            "" if row["snir_db"] is None else f"{row['snir_db']:.6f}",
+                            row["sf"],
+                            f"{row['tx_power']:.3f}",
+                            row["policy"],
+                            row["cluster"],
+                            row["num_nodes"],
+                            f"{row['packet_interval_s']:.6f}",
+                            f"{row['energy_j']:.6f}",
+                            row["snir_state"],
+                            str(row["use_snir"]).lower(),
+                        ]
+                    )
+
 
 if __name__ == "__main__":
-    run_load_sweep()
+    parser = argparse.ArgumentParser(
+        description="Balayage de charge UCB1 avec bascule SNIR."
+    )
+    parser.add_argument(
+        "--snir-states",
+        type=str,
+        default=None,
+        help="États SNIR séparés par des virgules (on,off,true,false,snir_on,snir_off).",
+    )
+    args = parser.parse_args()
+    run_load_sweep(use_snir_states=_parse_snir_states(args.snir_states))
