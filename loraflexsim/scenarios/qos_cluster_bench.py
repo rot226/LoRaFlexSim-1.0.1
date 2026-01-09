@@ -641,6 +641,7 @@ def run_bench(
     node_counts: Sequence[int] = DEFAULT_NODE_COUNTS,
     tx_periods: Sequence[float] = DEFAULT_TX_PERIODS,
     seed: int = 1,
+    replications: int = 10,
     use_snir_states: Sequence[bool] | None = None,
     output_dir: Path | None = None,
     simulation_duration_s: float | None = DEFAULT_SIMULATION_DURATION_S,
@@ -670,8 +671,10 @@ def run_bench(
     else:
         cluster_targets_override = None
 
+    if replications < 1:
+        raise ValueError("replications doit être >= 1.")
     combos = [(n, p) for n in node_counts for p in tx_periods]
-    total_runs = len(combos) * len(ALGORITHMS) * len(snir_states)
+    total_runs = len(combos) * replications * len(ALGORITHMS) * len(snir_states)
     run_index = 0
     summaries: Dict[str, Any] = {}
     for use_snir in snir_states:
@@ -683,67 +686,71 @@ def run_bench(
         validation_entries: List[Dict[str, Any]] = [] if validation_mode else []
 
         for combo_index, (num_nodes, packet_interval) in enumerate(combos):
-            combo_seed = seed + combo_index
-            for spec in ALGORITHMS:
-                run_index += 1
-                context = {
-                    "num_nodes": num_nodes,
-                    "packet_interval_s": packet_interval,
-                    "algorithm": spec.label,
-                    "snir_state": state_label,
-                    "run_index": run_index,
-                    "total_runs": total_runs,
-                }
-                if progress_callback is not None:
-                    progress_callback(run_index, total_runs, context)
-                elif not quiet:
-                    print(
-                        f"[{run_index}/{total_runs}] {spec.label} – {state_label} – N={num_nodes} TX={packet_interval:.0f}s"
-                    )
-                simulator = _create_simulator(num_nodes, packet_interval, combo_seed, use_snir=use_snir)
-                manager = QoSManager()
-                if spec.requires_qos:
-                    _configure_clusters(
-                        manager,
-                        packet_interval,
-                        pdr_targets=cluster_targets_override,
-                    )
-                try:
-                    spec.apply(simulator, manager, mixra_solver)
-                except Exception:
-                    if not quiet:
-                        print(
-                            f"Échec de l'initialisation pour {spec.label} ({state_label}), la simulation est ignorée."
-                        )
-                    raise
-                simulator.run(max_time=simulation_duration_s)
-                base_metrics = simulator.get_metrics()
-                effective_use_snir = _effective_snir_state(simulator, use_snir)
-                base_metrics.update(
-                    {
+            for rep_idx in range(replications):
+                combo_seed = seed + combo_index * replications + rep_idx
+                for spec in ALGORITHMS:
+                    run_index += 1
+                    context = {
                         "num_nodes": num_nodes,
                         "packet_interval_s": packet_interval,
-                        "random_seed": combo_seed,
-                        "simulation_duration_s": getattr(simulator, "current_time", simulation_duration_s),
-                        "use_snir": effective_use_snir,
-                        "with_snir": effective_use_snir,
+                        "algorithm": spec.label,
                         "snir_state": state_label,
+                        "replication_index": rep_idx,
+                        "run_index": run_index,
+                        "total_runs": total_runs,
                     }
-                )
-                enriched = _compute_additional_metrics(simulator, dict(base_metrics), spec.label, mixra_solver)
-                csv_row = _flatten_metrics(enriched)
-                csv_filename = f"{num_nodes}_{int(packet_interval) if float(packet_interval).is_integer() else packet_interval:g}.csv"
-                csv_path = output_root / spec.key / csv_filename
-                _write_csv(csv_path, csv_row)
-                run_record = RunRecord(
-                    num_nodes=num_nodes,
-                    packet_interval_s=packet_interval,
-                    algorithm=spec.label,
-                    csv_path=csv_path,
-                    metrics=enriched,
-                    targets_met=_targets_met(enriched),
-                )
-                records_by_algorithm[spec.label].append(run_record)
+                    if progress_callback is not None:
+                        progress_callback(run_index, total_runs, context)
+                    elif not quiet:
+                        print(
+                            f"[{run_index}/{total_runs}] {spec.label} – {state_label} – N={num_nodes} TX={packet_interval:.0f}s (rep {rep_idx + 1}/{replications})"
+                        )
+                    simulator = _create_simulator(num_nodes, packet_interval, combo_seed, use_snir=use_snir)
+                    manager = QoSManager()
+                    if spec.requires_qos:
+                        _configure_clusters(
+                            manager,
+                            packet_interval,
+                            pdr_targets=cluster_targets_override,
+                        )
+                    try:
+                        spec.apply(simulator, manager, mixra_solver)
+                    except Exception:
+                        if not quiet:
+                            print(
+                                f"Échec de l'initialisation pour {spec.label} ({state_label}), la simulation est ignorée."
+                            )
+                        raise
+                    simulator.run(max_time=simulation_duration_s)
+                    base_metrics = simulator.get_metrics()
+                    effective_use_snir = _effective_snir_state(simulator, use_snir)
+                    base_metrics.update(
+                        {
+                            "num_nodes": num_nodes,
+                            "packet_interval_s": packet_interval,
+                            "random_seed": combo_seed,
+                            "simulation_duration_s": getattr(simulator, "current_time", simulation_duration_s),
+                            "use_snir": effective_use_snir,
+                            "with_snir": effective_use_snir,
+                            "snir_state": state_label,
+                        }
+                    )
+                    enriched = _compute_additional_metrics(simulator, dict(base_metrics), spec.label, mixra_solver)
+                    csv_row = _flatten_metrics(enriched)
+                    csv_filename = (
+                        f"{num_nodes}_{int(packet_interval) if float(packet_interval).is_integer() else packet_interval:g}_rep{rep_idx + 1}.csv"
+                    )
+                    csv_path = output_root / spec.key / csv_filename
+                    _write_csv(csv_path, csv_row)
+                    run_record = RunRecord(
+                        num_nodes=num_nodes,
+                        packet_interval_s=packet_interval,
+                        algorithm=spec.label,
+                        csv_path=csv_path,
+                        metrics=enriched,
+                        targets_met=_targets_met(enriched),
+                    )
+                    records_by_algorithm[spec.label].append(run_record)
 
                 if validation_mode:
                     cluster_pdr = {
@@ -810,6 +817,7 @@ def run_bench(
                 "node_counts": list(node_counts),
                 "tx_periods": list(tx_periods),
                 "seed": seed,
+                "replications": replications,
                 "simulation_duration_s": simulation_duration_s,
                 "mixra_solver": mixra_solver,
                 "capture_delta_db": 1.0,
