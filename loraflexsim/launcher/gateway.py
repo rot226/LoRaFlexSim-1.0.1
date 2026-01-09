@@ -529,8 +529,7 @@ class Gateway:
                     t['lost_flag'] = False  # gagnant
                 else:
                     t['lost_flag'] = True   # perdants
-            if strongest.get("collision_reason") is None:
-                strongest["collision_reason"] = "capture"
+                    t["collision_reason"] = "capture"
             # Ajouter la transmission la plus forte si c'est la nouvelle (sinon elle est déjà dans active_transmissions)
             if strongest is new_transmission:
                 new_transmission['lost_flag'] = False
