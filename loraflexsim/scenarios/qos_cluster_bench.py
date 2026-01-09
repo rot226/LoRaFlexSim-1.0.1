@@ -401,7 +401,7 @@ def _compute_additional_metrics(
             snr = event.get("snr_dB")
             if snr is not None:
                 snr_values.append(float(snr))
-        elif result == "Collision":
+        elif result in {"Collision", "CollisionLoss"}:
             collisions_by_sf[sf] = collisions_by_sf.get(sf, 0) + 1
             collisions_by_channel[channel_idx] = collisions_by_channel.get(channel_idx, 0) + 1
         if use_snir:

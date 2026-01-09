@@ -346,6 +346,13 @@ Moyenne : PDR=100.00% , Paquets livrés=165.00, Collisions=0.00, Énergie consom
 ```
 【F:loraflexsim/run.py†L406-L503】【7e31c7†L1-L4】
 
+Les journaux `events_log` distinguent plusieurs valeurs de `result` : `Success`
+pour un paquet livré, `CollisionLoss` pour un paquet entendu mais finalement
+perdu à cause d'une collision, et `NoCoverage` lorsqu'aucune passerelle ne capte
+la trame. Les métriques de collisions agrègent les libellés de collision
+(`Collision` **et** `CollisionLoss`) afin de conserver une nomenclature
+cohérente dans les rapports et exports CSV.【F:loraflexsim/launcher/simulator.py†L1870-L1930】
+
 ## Grandes distances
 
 Le module `loraflexsim.scenarios.long_range` fournit un scénario « grandes distances »
