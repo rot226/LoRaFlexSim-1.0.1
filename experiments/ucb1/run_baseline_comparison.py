@@ -33,6 +33,8 @@ class ClusterMetrics:
     snir_avg: float
     success_rate: float
     algorithm: str
+    snir_state: str
+    use_snir: bool
 
 
 CLUSTER_PROPORTIONS = [0.1, 0.3, 0.6]
@@ -42,6 +44,15 @@ DECISION_LOG_PATH = ROOT / "experiments" / "ucb1" / "ucb1_baseline_decision_log.
 DEFAULT_PACKET_INTERVAL = 600.0
 DEFAULT_NODE_COUNT = 5000
 ALGORITHMS: Sequence[str] = ["ucb1", "ADR-MAX", "ADR-AVG", "MixRA-H", "Opt"]
+
+
+def _apply_snir_config(sim: Simulator, use_snir: bool) -> None:
+    sim.use_snir = bool(use_snir)
+    if hasattr(sim, "channel") and sim.channel is not None:
+        sim.channel.use_snir = bool(use_snir)
+    multichannel = getattr(sim, "multichannel", None)
+    for channel in getattr(multichannel, "channels", []) or []:
+        channel.use_snir = bool(use_snir)
 
 
 def _assign_clusters(sim: Simulator) -> dict[int, int]:
@@ -147,6 +158,8 @@ def _collect_cluster_metrics(
 ) -> list[ClusterMetrics]:
     metrics = sim.get_metrics()
     rows: list[ClusterMetrics] = []
+    use_snir = bool(getattr(sim, "use_snir", False))
+    snir_state = "snir_on" if use_snir else "snir_off"
     for cluster_id in range(1, len(CLUSTER_PROPORTIONS) + 1):
         nodes = [node for node in sim.nodes if assignments.get(node.id) == cluster_id]
         if not nodes:
@@ -182,6 +195,8 @@ def _collect_cluster_metrics(
                 snir_avg=snir_avg,
                 success_rate=success_rate,
                 algorithm=algorithm,
+                snir_state=snir_state,
+                use_snir=use_snir,
             )
         )
     return rows
@@ -201,6 +216,8 @@ def _collect_decision_log(
     per_cluster_attempts: dict[int, int] = {}
     per_cluster_delivered: dict[int, int] = {}
     rows: list[dict[str, object]] = []
+    use_snir = bool(getattr(sim, "use_snir", False))
+    snir_state = "snir_on" if use_snir else "snir_off"
 
     def _event_key(ev: dict) -> tuple[float, int]:
         return (float(ev.get("start_time", 0.0) or 0.0), int(ev.get("event_id", 0) or 0))
@@ -246,6 +263,8 @@ def _collect_decision_log(
                 "packet_interval_s": packet_interval,
                 "energy_j": _safe_float(event.get("energy_J")) or 0.0,
                 "algorithm": algorithm,
+                "snir_state": snir_state,
+                "use_snir": use_snir,
             }
         )
         decision_idx += 1
@@ -259,6 +278,7 @@ def run_baseline_comparison(
     packet_interval: float = DEFAULT_PACKET_INTERVAL,
     packets_per_node: int = 5,
     seed: int = 1,
+    use_snir: bool = True,
     output_path: Path = RESULTS_PATH,
     decision_log_path: Path = DECISION_LOG_PATH,
 ) -> None:
@@ -277,6 +297,7 @@ def run_baseline_comparison(
             adr_server=False,
             seed=seed + index,
         )
+        _apply_snir_config(sim, use_snir)
         assignments = _assign_clusters(sim)
         _apply_algorithm(sim, name, packet_interval)
         sim.run()
@@ -298,6 +319,8 @@ def run_baseline_comparison(
                 "snir_avg",
                 "success_rate",
                 "algorithm",
+                "snir_state",
+                "use_snir",
             ]
         )
         for entry in rows:
@@ -313,6 +336,8 @@ def run_baseline_comparison(
                     f"{entry.snir_avg:.6f}",
                     f"{entry.success_rate:.6f}",
                     entry.algorithm,
+                    entry.snir_state,
+                    entry.use_snir,
                 ]
             )
 
@@ -337,6 +362,8 @@ def run_baseline_comparison(
                     "packet_interval_s",
                     "energy_j",
                     "algorithm",
+                    "snir_state",
+                    "use_snir",
                 ]
             )
             for row in decision_rows:
@@ -357,6 +384,8 @@ def run_baseline_comparison(
                         f"{row['packet_interval_s']:.6f}",
                         f"{row['energy_j']:.6f}",
                         row["algorithm"],
+                        row["snir_state"],
+                        row["use_snir"],
                     ]
                 )
 
