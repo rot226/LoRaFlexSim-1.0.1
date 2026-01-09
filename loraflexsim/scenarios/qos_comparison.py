@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Mapping
 
-from loraflexsim.launcher import Simulator
+from loraflexsim.launcher import Channel, Simulator
 from loraflexsim.launcher.qos import QoSManager
 
 __all__ = ["run_qos_vs_adr"]
@@ -55,6 +55,16 @@ def _configure_qos(sim: Simulator) -> None:
     manager.apply(sim, "MixRA-Opt")
 
 
+def _build_qos_channel() -> Channel:
+    """Construit un canal avec des impairments non nuls pour casser la linéarité."""
+
+    return Channel(
+        shadowing_std=4.0,
+        fast_fading_std=1.0,
+        multipath_taps=3,
+    )
+
+
 def _run_single(
     label: str,
     *,
@@ -67,6 +77,7 @@ def _run_single(
     output_dir: Path,
     quiet: bool,
 ) -> ScenarioResult:
+    channel = _build_qos_channel()
     sim = Simulator(
         num_nodes=num_nodes,
         num_gateways=1,
@@ -79,6 +90,7 @@ def _run_single(
         adr_server=False,
         duty_cycle=None,
         mobility=False,
+        channels=[channel],
         seed=seed,
         payload_size_bytes=20,
     )
