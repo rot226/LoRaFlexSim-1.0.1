@@ -64,6 +64,7 @@ def test_margin_collision_drop_marks_losses() -> None:
     base_kwargs = dict(
         sf=7,
         capture_threshold=0.5,
+        required_snr_db_by_sf={7: 0.5},
         frequency=868e6,
         min_interference_time=0.0,
         noise_floor=-120.0,
@@ -111,6 +112,7 @@ def test_marginal_snir_drop_remains_probabilistic() -> None:
         common_kwargs = dict(
             sf=7,
             capture_threshold=0.0,
+            required_snr_db_by_sf={7: 0.0},
             frequency=868e6,
             min_interference_time=0.0,
             noise_floor=-120.0,

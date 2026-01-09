@@ -1772,6 +1772,7 @@ class Simulator:
                     bandwidth=node.channel.bandwidth,
                     noise_floor=noise_dBm,
                     snir=snr_effective if use_snir else None,
+                    required_snr_db_by_sf=REQUIRED_SNR,
                     capture_mode=capture_mode,
                     flora_phy=(
                         node.channel.flora_phy
