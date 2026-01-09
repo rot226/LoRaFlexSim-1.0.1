@@ -32,13 +32,13 @@ DEFAULT_FIGURES_DIR = ROOT_DIR / "figures" / "step1" / "heatmaps"
 
 METRIC_LABELS = {
     "DER": ("DER", "DER"),
-    "SNIR": ("snir_mean", "SNIR moyen (dB)"),
+    "SNIR": ("snir_mean", "Mean SNIR (dB)"),
 }
 
 SNIR_STATES = ("snir_on", "snir_off")
 SNIR_TITLES = {
-    "snir_on": "SNIR activé",
-    "snir_off": "SNIR désactivé",
+    "snir_on": "SNIR enabled",
+    "snir_off": "SNIR disabled",
 }
 
 
@@ -162,11 +162,11 @@ def _plot_heatmaps(
         ax.set_yticklabels([str(node) for node in nodes])
         ax.set_xticks(range(len(intervals)))
         ax.set_xticklabels(_format_axis_labels(intervals))
-        ax.set_ylabel("Nœuds")
+        ax.set_ylabel("Nodes")
         ax.set_title(f"{metric_label} – {SNIR_TITLES[state]}")
         ax.tick_params(axis="both", direction="in", length=4.5, width=1.0, labelsize=9)
 
-    axes[-1].set_xlabel("Intervalle (s)")
+    axes[-1].set_xlabel("Interval (s)")
 
     if image is not None:
         cbar = fig.colorbar(image, ax=axes, orientation="vertical", shrink=0.9, pad=0.02)
