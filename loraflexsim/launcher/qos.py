@@ -443,7 +443,12 @@ class QoSManager:
 
         self.sf_limits = cluster_limits
 
-        assignments = self._assign_nodes_to_clusters(nodes)
+        assignments = self._assign_nodes_to_clusters(
+            simulator,
+            nodes,
+            noise_power_w=noise_power_w,
+            reference_tx_dbm=reference_tx_dbm,
+        )
         node_sf_access: dict[int, list[int]] = {}
         node_cluster_ids: dict[int, int] = {}
         sfs = sorted(snr_requirements)
@@ -755,10 +760,46 @@ class QoSManager:
             return 0.0
         return (ratio ** (1.0 / alpha)) * factor
 
-    def _assign_nodes_to_clusters(self, nodes: list) -> dict[object, Cluster]:
+    def _assign_nodes_to_clusters(
+        self,
+        simulator,
+        nodes: list,
+        *,
+        noise_power_w: float,
+        reference_tx_dbm: float,
+    ) -> dict[object, Cluster]:
         if not nodes or not self.clusters:
             return {}
-        sorted_nodes = sorted(nodes, key=lambda n: getattr(n, "id", id(n)))
+        channel = self._reference_channel(simulator)
+        gateways = getattr(simulator, "gateways", []) or []
+        required_snr_db = getattr(simulator, "REQUIRED_SNR", {}) or {}
+        use_radio_metric = channel is not None and required_snr_db and noise_power_w > 0.0
+        noise_dbm = 10.0 * math.log10(noise_power_w) + 30.0 if use_radio_metric else None
+        sf_candidates = sorted(required_snr_db) if use_radio_metric else []
+
+        def _radio_metric(node) -> tuple[int, float, float, int]:
+            distance = self._nearest_gateway_distance(node, gateways)
+            path_loss = channel.path_loss(distance) if channel is not None else distance
+            min_sf = None
+            existing_access = getattr(node, "qos_accessible_sf", None) or []
+            if existing_access:
+                min_sf = existing_access[0]
+            elif use_radio_metric and noise_dbm is not None:
+                tx_power = getattr(node, "tx_power", reference_tx_dbm)
+                tx_gain = getattr(channel, "tx_antenna_gain_dB", 0.0)
+                rx_gain = getattr(channel, "rx_antenna_gain_dB", 0.0)
+                cable_loss = getattr(channel, "cable_loss_dB", 0.0)
+                rssi = tx_power + tx_gain + rx_gain - path_loss - cable_loss
+                snr_db = rssi - noise_dbm
+                for sf in sf_candidates:
+                    if snr_db >= required_snr_db.get(sf, 0.0):
+                        min_sf = sf
+                        break
+            min_sf_value = min_sf if min_sf is not None else 99
+            node_id = getattr(node, "id", id(node))
+            return (min_sf_value, distance, path_loss, node_id)
+
+        sorted_nodes = sorted(nodes, key=_radio_metric)
         total = len(sorted_nodes)
         quotas: list[int] = []
         fractions: list[tuple[float, int]] = []
@@ -877,7 +918,8 @@ class QoSManager:
         if argument >= 0.0:
             return 0.0
         value = QoSManager._lambertw_neg1(argument)
-        nu = -0.5 * value - xi / 2.0
+        saturation_pressure = 1.0 + 0.35 * math.sqrt(max(delta, 0.0))
+        nu = (-0.5 * value - xi / 2.0) / saturation_pressure
         if not math.isfinite(nu) or nu < 0.0:
             return 0.0
         return nu
@@ -1989,4 +2031,3 @@ class QoSManager:
                     fallback_pairs.append(entry)
 
         self._assign_distance_based(fallback_pairs)
-
