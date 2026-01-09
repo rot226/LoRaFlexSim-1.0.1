@@ -93,7 +93,10 @@ def _snir_state_from_row(row: Mapping[str, Any]) -> str | None:
             return "snir_off"
         if normalized in {"snir_unknown", "unknown", "na", "n/a"}:
             return "snir_unknown"
-    parsed = _parse_bool(row.get("use_snir") or row.get("with_snir"))
+    if "use_snir" in row:
+        parsed = _parse_bool(row.get("use_snir"))
+    else:
+        parsed = _parse_bool(row.get("with_snir"))
     return STATE_LABELS.get(parsed) if parsed is not None else None
 
 

@@ -33,12 +33,23 @@ class ClusterMetrics:
     pdr: float
     snir_avg: float
     success_rate: float
+    snir_state: str
+    use_snir: bool
 
 
 CLUSTER_PROPORTIONS = [0.1, 0.3, 0.6]
 CLUSTER_TARGETS = [0.9, 0.8, 0.7]
 DEFAULT_NODE_SWEEP = [2000, 5000, 8000, 11000, 15000]
 RESULTS_PATH = ROOT / "experiments" / "ucb1" / "ucb1_density_metrics.csv"
+
+
+def _apply_snir_config(sim: Simulator, use_snir: bool) -> None:
+    sim.use_snir = bool(use_snir)
+    if hasattr(sim, "channel") and sim.channel is not None:
+        sim.channel.use_snir = bool(use_snir)
+    multichannel = getattr(sim, "multichannel", None)
+    for channel in getattr(multichannel, "channels", []) or []:
+        channel.use_snir = bool(use_snir)
 
 
 def _assign_clusters(sim: Simulator) -> dict[int, int]:
@@ -75,6 +86,8 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
     metrics = sim.get_metrics()
     cluster_rows: list[ClusterMetrics] = []
     cluster_ids: Iterable[int] = range(1, len(CLUSTER_PROPORTIONS) + 1)
+    use_snir = bool(getattr(sim, "use_snir", False))
+    snir_state = "snir_on" if use_snir else "snir_off"
 
     for cluster_id in cluster_ids:
         nodes = [node for node in sim.nodes if assignments.get(node.id) == cluster_id]
@@ -110,6 +123,8 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
                 pdr=pdr,
                 snir_avg=snir_avg,
                 success_rate=success_rate,
+                snir_state=snir_state,
+                use_snir=use_snir,
             )
         )
     return cluster_rows
@@ -121,6 +136,7 @@ def run_density_sweep(
     packet_interval: float = 600.0,
     packets_per_node: int = 5,
     seed: int = 1,
+    use_snir: bool = True,
     output_path: Path = RESULTS_PATH,
 ) -> None:
     """Exécute le balayage de densité et écrit le CSV."""
@@ -139,6 +155,7 @@ def run_density_sweep(
             adr_server=False,
             seed=seed + index,
         )
+        _apply_snir_config(sim, use_snir)
         assignments = _assign_clusters(sim)
         sim.run()
         rows.extend(_collect_cluster_metrics(sim, assignments))
@@ -157,6 +174,8 @@ def run_density_sweep(
                 "pdr",
                 "snir_avg",
                 "success_rate",
+                "snir_state",
+                "use_snir",
             ]
         )
         for entry in rows:
@@ -171,6 +190,8 @@ def run_density_sweep(
                     f"{entry.pdr:.6f}",
                     f"{entry.snir_avg:.6f}",
                     f"{entry.success_rate:.6f}",
+                    entry.snir_state,
+                    entry.use_snir,
                 ]
             )
 

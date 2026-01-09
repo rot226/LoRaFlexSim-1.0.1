@@ -48,6 +48,8 @@ class ClusterMetrics:
     success_rate: float
     success_rate_window: float
     emission_ratio: float
+    snir_state: str
+    use_snir: bool
 
 
 CLUSTER_PROPORTIONS = [0.1, 0.3, 0.6]
@@ -56,6 +58,15 @@ PACKET_INTERVALS = [300.0, 600.0, 900.0]
 RESULTS_PATH = ROOT / "experiments" / "ucb1" / "ucb1_load_metrics.csv"
 DECISION_LOG_PATH = ROOT / "experiments" / "ucb1" / "ucb1_decision_log.csv"
 DEFAULT_NODE_COUNT = 5000
+
+
+def _apply_snir_config(sim: Simulator, use_snir: bool) -> None:
+    sim.use_snir = bool(use_snir)
+    if hasattr(sim, "channel") and sim.channel is not None:
+        sim.channel.use_snir = bool(use_snir)
+    multichannel = getattr(sim, "multichannel", None)
+    for channel in getattr(multichannel, "channels", []) or []:
+        channel.use_snir = bool(use_snir)
 
 
 def _assign_clusters(sim: Simulator) -> dict[int, int]:
@@ -129,6 +140,8 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
     packet_interval = float(getattr(sim, "packet_interval", 0.0) or 0.0)
     packets_to_send = int(getattr(sim, "packets_to_send", 0) or 0)
     node_map = {node.id: node for node in sim.nodes}
+    use_snir = bool(getattr(sim, "use_snir", False))
+    snir_state = "snir_on" if use_snir else "snir_off"
 
     def _bandit_reward_stats(nodes: list) -> tuple[float, float]:
         reward_means: list[float] = []
@@ -250,6 +263,8 @@ def _collect_cluster_metrics(sim: Simulator, assignments: dict[int, int]) -> lis
                     "success_rate": success_rate_all,
                     "success_rate_window": success_rate_window,
                     "emission_ratio": emission_ratio,
+                    "snir_state": snir_state,
+                    "use_snir": use_snir,
                 }
             )
 
@@ -273,6 +288,8 @@ def _collect_decision_log(
     per_cluster_attempts: dict[int, int] = {}
     per_cluster_delivered: dict[int, int] = {}
     rows: list[dict[str, object]] = []
+    use_snir = bool(getattr(sim, "use_snir", False))
+    snir_state = "snir_on" if use_snir else "snir_off"
 
     def _event_key(ev: dict) -> tuple[float, int]:
         return (float(ev.get("start_time", 0.0) or 0.0), int(ev.get("event_id", 0) or 0))
@@ -317,6 +334,8 @@ def _collect_decision_log(
                 "num_nodes": len(sim.nodes),
                 "packet_interval_s": packet_interval,
                 "energy_j": _safe_float(event.get("energy_J")) or 0.0,
+                "snir_state": snir_state,
+                "use_snir": use_snir,
             }
         )
         decision_idx += 1
@@ -329,6 +348,7 @@ def run_load_sweep(
     num_nodes: int = DEFAULT_NODE_COUNT,
     packets_per_node: int = 5,
     seed: int = 1,
+    use_snir: bool = True,
     output_path: Path = RESULTS_PATH,
     decision_log_path: Path = DECISION_LOG_PATH,
 ) -> None:
@@ -347,6 +367,7 @@ def run_load_sweep(
             adr_server=False,
             seed=seed + index,
         )
+        _apply_snir_config(sim, use_snir)
         assignments = _assign_clusters(sim)
         sim.run()
         rows.extend(_collect_cluster_metrics(sim, assignments))
@@ -381,6 +402,8 @@ def run_load_sweep(
                 "success_rate",
                 "success_rate_window",
                 "emission_ratio",
+                "snir_state",
+                "use_snir",
             ]
         )
         for entry in rows:
@@ -410,6 +433,8 @@ def run_load_sweep(
                     f"{entry.success_rate:.6f}",
                     f"{entry.success_rate_window:.6f}",
                     f"{entry.emission_ratio:.6f}",
+                    entry.snir_state,
+                    entry.use_snir,
                 ]
             )
 
@@ -433,6 +458,8 @@ def run_load_sweep(
                     "num_nodes",
                     "packet_interval_s",
                     "energy_j",
+                    "snir_state",
+                    "use_snir",
                 ]
             )
             for row in decision_rows:
@@ -452,6 +479,8 @@ def run_load_sweep(
                         row["num_nodes"],
                         f"{row['packet_interval_s']:.6f}",
                         f"{row['energy_j']:.6f}",
+                        row["snir_state"],
+                        row["use_snir"],
                     ]
                 )
 
