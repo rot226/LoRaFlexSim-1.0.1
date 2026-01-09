@@ -73,7 +73,7 @@ def _parse_snir_states(raw: str | None) -> Sequence[bool]:
     return tuple(states)
 
 
-def _apply_snir_state(sim: Simulator, use_snir: bool) -> None:
+def _apply_snir_config(sim: Simulator, use_snir: bool) -> None:
     sim.use_snir = bool(use_snir)
     multichannel = getattr(sim, "multichannel", None)
     if multichannel is None:
@@ -336,7 +336,7 @@ def run_baseline_comparison(
                 adr_server=False,
                 seed=seed + index,
             )
-            _apply_snir_state(sim, bool(use_snir))
+            _apply_snir_config(sim, bool(use_snir))
             assignments = _assign_clusters(sim)
             _apply_algorithm(sim, name, packet_interval)
             sim.run()
@@ -395,7 +395,7 @@ def run_baseline_comparison(
                         f"{entry.success_rate:.6f}",
                         entry.algorithm,
                         entry.snir_state,
-                        str(entry.use_snir).lower(),
+                        entry.use_snir,
                     ]
                 )
 
@@ -445,7 +445,7 @@ def run_baseline_comparison(
                             f"{row['energy_j']:.6f}",
                             row["algorithm"],
                             row["snir_state"],
-                            str(row["use_snir"]).lower(),
+                            row["use_snir"],
                         ]
                     )
 

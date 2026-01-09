@@ -70,7 +70,7 @@ def _parse_snir_states(raw: str | None) -> Sequence[bool]:
     return tuple(states)
 
 
-def _apply_snir_state(sim: Simulator, use_snir: bool) -> None:
+def _apply_snir_config(sim: Simulator, use_snir: bool) -> None:
     sim.use_snir = bool(use_snir)
     multichannel = getattr(sim, "multichannel", None)
     if multichannel is None:
@@ -192,7 +192,7 @@ def run_density_sweep(
                 adr_server=False,
                 seed=seed + index,
             )
-            _apply_snir_state(sim, bool(use_snir))
+            _apply_snir_config(sim, bool(use_snir))
             assignments = _assign_clusters(sim)
             sim.run()
             rows.extend(
@@ -237,7 +237,7 @@ def run_density_sweep(
                         f"{entry.snir_avg:.6f}",
                         f"{entry.success_rate:.6f}",
                         entry.snir_state,
-                        str(entry.use_snir).lower(),
+                        entry.use_snir,
                     ]
                 )
 
