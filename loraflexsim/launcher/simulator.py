@@ -1746,7 +1746,7 @@ class Simulator:
                     sync_offset=getattr(node, "current_sync_offset", 0.0),
                     bandwidth=node.channel.bandwidth,
                     noise_floor=noise_dBm,
-                    snir=snr_effective,
+                    snir=snr_effective if use_snir else None,
                     capture_mode=capture_mode,
                     flora_phy=(
                         node.channel.flora_phy
