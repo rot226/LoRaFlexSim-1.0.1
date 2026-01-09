@@ -369,7 +369,7 @@ def _extract_success_series(df: pd.DataFrame) -> Optional[pd.Series]:
 
 
 def _extract_snir_series(df: pd.DataFrame) -> Optional[pd.Series]:
-    for column in ["snir_dB"]:
+    for column in ["snir_dB", "snir_db", "snir"]:
         if column in df.columns:
             series = pd.to_numeric(df[column], errors="coerce")
             if series.notna().any():

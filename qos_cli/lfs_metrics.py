@@ -437,7 +437,7 @@ def _compute_cdf_from_column(
 
 
 def compute_snir_cdf(df: Optional[pd.DataFrame]) -> List[Tuple[float, float]]:
-    return _compute_cdf_from_column(df, ["snir_dB"])
+    return _compute_cdf_from_column(df, ["snir_dB", "snir_db", "snir"])
 
 
 def compute_snr_cdf(df: Optional[pd.DataFrame]) -> List[Tuple[float, float]]:
@@ -449,7 +449,7 @@ def compute_snir_stats(
 ) -> Tuple[Optional[float], Optional[float], Optional[float]]:
     if df is None or df.empty:
         return None, None, None
-    snir_column = _find_column(df.columns, ["snir_dB"])
+    snir_column = _find_column(df.columns, ["snir_dB", "snir_db", "snir"])
     if snir_column is None:
         return None, None, None
     series = pd.to_numeric(df[snir_column], errors="coerce").dropna()
@@ -472,7 +472,7 @@ def _normalize_sf_key(value: float) -> str:
 def compute_snir_mean_by_sf(df: Optional[pd.DataFrame]) -> Dict[str, Dict[str, float]]:
     if df is None or df.empty:
         return {}
-    snir_column = _find_column(df.columns, ["snir_dB"])
+    snir_column = _find_column(df.columns, ["snir_dB", "snir_db", "snir"])
     sf_column = _find_column(df.columns, ["sf", "spreading_factor", "SF", "assigned_sf"])
     if snir_column is None or sf_column is None:
         return {}
@@ -498,7 +498,7 @@ def compute_snir_mean_by_sf(df: Optional[pd.DataFrame]) -> Dict[str, Dict[str, f
 def compute_snir_mean_by_cluster(df: Optional[pd.DataFrame]) -> Dict[str, float]:
     if df is None or df.empty:
         return {}
-    snir_column = _find_column(df.columns, ["snir_dB"])
+    snir_column = _find_column(df.columns, ["snir_dB", "snir_db", "snir"])
     cluster_column = _find_column(
         df.columns,
         ["cluster", "cluster_id", "clusterId", "ring", "qos_cluster"],
@@ -526,7 +526,7 @@ def compute_pdr_by_snir_bins(
 ) -> List[Tuple[float, float]]:
     if df is None or df.empty:
         return []
-    snir_column = _find_column(df.columns, ["snir_dB"])
+    snir_column = _find_column(df.columns, ["snir_dB", "snir_db", "snir"])
     success_series = _extract_success_series(df)
     if snir_column is None or success_series is None:
         return []
