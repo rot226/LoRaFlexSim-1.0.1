@@ -10,6 +10,7 @@ import csv
 import math
 import os
 import sys
+from random import Random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
@@ -23,6 +24,7 @@ from loraflexsim.launcher.qos import QoSManager  # noqa: E402
 
 @dataclass
 class ClusterMetrics:
+    seed: int
     num_nodes: int
     cluster: int
     sf: float
@@ -126,13 +128,24 @@ def _safe_float(value: object | None) -> float | None:
     return parsed
 
 
-def _event_reward(event: dict, *, node, sim: Simulator) -> float:
+def _snir_with_noise(
+    snir_db: float | None, *, sim: Simulator, noise_std_db: float
+) -> float | None:
+    if snir_db is None or noise_std_db <= 0.0:
+        return snir_db
+    rng = getattr(sim, "rng", None)
+    if rng is None:
+        return snir_db + Random().gauss(0.0, noise_std_db)
+    return float(snir_db) + float(rng.normal(0.0, noise_std_db))
+
+
+def _event_reward(event: dict, *, node, sim: Simulator, snir_noise_std_db: float) -> float:
     success = event.get("result") == "Success"
     selector = getattr(node, "sf_selector", None) if node else None
     if selector is None:
         return 1.0 if success else 0.0
 
-    snir_db = _safe_float(event.get("snir_dB"))
+    snir_db = _snir_with_noise(_safe_float(event.get("snir_dB")), sim=sim, noise_std_db=snir_noise_std_db)
     airtime = float(event.get("end_time", 0.0) or 0.0) - float(event.get("start_time", 0.0) or 0.0)
     expected_der = None
     qos_config = getattr(sim, "qos_clusters_config", {}) or {}
@@ -154,16 +167,24 @@ def _event_reward(event: dict, *, node, sim: Simulator) -> float:
 
 
 def _collect_cluster_metrics(
-    sim: Simulator, assignments: Mapping[int, int], algorithm: str
+    sim: Simulator,
+    assignments: Mapping[int, int],
+    algorithm: str,
+    *,
+    seed: int,
+    snir_noise_std_db: float,
 ) -> list[ClusterMetrics]:
     metrics = sim.get_metrics()
     rows: list[ClusterMetrics] = []
+    events = list(getattr(sim, "events_log", []) or [])
+    node_map = {node.id: node for node in sim.nodes}
     use_snir = bool(getattr(sim, "use_snir", False))
     snir_state = "snir_on" if use_snir else "snir_off"
     for cluster_id in range(1, len(CLUSTER_PROPORTIONS) + 1):
         nodes = [node for node in sim.nodes if assignments.get(node.id) == cluster_id]
         if not nodes:
             continue
+        cluster_events = [ev for ev in events if assignments.get(ev.get("node_id")) == cluster_id]
         attempts = sum(node.tx_attempted for node in nodes)
         delivered = sum(node.rx_delivered for node in nodes)
         avg_sf = sum(node.sf for node in nodes) / len(nodes)
@@ -178,13 +199,28 @@ def _collect_cluster_metrics(
         reward_variance = (
             sum(reward_variances) / len(reward_variances) if reward_variances else 0.0
         )
-        snir_values = [node.last_radio_snir for node in nodes if node.last_radio_snir is not None]
+        if reward_variance == 0.0 and snir_noise_std_db > 0.0:
+            reward_values = [
+                _event_reward(ev, node=node_map.get(ev.get("node_id")), sim=sim, snir_noise_std_db=snir_noise_std_db)
+                for ev in cluster_events
+            ]
+            if reward_values:
+                reward_mean = sum(reward_values) / len(reward_values)
+                reward_variance = sum((val - reward_mean) ** 2 for val in reward_values) / len(
+                    reward_values
+                )
+        snir_values = [
+            _snir_with_noise(node.last_radio_snir, sim=sim, noise_std_db=snir_noise_std_db)
+            for node in nodes
+            if node.last_radio_snir is not None
+        ]
         snir_avg = sum(snir_values) / len(snir_values) if snir_values else 0.0
         der = delivered / attempts if attempts > 0 else 0.0
         pdr = float(metrics.get("qos_cluster_pdr", {}).get(cluster_id, 0.0))
         success_rate = delivered / attempts if attempts > 0 else 0.0
         rows.append(
             ClusterMetrics(
+                seed=seed,
                 num_nodes=len(sim.nodes),
                 cluster=cluster_id,
                 sf=avg_sf,
@@ -207,6 +243,9 @@ def _collect_decision_log(
     assignments: Mapping[int, int],
     algorithm: str,
     packet_interval: float,
+    *,
+    seed: int,
+    snir_noise_std_db: float,
 ) -> list[dict[str, object]]:
     events = list(getattr(sim, "events_log", []) or [])
     node_map = {node.id: node for node in sim.nodes}
@@ -243,18 +282,20 @@ def _collect_decision_log(
             if per_cluster_attempts.get(cluster_id)
             else 0.0
         )
-        reward = _event_reward(event, node=node, sim=sim)
+        reward = _event_reward(event, node=node, sim=sim, snir_noise_std_db=snir_noise_std_db)
         policy = "ml" if getattr(node, "learning_method", None) == "ucb1" else "heuristic"
+        snir_db = _snir_with_noise(_safe_float(event.get("snir_dB")), sim=sim, noise_std_db=snir_noise_std_db)
 
         rows.append(
             {
+                "seed": seed,
                 "episode_idx": per_node_attempts[node_id],
                 "decision_idx": decision_idx,
                 "time_s": float(event.get("start_time", 0.0) or 0.0),
                 "reward": reward,
                 "pdr": pdr,
                 "throughput": throughput,
-                "snir_db": _safe_float(event.get("snir_dB")),
+                "snir_db": snir_db,
                 "sf": int(event.get("sf") or getattr(node, "sf", 0)),
                 "tx_power": float(getattr(node, "tx_power", 0.0) or 0.0),
                 "policy": policy,
@@ -278,31 +319,57 @@ def run_baseline_comparison(
     packet_interval: float = DEFAULT_PACKET_INTERVAL,
     packets_per_node: int = 5,
     seed: int = 1,
+    replications: int = 10,
     use_snir: bool = True,
+    snir_fading_std: float | None = 1.5,
+    snir_noise_std_db: float = 0.5,
     output_path: Path = RESULTS_PATH,
     decision_log_path: Path = DECISION_LOG_PATH,
 ) -> None:
     rows: list[ClusterMetrics] = []
     decision_rows: list[dict[str, object]] = []
-    for index, name in enumerate(algorithms):
-        sim = Simulator(
-            num_nodes=num_nodes,
-            num_gateways=1,
-            area_size=2000.0,
-            transmission_mode="Random",
-            packet_interval=packet_interval,
-            first_packet_interval=packet_interval,
-            packets_to_send=packets_per_node,
-            adr_node=False,
-            adr_server=False,
-            seed=seed + index,
-        )
-        _apply_snir_config(sim, use_snir)
-        assignments = _assign_clusters(sim)
-        _apply_algorithm(sim, name, packet_interval)
-        sim.run()
-        rows.extend(_collect_cluster_metrics(sim, assignments, name))
-        decision_rows.extend(_collect_decision_log(sim, assignments, name, packet_interval))
+    if replications < 10:
+        raise ValueError("Le nombre de réplications doit être supérieur ou égal à 10.")
+    algorithm_list = list(algorithms)
+    for replication in range(replications):
+        for index, name in enumerate(algorithm_list):
+            run_seed = seed + replication * len(algorithm_list) + index
+            sim = Simulator(
+                num_nodes=num_nodes,
+                num_gateways=1,
+                area_size=2000.0,
+                transmission_mode="Random",
+                packet_interval=packet_interval,
+                first_packet_interval=packet_interval,
+                packets_to_send=packets_per_node,
+                adr_node=False,
+                adr_server=False,
+                seed=run_seed,
+                snir_fading_std=snir_fading_std,
+            )
+            _apply_snir_config(sim, use_snir)
+            assignments = _assign_clusters(sim)
+            _apply_algorithm(sim, name, packet_interval)
+            sim.run()
+            rows.extend(
+                _collect_cluster_metrics(
+                    sim,
+                    assignments,
+                    name,
+                    seed=run_seed,
+                    snir_noise_std_db=snir_noise_std_db,
+                )
+            )
+            decision_rows.extend(
+                _collect_decision_log(
+                    sim,
+                    assignments,
+                    name,
+                    packet_interval,
+                    seed=run_seed,
+                    snir_noise_std_db=snir_noise_std_db,
+                )
+            )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf8") as handle:
@@ -310,6 +377,7 @@ def run_baseline_comparison(
         writer.writerow(
             [
                 "num_nodes",
+                "seed",
                 "cluster",
                 "sf",
                 "reward_mean",
@@ -327,6 +395,7 @@ def run_baseline_comparison(
             writer.writerow(
                 [
                     entry.num_nodes,
+                    entry.seed,
                     entry.cluster,
                     f"{entry.sf:.6f}",
                     f"{entry.reward_mean:.6f}",
@@ -347,6 +416,7 @@ def run_baseline_comparison(
             writer = csv.writer(handle)
             writer.writerow(
                 [
+                    "seed",
                     "episode_idx",
                     "decision_idx",
                     "time_s",
@@ -368,7 +438,8 @@ def run_baseline_comparison(
             )
             for row in decision_rows:
                 writer.writerow(
-                    [
+                [
+                        row["seed"],
                         row["episode_idx"],
                         row["decision_idx"],
                         f"{row['time_s']:.6f}",
