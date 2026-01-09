@@ -36,14 +36,14 @@ DEFAULT_FIGURES_DIR = ROOT_DIR / "figures" / "step1" / "distributions"
 SNIR_STATES = ("snir_on", "snir_off")
 
 METRICS = {
-    "PDR": "PDR global",
-    "DER": "DER global",
-    "snir_mean": "SNIR moyen (dB)",
-    "snr_mean": "SNR moyen (dB)",
+    "PDR": "Overall PDR",
+    "DER": "Overall DER",
+    "snir_mean": "Mean SNIR (dB)",
+    "snr_mean": "Mean SNR (dB)",
     "collisions": "Collisions",
     "collisions_snir": "Collisions (SNIR)",
-    "jain_index": "Indice de Jain",
-    "throughput_bps": "Débit agrégé (bps)",
+    "jain_index": "Jain index",
+    "throughput_bps": "Aggregate throughput (bps)",
 }
 
 
@@ -110,8 +110,8 @@ def _plot_distribution(
     for patch, state in zip(boxplot["boxes"], SNIR_STATES):
         patch.set_facecolor(_snir_color(state))
         patch.set_alpha(0.5)
-    axes[0].set_title("Boxplot")
-    axes[0].set_xlabel("État SNIR")
+    axes[0].set_title("Box plot")
+    axes[0].set_xlabel("SNIR state")
     axes[0].set_ylabel(label)
     _format_axes(axes[0], integer_x=False)
 
@@ -122,11 +122,11 @@ def _plot_distribution(
         body.set_alpha(0.6)
     axes[1].set_xticks(range(1, len(SNIR_STATES) + 1))
     axes[1].set_xticklabels([_snir_label(state) for state in SNIR_STATES])
-    axes[1].set_title("Violon")
-    axes[1].set_xlabel("État SNIR")
+    axes[1].set_title("Violin")
+    axes[1].set_xlabel("SNIR state")
     _format_axes(axes[1], integer_x=False)
 
-    fig.suptitle(f"{label} – {algorithm} – distribution par état SNIR")
+    fig.suptitle(f"{label} – {algorithm} – distribution by SNIR state")
     figures_dir.mkdir(parents=True, exist_ok=True)
     safe_algorithm = algorithm.replace(" ", "_")
     output = figures_dir / f"step1_distribution_{metric}_{safe_algorithm}.png"
@@ -192,7 +192,11 @@ def generate_distributions(
             str(record.get("algorithm") or "unknown")
             for record in records
         ]
-        algorithms_to_plot, _duplicates = _unique_algorithms(discovered)
+        discovered_unique, _duplicates = _unique_algorithms(discovered)
+        if "mixra_opt" in discovered_unique:
+            algorithms_to_plot = ["mixra_opt"]
+        else:
+            algorithms_to_plot = discovered_unique
 
     if not algorithms_to_plot:
         print("Aucun algorithme trouvé ; aucune distribution générée.")
@@ -230,7 +234,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         help=(
             "Algorithme(s) à tracer (option répétable, liste séparée par des virgules). "
-            "Par défaut, tous les algorithmes présents sont utilisés."
+            "Par défaut, mixra_opt est utilisé si disponible afin d'éviter les figures isolées par algorithme."
         ),
     )
     parser.add_argument(

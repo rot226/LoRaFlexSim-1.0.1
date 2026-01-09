@@ -1,7 +1,9 @@
 """Génère les figures de l'étape 1 à partir des CSV produits par Tâche 4.
 
 Les figures standard (dans figures/step1/) ne sont plus recommandées ; privilégiez
-les figures étendues dans figures/step1/extended/.
+les figures étendues dans figures/step1/extended/. Pour les comparaisons
+multi-algorithmes 3×2 / 1×2 décrites dans README_FIGURES.md, utilisez plutôt
+scripts/plot_step1_comparison.py et gardez --compare-snir activé.
 """
 
 from __future__ import annotations
@@ -33,9 +35,9 @@ __all__ = [
 STATE_LABELS = {True: "snir_on", False: "snir_off", None: "snir_unknown"}
 SNIR_COLORS = {"snir_on": "#d62728", "snir_off": "#1f77b4", "snir_unknown": "#7f7f7f"}
 SNIR_LABELS = {
-    "snir_on": "SNIR activé",
-    "snir_off": "SNIR désactivé",
-    "snir_unknown": "SNIR inconnu",
+    "snir_on": "SNIR enabled",
+    "snir_off": "SNIR disabled",
+    "snir_unknown": "SNIR unknown",
 }
 MARKER_CYCLE = ["o", "s", "^", "D", "v", "P", "X"]
 MIXRA_OPT_ALIASES = {"mixra_opt", "mixraopt", "mixra-opt", "mixra opt", "opt"}
@@ -492,10 +494,10 @@ def _plot_global_metric(
                             color=_snir_color(state),
                             label=label,
                         )
-            ax.set_xlabel("Nombre de nœuds")
+            ax.set_xlabel("Number of nodes")
             ax.set_ylabel(ylabel)
             title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
-            ax.set_title(f"{title} – période {title_period} s")
+            ax.set_title(f"{title} – period {title_period} s")
             _format_axes(ax, integer_x=True)
             if ax.get_legend_handles_labels()[0]:
                 ax.legend()
@@ -509,7 +511,7 @@ def _plot_global_metric(
         render,
         on_title=f"{ylabel} – {_snir_label('snir_on')}",
         off_title=f"{ylabel} – {_snir_label('snir_off')}",
-        mixed_title=f"{ylabel} – SNIR mixte",
+        mixed_title=f"{ylabel} – mixed SNIR",
     )
 
 
@@ -527,14 +529,14 @@ def _plot_summary_bars(
             return
 
     metrics = {
-        "PDR": "PDR global",
-        "DER": "DER global",
-        "snir_mean": "SNIR moyen (dB)",
-        "snr_mean": "SNR moyen (dB)",
+        "PDR": "Overall PDR",
+        "DER": "Overall DER",
+        "snir_mean": "Mean SNIR (dB)",
+        "snr_mean": "Mean SNR (dB)",
         "collisions": "Collisions",
         "collisions_snir": "Collisions (SNIR)",
-        "jain_index": "Indice de Jain",
-        "throughput_bps": "Débit agrégé (bps)",
+        "jain_index": "Jain index",
+        "throughput_bps": "Aggregate throughput (bps)",
     }
 
     periods = sorted({r.get("packet_interval_s") for r in records})
@@ -602,10 +604,10 @@ def _plot_summary_bars(
                 )
 
             ax.set_xticks(positions)
-            ax.set_xticklabels([f"{algo}\n{nodes} nœuds" for nodes, algo in combinations], rotation=0)
+            ax.set_xticklabels([f"{algo}\n{nodes} nodes" for nodes, algo in combinations], rotation=0)
             ax.set_ylabel(ylabel)
             period_label = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
-            ax.set_title(f"{ylabel} – période {period_label} s")
+            ax.set_title(f"{ylabel} – period {period_label} s")
             _format_axes(ax, integer_x=False)
             if ax.get_legend_handles_labels()[0]:
                 ax.legend()
@@ -729,9 +731,9 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
                     if target is not None:
                         break
                 if target is not None:
-                    ax.axhline(target, color="black", linestyle="--", linewidth=1, label="Cible" if idx == 0 else None)
+                    ax.axhline(target, color="black", linestyle="--", linewidth=1, label="Target" if idx == 0 else None)
                 ax.set_title(f"Cluster {cluster_id}")
-                ax.set_xlabel("Nœuds")
+                ax.set_xlabel("Nodes")
                 if idx == 0:
                     ax.set_ylabel("PDR")
                 ax.set_ylim(0.0, 1.05)
@@ -740,7 +742,7 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
             if handles:
                 fig.legend(handles, labels, loc="upper center", ncol=min(len(labels), 4))
             title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
-            fig.suptitle(f"{title} – période {title_period} s")
+            fig.suptitle(f"{title} – period {title_period} s")
             figures_dir.mkdir(parents=True, exist_ok=True)
             output = figures_dir / f"step1_cluster_pdr{suffix}_tx_{title_period}.png"
             fig.tight_layout(rect=(0, 0, 1, 0.92))
@@ -749,9 +751,9 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
 
     _render_snir_variants(
         render,
-        on_title="PDR par cluster – SNIR activé",
-        off_title="PDR par cluster – SNIR désactivé",
-        mixed_title="PDR par cluster – SNIR mixte",
+        on_title="Cluster PDR – SNIR enabled",
+        off_title="Cluster PDR – SNIR disabled",
+        mixed_title="Cluster PDR – mixed SNIR",
     )
 
 
@@ -837,11 +839,11 @@ def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None
                 f"{fixed_value:.0f}" if float(fixed_value).is_integer() else f"{fixed_value:g}"
             )
             if fixed_key == "packet_interval_s":
-                fixed_desc = f"période {fixed_label} s"
+                fixed_desc = f"period {fixed_label} s"
             else:
-                fixed_desc = f"{fixed_label} nœuds"
+                fixed_desc = f"{fixed_label} nodes"
             ax.set_title(
-                f"Trajectoires {ylabel} – {algorithm} – {fixed_desc}"
+                f"Trajectories {ylabel} – {algorithm} – {fixed_desc}"
             )
             integer_x = all(float(x).is_integer() for x in collected_xs)
             _format_axes(ax, integer_x=integer_x)
@@ -876,7 +878,7 @@ def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None
                     x_key="num_nodes",
                     fixed_key="packet_interval_s",
                     fixed_values=period_values,
-                    x_label="Nombre de nœuds",
+                    x_label="Number of nodes",
                     filename_tag="nodes",
                 )
             if len(period_values) > 1:
@@ -887,7 +889,7 @@ def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None
                     x_key="packet_interval_s",
                     fixed_key="num_nodes",
                     fixed_values=node_values,
-                    x_label="Intervalle paquet (s)",
+                    x_label="Packet interval (s)",
                     filename_tag="interval",
                 )
 
@@ -924,14 +926,14 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
         return
 
     metrics = {
-        "PDR": "PDR global",
-        "DER": "DER global",
-        "snir_mean": "SNIR moyen (dB)",
-        "snr_mean": "SNR moyen (dB)",
+        "PDR": "Overall PDR",
+        "DER": "Overall DER",
+        "snir_mean": "Mean SNIR (dB)",
+        "snr_mean": "Mean SNR (dB)",
         "collisions": "Collisions",
         "collisions_snir": "Collisions (SNIR)",
-        "jain_index": "Indice de Jain",
-        "throughput_bps": "Débit agrégé (bps)",
+        "jain_index": "Jain index",
+        "throughput_bps": "Aggregate throughput (bps)",
     }
 
     by_algorithm = defaultdict(list)
@@ -1010,10 +1012,10 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
                                 label=label,
                             )
 
-                    ax.set_xlabel("Nombre de nœuds")
+                    ax.set_xlabel("Number of nodes")
                     ax.set_ylabel(ylabel)
                     period_label = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
-                    ax.set_title(f"{title} – {algorithm} – période {period_label} s")
+                    ax.set_title(f"{title} – {algorithm} – period {period_label} s")
                     _format_axes(ax, integer_x=True)
                     if ax.get_legend_handles_labels()[0]:
                         ax.legend()
@@ -1028,9 +1030,9 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
 
                 _render_snir_variants(
                     render,
-                    on_title=f"{ylabel} – SNIR activé",
-                    off_title=f"{ylabel} – SNIR désactivé",
-                    mixed_title=f"{ylabel} – SNIR mixte",
+                    on_title=f"{ylabel} – SNIR enabled",
+                    off_title=f"{ylabel} – SNIR disabled",
+                    mixed_title=f"{ylabel} – mixed SNIR",
                 )
 
 
@@ -1048,8 +1050,8 @@ def plot_distribution_by_state(
             return
 
     metrics = {
-        "snir_mean": "SNIR moyen (dB)",
-        "DER": "DER global",
+        "snir_mean": "Mean SNIR (dB)",
+        "DER": "Overall DER",
         "collisions": "Collisions",
     }
     states = ["snir_on", "snir_off"]
@@ -1091,8 +1093,8 @@ def plot_distribution_by_state(
             patch.set_facecolor(_snir_color(state))
             patch.set_alpha(0.5)
         ax.set_ylabel(ylabel)
-        ax.set_xlabel("État SNIR")
-        ax.set_title(f"Distribution {ylabel} par état SNIR")
+        ax.set_xlabel("SNIR state")
+        ax.set_title(f"{ylabel} distribution by SNIR state")
         _format_axes(ax, integer_x=False)
         figures_dir.mkdir(parents=True, exist_ok=True)
         output = figures_dir / f"step1_distribution_{metric}.png"
@@ -1162,16 +1164,16 @@ def generate_step1_figures(
             print(f"Aucun CSV trouvé dans {results_dir} ; rien à tracer.")
             return
         _plot_cluster_pdr(records, output_dir)
-        _plot_global_metric(records, "PDR", "PDR global", "pdr_global", output_dir)
-        _plot_global_metric(records, "DER", "DER global", "der_global", output_dir)
+        _plot_global_metric(records, "PDR", "Overall PDR", "pdr_global", output_dir)
+        _plot_global_metric(records, "DER", "Overall DER", "der_global", output_dir)
         _plot_global_metric(records, "collisions", "Collisions", "collisions", output_dir)
         _plot_global_metric(records, "collisions_snir", "Collisions (SNIR)", "collisions_snir", output_dir)
-        _plot_global_metric(records, "jain_index", "Indice de Jain", "jain_index", output_dir)
-        _plot_global_metric(records, "throughput_bps", "Débit agrégé (bps)", "throughput", output_dir)
+        _plot_global_metric(records, "jain_index", "Jain index", "jain_index", output_dir)
+        _plot_global_metric(records, "throughput_bps", "Aggregate throughput (bps)", "throughput", output_dir)
         if any((r.get("snir_mean") is not None or r.get("snr_mean") is not None) for r in records):
-            _plot_global_metric(records, "snir_mean", "SNIR moyen (dB)", "snir_mean", output_dir)
+            _plot_global_metric(records, "snir_mean", "Mean SNIR (dB)", "snir_mean", output_dir)
         if any(r.get("snr_mean") is not None for r in records):
-            _plot_global_metric(records, "snr_mean", "SNR moyen (dB)", "snr_mean", output_dir)
+            _plot_global_metric(records, "snr_mean", "Mean SNR (dB)", "snr_mean", output_dir)
         if plot_trajectories:
             _plot_trajectories(records, trajectories_dir)
         comparison_records = records
@@ -1181,7 +1183,18 @@ def generate_step1_figures(
         if not comparison_records:
             print("Aucune donnée disponible pour comparer SNIR on/off.")
         else:
-            _plot_snir_comparison(comparison_records, comparison_dir)
+            algorithms = {
+                str(record.get("algorithm") or "unknown")
+                for record in comparison_records
+            }
+            if len(algorithms) > 1:
+                print(
+                    "Plusieurs algorithmes détectés ; privilégiez les figures 3×2 / 1×2 "
+                    "de scripts/plot_step1_comparison.py. Les figures SNIR isolées par "
+                    "algorithme sont ignorées."
+                )
+            else:
+                _plot_snir_comparison(comparison_records, comparison_dir)
             forced_algorithm = (
                 EXTENDED_ALGORITHM if comparison_dir == extended_dir else None
             )
@@ -1261,7 +1274,8 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=True,
         help=(
-            "Active les figures combinées SNIR on/off par métrique et par algorithme (activé par défaut)"
+            "Active les comparaisons SNIR on/off (activé par défaut, recommandé pour "
+            "les figures 3×2 / 1×2 de README_FIGURES.md)."
         ),
     )
     parser.add_argument(

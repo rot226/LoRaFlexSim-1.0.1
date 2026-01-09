@@ -33,14 +33,14 @@ METRICS = [
     ("DER", "DER"),
     ("PDR", "PDR"),
     ("collisions", "Collisions"),
-    ("avg_energy_per_node_J", "Énergie moyenne (J)"),
-    ("snir_mean", "SNIR/SNR moyen (dB)"),
+    ("avg_energy_per_node_J", "Mean energy (J)"),
+    ("snir_mean", "Mean SNIR/SNR (dB)"),
 ]
 
 SNIR_STATES = ("snir_on", "snir_off")
 SNIR_LABELS = {
-    "snir_on": "SNIR activé",
-    "snir_off": "SNIR désactivé",
+    "snir_on": "SNIR enabled",
+    "snir_off": "SNIR disabled",
 }
 
 
@@ -200,7 +200,7 @@ def _plot_radar(
     ax.plot(angles, values, color=color, linewidth=2, label=SNIR_LABELS.get(state, state))
     ax.fill(angles, values, color=color, alpha=0.2)
 
-    ax.set_title(f"Radar QoS – {algorithm} ({SNIR_LABELS.get(state, state)})", y=1.1)
+    ax.set_title(f"QoS radar – {algorithm} ({SNIR_LABELS.get(state, state)})", y=1.1)
     ax.legend(loc="upper right", bbox_to_anchor=(1.2, 1.1))
 
     figures_dir.mkdir(parents=True, exist_ok=True)
