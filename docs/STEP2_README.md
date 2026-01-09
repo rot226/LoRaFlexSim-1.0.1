@@ -39,7 +39,9 @@ python scripts/run_step2_scenarios.py --input-dir results/step2/input
 python scripts/plot_step2_comparison.py --results-dir results/step2
 ```
 
-Les PNG sont produits dans `figures/step2`.
+Les PNG sont produits dans `figures/step2`. **`plot_step2_comparison.py` est
+le seul générateur de figures Step 2** : évitez d’appeler d’autres scripts de
+plots Step 2 (en CI ou dans vos wrappers) en parallèle.
 
 ## Paper runs (campagnes complètes)
 
@@ -52,6 +54,13 @@ Les PNG sont produits dans `figures/step2`.
 ```powershell
 python scripts/run_step2_scenarios.py --input-dir results/step2/input --output-dir results/step2
 python scripts/plot_step2_comparison.py --results-dir results/step2 --output-dir figures/step2
+```
+
+Pour ne produire que les figures principales (performance + convergence), ajoutez
+`--only-core-figures` :
+
+```powershell
+python scripts/plot_step2_comparison.py --results-dir results/step2 --only-core-figures
 ```
 
 ### Détails des sorties

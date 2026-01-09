@@ -318,6 +318,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Ignore la figure de distribution SF/TP.",
     )
+    parser.add_argument(
+        "--only-core-figures",
+        action="store_true",
+        help="Ne génère que les figures principales (performance + convergence).",
+    )
     return parser
 
 
@@ -342,7 +347,7 @@ def main() -> None:
     if convergence_rows:
         _plot_convergence(convergence_rows, args.output_dir, algorithms)
 
-    if not args.skip_distribution:
+    if not args.skip_distribution and not args.only_core_figures:
         distribution_rows = _load_csv(agg_dir / "sf_tp_distribution.csv")
         if distribution_rows:
             _plot_distribution(distribution_rows, args.output_dir, algorithms)
