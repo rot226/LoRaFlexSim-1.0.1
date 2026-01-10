@@ -3,8 +3,8 @@ Exécution guidée de la matrice d'essais Step 1 sous Windows.
 
 Ce script :
 - se place à la racine du dépôt ;
-- active l'environnement virtuel local (``.\\venv`` prioritaire, sinon ``.\\env``) ;
-- lance ``python scripts/run_step1_matrix.py`` avec les paramètres
+- utilise explicitement le Python du venv local (``.\\venv`` prioritaire, sinon ``.\\env``) ;
+- lance ``scripts/run_step1_matrix.py`` avec les paramètres
   recommandés pour générer les CSV sous ``results/step1/<snir_state>/seed_<seed>/``.
 #>
 
@@ -21,27 +21,21 @@ $rootDir = Resolve-Path (Join-Path $scriptDir "..")
 Set-Location $rootDir
 
 if ([string]::IsNullOrWhiteSpace($VenvPath)) {
-    if (Test-Path ".\\.venv\\Scripts\\Activate.ps1") {
+    if (Test-Path ".\\.venv\\Scripts\\python.exe") {
         $VenvPath = ".\\.venv"
-    } elseif (Test-Path ".\\env\\Scripts\\Activate.ps1") {
+    } elseif (Test-Path ".\\env\\Scripts\\python.exe") {
         $VenvPath = ".\\env"
     } else {
-        throw "Aucun venv détecté. Créez un environnement avec 'python -m venv .venv' ou 'python -m venv env', ou fournissez -VenvPath."
+        Write-Error "Aucun venv détecté. Créez un environnement avec 'python -m venv .venv' (ou 'python -m venv env'), puis relancez ce script, ou fournissez -VenvPath."
+        exit 1
     }
 }
 
-$activateScript = Join-Path $VenvPath "Scripts/Activate.ps1"
-if (-not (Test-Path $activateScript)) {
-    throw "Fichier d'activation introuvable : $activateScript. Créez l'environnement avec 'python -m venv $VenvPath'."
+$Py = Join-Path $VenvPath "Scripts/python.exe"
+if (-not (Test-Path $Py)) {
+    Write-Error "Interpréteur Python introuvable dans le venv : $Py"
+    exit 1
 }
-
-$pythonExe = Join-Path $VenvPath "Scripts/python.exe"
-if (-not (Test-Path $pythonExe)) {
-    throw "Interpréteur Python introuvable dans le venv : $pythonExe"
-}
-
-Write-Host "Activation de l'environnement virtuel '$VenvPath'..."
-. $activateScript
 
 $arguments = @(
     "scripts/run_step1_matrix.py"
@@ -52,5 +46,5 @@ $arguments = @(
     "--packet-intervals" "300" "600"
 )
 
-Write-Host "Lancement de la matrice Step 1..."
-& $pythonExe @arguments
+Write-Host "Lancement de la matrice Step 1 avec le Python du venv : $Py"
+& $Py @arguments
