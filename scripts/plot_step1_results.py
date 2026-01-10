@@ -164,6 +164,7 @@ def _load_step1_records(results_dir: Path, strict: bool = False) -> List[Dict[st
             for row in reader:
                 cluster_pdr: Dict[int, float] = {}
                 cluster_targets: Dict[int, float] = {}
+                cluster_der: Dict[int, float] = {}
                 for key, value in row.items():
                     if key.startswith("qos_cluster_pdr__"):
                         cluster_id = int(key.split("__")[-1])
@@ -171,6 +172,9 @@ def _load_step1_records(results_dir: Path, strict: bool = False) -> List[Dict[st
                     elif key.startswith("qos_cluster_targets__"):
                         cluster_id = int(key.split("__")[-1])
                         cluster_targets[cluster_id] = _parse_float(value)
+                    elif key.startswith("qos_cluster_der__"):
+                        cluster_id = int(key.split("__")[-1])
+                        cluster_der[cluster_id] = _parse_float(value)
 
                 snir_candidate = row.get("snir_mean")
                 snr_candidate = row.get("snr_mean") or row.get("SNR") or row.get("snr")
@@ -192,6 +196,7 @@ def _load_step1_records(results_dir: Path, strict: bool = False) -> List[Dict[st
                     "jain_index": _parse_float(row.get("jain_index")),
                     "throughput_bps": _parse_float(row.get("throughput_bps")),
                     "cluster_pdr": cluster_pdr,
+                    "cluster_der": cluster_der,
                     "cluster_targets": cluster_targets,
                 }
                 snir_state, snir_detected = _detect_snir_state(row)
@@ -757,6 +762,74 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
     )
 
 
+def _plot_cluster_der(records: List[Dict[str, Any]], figures_dir: Path) -> None:
+    if not records or plt is None:
+        return
+    clusters = sorted({cid for r in records for cid in r.get("cluster_der", {})})
+    if not clusters:
+        return
+    periods = sorted({r["packet_interval_s"] for r in records})
+    algorithms = _unique_algorithms(records)
+    states = ["snir_on", "snir_off"]
+
+    for period in periods:
+        filtered = [
+            r
+            for r in records
+            if r["packet_interval_s"] == period
+            and r.get("snir_state") in states
+            and r.get("snir_detected", True)
+        ]
+        if not filtered:
+            continue
+        fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 4), sharey=True)
+        if len(clusters) == 1:
+            axes = [axes]
+        for idx, cluster_id in enumerate(clusters):
+            ax = axes[idx]
+            for state in states:
+                state_records = [r for r in filtered if _record_matches_state(r, state)]
+                for algo_idx, algorithm in enumerate(algorithms):
+                    algo_records = [r for r in state_records if r["algorithm"] == algorithm]
+                    algo_records.sort(key=lambda item: item["num_nodes"])
+                    xs: List[int] = []
+                    ys: List[float] = []
+                    for item in algo_records:
+                        value = item.get("cluster_der", {}).get(cluster_id)
+                        if value is None:
+                            continue
+                        xs.append(item["num_nodes"])
+                        ys.append(value)
+                    if xs:
+                        marker = MARKER_CYCLE[algo_idx % len(MARKER_CYCLE)]
+                        label = f"{algorithm} ({_snir_label(state)})"
+                        ax.plot(
+                            xs,
+                            ys,
+                            marker=marker,
+                            markersize=5.5,
+                            linewidth=2,
+                            color=_snir_color(state),
+                            label=label,
+                        )
+            ax.set_title(f"Cluster {cluster_id}")
+            ax.set_xlabel("Nodes")
+            if idx == 0:
+                ax.set_ylabel("DER")
+            ax.set_ylim(0.0, 1.05)
+            _format_axes(ax, integer_x=True)
+        handles, labels = axes[0].get_legend_handles_labels()
+        if handles:
+            fig.legend(handles, labels, loc="upper center", ncol=min(len(labels), 4))
+        title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
+        fig.suptitle(f"DER par cluster – SNIR ON/OFF superposés (period {title_period} s)")
+        figures_dir.mkdir(parents=True, exist_ok=True)
+        output = figures_dir / f"step1_cluster_der_overlay_tx_{title_period}.png"
+        fig.tight_layout(rect=(0, 0, 1, 0.92))
+        fig.savefig(output, dpi=150)
+        plt.close(fig)
+
+
 def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None:
     if not records or plt is None:
         return
@@ -1163,6 +1236,7 @@ def generate_step1_figures(
         if not records:
             print(f"Aucun CSV trouvé dans {results_dir} ; rien à tracer.")
             return
+        _plot_cluster_der(records, output_dir)
         _plot_cluster_pdr(records, output_dir)
         _plot_global_metric(records, "PDR", "Overall PDR", "pdr_global", output_dir)
         _plot_global_metric(records, "DER", "Overall DER", "der_global", output_dir)

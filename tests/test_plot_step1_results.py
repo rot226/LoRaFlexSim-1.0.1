@@ -805,6 +805,7 @@ def test_cli_includes_mixra_opt_in_all_global_outputs(
     monkeypatch.setattr(plot_step1_results, "plt", _FakePlt())
     monkeypatch.setattr(plot_step1_results, "_format_axes", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(plot_step1_results, "_apply_ieee_style", lambda: None)
+    monkeypatch.setattr(plot_step1_results, "_plot_cluster_der", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(plot_step1_results, "_plot_cluster_pdr", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(plot_step1_results, "plot_distribution_by_state", lambda *_args, **_kwargs: None)
 
