@@ -208,6 +208,8 @@ def _normalize_metric_rows(
                 "pdr": _parse_float(row.get("pdr")),
                 "snir_avg": _parse_float(row.get("snir_avg")),
                 "success_rate": _parse_float(row.get("success_rate")),
+                "energy_j": _parse_float(row.get("energy_j")),
+                "fairness": _parse_float(row.get("fairness")),
             }
         )
     return rows
@@ -420,6 +422,8 @@ def run_normalisation(input_dir: Path, output_dir: Path) -> None:
             "pdr",
             "snir_avg",
             "success_rate",
+            "energy_j",
+            "fairness",
         ]
         _write_csv(raw_dir / "metrics.csv", metrics_fields, metrics)
 
