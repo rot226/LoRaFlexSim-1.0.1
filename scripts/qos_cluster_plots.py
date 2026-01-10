@@ -15,6 +15,8 @@ try:  # pragma: no cover - dépend de l'environnement de test
 except Exception:  # pragma: no cover - permet une dégradation élégante sans numpy réel
     plt = None  # type: ignore
 
+from plot_theme import SNIR_COLORS, apply_plot_theme
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "qos_clusters"
 DEFAULT_FIGURES_DIR = ROOT_DIR / "figures" / "qos_clusters"
@@ -128,7 +130,7 @@ def _plot_metric_vs_nodes(
     for period in periods:
         fig, ax = plt.subplots(figsize=(6, 4))
         for algorithm in algorithms:
-            for use_snir, color in ((True, "#d62728"), (False, "#1f77b4")):
+            for use_snir, color_key in ((True, "snir_on"), (False, "snir_off")):
                 data = [
                     record
                     for record in records
@@ -142,7 +144,7 @@ def _plot_metric_vs_nodes(
                 xs = [item["num_nodes"] for item in data]
                 ys = [item.get(metric, 0.0) for item in data]
                 label = f"{algorithm} (SNIR {'ON' if use_snir else 'OFF'})"
-                ax.plot(xs, ys, marker="o", label=label, color=color)
+                ax.plot(xs, ys, marker="o", label=label, color=SNIR_COLORS[color_key])
         ax.set_xlabel("Nombre de nœuds")
         ax.set_ylabel(ylabel)
         title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
@@ -421,6 +423,7 @@ def generate_plots(results_dir: Path, figures_dir: Path, *, quiet: bool = False)
             )
         return False
 
+    apply_plot_theme(plt)
     records = _load_records(results_dir)
     if not records:
         if not quiet:
