@@ -12,7 +12,14 @@ terminal disposant de Python 3.10+ (Windows 11 : PowerShell, Git Bash ou WSL
    ```bash
    python -m venv env
    # Windows (PowerShell) :
-   .\\env\\Scripts\\Activate.ps1
+   if (Test-Path ".\\.venv\\Scripts\\Activate.ps1") {
+       $venvPath = ".\\.venv"
+   } elseif (Test-Path ".\\env\\Scripts\\Activate.ps1") {
+       $venvPath = ".\\env"
+   } else {
+       throw "Aucun venv détecté. Créez-en un avec 'python -m venv .venv' ou 'python -m venv env'."
+   }
+   . "$venvPath\\Scripts\\Activate.ps1"
    # Linux/macOS :
    source env/bin/activate
    ```
