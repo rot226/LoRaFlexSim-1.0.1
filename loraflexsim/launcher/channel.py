@@ -70,7 +70,8 @@ class Channel:
     """Représente le canal de propagation radio pour LoRa."""
 
     SPEED_OF_LIGHT = 299_792_458.0
-    RAYLEIGH_DB_MEAN = 20 / math.log(10) * 0.5 * (math.log(2.0) - math.euler_gamma)
+    EULER_GAMMA = getattr(math, "euler_gamma", 0.5772156649015329)
+    RAYLEIGH_DB_MEAN = 20 / math.log(10) * 0.5 * (math.log(2.0) - EULER_GAMMA)
     RAYLEIGH_DB_STD = 20 / math.log(10) * (math.pi / (2.0 * math.sqrt(6.0)))
     FLORA_ENERGY_DETECTION_DBM = -90.0
     ENV_PRESETS = {
