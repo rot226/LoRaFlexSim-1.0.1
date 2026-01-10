@@ -56,6 +56,26 @@ ALGORITHMS: Mapping[str, Callable[..., None]] = {
 STATE_LABELS = {True: "snir_on", False: "snir_off"}
 
 
+def _parse_snir_window(value: str) -> str | float:
+    text = str(value).strip().lower()
+    if text in {"packet", "preamble", "symbol"}:
+        return text
+    try:
+        return float(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "snir_window doit être 'packet', 'preamble', 'symbol' ou une durée en secondes."
+        ) from exc
+
+
+def _snir_window_label(value: str | float | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return f"{value:g}s"
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -128,6 +148,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Probabilité max d'échec lorsque le SNIR est marginal",
     )
     parser.add_argument(
+        "--snir-window",
+        type=_parse_snir_window,
+        default=None,
+        help="Fenêtre SNIR (packet, preamble, symbol ou durée en secondes)",
+    )
+    parser.add_argument(
         "--mixra-solver",
         choices=["auto", "greedy"],
         default="auto",
@@ -185,6 +211,7 @@ def _instantiate_simulator(
     capture_threshold_db: float | None = None,
     marginal_snir_margin_db: float | None = None,
     marginal_snir_drop_prob: float | None = None,
+    snir_window: str | float | None = None,
     fading_model: str = "rayleigh",
 ) -> Simulator:
     channel_overrides: dict[str, object | None] = {
@@ -193,6 +220,7 @@ def _instantiate_simulator(
         "capture_threshold_dB": capture_threshold_db,
         "marginal_snir_margin_db": marginal_snir_margin_db,
         "marginal_snir_drop_prob": marginal_snir_drop_prob,
+        "snir_window": snir_window,
     }
     if fading_model == "rayleigh":
         if channel_overrides.get("shadowing_std") is None:
@@ -210,6 +238,7 @@ def _instantiate_simulator(
         pure_poisson_mode=pure_poisson,
         channel_config=channel_config,
         channel_overrides=channel_overrides,
+        snir_window=snir_window,
     )
     simulator._interference_tracker = InterferenceTracker()
     _sync_snir_state(simulator, use_snir)
@@ -236,6 +265,17 @@ def _apply_algorithm(name: str, simulator: Simulator, manager: QoSManager, solve
 
 def _snir_suffix(use_snir: bool) -> str:
     return "_snir-on" if use_snir else "_snir-off"
+
+
+def _resolve_snir_window(simulator: Simulator) -> str | float | None:
+    multichannel = getattr(simulator, "multichannel", None)
+    channels = list(getattr(multichannel, "channels", []) or [])
+    if channels:
+        return getattr(channels[0], "snir_window", None)
+    base_channel = getattr(simulator, "channel", None)
+    if base_channel is not None:
+        return getattr(base_channel, "snir_window", None)
+    return getattr(simulator, "snir_window", None)
 
 
 def _ensure_collisions_snir(csv_row: Mapping[str, object]) -> None:
@@ -321,6 +361,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
         capture_threshold_db=args.capture_threshold_db,
         marginal_snir_margin_db=args.marginal_snir_margin_db,
         marginal_snir_drop_prob=args.marginal_snir_drop_prob,
+        snir_window=args.snir_window,
         fading_model=args.fading_model,
     )
     manager = QoSManager()
@@ -349,6 +390,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
             "capture_threshold_dB": getattr(simulator, "capture_delta_db", None),
             "marginal_snir_margin_db": getattr(simulator, "marginal_snir_margin_db", None),
             "marginal_snir_drop_prob": getattr(simulator, "marginal_snir_drop_prob", None),
+            "snir_window": _snir_window_label(_resolve_snir_window(simulator)),
         }
     )
     enriched = _compute_additional_metrics(simulator, dict(metrics), args.algorithm, args.mixra_solver)

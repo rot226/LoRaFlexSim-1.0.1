@@ -60,6 +60,26 @@ ALGORITHMS = {
 }
 
 
+def _parse_snir_window(value: str) -> str | float:
+    text = str(value).strip().lower()
+    if text in {"packet", "preamble", "symbol"}:
+        return text
+    try:
+        return float(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "snir_window doit être 'packet', 'preamble', 'symbol' ou une durée en secondes."
+        ) from exc
+
+
+def _snir_window_label(value: str | float | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return f"{value:g}s"
+
+
 def _parse_bool(value: str) -> bool:
     text = str(value).strip().lower()
     if text in {"1", "true", "yes", "y", "on"}:
@@ -129,6 +149,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Solveur MixRA-Opt à utiliser",
     )
     parser.add_argument(
+        "--snir-window",
+        type=_parse_snir_window,
+        default=None,
+        help="Fenêtre SNIR (packet, preamble, symbol ou durée en secondes)",
+    )
+    parser.add_argument(
         "--raw-dir",
         type=Path,
         default=DEFAULT_RAW_DIR,
@@ -153,7 +179,11 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _build_multichannel(channel_count: int) -> MultiChannel:
+def _build_multichannel(
+    channel_count: int,
+    *,
+    snir_window: str | float | None = None,
+) -> MultiChannel:
     if channel_count < 1:
         raise ValueError("Le nombre de canaux doit être >= 1")
     if channel_count > len(FREQUENCIES_HZ):
@@ -173,6 +203,7 @@ def _build_multichannel(channel_count: int) -> MultiChannel:
             fast_fading_std=1.0,
             snir_fading_std=1.5,
             variable_noise_std=0.5,
+            snir_window=snir_window,
         )
         channel.orthogonal_sf = False
         channels.append(channel)
@@ -216,6 +247,7 @@ def _instantiate_simulator(
     seed: int,
     channels: int,
     use_snir: bool,
+    snir_window: str | float | None = None,
 ) -> Simulator:
     simulator = Simulator(
         num_nodes=nodes,
@@ -229,7 +261,7 @@ def _instantiate_simulator(
         adr_server=False,
         duty_cycle=0.01,
         mobility=False,
-        channels=_build_multichannel(channels),
+        channels=_build_multichannel(channels, snir_window=snir_window),
         channel_distribution="round-robin",
         payload_size_bytes=PAYLOAD_BYTES,
         seed=seed,
@@ -238,6 +270,7 @@ def _instantiate_simulator(
         pure_poisson_mode=False,
     )
     simulator.use_snir = bool(use_snir)
+    simulator.snir_window = snir_window
     setattr(simulator, "capture_delta_db", 1.0)
     simulator._interference_tracker = InterferenceTracker()
     _sync_snir_state(simulator, use_snir)
@@ -291,6 +324,7 @@ def _run_simulation(
     seed: int,
     duration: float,
     mixra_solver: str,
+    snir_window: str | float | None,
 ) -> Dict[str, Any]:
     simulator = _instantiate_simulator(
         nodes=nodes,
@@ -298,6 +332,7 @@ def _run_simulation(
         seed=seed,
         channels=channels,
         use_snir=use_snir,
+        snir_window=snir_window,
     )
     manager = QoSManager()
     _configure_clusters(manager, charge_s)
@@ -319,6 +354,7 @@ def _run_simulation(
             "snir_state": STATE_LABELS.get(use_snir, "snir_unknown"),
             "snir_state_effective": STATE_LABELS.get(effective_snir, "snir_unknown"),
             "channels": channels,
+            "snir_window": _snir_window_label(snir_window),
         }
     )
     enriched = _compute_additional_metrics(simulator, dict(metrics), algo, mixra_solver)
@@ -336,10 +372,12 @@ def _collect_rows(
     seed: int,
     duration: float,
     mixra_solver: str,
+    snir_window: str | float | None,
     quiet: bool,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     scenario_index = 0
+    snir_window_label = _snir_window_label(snir_window)
     for snir_mode in snir_modes:
         snir_label = STATE_LABELS.get(snir_mode, "snir_unknown")
         for channel_count in channels:
@@ -365,6 +403,7 @@ def _collect_rows(
                                 seed=run_seed,
                                 duration=duration,
                                 mixra_solver=mixra_solver,
+                                snir_window=snir_window,
                             )
                             flat = _flatten_metrics(metrics)
                             total_nodes = int(metrics.get("num_nodes", node_count))
@@ -380,6 +419,7 @@ def _collect_rows(
                                 "channels": channel_count,
                                 "algos": algo,
                                 "snir_mode": snir_label,
+                                "snir_window": snir_window_label,
                                 "collisions": flat.get("collisions", 0),
                                 "snir_mean": flat.get("snir_mean", 0.0),
                                 "snr_mean": flat.get("snr_mean", 0.0),
@@ -453,6 +493,7 @@ def _aggregate(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             row["channels"],
             row["algos"],
             row["snir_mode"],
+            row.get("snir_window"),
         )
         grouped[key].append(row)
 
@@ -466,16 +507,18 @@ def _aggregate(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         "channels",
         "algos",
         "snir_mode",
+        "snir_window",
     }
     numeric_cols = _numeric_columns(rows, exclude)
     aggregated: List[Dict[str, Any]] = []
-    for (n_nodes, charge, channels, algo, snir_mode), items in grouped.items():
+    for (n_nodes, charge, channels, algo, snir_mode, snir_window), items in grouped.items():
         entry: Dict[str, Any] = {
             "n_nodes": n_nodes,
             "charge": charge,
             "channels": channels,
             "algos": algo,
             "snir_mode": snir_mode,
+            "snir_window": snir_window,
             "replications": len(items),
             "clusters": items[0].get("clusters", "{}"),
         }
@@ -527,6 +570,7 @@ def main(argv: List[str] | None = None) -> None:
             seed=args.seed,
             duration=args.duration,
             mixra_solver=args.mixra_solver,
+            snir_window=args.snir_window,
             quiet=args.quiet,
         )
         _write_csv(raw_path, rows)

@@ -244,8 +244,12 @@ def _create_simulator(
     pure_poisson_mode: bool = False,
     channel_config: str | Path | None = None,
     channel_overrides: Mapping[str, object] | None = None,
+    snir_window: str | float | None = None,
 ) -> Simulator:
-    multichannel = _build_multichannel(channel_overrides)
+    overrides: dict[str, object] = dict(channel_overrides or {})
+    if snir_window is not None:
+        overrides["snir_window"] = snir_window
+    multichannel = _build_multichannel(overrides)
     simulator = Simulator(
         num_nodes=num_nodes,
         num_gateways=1,
@@ -273,9 +277,10 @@ def _create_simulator(
         marginal_snir_drop_prob=None,
     )
     simulator.use_snir = bool(use_snir)
+    simulator.snir_window = snir_window
     setattr(simulator, "capture_delta_db", 1.0)
-    if channel_overrides:
-        if (capture := channel_overrides.get("capture_threshold_dB")) is not None:
+    if overrides:
+        if (capture := overrides.get("capture_threshold_dB")) is not None:
             setattr(simulator, "capture_delta_db", float(capture))
         for key in (
             "snir_fading_std",
@@ -283,9 +288,10 @@ def _create_simulator(
             "capture_threshold_dB",
             "marginal_snir_margin_db",
             "marginal_snir_drop_prob",
+            "snir_window",
         ):
-            if key in channel_overrides and channel_overrides[key] is not None:
-                setattr(simulator, key, channel_overrides[key])
+            if key in overrides and overrides[key] is not None:
+                setattr(simulator, key, overrides[key])
     for channel in getattr(simulator.multichannel, "channels", []) or []:
         channel.use_snir = bool(use_snir)
     return simulator
