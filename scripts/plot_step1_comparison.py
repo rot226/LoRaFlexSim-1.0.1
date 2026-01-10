@@ -33,6 +33,7 @@ SNIR_LABELS = {"snir_on": "SNIR ON", "snir_off": "SNIR OFF", "snir_unknown": "SN
 COLOR_CYCLE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
 MARKER_CYCLE = ["o", "s", "^", "D", "v", "P", "X"]
 DEFAULT_ALGO_PRIORITY = ["adr", "apra", "mixra_h", "mixra_opt"]
+ARTICLE_COMPARISON_ALGOS = DEFAULT_ALGO_PRIORITY
 
 
 def _normalize_algorithm_name(value: Any) -> str | None:
@@ -159,6 +160,19 @@ def _select_algorithms(records: Iterable[Mapping[str, Any]], selected: Sequence[
     if not algorithms:
         return sorted(available)
     return algorithms
+
+
+def _available_algorithms(records: Iterable[Mapping[str, Any]]) -> List[str]:
+    return sorted({str(record["algorithm"]) for record in records if record.get("algorithm")})
+
+
+def _validate_algorithms(selected: Sequence[str], available: Sequence[str]) -> None:
+    missing = [algo for algo in selected if algo not in available]
+    if missing:
+        raise ValueError(
+            "Algorithmes manquants dans les CSV: "
+            f"{', '.join(missing)}. Disponibles: {', '.join(available)}."
+        )
 
 
 def _select_clusters(records: Iterable[Mapping[str, Any]], max_clusters: int = 3) -> List[int]:
@@ -476,6 +490,9 @@ def generate_figures(
     records = _load_records(results_dir)
     if not records:
         raise ValueError(f"No CSV records found in {results_dir}")
+    available_algorithms = _available_algorithms(records)
+    if algorithms:
+        _validate_algorithms(algorithms, available_algorithms)
     selected_algorithms = _select_algorithms(records, algorithms)
     selected_clusters = list(clusters) if clusters else _select_clusters(records)
     if not selected_clusters:
@@ -569,19 +586,30 @@ def main(argv: Sequence[str] | None = None) -> None:
         action="store_true",
         help="Génère uniquement les figures superposées SNIR ON/OFF.",
     )
+    parser.add_argument(
+        "--article-comparison",
+        action="store_true",
+        help="Force ADR/APRA/MixRA-H/MixRA-Opt avec SNIR ON/OFF sur les mêmes figures.",
+    )
     args = parser.parse_args(argv)
 
     algorithms = _parse_list(args.algorithms)
     cluster_values = _parse_list(args.clusters)
     clusters = [int(value) for value in cluster_values] if cluster_values else None
+    overlay_snir = args.overlay_snir
+    overlay_only = args.overlay_only
+    if args.article_comparison:
+        algorithms = list(ARTICLE_COMPARISON_ALGOS)
+        overlay_snir = True
+        overlay_only = True
 
     generate_figures(
         args.results_dir,
         args.output_dir,
         algorithms or None,
         clusters,
-        overlay_snir=args.overlay_snir,
-        overlay_only=args.overlay_only,
+        overlay_snir=overlay_snir,
+        overlay_only=overlay_only,
     )
 
 
