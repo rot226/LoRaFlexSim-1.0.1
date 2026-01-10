@@ -91,11 +91,26 @@ environnement virtuel puis lancez :
 powershell -ExecutionPolicy Bypass -File scripts/run_step1_matrix_windows.ps1
 ```
 
-Le script `scripts/run_step1_matrix_windows.ps1` active le venv (par défaut
-`.\env`) puis exécute la commande équivalente à :
+Le script `scripts/run_step1_matrix_windows.ps1` active le venv détecté
+(`.\.venv` prioritaire, sinon `.\env`) puis exécute la commande équivalente à :
 
 ```powershell
 python scripts/run_step1_matrix.py --algos adr apra mixra_h mixra_opt --with-snir true false --seeds 1 2 3 --nodes 1000 5000 --packet-intervals 300 600
+```
+
+Pour forcer explicitement le venv via PowerShell (sans déclencher l’erreur
+« Le terme 'elseif' n’est pas reconnu »), utilisez un bloc `if (...) { ... } elseif (...) { ... }`
+dans la même commande :
+
+```powershell
+if (Test-Path ".\\.venv\\Scripts\\Activate.ps1") {
+  $venvPath = ".\\.venv"
+} elseif (Test-Path ".\\env\\Scripts\\Activate.ps1") {
+  $venvPath = ".\\env"
+} else {
+  throw "Aucun venv détecté. Créez-en un avec 'python -m venv .venv' ou 'python -m venv env'."
+}
+powershell -ExecutionPolicy Bypass -File scripts/run_step1_matrix_windows.ps1 -VenvPath $venvPath
 ```
 
 Les CSV générés sont rangés par état SNIR dans
