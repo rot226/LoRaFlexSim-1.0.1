@@ -225,7 +225,7 @@ class Channel:
         residual_collision_load_scale: float = 4.0,
         baseline_loss_rate: float | None = None,
         baseline_collision_rate: float | None = None,
-        snir_off_noise_prob: float = 0.01,
+        snir_off_noise_prob: float = 0.005,
         tx_current_a: float = 0.0,
         rx_current_a: float = 0.0,
         idle_current_a: float = 0.0,
@@ -503,13 +503,13 @@ class Channel:
         self.marginal_snir_margin_db = float(marginal_snir_margin_db)
         self.marginal_snir_drop_prob = float(marginal_snir_drop_prob)
         if residual_collision_prob is None:
-            residual_collision_prob = 0.03 if use_snir is False else 0.0
+            residual_collision_prob = 0.02 if use_snir is False else 0.005
         self.residual_collision_prob = float(residual_collision_prob)
         self.residual_collision_load_scale = float(residual_collision_load_scale)
         if baseline_loss_rate is None:
-            baseline_loss_rate = 0.005 if use_snir is False else 0.001
+            baseline_loss_rate = 0.003 if use_snir is False else 0.002
         if baseline_collision_rate is None:
-            baseline_collision_rate = 0.02 if use_snir is False else 0.005
+            baseline_collision_rate = 0.015 if use_snir is False else 0.0075
         self.baseline_loss_rate = float(baseline_loss_rate)
         self.baseline_collision_rate = float(baseline_collision_rate)
         self.snir_off_noise_prob = float(snir_off_noise_prob)

@@ -90,6 +90,8 @@ def _load_channel_overrides(path: str | Path | None) -> dict[str, float]:
         "marginal_snir_drop_prob",
         "baseline_loss_rate",
         "baseline_collision_rate",
+        "residual_collision_prob",
+        "snir_off_noise_prob",
     )
     for key in keys:
         try:
@@ -763,6 +765,10 @@ class Simulator:
                 channel.baseline_loss_rate = channel_overrides["baseline_loss_rate"]
             if "baseline_collision_rate" in channel_overrides:
                 channel.baseline_collision_rate = channel_overrides["baseline_collision_rate"]
+            if "residual_collision_prob" in channel_overrides:
+                channel.residual_collision_prob = channel_overrides["residual_collision_prob"]
+            if "snir_off_noise_prob" in channel_overrides:
+                channel.snir_off_noise_prob = channel_overrides["snir_off_noise_prob"]
 
         channel_kwargs = {
             key: value
@@ -778,6 +784,8 @@ class Simulator:
                 "marginal_snir_drop_prob",
                 "baseline_loss_rate",
                 "baseline_collision_rate",
+                "residual_collision_prob",
+                "snir_off_noise_prob",
             }
         }
         # Activation ou non de la mobilité des nœuds

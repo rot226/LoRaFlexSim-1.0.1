@@ -50,9 +50,21 @@
 - La section `[channel]` d'un fichier INI (par ex. `config.ini`) peut fournir
   `snir_fading_std`, `noise_floor_std`, `interference_dB`,
   `capture_threshold_dB`, `sensitivity_margin_dB`,
-  `marginal_snir_margin_db` et `marginal_snir_drop_prob`. Passer
+  `marginal_snir_margin_db`, `marginal_snir_drop_prob`,
+  `baseline_loss_rate`, `baseline_collision_rate`,
+  `residual_collision_prob` et `snir_off_noise_prob`. Passer
   `channel_config=<chemin>` au constructeur `Simulator` applique ces valeurs à
   tous les canaux créés par défaut.
 - Les mêmes clés restent surchargeables à l'initialisation du `Simulator`
   (arguments nommés), ce qui permet d'ajuster rapidement le niveau de bruit de
   fond ou la sévérité du capture effect sans modifier le code.
+
+## Plages raisonnables (article-friendly)
+
+Les valeurs ci-dessous constituent des ordres de grandeur raisonnables pour
+documenter un scénario dans un article sans surcharger la simulation :
+
+- `baseline_loss_rate` : 0.001 à 0.01
+- `baseline_collision_rate` : 0.005 à 0.03
+- `residual_collision_prob` : 0.0 à 0.05
+- `snir_off_noise_prob` : 0.0 à 0.02
