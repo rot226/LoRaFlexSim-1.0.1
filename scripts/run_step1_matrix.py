@@ -21,7 +21,7 @@ import run_step1_experiments
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
 
-DEFAULT_ALGOS: Sequence[str] = ("adr", "apra", "mixra_h", "mixra_opt", "ucb1")
+DEFAULT_ALGOS: Sequence[str] = ("adr", "apra", "mixra_h", "mixra_opt")
 DEFAULT_SNIR_STATES: Sequence[bool] = (False, True)
 DEFAULT_SEEDS: Sequence[int] = tuple(range(1, 6))
 DEFAULT_NODE_COUNTS: Sequence[int] = (1000, 5000, 10000, 13000, 15000)
