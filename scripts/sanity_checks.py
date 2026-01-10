@@ -121,6 +121,7 @@ def run_checks(
     csv_files: list[Path],
     *,
     epsilon: float,
+    directional_tolerance: bool,
     large_nodes: int,
     high_pdr_threshold: float,
 ) -> tuple[list[CheckIssue], list[CheckIssue]]:
@@ -162,6 +163,45 @@ def run_checks(
     for key, bundle in sorted(grouped.items()):
         if not bundle["snir_on"] or not bundle["snir_off"]:
             continue
+        directional_metrics = {
+            "PDR": (bundle["snir_on"], bundle["snir_off"]),
+            "DER": (bundle["snir_on"], bundle["snir_off"]),
+        }
+        for metric, (rows_on, rows_off) in directional_metrics.items():
+            values_on = [_float_or_zero(r.get(metric)) for r in rows_on]
+            values_off = [_float_or_zero(r.get(metric)) for r in rows_off]
+            if not values_on or not values_off:
+                warnings.append(
+                    CheckIssue(
+                        "WARN",
+                        f"Valeurs manquantes pour {metric} dans le groupe {key} (comparaison directionnelle).",
+                    )
+                )
+                continue
+            mean_on = sum(values_on) / len(values_on)
+            mean_off = sum(values_off) / len(values_off)
+            if mean_on >= mean_off:
+                delta = mean_on - mean_off
+                if directional_tolerance and delta <= epsilon:
+                    warnings.append(
+                        CheckIssue(
+                            "WARN",
+                            (
+                                f"{metric} ON >= OFF toléré (Δ={delta:.4f} ≤ {epsilon:.4f}) "
+                                f"dans le groupe {key}."
+                            ),
+                        )
+                    )
+                else:
+                    failures.append(
+                        CheckIssue(
+                            "FAIL",
+                            (
+                                f"{metric} ON >= OFF (ON={mean_on:.4f}, OFF={mean_off:.4f}, Δ={delta:.4f}) "
+                                f"dans le groupe {key}."
+                            ),
+                        )
+                    )
         metric_pairs = {
             "PDR": (bundle["snir_on"], bundle["snir_off"]),
             "throughput_bps": (bundle["snir_on"], bundle["snir_off"]),
@@ -185,7 +225,10 @@ def run_checks(
                 failures.append(
                     CheckIssue(
                         "FAIL",
-                        f"Δ {metric} trop faible ({delta:.4f} ≤ {epsilon:.4f}) pour {key}.",
+                        (
+                            f"Δ {metric} trop faible (ON={mean_on:.4f}, OFF={mean_off:.4f}, "
+                            f"Δ={delta:.4f} ≤ {epsilon:.4f}) pour {key}."
+                        ),
                     )
                 )
 
@@ -199,14 +242,20 @@ def run_checks(
             warnings.append(
                 CheckIssue(
                     "WARN",
-                    f"PDR élevée (>{high_pdr_threshold}) pour N={num_nodes} ({row.get('__csv_path')}).",
+                    (
+                        f"PDR élevée (>{high_pdr_threshold}) pour N={num_nodes} "
+                        f"({row.get('__csv_path')})."
+                    ),
                 )
             )
         if der is not None and der > high_pdr_threshold:
             warnings.append(
                 CheckIssue(
                     "WARN",
-                    f"DER élevée (>{high_pdr_threshold}) pour N={num_nodes} ({row.get('__csv_path')}).",
+                    (
+                        f"DER élevée (>{high_pdr_threshold}) pour N={num_nodes} "
+                        f"({row.get('__csv_path')})."
+                    ),
                 )
             )
 
@@ -287,8 +336,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--pdr-der-threshold",
         type=float,
-        default=0.999,
+        default=0.995,
         help="Seuil PDR/DER déclenchant une alerte.",
+    )
+    parser.add_argument(
+        "--directional-tolerance",
+        action="store_true",
+        help="Tolère un léger renversement ON>=OFF (dans la limite d'epsilon).",
     )
     parser.add_argument(
         "--fail-on-warn",
@@ -301,6 +355,7 @@ def main(argv: list[str] | None = None) -> int:
     warnings, failures = run_checks(
         csv_files,
         epsilon=args.epsilon,
+        directional_tolerance=args.directional_tolerance,
         large_nodes=args.large_nodes,
         high_pdr_threshold=args.pdr_der_threshold,
     )
