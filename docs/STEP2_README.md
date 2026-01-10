@@ -4,6 +4,11 @@ Ce mode d’emploi décrit la **normalisation** des sorties Step 2 (CSV de
 métriques et de décisions) vers `results/step2/raw|agg`, puis la génération des
 figures comparatives.
 
+Les figures Step 2 intègrent désormais la **récompense moyenne** ainsi que ses
+composantes (succès, SNIR, énergie, collisions, équité). Cette décomposition
+reflète l’agrégation utilisée côté bandit multi-bras (MAB/UCB1) : une moyenne
+pondérée normalisée des composantes configurées dans `loraflexsim/learning/ucb1.py`.
+
 ## Préparer les entrées Step 2
 
 Les scripts attendent des CSV similaires à ceux générés par les campagnes UCB1
@@ -70,3 +75,5 @@ python scripts/plot_step2_comparison.py --results-dir results/step2 --only-core-
 - `results/step2/agg/performance_rounds.csv` : performance vs rounds.
 - `results/step2/agg/convergence.csv` : convergence moyenne + CI95.
 - `results/step2/agg/sf_tp_distribution.csv` : distribution SF/TP (optionnelle).
+- `figures/step2/step2_reward_components_ci95.png` : récompense moyenne et
+  composantes (succès, SNIR, énergie, collisions = 1 − PDR, équité) par scénario.

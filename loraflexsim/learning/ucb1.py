@@ -224,19 +224,33 @@ class LoRaSFSelectorUCB1:
         )
 
     def _combine_components(self, components: RewardSample, *, expected_der: float | None = None) -> float:
+        """Combine les composantes en moyenne pondérée normalisée (MAB/UCB1).
+
+        La récompense est une moyenne pondérée normalisée des composantes
+        (succès, SNIR, énergie, collisions, équité). Les poids représentent
+        l'importance relative de chaque signal pour le bandit multi-bras
+        (MAB), et l'agrégation est normalisée par la somme des poids appliqués.
+        """
+
         expected = expected_der if expected_der is not None and expected_der > 0 else 1.0
         normalized_success = components.success
         if expected > 0:
             normalized_success = min(max(components.success / expected, 0.0), 1.0)
 
-        reward = (
-            self.success_weight * normalized_success
-            + self.snir_margin_weight * components.snir
-            - self.energy_penalty_weight * components.energy
-            - self.collision_penalty * components.collision
-        )
+        weighted_components: List[Tuple[float, float]] = [
+            (normalized_success, self.success_weight),
+            (components.snir, self.snir_margin_weight),
+            (-components.energy, self.energy_penalty_weight),
+            (-components.collision, self.collision_penalty),
+        ]
         if components.fairness is not None:
-            reward += self.fairness_weight * components.fairness
+            weighted_components.append((components.fairness, self.fairness_weight))
+
+        total_weight = sum(abs(weight) for _, weight in weighted_components if weight != 0.0)
+        if total_weight == 0.0:
+            return 0.0
+
+        reward = sum(value * weight for value, weight in weighted_components) / total_weight
         return reward
 
     def select_sf(self) -> str:
