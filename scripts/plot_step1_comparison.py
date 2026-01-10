@@ -30,6 +30,7 @@ SNIR_LABELS = {"snir_on": "SNIR ON", "snir_off": "SNIR OFF", "snir_unknown": "SN
 
 COLOR_CYCLE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
 MARKER_CYCLE = ["o", "s", "^", "D", "v", "P", "X"]
+DEFAULT_ALGO_PRIORITY = ["adr", "apra", "mixra_h", "mixra_opt"]
 
 
 def _normalize_algorithm_name(value: Any) -> str | None:
@@ -151,13 +152,10 @@ def _collect_nodes(records: Iterable[Mapping[str, Any]]) -> List[int]:
 def _select_algorithms(records: Iterable[Mapping[str, Any]], selected: Sequence[str] | None) -> List[str]:
     if selected:
         return list(selected)
-    algorithms = sorted({str(record["algorithm"]) for record in records})
-    if len(algorithms) > 4:
-        warnings.warn(
-            "More than 4 algorithms found; using the first four alphabetically.",
-            RuntimeWarning,
-        )
-        return algorithms[:4]
+    available = {str(record["algorithm"]) for record in records if record.get("algorithm")}
+    algorithms = [algo for algo in DEFAULT_ALGO_PRIORITY if algo in available]
+    if not algorithms:
+        return sorted(available)
     return algorithms
 
 

@@ -20,6 +20,7 @@ SNIR_TITLES = {"snir_off": "SNIR OFF", "snir_on": "SNIR ON"}
 
 COLOR_CYCLE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
 MARKER_CYCLE = ["o", "s", "^", "D", "v", "P", "X"]
+DEFAULT_ALGO_PRIORITY = ["adr", "apra", "mixra_h", "mixra_opt"]
 
 
 def _parse_float(value: Any, default: float | None = None) -> float | None:
@@ -62,8 +63,11 @@ def _mean_ci(values: Sequence[float]) -> Tuple[float, float]:
 def _select_algorithms(records: Iterable[Mapping[str, Any]], selected: Sequence[str] | None) -> List[str]:
     if selected:
         return list(selected)
-    algorithms = sorted({str(record["algorithm"]) for record in records if record.get("algorithm")})
-    return algorithms[:4] if len(algorithms) > 4 else algorithms
+    available = {str(record["algorithm"]) for record in records if record.get("algorithm")}
+    algorithms = [algo for algo in DEFAULT_ALGO_PRIORITY if algo in available]
+    if not algorithms:
+        return sorted(available)
+    return algorithms
 
 
 def _style_map(labels: Sequence[str]) -> Dict[str, Tuple[str, str]]:
