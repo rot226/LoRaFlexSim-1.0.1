@@ -61,6 +61,15 @@ def _mean_ci(values: Sequence[float]) -> Tuple[float, float]:
     return mean, margin
 
 
+def _valid_values(values: Iterable[float | None]) -> List[float]:
+    cleaned: List[float] = []
+    for value in values:
+        if value is None or math.isnan(value):
+            continue
+        cleaned.append(float(value))
+    return cleaned
+
+
 def _select_algorithms(records: Iterable[Mapping[str, Any]], selected: Sequence[str] | None) -> List[str]:
     if selected:
         return list(selected)
@@ -150,6 +159,58 @@ def _build_agg_from_raw(decisions: Sequence[Mapping[str, Any]]) -> Dict[str, Lis
         )
 
     return {"performance": performance_rows, "convergence": convergence_rows}
+
+
+def _select_metrics_x_key(records: Sequence[Mapping[str, Any]]) -> str:
+    candidates = ["num_nodes", "cluster", "sf", "run_id"]
+    for key in candidates:
+        values = {
+            _parse_float(record.get(key))
+            for record in records
+            if record.get(key) is not None and record.get(key) != ""
+        }
+        if len(values) > 1:
+            return key
+    return "run_id"
+
+
+def _x_label_for_key(key: str) -> str:
+    return {
+        "num_nodes": "Nombre de nœuds",
+        "cluster": "Cluster",
+        "sf": "SF",
+        "run_id": "Run",
+    }.get(key, key)
+
+
+def _aggregate_metrics(
+    records: Sequence[Mapping[str, Any]],
+    metrics: Sequence[str],
+    x_key: str,
+) -> List[Dict[str, Any]]:
+    grouped: Dict[Tuple[str, str, float], List[Mapping[str, Any]]] = {}
+    for row in records:
+        snir_state = row.get("snir_state", "snir_unknown")
+        algorithm = row.get("algorithm")
+        x_value = _parse_float(row.get(x_key))
+        if algorithm is None or x_value is None:
+            continue
+        grouped.setdefault((snir_state, algorithm, x_value), []).append(row)
+
+    aggregated: List[Dict[str, Any]] = []
+    for (snir_state, algorithm, x_value), items in sorted(grouped.items(), key=lambda item: item[0][2]):
+        row: Dict[str, Any] = {
+            "snir_state": snir_state,
+            "algorithm": algorithm,
+            "x_value": x_value,
+        }
+        for metric in metrics:
+            values = _valid_values(_parse_float(item.get(metric)) for item in items)
+            mean, ci = _mean_ci(values)
+            row[f"{metric}_mean"] = mean
+            row[f"{metric}_ci95"] = ci
+        aggregated.append(row)
+    return aggregated
 
 
 def _save_plot(fig: plt.Figure, output_dir: Path, name: str) -> Path:
@@ -339,6 +400,59 @@ def _plot_distribution(
     _save_plot(fig, output_dir, "step2_sf_tx_distribution.png")
 
 
+def _plot_metrics(
+    records: Sequence[Mapping[str, Any]],
+    output_dir: Path,
+    algorithms: Sequence[str],
+    metrics: Sequence[Tuple[str, str]],
+    *,
+    figure_name: str,
+    x_label: str,
+) -> None:
+    if not records:
+        return
+    fig, axes = plt.subplots(nrows=len(metrics), ncols=2, figsize=(12, 4.5 * len(metrics)), sharex=True)
+    if len(metrics) == 1:
+        axes = [axes]
+    style = _style_map(list(algorithms))
+
+    for row_idx, (metric_key, ylabel) in enumerate(metrics):
+        mean_key = f"{metric_key}_mean"
+        ci_key = f"{metric_key}_ci95"
+        for col_idx, state in enumerate(STATE_LABELS):
+            ax = axes[row_idx][col_idx]
+            ax.set_title(SNIR_TITLES.get(state, state))
+            for algo in algorithms:
+                subset = [
+                    rec
+                    for rec in records
+                    if rec.get("snir_state") == state and rec.get("algorithm") == algo
+                ]
+                if not subset:
+                    continue
+                subset_sorted = sorted(subset, key=lambda rec: float(rec.get("x_value", 0.0)))
+                xs = [float(rec.get("x_value", 0.0)) for rec in subset_sorted]
+                means = [_parse_float(rec.get(mean_key), 0.0) or 0.0 for rec in subset_sorted]
+                cis = [_parse_float(rec.get(ci_key), 0.0) or 0.0 for rec in subset_sorted]
+                marker = style[algo]
+                ax.plot(xs, means, marker=marker, markersize=3, label=algo, color=_snir_color(state))
+                ax.fill_between(
+                    xs,
+                    [m - c for m, c in zip(means, cis)],
+                    [m + c for m, c in zip(means, cis)],
+                    color=_snir_color(state),
+                    alpha=0.15,
+                )
+            ax.set_ylabel(ylabel)
+            ax.grid(True, linestyle=":", alpha=0.4)
+            if row_idx == 0 and ax.get_legend_handles_labels()[1]:
+                ax.legend(fontsize=8, ncol=2)
+    axes[-1][0].set_xlabel(x_label)
+    axes[-1][1].set_xlabel(x_label)
+    _add_state_legend(fig)
+    _save_plot(fig, output_dir, figure_name)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -387,11 +501,49 @@ def main() -> None:
             performance_rows = performance_rows or generated["performance"]
             convergence_rows = convergence_rows or generated["convergence"]
 
-    algorithms = _select_algorithms(performance_rows or convergence_rows, args.algorithm or None)
+    metrics_rows = _load_csv(raw_dir / "metrics.csv")
+
+    algorithms = _select_algorithms(
+        performance_rows or convergence_rows or metrics_rows,
+        args.algorithm or None,
+    )
     if performance_rows:
         _plot_performance(performance_rows, args.output_dir, algorithms)
     if convergence_rows:
         _plot_convergence(convergence_rows, args.output_dir, algorithms)
+
+    if metrics_rows:
+        x_key = _select_metrics_x_key(metrics_rows)
+        x_label = _x_label_for_key(x_key)
+        metric_keys = ["der", "snir_avg", "energy_j", "fairness"]
+        aggregated_metrics = _aggregate_metrics(metrics_rows, metric_keys + ["pdr"], x_key)
+        _plot_metrics(
+            aggregated_metrics,
+            args.output_dir,
+            algorithms,
+            [
+                ("der", "DER"),
+                ("snir_avg", "SNIR moyen"),
+                ("energy_j", "Énergie (J)"),
+                ("fairness", "Équité"),
+            ],
+            figure_name="step2_metrics_ci95.png",
+            x_label=x_label,
+        )
+        _plot_metrics(
+            aggregated_metrics,
+            args.output_dir,
+            algorithms,
+            [
+                ("pdr", "PDR"),
+                ("der", "DER"),
+                ("snir_avg", "SNIR moyen"),
+                ("energy_j", "Énergie (J)"),
+                ("fairness", "Équité"),
+            ],
+            figure_name="step2_key_metrics_combined.png",
+            x_label=x_label,
+        )
 
     if not args.skip_distribution and not args.only_core_figures:
         distribution_rows = _load_csv(agg_dir / "sf_tp_distribution.csv")
