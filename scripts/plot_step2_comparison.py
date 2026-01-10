@@ -198,6 +198,14 @@ def _aggregate_metrics(
         grouped.setdefault((snir_state, algorithm, x_value), []).append(row)
 
     aggregated: List[Dict[str, Any]] = []
+    def _metric_value(row: Mapping[str, Any], metric: str) -> float | None:
+        if metric == "collision_rate":
+            pdr = _parse_float(row.get("pdr"))
+            if pdr is None:
+                return None
+            return max(0.0, min(1.0, 1.0 - pdr))
+        return _parse_float(row.get(metric))
+
     for (snir_state, algorithm, x_value), items in sorted(grouped.items(), key=lambda item: item[0][2]):
         row: Dict[str, Any] = {
             "snir_state": snir_state,
@@ -205,7 +213,7 @@ def _aggregate_metrics(
             "x_value": x_value,
         }
         for metric in metrics:
-            values = _valid_values(_parse_float(item.get(metric)) for item in items)
+            values = _valid_values(_metric_value(item, metric) for item in items)
             mean, ci = _mean_ci(values)
             row[f"{metric}_mean"] = mean
             row[f"{metric}_ci95"] = ci
@@ -228,6 +236,7 @@ def _plot_performance(
     algorithms: Sequence[str],
 ) -> None:
     metrics = [
+        ("reward_mean", "reward_ci95", "Average reward"),
         ("pdr_mean", "pdr_ci95", "Average PDR"),
         ("throughput_mean", "throughput_ci95", "Average throughput (bps)"),
     ]
@@ -515,8 +524,32 @@ def main() -> None:
     if metrics_rows:
         x_key = _select_metrics_x_key(metrics_rows)
         x_label = _x_label_for_key(x_key)
-        metric_keys = ["der", "snir_avg", "energy_j", "fairness"]
-        aggregated_metrics = _aggregate_metrics(metrics_rows, metric_keys + ["pdr"], x_key)
+        metric_keys = [
+            "reward_mean",
+            "success_rate",
+            "snir_avg",
+            "energy_j",
+            "collision_rate",
+            "fairness",
+            "der",
+            "pdr",
+        ]
+        aggregated_metrics = _aggregate_metrics(metrics_rows, metric_keys, x_key)
+        _plot_metrics(
+            aggregated_metrics,
+            args.output_dir,
+            algorithms,
+            [
+                ("reward_mean", "Récompense moyenne"),
+                ("success_rate", "Succès moyen"),
+                ("snir_avg", "SNIR moyen"),
+                ("energy_j", "Énergie (J)"),
+                ("collision_rate", "Collision (1 - PDR)"),
+                ("fairness", "Équité"),
+            ],
+            figure_name="step2_reward_components_ci95.png",
+            x_label=x_label,
+        )
         _plot_metrics(
             aggregated_metrics,
             args.output_dir,
