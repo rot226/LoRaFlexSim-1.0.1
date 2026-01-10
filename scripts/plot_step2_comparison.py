@@ -22,6 +22,7 @@ SNIR_TITLES = {"snir_off": "SNIR OFF", "snir_on": "SNIR ON"}
 
 MARKER_CYCLE = ["o", "s", "^", "D", "v", "P", "X"]
 DEFAULT_ALGO_PRIORITY = ["adr", "apra", "mixra_h", "mixra_opt"]
+ARTICLE_COMPARISON_ALGOS = DEFAULT_ALGO_PRIORITY
 
 
 def _parse_float(value: Any, default: float | None = None) -> float | None:
@@ -78,6 +79,25 @@ def _select_algorithms(records: Iterable[Mapping[str, Any]], selected: Sequence[
     if not algorithms:
         return sorted(available)
     return algorithms
+
+
+def _available_algorithms(records: Iterable[Mapping[str, Any]]) -> List[str]:
+    return sorted({str(record["algorithm"]) for record in records if record.get("algorithm")})
+
+
+def _validate_algorithms(selected: Sequence[str], available: Sequence[str]) -> None:
+    missing = [algo for algo in selected if algo not in available]
+    if missing:
+        raise ValueError(
+            "Algorithmes manquants dans les CSV: "
+            f"{', '.join(missing)}. Disponibles: {', '.join(available)}."
+        )
+
+
+def _parse_list(value: str | None) -> List[str]:
+    if value is None:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _style_map(labels: Sequence[str]) -> Dict[str, str]:
@@ -480,7 +500,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--algorithm",
         action="append",
         default=[],
-        help="Limite la sélection aux algorithmes listés (répétable).",
+        help="(Déprécié) Limite la sélection aux algorithmes listés (répétable).",
+    )
+    parser.add_argument(
+        "--algorithms",
+        type=str,
+        default=None,
+        help="Liste d'algorithmes séparés par des virgules.",
     )
     parser.add_argument(
         "--skip-distribution",
@@ -491,6 +517,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--only-core-figures",
         action="store_true",
         help="Ne génère que les figures principales (performance + convergence).",
+    )
+    parser.add_argument(
+        "--article-comparison",
+        action="store_true",
+        help="Force ADR/APRA/MixRA-H/MixRA-Opt avec SNIR ON/OFF sur les mêmes figures.",
     )
     return parser
 
@@ -512,9 +543,17 @@ def main() -> None:
 
     metrics_rows = _load_csv(raw_dir / "metrics.csv")
 
+    all_records = performance_rows or convergence_rows or metrics_rows
+    algorithms_input = _parse_list(args.algorithms)
+    if args.algorithm:
+        algorithms_input.extend(args.algorithm)
+    if args.article_comparison:
+        algorithms_input = list(ARTICLE_COMPARISON_ALGOS)
+    if algorithms_input and all_records:
+        _validate_algorithms(algorithms_input, _available_algorithms(all_records))
     algorithms = _select_algorithms(
-        performance_rows or convergence_rows or metrics_rows,
-        args.algorithm or None,
+        all_records,
+        algorithms_input or None,
     )
     if performance_rows:
         _plot_performance(performance_rows, args.output_dir, algorithms)
