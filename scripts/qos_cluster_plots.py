@@ -128,17 +128,21 @@ def _plot_metric_vs_nodes(
     for period in periods:
         fig, ax = plt.subplots(figsize=(6, 4))
         for algorithm in algorithms:
-            data = [
-                record
-                for record in records
-                if record["algorithm"] == algorithm and record["packet_interval_s"] == period
-            ]
-            data.sort(key=lambda item: item["num_nodes"])
-            if not data:
-                continue
-            xs = [item["num_nodes"] for item in data]
-            ys = [item.get(metric, 0.0) for item in data]
-            ax.plot(xs, ys, marker="o", label=algorithm)
+            for use_snir, color in ((True, "#d62728"), (False, "#1f77b4")):
+                data = [
+                    record
+                    for record in records
+                    if record["algorithm"] == algorithm
+                    and record["packet_interval_s"] == period
+                    and record["use_snir"] == use_snir
+                ]
+                data.sort(key=lambda item: item["num_nodes"])
+                if not data:
+                    continue
+                xs = [item["num_nodes"] for item in data]
+                ys = [item.get(metric, 0.0) for item in data]
+                label = f"{algorithm} (SNIR {'ON' if use_snir else 'OFF'})"
+                ax.plot(xs, ys, marker="o", label=label, color=color)
         ax.set_xlabel("Nombre de nœuds")
         ax.set_ylabel(ylabel)
         title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
@@ -207,7 +211,9 @@ def _plot_pdr_clusters(records: List[Dict[str, Any]], figures_dir: Path) -> None
         plt.close(fig)
 
 
-def _select_worst_cases(records: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def _select_worst_cases(
+    records: List[Dict[str, Any]], *, use_snir: bool | None = None
+) -> Dict[str, Dict[str, Any]]:
     if not records:
         return {}
     max_nodes = max(record["num_nodes"] for record in records)
@@ -220,6 +226,7 @@ def _select_worst_cases(records: List[Dict[str, Any]]) -> Dict[str, Dict[str, An
             if record["algorithm"] == algorithm
             and record["num_nodes"] == max_nodes
             and record["packet_interval_s"] == min_period
+            and (use_snir is None or record["use_snir"] == use_snir)
         ]
         if not candidates:
             continue
@@ -281,37 +288,123 @@ def _plot_sf_histogram(records: List[Dict[str, Any]], figures_dir: Path) -> None
     plt.close(fig)
 
 
-def _plot_heatmap(records: List[Dict[str, Any]], figures_dir: Path) -> None:
-    selected = _select_worst_cases(records)
-    if not selected:
+def _build_throughput_matrix(
+    throughput_map: Mapping[int, Mapping[int, float]],
+    sfs: List[int],
+    channels: List[int],
+) -> List[List[float]]:
+    return [
+        [throughput_map.get(sf, {}).get(channel, 0.0) for channel in channels]
+        for sf in sfs
+    ]
+
+
+def _plot_heatmap_matrix(
+    *,
+    matrix: List[List[float]],
+    sfs: List[int],
+    channels: List[int],
+    title: str,
+    figures_dir: Path,
+    filename: str,
+    cmap: str,
+    cbar_label: str,
+    vmin: float | None = None,
+    vmax: float | None = None,
+) -> None:
+    if not matrix:
         return
-    for algorithm, record in selected.items():
-        throughput_map = record.get("throughput_sf_channel", {})
-        if not throughput_map:
+    fig, ax = plt.subplots(figsize=(1.2 * len(channels) + 3, 0.8 * len(sfs) + 2))
+    im = ax.imshow(matrix, aspect="auto", origin="lower", cmap=cmap, vmin=vmin, vmax=vmax)
+    ax.set_xticks(range(len(channels)))
+    ax.set_xticklabels([str(ch) for ch in channels])
+    ax.set_yticks(range(len(sfs)))
+    ax.set_yticklabels([str(sf) for sf in sfs])
+    ax.set_xlabel("Canal")
+    ax.set_ylabel("SF")
+    ax.set_title(title)
+    cbar = fig.colorbar(im, ax=ax)
+    cbar.set_label(cbar_label)
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(figures_dir / filename, dpi=150)
+    plt.close(fig)
+
+
+def _plot_heatmap(records: List[Dict[str, Any]], figures_dir: Path) -> None:
+    selected_on = _select_worst_cases(records, use_snir=True)
+    selected_off = _select_worst_cases(records, use_snir=False)
+    algorithms = sorted({*selected_on.keys(), *selected_off.keys()})
+    if not algorithms:
+        return
+    for algorithm in algorithms:
+        record_on = selected_on.get(algorithm)
+        record_off = selected_off.get(algorithm)
+        if record_on:
+            throughput_on = record_on.get("throughput_sf_channel", {})
+            sfs_on = sorted(throughput_on)
+            channels_on = sorted({channel for mapping in throughput_on.values() for channel in mapping})
+            if sfs_on and channels_on:
+                matrix_on = _build_throughput_matrix(throughput_on, sfs_on, channels_on)
+                _plot_heatmap_matrix(
+                    matrix=matrix_on,
+                    sfs=sfs_on,
+                    channels=channels_on,
+                    title=f"Heatmap SF×canal – {algorithm} (SNIR ON)",
+                    figures_dir=figures_dir,
+                    filename=f"heatmap_sf_channel_{algorithm.replace(' ', '_')}_snir_on.png",
+                    cmap="viridis",
+                    cbar_label="Débit (bps)",
+                )
+        if record_off:
+            throughput_off = record_off.get("throughput_sf_channel", {})
+            sfs_off = sorted(throughput_off)
+            channels_off = sorted({channel for mapping in throughput_off.values() for channel in mapping})
+            if sfs_off and channels_off:
+                matrix_off = _build_throughput_matrix(throughput_off, sfs_off, channels_off)
+                _plot_heatmap_matrix(
+                    matrix=matrix_off,
+                    sfs=sfs_off,
+                    channels=channels_off,
+                    title=f"Heatmap SF×canal – {algorithm} (SNIR OFF)",
+                    figures_dir=figures_dir,
+                    filename=f"heatmap_sf_channel_{algorithm.replace(' ', '_')}_snir_off.png",
+                    cmap="viridis",
+                    cbar_label="Débit (bps)",
+                )
+        if not record_on or not record_off:
             continue
-        sfs = sorted(throughput_map)
-        channels = sorted({channel for mapping in throughput_map.values() for channel in mapping})
+        throughput_on = record_on.get("throughput_sf_channel", {})
+        throughput_off = record_off.get("throughput_sf_channel", {})
+        sfs = sorted({*throughput_on.keys(), *throughput_off.keys()})
+        channels = sorted(
+            {
+                channel
+                for mapping in list(throughput_on.values()) + list(throughput_off.values())
+                for channel in mapping
+            }
+        )
         if not sfs or not channels:
             continue
-        matrix = [
-            [throughput_map.get(sf, {}).get(channel, 0.0) for channel in channels]
-            for sf in sfs
+        matrix_on = _build_throughput_matrix(throughput_on, sfs, channels)
+        matrix_off = _build_throughput_matrix(throughput_off, sfs, channels)
+        diff_matrix = [
+            [on_value - off_value for on_value, off_value in zip(on_row, off_row)]
+            for on_row, off_row in zip(matrix_on, matrix_off)
         ]
-        fig, ax = plt.subplots(figsize=(1.2 * len(channels) + 3, 0.8 * len(sfs) + 2))
-        im = ax.imshow(matrix, aspect="auto", origin="lower", cmap="viridis")
-        ax.set_xticks(range(len(channels)))
-        ax.set_xticklabels([str(ch) for ch in channels])
-        ax.set_yticks(range(len(sfs)))
-        ax.set_yticklabels([str(sf) for sf in sfs])
-        ax.set_xlabel("Canal")
-        ax.set_ylabel("SF")
-        ax.set_title(f"Heatmap SF×canal – {algorithm}")
-        cbar = fig.colorbar(im, ax=ax)
-        cbar.set_label("Débit (bps)")
-        figures_dir.mkdir(parents=True, exist_ok=True)
-        fig.tight_layout()
-        fig.savefig(figures_dir / f"heatmap_sf_channel_{algorithm.replace(' ', '_')}.png", dpi=150)
-        plt.close(fig)
+        max_abs = max((abs(value) for row in diff_matrix for value in row), default=1.0)
+        _plot_heatmap_matrix(
+            matrix=diff_matrix,
+            sfs=sfs,
+            channels=channels,
+            title=f"Différence SNIR ON – OFF – {algorithm}",
+            figures_dir=figures_dir,
+            filename=f"heatmap_sf_channel_{algorithm.replace(' ', '_')}_snir_diff.png",
+            cmap="coolwarm",
+            cbar_label="Δ débit (bps)",
+            vmin=-max_abs,
+            vmax=max_abs,
+        )
 
 
 def generate_plots(results_dir: Path, figures_dir: Path, *, quiet: bool = False) -> bool:
@@ -334,9 +427,10 @@ def generate_plots(results_dir: Path, figures_dir: Path, *, quiet: bool = False)
             print("Aucun résultat trouvé, aucune figure générée.")
         return False
     _plot_pdr_clusters(records, figures_dir)
+    _plot_metric_vs_nodes(records, "PDR", "PDR", "pdr", figures_dir)
     _plot_metric_vs_nodes(records, "DER", "DER", "der", figures_dir)
     _plot_metric_vs_nodes(records, "throughput_bps", "Débit (bps)", "throughput", figures_dir)
-    _plot_metric_vs_nodes(records, "avg_energy_per_node_J", "Énergie moyenne (J)", "energy", figures_dir)
+    _plot_metric_vs_nodes(records, "jain_index", "Indice de Jain", "jain", figures_dir)
     _plot_snr_cdf(records, figures_dir)
     _plot_sf_histogram(records, figures_dir)
     _plot_heatmap(records, figures_dir)
