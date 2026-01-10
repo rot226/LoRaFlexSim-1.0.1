@@ -21,7 +21,7 @@ try:  # pragma: no cover - optional dependency in CI
 except Exception:  # pragma: no cover - allow script import without matplotlib
     plt = None  # type: ignore
 
-from plot_step1_results import SNIR_COLORS
+from plot_theme import SNIR_COLORS, apply_plot_theme
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
@@ -471,6 +471,8 @@ def generate_figures(
     overlay_snir: bool = False,
     overlay_only: bool = False,
 ) -> None:
+    if plt is not None:
+        apply_plot_theme(plt)
     records = _load_records(results_dir)
     if not records:
         raise ValueError(f"No CSV records found in {results_dir}")

@@ -21,6 +21,17 @@ try:  # pragma: no cover - dépend de l'environnement de test
 except Exception:  # pragma: no cover - permet de continuer même sans matplotlib
     plt = None  # type: ignore
 
+from plot_theme import (
+    SNIR_COLORS,
+    THEME_LABEL_SIZE,
+    THEME_LINE_WIDTH,
+    THEME_MARKER_EDGE_WIDTH,
+    THEME_MARKER_SIZE,
+    THEME_TICK_LABEL_SIZE,
+    THEME_TITLE_SIZE,
+    apply_plot_theme,
+)
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
 DEFAULT_FIGURES_DIR = ROOT_DIR / "figures"
@@ -33,7 +44,6 @@ __all__ = [
 ]
 
 STATE_LABELS = {True: "snir_on", False: "snir_off", None: "snir_unknown"}
-SNIR_COLORS = {"snir_on": "#d62728", "snir_off": "#1f77b4", "snir_unknown": "#7f7f7f"}
 SNIR_LABELS = {
     "snir_on": "SNIR enabled",
     "snir_off": "SNIR disabled",
@@ -291,16 +301,22 @@ def _format_axes(ax: Any, integer_x: bool = False) -> None:
     y_formatter = ScalarFormatter(useMathText=True)
     y_formatter.set_scientific(False)
     ax.yaxis.set_major_formatter(y_formatter)
-    ax.tick_params(axis="both", direction="in", length=4.5, width=1.0, labelsize=9)
-    ax.xaxis.label.set_size(10)
-    ax.yaxis.label.set_size(10)
-    ax.title.set_size(12)
+    ax.tick_params(
+        axis="both",
+        direction="in",
+        length=4.5,
+        width=1.0,
+        labelsize=THEME_TICK_LABEL_SIZE,
+    )
+    ax.xaxis.label.set_size(THEME_LABEL_SIZE)
+    ax.yaxis.label.set_size(THEME_LABEL_SIZE)
+    ax.title.set_size(THEME_TITLE_SIZE)
     for spine in ax.spines.values():
         spine.set_linewidth(1.0)
     for line in ax.get_lines():
-        line.set_linewidth(2.0)
-        line.set_markersize(6.0)
-        line.set_markeredgewidth(0.8)
+        line.set_linewidth(THEME_LINE_WIDTH)
+        line.set_markersize(THEME_MARKER_SIZE)
+        line.set_markeredgewidth(THEME_MARKER_EDGE_WIDTH)
 
 
 def _metric_error_bounds(record: Mapping[str, Any], metric: str, value: float) -> Tuple[float, float] | None:
@@ -904,17 +920,10 @@ def _select_metric_value(record: Mapping[str, Any], metric: str) -> float:
 def _apply_ieee_style() -> None:
     if plt is None:
         return
+    apply_plot_theme(plt)
     plt.rcParams.update(
         {
-            "font.size": 10,
-            "axes.titlesize": 12,
-            "axes.labelsize": 11,
-            "legend.fontsize": 10,
-            "xtick.labelsize": 10,
-            "ytick.labelsize": 10,
             "figure.dpi": 200,
-            "lines.linewidth": 2,
-            "lines.markersize": 6,
             "savefig.dpi": 300,
             "axes.grid": False,
         }

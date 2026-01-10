@@ -11,7 +11,8 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from plot_step1_results import SNIR_COLORS
+
+from plot_theme import SNIR_COLORS, THEME_LINE_WIDTH, THEME_MARKER_SIZE, apply_plot_theme
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step2"
@@ -93,8 +94,20 @@ def _snir_color(state: str) -> str:
 
 def _add_state_legend(fig: plt.Figure) -> None:
     handles = [
-        Line2D([0], [0], color=_snir_color("snir_off"), lw=2, label=SNIR_TITLES["snir_off"]),
-        Line2D([0], [0], color=_snir_color("snir_on"), lw=2, label=SNIR_TITLES["snir_on"]),
+        Line2D(
+            [0],
+            [0],
+            color=_snir_color("snir_off"),
+            lw=THEME_LINE_WIDTH,
+            label=SNIR_TITLES["snir_off"],
+        ),
+        Line2D(
+            [0],
+            [0],
+            color=_snir_color("snir_on"),
+            lw=THEME_LINE_WIDTH,
+            label=SNIR_TITLES["snir_on"],
+        ),
     ]
     fig.legend(handles=handles, loc="upper right", frameon=False, title="SNIR")
 
@@ -266,7 +279,7 @@ def _plot_performance(
                     rounds,
                     means,
                     marker=marker,
-                    markersize=3,
+                    markersize=THEME_MARKER_SIZE,
                     label=algo,
                     color=_snir_color(state),
                 )
@@ -323,7 +336,7 @@ def _plot_convergence(
                     episodes,
                     means,
                     marker=marker,
-                    markersize=3,
+                    markersize=THEME_MARKER_SIZE,
                     label=algo,
                     color=_snir_color(state),
                 )
@@ -444,7 +457,14 @@ def _plot_metrics(
                 means = [_parse_float(rec.get(mean_key), 0.0) or 0.0 for rec in subset_sorted]
                 cis = [_parse_float(rec.get(ci_key), 0.0) or 0.0 for rec in subset_sorted]
                 marker = style[algo]
-                ax.plot(xs, means, marker=marker, markersize=3, label=algo, color=_snir_color(state))
+                ax.plot(
+                    xs,
+                    means,
+                    marker=marker,
+                    markersize=THEME_MARKER_SIZE,
+                    label=algo,
+                    color=_snir_color(state),
+                )
                 ax.fill_between(
                     xs,
                     [m - c for m, c in zip(means, cis)],
@@ -496,6 +516,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    apply_plot_theme(plt)
     args = _build_parser().parse_args()
     results_dir = args.results_dir
     agg_dir = results_dir / "agg"

@@ -12,13 +12,13 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 import matplotlib.pyplot as plt
 
 from scripts.plot_step1_results import _detect_snir_state, _normalize_algorithm_name
+from plot_theme import SNIR_COLORS
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
 DEFAULT_FIGURES_DIR = ROOT_DIR / "figures" / "step1" / "extended"
 
 SNIR_LABELS = {"snir_on": "SNIR activé", "snir_off": "SNIR désactivé"}
-SNIR_COLORS = {"snir_on": "#d62728", "snir_off": "#1f77b4"}
 METRICS = ("PDR", "DER")
 CLUSTER_PATTERN = re.compile(r"cluster_(pdr|der)[^0-9]*([0-9]+)", re.IGNORECASE)
 
