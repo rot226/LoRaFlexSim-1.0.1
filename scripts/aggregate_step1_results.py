@@ -89,11 +89,16 @@ def _load_records(results_dir: Path, strict_snir: bool) -> Tuple[List[Record], L
             reader = csv.DictReader(handle)
             for row in reader:
                 cluster_pdr: Dict[int, float] = {}
+                cluster_der: Dict[int, float] = {}
                 for key, value in row.items():
                     if key.startswith("qos_cluster_pdr__"):
                         cid = int(key.split("__")[-1])
                         cluster_ids.add(cid)
                         cluster_pdr[cid] = _parse_float(value)
+                    elif key.startswith("qos_cluster_der__"):
+                        cid = int(key.split("__")[-1])
+                        cluster_ids.add(cid)
+                        cluster_der[cid] = _parse_float(value)
 
                 expected_state = _expected_snir_state_from_path(csv_path)
 
@@ -143,6 +148,7 @@ def _load_records(results_dir: Path, strict_snir: bool) -> Tuple[List[Record], L
                     "jain_index": _parse_float(row.get("jain_index")),
                     "throughput_bps": _parse_float(row.get("throughput_bps")),
                     "cluster_pdr": cluster_pdr,
+                    "cluster_der": cluster_der,
                     "with_snir": snir_flag,
                     "use_snir": snir_flag,
                     "snir_state": snir_state or STATE_LABELS.get(snir_flag, "snir_unknown"),
@@ -204,6 +210,11 @@ def _build_summary_rows(
             mean, std = _mean_std(filtered)
             summary[f"cluster_pdr_{cid}_mean"] = mean
             summary[f"cluster_pdr_{cid}_std"] = std
+            values = [r.get("cluster_der", {}).get(cid) for r in items]
+            filtered = [v for v in values if v is not None]
+            mean, std = _mean_std(filtered)
+            summary[f"cluster_der_{cid}_mean"] = mean
+            summary[f"cluster_der_{cid}_std"] = std
         rows.append(summary)
     return rows
 
@@ -238,7 +249,14 @@ def _write_summary(
     ]
     cluster_headers: MutableSequence[str] = []
     for cid in cluster_ids:
-        cluster_headers.extend([f"cluster_pdr_{cid}_mean", f"cluster_pdr_{cid}_std"])
+        cluster_headers.extend(
+            [
+                f"cluster_pdr_{cid}_mean",
+                f"cluster_pdr_{cid}_std",
+                f"cluster_der_{cid}_mean",
+                f"cluster_der_{cid}_std",
+            ]
+        )
     headers = base_headers + list(cluster_headers)
 
     rows = _build_summary_rows(groups, cluster_ids)
@@ -282,6 +300,7 @@ def _build_raw_rows(records: Iterable[Record], cluster_ids: Sequence[int]) -> Li
                 row["csv_path"] = str(path)
         for cid in cluster_ids:
             row[f"cluster_pdr_{cid}"] = record.get("cluster_pdr", {}).get(cid)
+            row[f"cluster_der_{cid}"] = record.get("cluster_der", {}).get(cid)
         rows.append(row)
     return rows
 
@@ -307,7 +326,9 @@ def _write_raw_index(output_path: Path, records: Iterable[Record], cluster_ids: 
         "jain_index",
         "throughput_bps",
     ]
-    cluster_headers = [f"cluster_pdr_{cid}" for cid in cluster_ids]
+    cluster_headers: List[str] = []
+    for cid in cluster_ids:
+        cluster_headers.extend([f"cluster_pdr_{cid}", f"cluster_der_{cid}"])
     headers = base_headers + cluster_headers
 
     rows = _build_raw_rows(records, cluster_ids)

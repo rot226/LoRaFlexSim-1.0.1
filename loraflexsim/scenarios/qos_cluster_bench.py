@@ -381,6 +381,30 @@ def _compute_additional_metrics(
     nodes = list(getattr(simulator, "nodes", []) or [])
     energy_nodes = float(metrics.get("energy_nodes_J", 0.0) or 0.0)
     metrics["avg_energy_per_node_J"] = energy_nodes / len(nodes) if nodes else 0.0
+    qos_clusters_config = getattr(simulator, "qos_clusters_config", {}) or {}
+    qos_node_clusters = getattr(simulator, "qos_node_clusters", {}) or {}
+    cluster_der: Dict[int, float] = {}
+    if qos_clusters_config:
+        cluster_attempts: Dict[int, int] = {cluster_id: 0 for cluster_id in qos_clusters_config}
+        cluster_delivered: Dict[int, int] = {cluster_id: 0 for cluster_id in qos_clusters_config}
+        for node in nodes:
+            node_id = getattr(node, "id", None)
+            cluster_id = qos_node_clusters.get(node_id) if node_id is not None else None
+            if cluster_id is None:
+                cluster_id = getattr(node, "qos_cluster_id", None)
+            if cluster_id is None or cluster_id not in qos_clusters_config:
+                continue
+            cluster_attempts[cluster_id] = cluster_attempts.get(cluster_id, 0) + int(
+                getattr(node, "tx_attempted", 0) or 0
+            )
+            cluster_delivered[cluster_id] = cluster_delivered.get(cluster_id, 0) + int(
+                getattr(node, "rx_delivered", 0) or 0
+            )
+        for cluster_id in qos_clusters_config:
+            attempts = cluster_attempts.get(cluster_id, 0)
+            delivered_cluster = cluster_delivered.get(cluster_id, 0)
+            cluster_der[cluster_id] = delivered_cluster / attempts if attempts > 0 else 0.0
+    metrics["qos_cluster_der"] = cluster_der
 
     per_node_throughput = [
         getattr(node, "rx_delivered", 0) * payload_bits / duration for node in nodes
@@ -451,6 +475,7 @@ def _compute_additional_metrics(
     metrics["snir_histogram_json"] = json.dumps(snir_histogram, ensure_ascii=False, sort_keys=True)
     metrics["snir_cdf_json"] = json.dumps(snir_cdf, ensure_ascii=False)
     metrics["sf_distribution_json"] = json.dumps(metrics.get("sf_distribution", {}), ensure_ascii=False, sort_keys=True)
+    metrics["qos_cluster_der_json"] = json.dumps(cluster_der, ensure_ascii=False, sort_keys=True)
     return dict(metrics)
 
 
