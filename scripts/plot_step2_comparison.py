@@ -10,6 +10,8 @@ from statistics import fmean, pstdev
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from plot_step1_results import SNIR_COLORS
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step2"
@@ -18,7 +20,6 @@ DEFAULT_FIGURES_DIR = ROOT_DIR / "figures" / "step2"
 STATE_LABELS = ["snir_off", "snir_on"]
 SNIR_TITLES = {"snir_off": "SNIR OFF", "snir_on": "SNIR ON"}
 
-COLOR_CYCLE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
 MARKER_CYCLE = ["o", "s", "^", "D", "v", "P", "X"]
 
 
@@ -66,11 +67,23 @@ def _select_algorithms(records: Iterable[Mapping[str, Any]], selected: Sequence[
     return algorithms[:4] if len(algorithms) > 4 else algorithms
 
 
-def _style_map(labels: Sequence[str]) -> Dict[str, Tuple[str, str]]:
-    mapping: Dict[str, Tuple[str, str]] = {}
+def _style_map(labels: Sequence[str]) -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
     for idx, label in enumerate(labels):
-        mapping[label] = (COLOR_CYCLE[idx % len(COLOR_CYCLE)], MARKER_CYCLE[idx % len(MARKER_CYCLE)])
+        mapping[label] = MARKER_CYCLE[idx % len(MARKER_CYCLE)]
     return mapping
+
+
+def _snir_color(state: str) -> str:
+    return SNIR_COLORS.get(state, SNIR_COLORS["snir_unknown"])
+
+
+def _add_state_legend(fig: plt.Figure) -> None:
+    handles = [
+        Line2D([0], [0], color=_snir_color("snir_off"), lw=2, label=SNIR_TITLES["snir_off"]),
+        Line2D([0], [0], color=_snir_color("snir_on"), lw=2, label=SNIR_TITLES["snir_on"]),
+    ]
+    fig.legend(handles=handles, loc="upper right", frameon=False, title="SNIR")
 
 
 def _build_agg_from_raw(decisions: Sequence[Mapping[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
@@ -174,13 +187,20 @@ def _plot_performance(
                 rounds = [int(rec.get("round_idx", 0)) for rec in subset_sorted]
                 means = [_parse_float(rec.get(mean_key), 0.0) or 0.0 for rec in subset_sorted]
                 cis = [_parse_float(rec.get(ci_key), 0.0) or 0.0 for rec in subset_sorted]
-                color, marker = style[algo]
-                ax.plot(rounds, means, marker=marker, markersize=3, label=algo, color=color)
+                marker = style[algo]
+                ax.plot(
+                    rounds,
+                    means,
+                    marker=marker,
+                    markersize=3,
+                    label=algo,
+                    color=_snir_color(state),
+                )
                 ax.fill_between(
                     rounds,
                     [m - c for m, c in zip(means, cis)],
                     [m + c for m, c in zip(means, cis)],
-                    color=color,
+                    color=_snir_color(state),
                     alpha=0.15,
                 )
             ax.set_ylabel(ylabel)
@@ -189,6 +209,7 @@ def _plot_performance(
                 ax.legend(fontsize=8, ncol=2)
     axes[-1][0].set_xlabel("Round")
     axes[-1][1].set_xlabel("Round")
+    _add_state_legend(fig)
     _save_plot(fig, output_dir, "step2_performance_rounds.png")
 
 
@@ -223,13 +244,20 @@ def _plot_convergence(
                 episodes = [int(rec.get("episode_idx", 0)) for rec in subset_sorted]
                 means = [_parse_float(rec.get(mean_key), 0.0) or 0.0 for rec in subset_sorted]
                 cis = [_parse_float(rec.get(ci_key), 0.0) or 0.0 for rec in subset_sorted]
-                color, marker = style[algo]
-                ax.plot(episodes, means, marker=marker, markersize=3, label=algo, color=color)
+                marker = style[algo]
+                ax.plot(
+                    episodes,
+                    means,
+                    marker=marker,
+                    markersize=3,
+                    label=algo,
+                    color=_snir_color(state),
+                )
                 ax.fill_between(
                     episodes,
                     [m - c for m, c in zip(means, cis)],
                     [m + c for m, c in zip(means, cis)],
-                    color=color,
+                    color=_snir_color(state),
                     alpha=0.15,
                 )
             ax.set_ylabel(ylabel)
@@ -238,6 +266,7 @@ def _plot_convergence(
                 ax.legend(fontsize=8, ncol=2)
     axes[-1][0].set_xlabel("Episode")
     axes[-1][1].set_xlabel("Episode")
+    _add_state_legend(fig)
     _save_plot(fig, output_dir, "step2_convergence_ci95.png")
 
 
@@ -259,7 +288,7 @@ def _plot_distribution(
                 continue
             sf_records = sorted({int(rec["sf"]) for rec in algo_records if rec.get("sf")})
             tx_records = sorted({float(rec["tx_power"]) for rec in algo_records if rec.get("tx_power")})
-            color, marker = style[algo]
+            marker = style[algo]
             if sf_records:
                 sf_shares = [
                     sum(
@@ -269,7 +298,13 @@ def _plot_distribution(
                     )
                     for sf in sf_records
                 ]
-                axes[row_idx][0].plot(sf_records, sf_shares, marker=marker, label=algo, color=color)
+                axes[row_idx][0].plot(
+                    sf_records,
+                    sf_shares,
+                    marker=marker,
+                    label=algo,
+                    color=_snir_color(state),
+                )
             if tx_records:
                 tx_shares = [
                     sum(
@@ -279,7 +314,13 @@ def _plot_distribution(
                     )
                     for tx in tx_records
                 ]
-                axes[row_idx][1].plot(tx_records, tx_shares, marker=marker, label=algo, color=color)
+                axes[row_idx][1].plot(
+                    tx_records,
+                    tx_shares,
+                    marker=marker,
+                    label=algo,
+                    color=_snir_color(state),
+                )
 
         axes[row_idx][0].set_title(f"{SNIR_TITLES.get(state, state)} - SF")
         axes[row_idx][1].set_title(f"{SNIR_TITLES.get(state, state)} - TX Power")
@@ -290,6 +331,7 @@ def _plot_distribution(
             axes[row_idx][0].legend(fontsize=8, ncol=2)
     axes[1][0].set_xlabel("SF")
     axes[1][1].set_xlabel("TX Power")
+    _add_state_legend(fig)
     _save_plot(fig, output_dir, "step2_sf_tx_distribution.png")
 
 
