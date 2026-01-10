@@ -47,7 +47,8 @@ DEFAULT_NODE_COUNTS: Sequence[int] = (1000, 5000, 10000)
 DEFAULT_CHARGES: Sequence[float] = (600.0, 300.0, 150.0)
 DEFAULT_CHANNELS: Sequence[int] = (1, 3, 8)
 DEFAULT_SNIR_STATES: Sequence[bool] = (False, True)
-DEFAULT_REPLICATIONS = 3
+DEFAULT_REPLICATIONS = 5
+MAX_REPLICATIONS = 5
 DEFAULT_DURATION = 6 * 3600.0
 STATE_LABELS = {True: "snir_on", False: "snir_off"}
 
@@ -112,7 +113,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--replications",
         type=int,
         default=DEFAULT_REPLICATIONS,
-        help="Nombre de répétitions par scénario",
+        help=f"Nombre de répétitions par scénario (max {MAX_REPLICATIONS})",
     )
     parser.add_argument("--seed", type=int, default=1, help="Graine de base")
     parser.add_argument(
@@ -498,6 +499,10 @@ def _aggregate(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def main(argv: List[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    if args.replications > MAX_REPLICATIONS:
+        parser.error(f"replications ne doit pas dépasser {MAX_REPLICATIONS}.")
+    if args.replications < 1:
+        parser.error("replications doit être >= 1.")
 
     raw_dir: Path = args.raw_dir
     agg_dir: Path = args.agg_dir
