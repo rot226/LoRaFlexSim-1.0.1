@@ -24,6 +24,8 @@ PAYLOAD_BYTES = 20
 DEFAULT_NODE_COUNTS: Sequence[int] = (1000, 5000, 10000, 13000, 15000)
 DEFAULT_TX_PERIODS: Sequence[float] = (600.0, 300.0, 150.0)
 DEFAULT_SIMULATION_DURATION_S = 24.0 * 3600.0
+DEFAULT_REPLICATIONS = 5
+MAX_REPLICATIONS = 5
 VALIDATION_NODE_COUNTS: Sequence[int] = (1000, 5000, 10000)
 VALIDATION_TX_PERIODS: Sequence[float] = (600.0, 300.0, 150.0)
 VALIDATION_PDR_TARGETS: Sequence[float] = (0.9, 0.8, 0.7)
@@ -641,7 +643,7 @@ def run_bench(
     node_counts: Sequence[int] = DEFAULT_NODE_COUNTS,
     tx_periods: Sequence[float] = DEFAULT_TX_PERIODS,
     seed: int = 1,
-    replications: int = 10,
+    replications: int = DEFAULT_REPLICATIONS,
     use_snir_states: Sequence[bool] | None = None,
     output_dir: Path | None = None,
     simulation_duration_s: float | None = DEFAULT_SIMULATION_DURATION_S,
@@ -673,6 +675,8 @@ def run_bench(
 
     if replications < 1:
         raise ValueError("replications doit être >= 1.")
+    if replications > MAX_REPLICATIONS:
+        raise ValueError(f"replications ne doit pas dépasser {MAX_REPLICATIONS}.")
     combos = [(n, p) for n in node_counts for p in tx_periods]
     total_runs = len(combos) * replications * len(ALGORITHMS) * len(snir_states)
     run_index = 0

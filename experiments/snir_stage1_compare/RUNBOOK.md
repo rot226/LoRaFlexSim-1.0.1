@@ -18,6 +18,7 @@ Ce runbook décrit la marche à suivre pour préparer les comparaisons baseline 
 2. Pour chaque script, utiliser les mêmes paramètres de trafic (graine, nombre de paquets, intervalle, zone) afin de permettre la comparaison.
 3. La DER baseline reflète strictement `packets_delivered / packets_sent` (pas de biais artificiel). On s'attend donc à une DER baseline légèrement plus basse (jusqu'à ~0,05 auparavant) et à un écart SNIR/DER qui reflète mieux la performance réelle.
 4. Exporter les résultats en CSV dans `data/` avec un nom explicite, par exemple `der_density_baseline.csv`, `der_density_snir.csv`, etc.
+5. Le nombre de répétitions (`--replications`) est plafonné à 5 afin de limiter le temps de calcul.
 
 ## 3. Générer les graphiques
 1. Centraliser les fonctions communes (palette, mise en forme des légendes, labels) dans `plots_helpers/`.
