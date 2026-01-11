@@ -68,6 +68,7 @@ class Node:
         beacon_loss_prob: float = 0.0,
         beacon_drift: float = 0.0,
         learning_method: str | None = "ucb1",
+        skip_downlink_validation: bool = False,
     ):
         """
         Initialise le nœud avec ses paramètres de départ.
@@ -87,6 +88,7 @@ class Node:
         :param security: Active le chiffrement AES/MIC LoRaWAN (``True`` par défaut).
         :param beacon_loss_prob: Probabilité de manquer un beacon (classe B).
         :param beacon_drift: Dérive relative appliquée aux fenêtres classe B.
+        :param skip_downlink_validation: Ignore la validation LoRaWAN sur les downlinks.
         """
         # Identité et paramètres initiaux
         self.id = node_id
@@ -107,6 +109,7 @@ class Node:
         self.channel = channel or Channel()
         self.assigned_channel_index = getattr(self.channel, "channel_index", 0)
         self.out_of_service = False
+        self.skip_downlink_validation = skip_downlink_validation
         # Offsets de fréquence et de synchronisation (corrélés dans le temps)
         from .advanced_channel import _CorrelatedValue
 
@@ -781,10 +784,13 @@ class Node:
             self.security_enabled
             and getattr(frame, "encrypted_payload", None) is not None
         ):
-            from .lorawan import validate_frame
+            if not self.skip_downlink_validation:
+                from .lorawan import validate_frame
 
-            if not validate_frame(frame, self.nwkskey, self.appskey, self.devaddr, 1):
-                return
+                if not validate_frame(
+                    frame, self.nwkskey, self.appskey, self.devaddr, 1
+                ):
+                    return
             payload = frame.payload
 
         if isinstance(payload, bytes):

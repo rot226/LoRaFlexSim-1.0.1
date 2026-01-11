@@ -491,6 +491,7 @@ class Simulator:
         pa_ramp_down_s: float = 0.0,
         capture_mode: str | None = None,
         validation_mode: str | None = None,
+        skip_downlink_validation: bool = False,
         tick_ns: int | None = None,
         progress_every_s: float | None = None,
         progress_every_steps: int | None = None,
@@ -604,6 +605,9 @@ class Simulator:
         :param validation_mode: Active des réglages additionnels dédiés aux
             campagnes de validation (``"flora"`` déclenche le mode capture
             ``"aloha"`` par défaut).
+        :param skip_downlink_validation: Ignore la validation LoRaWAN des
+            downlinks (les métriques radio restent valides, mais pas la sécurité
+            LoRaWAN).
         :param tick_ns: Quand défini, quantifie chaque instant à des entiers de
             ``tick_ns`` nanosecondes pour la file d'événements.
         :param progress_every_s: Fréquence de log de progression en secondes simulées.
@@ -724,6 +728,7 @@ class Simulator:
         self.flora_loss_model = flora_loss_model
         self.phase_noise_std_dB = phase_noise_std_dB
         self.clock_jitter_std_s = clock_jitter_std_s
+        self.skip_downlink_validation = skip_downlink_validation
         self.validation_mode = validation_mode.lower() if isinstance(validation_mode, str) else validation_mode
         if isinstance(capture_mode, str):
             capture_mode = capture_mode.lower()
@@ -1162,6 +1167,7 @@ class Simulator:
                     if self.clock_accuracy > 0.0
                     else 0.0
                 ),
+                skip_downlink_validation=self.skip_downlink_validation,
             )
             node.simulator = self
             node.assigned_channel_index = self.channel_index(channel)
