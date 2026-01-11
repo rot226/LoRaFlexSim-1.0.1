@@ -245,6 +245,7 @@ def _create_simulator(
     channel_config: str | Path | None = None,
     channel_overrides: Mapping[str, object] | None = None,
     snir_window: str | float | None = None,
+    skip_downlink_validation: bool = False,
 ) -> Simulator:
     overrides: dict[str, object] = dict(channel_overrides or {})
     if snir_window is not None:
@@ -270,6 +271,7 @@ def _create_simulator(
         phy_model="omnet",
         pure_poisson_mode=pure_poisson_mode,
         channel_config=channel_config,
+        skip_downlink_validation=skip_downlink_validation,
         snir_fading_std=None,
         noise_floor_std=None,
         capture_threshold_dB=None,

@@ -212,6 +212,14 @@ def _build_parser() -> argparse.ArgumentParser:
         default=0.0,
         help="Active le log de progression toutes les N secondes simulées (0 = désactivé)",
     )
+    parser.add_argument(
+        "--skip-lorawan-validation",
+        action="store_true",
+        help=(
+            "Ignore la validation LoRaWAN sur les downlinks "
+            "(PDR global inchangé, mais pas de garantie de sécurité LoRaWAN)."
+        ),
+    )
     parser.add_argument("--quiet", action="store_true", help="Réduit les impressions de progression")
     parser.add_argument(
         "--qos-verbose",
@@ -250,6 +258,7 @@ def _instantiate_simulator(
     marginal_snir_drop_prob: float | None = None,
     snir_window: str | float | None = None,
     fading_model: str = "rayleigh",
+    skip_downlink_validation: bool = False,
 ) -> Simulator:
     channel_overrides: dict[str, object | None] = {
         "snir_fading_std": fading_std_db,
@@ -276,6 +285,7 @@ def _instantiate_simulator(
         channel_config=channel_config,
         channel_overrides=channel_overrides,
         snir_window=snir_window,
+        skip_downlink_validation=skip_downlink_validation,
     )
     simulator._interference_tracker = InterferenceTracker()
     _sync_snir_state(simulator, use_snir)
@@ -417,6 +427,11 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
         f"noise_std={args.noise_floor_std_db or 'config'}dB "
         f"mode={args.fading_model}"
     )
+    if args.skip_lorawan_validation:
+        print(
+            "[WARN] Validation LoRaWAN des downlinks désactivée : "
+            "la PDR globale reste exploitable, mais pas la sécurité LoRaWAN."
+        )
 
     simulator = _instantiate_simulator(
         args.nodes,
@@ -432,6 +447,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
         marginal_snir_drop_prob=args.marginal_snir_drop_prob,
         snir_window=args.snir_window,
         fading_model=args.fading_model,
+        skip_downlink_validation=args.skip_lorawan_validation,
     )
     manager = QoSManager()
     _configure_clusters(manager, args.packet_interval)
@@ -472,6 +488,8 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
             "with_snir": args.use_snir,
             "snir_state": STATE_LABELS.get(args.use_snir, "snir_unknown"),
             "snir_state_effective": STATE_LABELS.get(effective_use_snir, "snir_unknown"),
+            "skip_lorawan_validation": args.skip_lorawan_validation,
+            "lorawan_validation": not args.skip_lorawan_validation,
             "channel_config": str(args.channel_config) if args.channel_config else None,
             "snir_fading_std": getattr(simulator, "snir_fading_std", None),
             "noise_floor_std": getattr(simulator, "noise_floor_std", None),
