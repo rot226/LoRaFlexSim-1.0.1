@@ -11,6 +11,8 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import Callable, Mapping
 
@@ -370,6 +372,37 @@ def _sync_snir_state(simulator: Simulator, requested: bool) -> bool:
     return effective_state
 
 
+def _start_progress_monitor(
+    simulator: Simulator,
+    duration: float,
+    progress_every: float,
+    *,
+    quiet: bool,
+) -> tuple[threading.Thread | None, threading.Event | None]:
+    if quiet or progress_every <= 0:
+        return None, None
+
+    stop_event = threading.Event()
+
+    def _monitor() -> None:
+        next_tick = progress_every
+        while not stop_event.is_set():
+            current_time = float(getattr(simulator, "current_time", 0.0) or 0.0)
+            if current_time >= next_tick:
+                ratio = current_time / duration if duration > 0 else 0.0
+                percent = max(0, min(100, int(ratio * 100)))
+                print(
+                    f"[PROGRESS] {percent}% "
+                    f"(t={current_time:.0f}s / {duration:.0f}s)"
+                )
+                next_tick += progress_every
+            time.sleep(0.2)
+
+    thread = threading.Thread(target=_monitor, name="sim-progress", daemon=True)
+    thread.start()
+    return thread, stop_event
+
+
 def main(argv: list[str] | None = None) -> Mapping[str, object]:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -413,7 +446,19 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
         simulator.progress_every_s = None
         simulator._next_progress_time = None
 
-    simulator.run(max_time=args.duration)
+    monitor_thread, monitor_stop = _start_progress_monitor(
+        simulator,
+        args.duration,
+        args.progress_every,
+        quiet=args.quiet,
+    )
+    try:
+        simulator.run(max_time=args.duration)
+    finally:
+        if monitor_stop is not None:
+            monitor_stop.set()
+        if monitor_thread is not None:
+            monitor_thread.join(timeout=2.0)
 
     metrics = simulator.get_metrics()
     metrics.update(
