@@ -885,7 +885,7 @@ def setup_simulation(seed_offset: int = 0):
     # Choisir le modèle de mobilité
     mobility_instance = None
     if mobility_model_select.value == "Path":
-        from launcher.path_mobility import PathMobility
+        from .path_mobility import PathMobility
         mobility_instance = PathMobility(
             float(area_input.value),
             path_map or [[0]],
@@ -894,7 +894,7 @@ def setup_simulation(seed_offset: int = 0):
             dynamic_obstacles=dyn_map,
         )
     elif mobility_model_select.value == "RandomWaypoint":
-        from launcher.random_waypoint import RandomWaypoint
+        from .random_waypoint import RandomWaypoint
         mobility_instance = RandomWaypoint(
             float(area_input.value),
             min_speed=float(mobility_speed_min_input.value),
@@ -902,7 +902,7 @@ def setup_simulation(seed_offset: int = 0):
             terrain=terrain_map,
         )
     else:
-        from launcher.smooth_mobility import SmoothMobility
+        from .smooth_mobility import SmoothMobility
         mobility_instance = SmoothMobility(
             float(area_input.value),
             float(mobility_speed_min_input.value),
