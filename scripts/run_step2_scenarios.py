@@ -313,6 +313,9 @@ def run_normalisation(input_dir: Path, output_dir: Path) -> None:
     input_paths = _collect_inputs(input_dir)
     if not input_paths:
         print(f"Aucun CSV Step 2 trouvé dans {input_dir}")
+        print("Lancez par exemple :")
+        print("  python experiments/ucb1/run_baseline_comparison.py")
+        print("  python experiments/ucb1/run_ucb1_load_sweep.py")
         return
     decisions: List[DecisionRow] = []
     metrics: List[MetricsRow] = []
@@ -432,7 +435,10 @@ def run_normalisation(input_dir: Path, output_dir: Path) -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog="Ce script normalise des CSV générés par experiments/ucb1/*.py",
+    )
     parser.add_argument(
         "--input-dir",
         type=Path,

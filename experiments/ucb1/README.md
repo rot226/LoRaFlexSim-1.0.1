@@ -47,6 +47,13 @@ racine du dépôt ou depuis ``experiments/ucb1``.
   de décisions multi-algorithmes est exporté dans
   ``experiments/ucb1/ucb1_baseline_decision_log.csv``.
 
+Pour produire des CSV compatibles Step 2, lancez exactement :
+
+```bash
+python experiments/ucb1/run_baseline_comparison.py
+python experiments/ucb1/run_ucb1_load_sweep.py
+```
+
 Tous les CSV partagent les colonnes suivantes (``algorithm`` n'est présent que
 pour la comparaison) :
 
