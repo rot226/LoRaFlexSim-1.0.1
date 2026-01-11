@@ -59,9 +59,6 @@ _DEFAULT_QOS_CLUSTER_COUNT = 1
 _DEFAULT_QOS_LAMBDA = 0.1
 _DEFAULT_QOS_PDR = 0.9
 _QOS_TOGGLE_GUARD = False
-qos_snir_enabled = False
-qos_inter_sf_coupling = 0.0
-qos_capture_thresholds = ""
 total_runs = 1
 current_run = 0
 runs_events: list[pd.DataFrame] = []
@@ -250,41 +247,34 @@ def _parse_capture_thresholds(raw_value: str) -> list[float] | None:
     return thresholds or None
 
 
-def _qos_radio_kwargs() -> dict:
+def _radio_model_kwargs() -> dict:
     """Construit les options radio à transmettre au gestionnaire QoS."""
 
     try:
-        capture_thresholds = _parse_capture_thresholds(qos_capture_thresholds)
+        capture_thresholds = _parse_capture_thresholds(qos_capture_thresholds_input.value)
     except ValueError as exc:  # pragma: no cover - validation utilisateur
         export_message.object = f"⚠️ {exc}"
         raise
     qos_kwargs: dict[str, float | bool | Sequence[float] | None] = {}
 
-    # N'inclure que les paramètres effectivement activés pour éviter de
-    # passer des arguments superflus lors de l'application de la stratégie.
-    qos_kwargs["use_snir"] = bool(qos_snir_enabled)
-    if qos_inter_sf_coupling:
-        qos_kwargs["inter_sf_coupling"] = float(qos_inter_sf_coupling)
-    if capture_thresholds:
-        qos_kwargs["capture_thresholds"] = capture_thresholds
+    qos_kwargs["use_snir"] = bool(qos_snir_toggle.value)
+    qos_kwargs["inter_sf_coupling"] = float(qos_inter_sf_coupling_input.value or 0.0)
+    qos_kwargs["capture_thresholds"] = capture_thresholds
 
     return qos_kwargs
 
 
-def _restore_default_radio_model() -> None:
-    """Désactive le modèle SNIR/captures pour revenir au profil ADR standard."""
+def _apply_radio_model_from_widgets() -> None:
+    """Applique les réglages radio avancés au simulateur courant."""
 
     if sim is None:
         return
 
+    radio_kwargs = _radio_model_kwargs()
     qos_manager._configure_radio_model(  # type: ignore[attr-defined]
         sim,
-        use_snir=False,
-        inter_sf_coupling=0.0,
-        capture_thresholds=[6.0],
+        **radio_kwargs,
     )
-    setattr(sim, "qos_active", False)
-    setattr(sim, "qos_algorithm", None)
 
 
 # --- Widgets de configuration ---
@@ -403,20 +393,18 @@ qos_algorithm_select = pn.widgets.RadioButtonGroup(
 )
 qos_algorithm_select.visible = False
 qos_snir_toggle = pn.widgets.Toggle(
-    name="Activer SNIR", button_type="default", value=False, visible=False
+    name="Activer SNIR", button_type="default", value=False
 )
 qos_inter_sf_coupling_input = pn.widgets.FloatInput(
     name="Couplage inter-SF (α)",
     value=0.0,
     step=0.1,
     start=0.0,
-    visible=False,
 )
 qos_capture_thresholds_input = pn.widgets.TextInput(
     name="Seuils de capture SNIR (dB)",
     value="",
     placeholder="Ex.: 6, 6, 6",
-    visible=False,
 )
 qos_cluster_count_input = pn.widgets.IntInput(
     name="Nombre de clusters QoS",
@@ -988,7 +976,7 @@ def setup_simulation(seed_offset: int = 0):
     if qos_toggle.value:
         try:
             _configure_qos_clusters_from_widgets()
-            qos_kwargs = _qos_radio_kwargs()
+            qos_kwargs = _radio_model_kwargs()
         except ValueError as exc:
             export_message.object = f"⚠️ {exc}"
             on_stop(None)
@@ -997,21 +985,19 @@ def setup_simulation(seed_offset: int = 0):
         accepted_kwargs = {k: v for k, v in qos_kwargs.items() if k in apply_sig.parameters}
         qos_manager.apply(sim, qos_algorithm_select.value, **accepted_kwargs)
     else:
-        _restore_default_radio_model()
         if selected_adr_module:
             if selected_adr_module is adr_standard_1:
                 selected_adr_module.apply(sim, degrade_channel=True, profile="flora")
             else:
                 selected_adr_module.apply(sim)
-        channels = []
-        base_channel = getattr(sim, "channel", None)
-        if base_channel is not None:
-            channels.append(base_channel)
-        multichannel = getattr(sim, "multichannel", None)
-        if multichannel is not None:
-            channels.extend(getattr(multichannel, "channels", []) or [])
-        for channel in channels:
-            channel.use_snir = False
+        try:
+            _apply_radio_model_from_widgets()
+        except ValueError as exc:
+            export_message.object = f"⚠️ {exc}"
+            on_stop(None)
+            return
+        setattr(sim, "qos_active", False)
+        setattr(sim, "qos_algorithm", None)
 
     # La mobilité est désormais gérée directement par le simulateur
     start_time = time.time()
@@ -1475,7 +1461,7 @@ def _apply_qos_if_running() -> None:
     if qos_toggle.value:
         try:
             _configure_qos_clusters_from_widgets()
-            qos_kwargs = _qos_radio_kwargs()
+            qos_kwargs = _radio_model_kwargs()
         except ValueError as exc:
             export_message.object = f"⚠️ {exc}"
             return
@@ -1484,7 +1470,13 @@ def _apply_qos_if_running() -> None:
         except ValueError as exc:  # pragma: no cover - sécurité supplémentaire
             export_message.object = f"⚠️ {exc}"
     else:
-        _restore_default_radio_model()
+        try:
+            _apply_radio_model_from_widgets()
+        except ValueError as exc:
+            export_message.object = f"⚠️ {exc}"
+            return
+        setattr(sim, "qos_active", False)
+        setattr(sim, "qos_algorithm", None)
 
 
 def on_qos_toggle(event) -> None:
@@ -1502,9 +1494,6 @@ def on_qos_toggle(event) -> None:
             return
         qos_toggle.button_type = "primary"
         qos_algorithm_select.visible = True
-        qos_snir_toggle.visible = True
-        qos_inter_sf_coupling_input.visible = True
-        qos_capture_thresholds_input.visible = True
         adr_select.disabled = True
         adr_node_checkbox.disabled = True
         adr_server_checkbox.disabled = True
@@ -1521,9 +1510,6 @@ def on_qos_toggle(event) -> None:
         _apply_qos_if_running()
         module = ADR_MODULES[last_selected_adr_name]
         select_adr(module, last_selected_adr_name)
-        qos_snir_toggle.visible = False
-        qos_inter_sf_coupling_input.visible = False
-        qos_capture_thresholds_input.visible = False
 
 
 def on_qos_algorithm_change(event) -> None:
@@ -1532,20 +1518,12 @@ def on_qos_algorithm_change(event) -> None:
 
 
 def on_qos_snir_toggle(event) -> None:
-    globals().update(qos_snir_enabled=bool(event.new))
-    if qos_toggle.value:
-        _apply_qos_if_running()
+    _apply_qos_if_running()
 
 
 qos_toggle.param.watch(on_qos_toggle, "value")
 qos_algorithm_select.param.watch(on_qos_algorithm_change, "value")
 qos_snir_toggle.param.watch(on_qos_snir_toggle, "value")
-qos_inter_sf_coupling_input.param.watch(
-    lambda event: globals().update(qos_inter_sf_coupling=float(event.new)), "value"
-)
-qos_capture_thresholds_input.param.watch(
-    lambda event: globals().update(qos_capture_thresholds=event.new or ""), "value"
-)
 
 # --- Mode FLoRa complet ---
 def on_flora_toggle(event):
@@ -1653,12 +1631,14 @@ center_col = pn.Column(
             manual_pos_toggle,
             position_textarea,
             pn.Spacer(height=10),
-            pn.pane.Markdown("### QoS"),
-            qos_toggle,
-            qos_algorithm_select,
+            pn.pane.Markdown("### Radio avancée"),
             qos_snir_toggle,
             qos_inter_sf_coupling_input,
             qos_capture_thresholds_input,
+            pn.Spacer(height=10),
+            pn.pane.Markdown("### QoS"),
+            qos_toggle,
+            qos_algorithm_select,
             qos_cluster_count_input,
             qos_cluster_proportions_input,
             qos_cluster_arrival_rates_input,
