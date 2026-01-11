@@ -1421,6 +1421,28 @@ class Simulator:
             return
         if not manager.clusters:
             return
+        if reason == "metrics":
+            cooldown_s = getattr(manager, "qos_metrics_cooldown_s", None)
+            if cooldown_s is None:
+                cooldown_s = getattr(manager, "reconfig_interval_s", None)
+            if cooldown_s is not None and cooldown_s > 0.0:
+                current_time = getattr(self, "current_time", None)
+                try:
+                    time_value = float(current_time)
+                except (TypeError, ValueError):
+                    time_value = None
+                last_time = getattr(manager, "_last_reconfig_time", None)
+                try:
+                    last_value = float(last_time)
+                except (TypeError, ValueError):
+                    last_value = None
+                if (
+                    time_value is not None
+                    and math.isfinite(time_value)
+                    and last_value is not None
+                    and time_value - last_value < cooldown_s
+                ):
+                    return
         try:
             needs_refresh = manager._should_refresh_context(self)
         except Exception:  # pragma: no cover - robust logging

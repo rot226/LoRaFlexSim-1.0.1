@@ -149,6 +149,7 @@ class QoSManager:
         self.cluster_sf_channel_capacity: dict[int, dict[int, dict[int, float]]] = {}
         self.capacity_margin: float = 0.1
         self.reconfig_interval_s: float = 60.0
+        self.qos_metrics_cooldown_s: float | None = None
         self.pdr_drift_threshold: float = 0.1
         self.traffic_drift_threshold: float = 0.25
         self.max_clusters_per_channel: int | None = None
