@@ -1428,8 +1428,30 @@ class Simulator:
             return
         if not needs_refresh:
             return
-        diag_logger.debug("Déclenchement QoS (%s) à t=%.3fs", reason, self.current_time)
-        manager.apply(self, algorithm)
+        node_count = len(getattr(self, "nodes", []) or [])
+        refresh_context = {
+            "reason": reason,
+            "sim_time": getattr(self, "current_time", None),
+            "node_count": node_count,
+        }
+        manager.apply(self, algorithm, refresh_context=refresh_context)
+        duration_s = refresh_context.get("duration_s")
+        if duration_s is None:
+            return
+        sim_time = refresh_context.get("sim_time", getattr(self, "current_time", None))
+        try:
+            sim_time_value = float(sim_time)
+        except (TypeError, ValueError):
+            sim_time_label = "n/a"
+        else:
+            sim_time_label = f"{sim_time_value:.3f}s"
+        diag_logger.info(
+            "QoS recalculé (%s) à t=%s sur %s nœuds en %.3fs",
+            reason,
+            sim_time_label,
+            node_count,
+            duration_s,
+        )
 
     def _notify_qos_metrics_update(self, node: Node) -> None:
         if getattr(self, "qos_manager", None) is None:

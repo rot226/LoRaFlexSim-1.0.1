@@ -9,6 +9,7 @@ existante.
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 from typing import Callable, Mapping
@@ -210,8 +211,26 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Active le log de progression toutes les N secondes simulées (0 = désactivé)",
     )
     parser.add_argument("--quiet", action="store_true", help="Réduit les impressions de progression")
+    parser.add_argument(
+        "--qos-verbose",
+        action="store_true",
+        help="Active les logs détaillés pour les recalculs QoS",
+    )
     parser.set_defaults(pure_poisson=False, fading_model="rayleigh")
     return parser
+
+
+def _configure_qos_logging(enabled: bool) -> None:
+    if not enabled:
+        return
+    diag_logger = logging.getLogger("diagnostics")
+    diag_logger.setLevel(logging.INFO)
+    if not diag_logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter("[QoS] %(message)s")
+        handler.setFormatter(formatter)
+        diag_logger.addHandler(handler)
+    diag_logger.propagate = False
 
 
 def _instantiate_simulator(
@@ -354,6 +373,7 @@ def _sync_snir_state(simulator: Simulator, requested: bool) -> bool:
 def main(argv: list[str] | None = None) -> Mapping[str, object]:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    _configure_qos_logging(args.qos_verbose)
 
     print(
         "[RUN] "
