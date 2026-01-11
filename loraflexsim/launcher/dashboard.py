@@ -12,20 +12,16 @@ import threading
 import pandas as pd
 
 # Assurer la résolution correcte des imports quel que soit le répertoire
-# depuis lequel ce fichier est exécuté. On ajoute le dossier parent
-# (celui contenant le paquet ``launcher``) ainsi que la racine du projet
-# au ``sys.path`` s'ils n'y sont pas déjà. Ainsi, ``from launcher.simulator``
-# fonctionnera aussi avec la commande ``panel serve dashboard.py`` exécutée
-# depuis ce dossier et les modules comme ``traffic`` seront importables.
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+# depuis lequel ce fichier est exécuté. On ajoute la racine du projet
+# au ``sys.path`` si elle n'y est pas déjà. Ainsi, le paquet
+# ``loraflexsim`` et les modules comme ``traffic`` seront importables.
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-for path in (ROOT_DIR, REPO_ROOT):
-    if path not in sys.path:
-        sys.path.insert(0, path)
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
-from launcher.simulator import Simulator  # noqa: E402
-from launcher.channel import Channel  # noqa: E402
-from launcher import (
+from loraflexsim.launcher.simulator import Simulator  # noqa: E402
+from loraflexsim.launcher.channel import Channel  # noqa: E402
+from loraflexsim.launcher import (
     adr_standard_1,
     adr_2,
     adr_ml,  # stratégie ADR basée sur le ML
@@ -36,7 +32,7 @@ from launcher import (
     radr,
     ADR_MODULES,
 )  # noqa: E402
-from launcher.qos import QoSManager, QOS_ALGORITHMS  # noqa: E402
+from loraflexsim.launcher.qos import QoSManager, QOS_ALGORITHMS  # noqa: E402
 
 # --- Initialisation Panel ---
 pn.extension("plotly", raw_css=[

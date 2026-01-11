@@ -7,7 +7,7 @@ from .channel import Channel
 from .lorawan import default_downlink_datarate
 from traffic.exponential import sample_interval
 from traffic.numpy_compat import is_mt19937_rng
-from ..learning import LoRaSFSelectorUCB1
+from loraflexsim.learning import LoRaSFSelectorUCB1
 
 # Default energy profile used by all nodes (based on the FLoRa model)
 DEFAULT_ENERGY_PROFILE = FLORA_PROFILE
