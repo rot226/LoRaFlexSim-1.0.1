@@ -13,10 +13,12 @@ peuvent être affinées par la suite si un modèle plus précis est nécessaire.
 from __future__ import annotations
 
 import importlib.util
-from importlib import import_module
+import logging
+import math
+import time
 from collections import deque, defaultdict
 from dataclasses import dataclass
-import math
+from importlib import import_module
 from types import ModuleType
 from typing import Iterable, Sequence
 
@@ -45,6 +47,7 @@ QOS_ALGORITHMS = {
 }
 
 __all__ = ["Cluster", "build_clusters", "QoSManager"]
+diag_logger = logging.getLogger("diagnostics")
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,6 +169,7 @@ class QoSManager:
         use_snir: bool | None = None,
         inter_sf_coupling: float | None = None,
         capture_thresholds: Sequence[float] | None = None,
+        refresh_context: dict[str, object] | None = None,
     ) -> None:
         """Active ``algorithm`` sur ``simulator``.
 
@@ -175,42 +179,72 @@ class QoSManager:
         simulateur.
         """
 
-        if algorithm not in QOS_ALGORITHMS:
-            raise ValueError(f"Algorithme QoS inconnu : {algorithm}")
-        method_name = f"_apply_{QOS_ALGORITHMS[algorithm]}"
-        method = getattr(self, method_name, None)
-        if method is None:
-            raise ValueError(f"Implémentation manquante pour {algorithm}")
-        shared_queue = getattr(simulator, "out_of_service_queue", None)
-        if shared_queue is not None:
-            self.out_of_service_queue = shared_queue
-        if self.clusters and self._should_refresh_context(simulator):
-            self._update_qos_context(simulator)
-        self._configure_radio_model(
-            simulator,
-            use_snir=use_snir,
-            inter_sf_coupling=inter_sf_coupling,
-            capture_thresholds=capture_thresholds,
-        )
-        setattr(simulator, "qos_manager", self)
-        if not getattr(simulator, "nodes", None):
-            # Rien à faire si aucun nœud n'est présent.
+        start_time = time.perf_counter() if refresh_context is not None else None
+        error: Exception | None = None
+        try:
+            if algorithm not in QOS_ALGORITHMS:
+                raise ValueError(f"Algorithme QoS inconnu : {algorithm}")
+            method_name = f"_apply_{QOS_ALGORITHMS[algorithm]}"
+            method = getattr(self, method_name, None)
+            if method is None:
+                raise ValueError(f"Implémentation manquante pour {algorithm}")
+            shared_queue = getattr(simulator, "out_of_service_queue", None)
+            if shared_queue is not None:
+                self.out_of_service_queue = shared_queue
+            if self.clusters and self._should_refresh_context(simulator):
+                self._update_qos_context(simulator)
+            self._configure_radio_model(
+                simulator,
+                use_snir=use_snir,
+                inter_sf_coupling=inter_sf_coupling,
+                capture_thresholds=capture_thresholds,
+            )
+            setattr(simulator, "qos_manager", self)
+            if not getattr(simulator, "nodes", None):
+                # Rien à faire si aucun nœud n'est présent.
+                self.active_algorithm = algorithm
+                setattr(simulator, "qos_algorithm", algorithm)
+                setattr(simulator, "qos_active", True)
+                self._broadcast_control_updates(simulator)
+                hook = getattr(simulator, "_on_qos_applied", None)
+                if callable(hook):
+                    hook(self)
+                return
             self.active_algorithm = algorithm
+            method(simulator)
             setattr(simulator, "qos_algorithm", algorithm)
             setattr(simulator, "qos_active", True)
             self._broadcast_control_updates(simulator)
             hook = getattr(simulator, "_on_qos_applied", None)
             if callable(hook):
                 hook(self)
-            return
-        self.active_algorithm = algorithm
-        method(simulator)
-        setattr(simulator, "qos_algorithm", algorithm)
-        setattr(simulator, "qos_active", True)
-        self._broadcast_control_updates(simulator)
-        hook = getattr(simulator, "_on_qos_applied", None)
-        if callable(hook):
-            hook(self)
+        except Exception as exc:
+            error = exc
+            raise
+        finally:
+            if refresh_context is not None and start_time is not None and error is None:
+                duration_s = time.perf_counter() - start_time
+                refresh_context["duration_s"] = duration_s
+                reason = refresh_context.get("reason", "unspecified")
+                sim_time = refresh_context.get(
+                    "sim_time", getattr(simulator, "current_time", None)
+                )
+                node_count = refresh_context.get("node_count")
+                if node_count is None:
+                    node_count = len(getattr(simulator, "nodes", []) or [])
+                try:
+                    sim_time_value = float(sim_time)
+                except (TypeError, ValueError):
+                    sim_time_label = "n/a"
+                else:
+                    sim_time_label = f"{sim_time_value:.3f}s"
+                diag_logger.info(
+                    "Recalcul QoS terminé (%s) à t=%s sur %s nœuds en %.3fs",
+                    reason,
+                    sim_time_label,
+                    node_count,
+                    duration_s,
+                )
 
     def configure_clusters(
         self,
