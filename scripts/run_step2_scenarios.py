@@ -309,18 +309,21 @@ def _aggregate_sf_tp(decisions: Sequence[DecisionRow]) -> List[Dict[str, Any]]:
     return rows
 
 
-def run_normalisation(input_dir: Path, output_dir: Path) -> None:
+def run_normalisation(input_dir: Path, output_dir: Path, *, quiet: bool = False) -> None:
     input_paths = _collect_inputs(input_dir)
     if not input_paths:
-        print(f"Aucun CSV Step 2 trouvé dans {input_dir}")
+        if not quiet:
+            print(f"Aucun CSV Step 2 trouvé dans {input_dir}")
         return
     decisions: List[DecisionRow] = []
     metrics: List[MetricsRow] = []
     run_id = 1
+    csv_read_count = 0
     for path in input_paths:
         kind, rows = _load_csv(path)
         if not rows or kind is None:
             continue
+        csv_read_count += 1
         snir_state = _snir_state_from_path(path)
         algorithm = None
         if rows:
@@ -345,6 +348,8 @@ def run_normalisation(input_dir: Path, output_dir: Path) -> None:
     agg_dir = output_dir / "agg"
     _ensure_dir(raw_dir)
     _ensure_dir(agg_dir)
+    written_paths: List[Path] = []
+    aggregated_lines = 0
 
     if decisions:
         decision_fields = [
@@ -368,6 +373,7 @@ def run_normalisation(input_dir: Path, output_dir: Path) -> None:
             "energy_j",
         ]
         _write_csv(raw_dir / "decisions.csv", decision_fields, decisions)
+        written_paths.append(raw_dir / "decisions.csv")
         performance_rows, convergence_rows = _aggregate_decisions(decisions)
         if performance_rows:
             _write_csv(
@@ -386,6 +392,8 @@ def run_normalisation(input_dir: Path, output_dir: Path) -> None:
                 ],
                 performance_rows,
             )
+            written_paths.append(agg_dir / "performance_rounds.csv")
+            aggregated_lines += len(performance_rows)
         if convergence_rows:
             _write_csv(
                 agg_dir / "convergence.csv",
@@ -403,6 +411,8 @@ def run_normalisation(input_dir: Path, output_dir: Path) -> None:
                 ],
                 convergence_rows,
             )
+            written_paths.append(agg_dir / "convergence.csv")
+            aggregated_lines += len(convergence_rows)
         sf_rows = _aggregate_sf_tp(decisions)
         if sf_rows:
             _write_csv(
@@ -410,6 +420,8 @@ def run_normalisation(input_dir: Path, output_dir: Path) -> None:
                 ["snir_state", "algorithm", "sf", "tx_power", "count", "share"],
                 sf_rows,
             )
+            written_paths.append(agg_dir / "sf_tp_distribution.csv")
+            aggregated_lines += len(sf_rows)
 
     if metrics:
         metrics_fields = [
@@ -429,6 +441,15 @@ def run_normalisation(input_dir: Path, output_dir: Path) -> None:
             "fairness",
         ]
         _write_csv(raw_dir / "metrics.csv", metrics_fields, metrics)
+        written_paths.append(raw_dir / "metrics.csv")
+
+    if not quiet:
+        print(f"CSV lus: {csv_read_count}")
+        print(f"Lignes agrégées: {aggregated_lines}")
+        if written_paths:
+            print("Fichiers écrits:")
+            for path in written_paths:
+                print(f"- {path.as_posix()}")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -445,12 +466,17 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_OUTPUT_DIR,
         help="Répertoire de sortie pour results/step2.",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Désactive l'affichage des informations de normalisation.",
+    )
     return parser
 
 
 def main() -> None:
     args = _build_parser().parse_args()
-    run_normalisation(args.input_dir, args.output_dir)
+    run_normalisation(args.input_dir, args.output_dir, quiet=args.quiet)
 
 
 if __name__ == "__main__":
