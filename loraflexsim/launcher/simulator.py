@@ -36,7 +36,7 @@ from .server import NetworkServer, REQUIRED_SNR
 from .duty_cycle import DutyCycleManager
 from .smooth_mobility import SmoothMobility
 from .id_provider import next_node_id, next_gateway_id, reset as reset_ids
-from ..learning import LoRaSFSelectorUCB1
+from loraflexsim.learning import LoRaSFSelectorUCB1
 
 
 class EventType(IntEnum):
