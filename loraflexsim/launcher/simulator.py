@@ -492,6 +492,8 @@ class Simulator:
         capture_mode: str | None = None,
         validation_mode: str | None = None,
         tick_ns: int | None = None,
+        progress_every_s: float | None = None,
+        progress_every_steps: int | None = None,
     ):
         """
         Initialise la simulation LoRaFlexSim avec les entités et paramètres donnés.
@@ -604,6 +606,8 @@ class Simulator:
             ``"aloha"`` par défaut).
         :param tick_ns: Quand défini, quantifie chaque instant à des entiers de
             ``tick_ns`` nanosecondes pour la file d'événements.
+        :param progress_every_s: Fréquence de log de progression en secondes simulées.
+        :param progress_every_steps: Fréquence de log de progression en nombre d'événements.
         """
         # Paramètres de simulation
         if flora_mode and packet_interval == 60.0 and first_packet_interval is None:
@@ -1201,6 +1205,7 @@ class Simulator:
         self.node_map = {node.id: node for node in self.nodes}
         self.current_time = 0.0
         self.event_id_counter = 0
+        self.events_processed = 0
 
         # Gestion automatique du rafraîchissement QoS
         self.qos_manager = None
@@ -1238,6 +1243,26 @@ class Simulator:
         # Nœuds de classe C actuellement maintenus en écoute périodique
         self._class_c_polling_nodes: set[int] = set()
         self.out_of_service_queue: deque[tuple[int, str, float]] = deque()
+        self.progress_every_s = None
+        self.progress_every_steps = None
+        if progress_every_s is not None:
+            self.progress_every_s = _validate_positive_real(
+                "progress_every_s", progress_every_s
+            )
+        if progress_every_steps is not None:
+            if isinstance(progress_every_steps, bool):
+                raise TypeError("progress_every_steps must be an integer, not bool")
+            if not isinstance(progress_every_steps, numbers.Integral):
+                raise TypeError("progress_every_steps must be an integer")
+            if progress_every_steps <= 0:
+                raise ValueError("progress_every_steps must be a positive integer")
+            self.progress_every_steps = int(progress_every_steps)
+        self._next_progress_time = (
+            self.progress_every_s if self.progress_every_s is not None else None
+        )
+        self._next_progress_step = (
+            self.progress_every_steps if self.progress_every_steps is not None else None
+        )
 
         # Planifier le premier envoi de chaque nœud
         for node in self.nodes:
@@ -2540,6 +2565,36 @@ class Simulator:
         # Si autre type d'événement (non prévu)
         return True
 
+    def _log_progress(self) -> None:
+        total_sent = self.tx_attempted
+        delivered = self.rx_delivered
+        pdr = delivered / total_sent if total_sent > 0 else 0.0
+        logger.info(
+            "Progression t=%.2fs | événements=%d | TX=%d | collisions=%d | PDR=%.3f",
+            self.current_time,
+            self.events_processed,
+            total_sent,
+            self.packets_lost_collision,
+            pdr,
+        )
+
+    def _maybe_log_progress(self) -> None:
+        if self._next_progress_time is None and self._next_progress_step is None:
+            return
+        log_due = False
+        if self._next_progress_time is not None and self.progress_every_s is not None:
+            if self.current_time >= self._next_progress_time:
+                log_due = True
+                while self.current_time >= self._next_progress_time:
+                    self._next_progress_time += self.progress_every_s
+        if self._next_progress_step is not None and self.progress_every_steps is not None:
+            if self.events_processed >= self._next_progress_step:
+                log_due = True
+                while self.events_processed >= self._next_progress_step:
+                    self._next_progress_step += self.progress_every_steps
+        if log_due:
+            self._log_progress()
+
     def run(
         self,
         max_steps: int | None = None,
@@ -2555,6 +2610,8 @@ class Simulator:
                     break
             self.step()
             step_count += 1
+            self.events_processed += 1
+            self._maybe_log_progress()
             if max_steps and step_count >= max_steps:
                 break
         if self.dump_intervals:

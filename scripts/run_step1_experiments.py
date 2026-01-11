@@ -68,6 +68,16 @@ def _parse_snir_window(value: str) -> str | float:
         ) from exc
 
 
+def _parse_progress_every(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("progress_every doit être un nombre.") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("progress_every doit être positif ou nul.")
+    return parsed
+
+
 def _snir_window_label(value: str | float | None) -> str | None:
     if value is None:
         return None
@@ -192,6 +202,12 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=DEFAULT_RESULTS_DIR,
         help="Répertoire de sortie pour les fichiers CSV",
+    )
+    parser.add_argument(
+        "--progress-every",
+        type=_parse_progress_every,
+        default=0.0,
+        help="Active le log de progression toutes les N secondes simulées (0 = désactivé)",
     )
     parser.add_argument("--quiet", action="store_true", help="Réduit les impressions de progression")
     parser.set_defaults(pure_poisson=False, fading_model="rayleigh")
@@ -369,6 +385,13 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
     _apply_algorithm(args.algorithm, simulator, manager, args.mixra_solver)
 
     effective_use_snir = _sync_snir_state(simulator, args.use_snir)
+
+    if args.progress_every > 0:
+        simulator.progress_every_s = args.progress_every
+        simulator._next_progress_time = args.progress_every
+    else:
+        simulator.progress_every_s = None
+        simulator._next_progress_time = None
 
     simulator.run(max_time=args.duration)
 
