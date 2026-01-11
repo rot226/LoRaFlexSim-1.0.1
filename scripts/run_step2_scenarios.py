@@ -311,6 +311,9 @@ def _aggregate_sf_tp(decisions: Sequence[DecisionRow]) -> List[Dict[str, Any]]:
 
 def run_normalisation(input_dir: Path, output_dir: Path) -> None:
     input_paths = _collect_inputs(input_dir)
+    if not input_paths:
+        print(f"Aucun CSV Step 2 trouvé dans {input_dir}")
+        return
     decisions: List[DecisionRow] = []
     metrics: List[MetricsRow] = []
     run_id = 1
