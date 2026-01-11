@@ -262,8 +262,7 @@ def _qos_radio_kwargs() -> dict:
 
     # N'inclure que les paramètres effectivement activés pour éviter de
     # passer des arguments superflus lors de l'application de la stratégie.
-    if qos_snir_enabled:
-        qos_kwargs["use_snir"] = True
+    qos_kwargs["use_snir"] = bool(qos_snir_enabled)
     if qos_inter_sf_coupling:
         qos_kwargs["inter_sf_coupling"] = float(qos_inter_sf_coupling)
     if capture_thresholds:
@@ -929,7 +928,7 @@ def setup_simulation(seed_offset: int = 0):
                 variable_noise_std=float(noise_std_input.value),
                 phy_model="flora" if flora_mode_toggle.value else "omnet",
                 use_flora_curves=flora_mode_toggle.value,
-                use_snir=bool(qos_toggle.value),
+                use_snir=bool(qos_snir_toggle.value),
             )
             for i in range(num_channels_input.value)
         ],
@@ -1532,11 +1531,15 @@ def on_qos_algorithm_change(event) -> None:
         _apply_qos_if_running()
 
 
+def on_qos_snir_toggle(event) -> None:
+    globals().update(qos_snir_enabled=bool(event.new))
+    if qos_toggle.value:
+        _apply_qos_if_running()
+
+
 qos_toggle.param.watch(on_qos_toggle, "value")
 qos_algorithm_select.param.watch(on_qos_algorithm_change, "value")
-qos_snir_toggle.param.watch(
-    lambda event: globals().update(qos_snir_enabled=bool(event.new)), "value"
-)
+qos_snir_toggle.param.watch(on_qos_snir_toggle, "value")
 qos_inter_sf_coupling_input.param.watch(
     lambda event: globals().update(qos_inter_sf_coupling=float(event.new)), "value"
 )
