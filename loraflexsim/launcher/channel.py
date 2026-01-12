@@ -219,6 +219,7 @@ class Channel:
         snir_fading_std: float | None = None,
         marginal_snir_margin_db: float = 1.5,
         marginal_snir_drop_prob: float = 0.25,
+        snir_penalty_strength: float = 0.0,
         snir_window: str | float | None = None,
         use_flora_curves: bool = False,
         residual_collision_prob: float | None = None,
@@ -345,6 +346,13 @@ class Channel:
         :param use_snir: Si ``True``, applique le calcul SNIR en tenant compte
             des interférences explicites. Sinon, le calcul SNR historique est
             conservé.
+        :param marginal_snir_margin_db: Marge en-dessous de laquelle un paquet
+            capturé peut encore échouer aléatoirement malgré un SNIR légèrement
+            au-dessus du seuil.
+        :param marginal_snir_drop_prob: Probabilité maximale de déclencher
+            cette perte marginale lorsque ``margin=0``.
+        :param snir_penalty_strength: Intensité de pénalisation additionnelle
+            appliquée aux transmissions proches du seuil SNIR.
         :param snir_window: Fenêtre utilisée pour évaluer l'interférence
             moyenne lorsque ``use_snir`` est activé. La valeur ``None`` ou
             ``"packet"`` conserve le comportement historique (moyenne sur
@@ -502,6 +510,7 @@ class Channel:
             self.snir_fading_std = float(snir_fading_std)
         self.marginal_snir_margin_db = float(marginal_snir_margin_db)
         self.marginal_snir_drop_prob = float(marginal_snir_drop_prob)
+        self.snir_penalty_strength = float(snir_penalty_strength)
         if residual_collision_prob is None:
             residual_collision_prob = 0.02 if use_snir is False else 0.005
         self.residual_collision_prob = float(residual_collision_prob)
