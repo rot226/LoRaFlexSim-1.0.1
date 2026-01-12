@@ -1,8 +1,9 @@
 """Trace des heatmaps DER/SNIR pour l'étape 1.
 
 Le script génère des matrices (x = intervalle, y = nœuds) pour deux états
-SNIR (on/off) empilés, avec une légende colorée adaptée aux publications
-IEEE. Par défaut, les heatmaps sont filtrées sur l'algorithme mixra_opt.
+SNIR (on/off) empilés, avec une légende claire et une palette uniforme. Par
+défaut, les heatmaps sont produites pour les 4 algorithmes (adr, apra,
+mixra_h, mixra_opt).
 """
 
 from __future__ import annotations
@@ -29,6 +30,8 @@ from scripts.plot_step1_results import (  # noqa: E402
 
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
 DEFAULT_FIGURES_DIR = ROOT_DIR / "figures" / "step1" / "heatmaps"
+DEFAULT_ALGORITHMS = ["adr", "apra", "mixra_h", "mixra_opt"]
+HEATMAP_COLORMAP = "cividis"
 
 METRIC_LABELS = {
     "DER": ("DER", "DER"),
@@ -105,6 +108,8 @@ def _plot_heatmaps(
     metric_label: str,
     algorithm: str,
     figures_dir: Path,
+    vmin: float | None,
+    vmax: float | None,
 ) -> None:
     if plt is None:
         return
@@ -123,16 +128,6 @@ def _plot_heatmaps(
     if not matrices:
         return
 
-    all_values = [
-        value
-        for _, _, matrix in matrices.values()
-        for row in matrix
-        for value in row
-        if not (value != value)
-    ]
-    vmin = min(all_values) if all_values else None
-    vmax = max(all_values) if all_values else None
-
     fig, axes = plt.subplots(
         len(SNIR_STATES),
         1,
@@ -143,8 +138,9 @@ def _plot_heatmaps(
         axes = [axes]
 
     image = None
-    cmap = plt.get_cmap("viridis").copy()
-    cmap.set_bad(color="#f2f2f2")
+    cmap = plt.get_cmap(HEATMAP_COLORMAP).copy()
+    missing_color = "#f2f2f2"
+    cmap.set_bad(color=missing_color)
     for ax, state in zip(axes, SNIR_STATES):
         if state not in matrices:
             ax.axis("off")
@@ -170,21 +166,53 @@ def _plot_heatmaps(
 
     if image is not None:
         cbar = fig.colorbar(image, ax=axes, orientation="vertical", shrink=0.9, pad=0.02)
-        cbar.set_label(metric_label)
+        cbar.set_label(f"{metric_label} (palette uniforme)")
         cbar.ax.tick_params(labelsize=9)
 
+    missing_patch = plt.matplotlib.patches.Patch(
+        facecolor=missing_color,
+        edgecolor="#666666",
+        label="Données manquantes",
+    )
+    fig.legend(handles=[missing_patch], loc="lower center", ncol=1, frameon=False)
+    fig.suptitle(f"Heatmap {metric_label} – {algorithm}", y=1.02, fontsize=11)
+
     figures_dir.mkdir(parents=True, exist_ok=True)
-    output_name = f"heatmap_{metric_key.lower()}_{algorithm.replace(' ', '_')}_snir_overlay.png"
-    fig.tight_layout()
+    output_name = f"heatmap_{metric_key.lower()}_{algorithm.replace(' ', '_')}_snir_on_off.png"
+    fig.tight_layout(rect=(0, 0.03, 1, 0.95))
     fig.savefig(figures_dir / output_name, dpi=300)
     plt.close(fig)
+
+
+def _parse_algorithms(values: Sequence[str] | None) -> List[str]:
+    if not values:
+        return []
+    algorithms: List[str] = []
+    for value in values:
+        algorithms.extend([item.strip() for item in value.split(",") if item.strip()])
+    return algorithms
+
+
+def _metric_extent(
+    records: Sequence[Mapping[str, float | int | str]],
+    metric_key: str,
+) -> tuple[float | None, float | None]:
+    values: List[float] = []
+    for record in records:
+        value = _metric_value(record, metric_key)
+        if value is None:
+            continue
+        values.append(value)
+    if not values:
+        return None, None
+    return min(values), max(values)
 
 
 def generate_heatmaps(
     results_dir: Path,
     figures_dir: Path,
     metric: str,
-    algorithm: str | None,
+    algorithms: Sequence[str] | None,
     strict: bool,
     ieee_mode: bool,
 ) -> None:
@@ -204,17 +232,30 @@ def generate_heatmaps(
         print(f"Aucun CSV trouvé dans {results_dir} ; aucune heatmap générée.")
         return
 
-    algorithms = {str(record.get("algorithm") or "") for record in records}
-    if "mixra_opt" not in algorithms:
-        warning = "Aucune donnée pour l'algorithme mixra_opt n'a été détectée."
+    available_algorithms = {str(record.get("algorithm") or "") for record in records}
+
+    requested_algorithms = _parse_algorithms(algorithms)
+    if requested_algorithms:
+        selected_algorithms = requested_algorithms
+    else:
+        selected_algorithms = DEFAULT_ALGORITHMS
+
+    missing_algorithms = [algo for algo in selected_algorithms if algo not in available_algorithms]
+    if missing_algorithms:
+        warning = (
+            "Aucune donnée détectée pour : "
+            f"{', '.join(missing_algorithms)}."
+        )
         if ieee_mode:
             raise ValueError(f"{warning} (mode IEEE).")
         print(warning, file=sys.stderr)
 
-    if algorithm:
-        selected_algorithms = [algorithm]
-    else:
-        selected_algorithms = ["mixra_opt"]
+    filtered_records = [
+        record
+        for record in records
+        if str(record.get("algorithm") or "") in selected_algorithms
+    ]
+    vmin, vmax = _metric_extent(filtered_records, metric_key)
 
     for algo in selected_algorithms:
         algo_records = [record for record in records if str(record.get("algorithm") or "unknown") == algo]
@@ -224,7 +265,15 @@ def generate_heatmaps(
                     f"Aucune donnée pour l'algorithme {algo} (mode IEEE)."
                 )
             continue
-        _plot_heatmaps(algo_records, metric_key, metric_label, algo, figures_dir)
+        _plot_heatmaps(
+            algo_records,
+            metric_key,
+            metric_label,
+            algo,
+            figures_dir,
+            vmin,
+            vmax,
+        )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -248,9 +297,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Métrique à représenter dans la heatmap (DER ou SNIR)",
     )
     parser.add_argument(
+        "--algorithms",
+        default=None,
+        help=(
+            "Liste d'algorithmes séparés par des virgules (par défaut : "
+            "adr, apra, mixra_h, mixra_opt)"
+        ),
+    )
+    parser.add_argument(
         "--algorithm",
-        default="mixra_opt",
-        help="Filtre sur l'algorithme à tracer (par défaut : mixra_opt)",
+        default=None,
+        help="Alias de --algorithms pour un seul algorithme.",
     )
     parser.add_argument(
         "--strict",
@@ -275,7 +332,11 @@ def main(argv: List[str] | None = None) -> None:
         results_dir=args.results_dir,
         figures_dir=args.figures_dir,
         metric=args.metric,
-        algorithm=args.algorithm,
+        algorithms=(
+            [args.algorithm]
+            if args.algorithm and not args.algorithms
+            else args.algorithms
+        ),
         strict=args.strict,
         ieee_mode=args.ieee,
     )
