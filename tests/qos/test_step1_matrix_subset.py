@@ -165,6 +165,7 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
     min_collision_gap_between_states = 5.0
     min_collision_mean_gap_between_states = 1.0
     min_collision_median_gap_between_states = 1.0
+    min_der_mean = 0.3
 
     for campaign_name, metrics in metrics_by_campaign.items():
         state_means: dict[bool, dict[str, float]] = {}
@@ -182,6 +183,10 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
 
             assert 0.75 <= pdr_mean <= 1.01, (
                 f"PDR moyen inattendu pour SNIR={use_snir} ({campaign_name}): {pdr_mean:.3f}"
+            )
+            der_mean = sum(der_values) / len(der_values)
+            assert der_mean >= min_der_mean, (
+                f"DER moyen trop faible pour SNIR={use_snir} ({campaign_name}): {der_mean:.3f}"
             )
             assert 0.0 <= collisions_mean <= 10.0, (
                 f"Taux de collisions moyen hors bornes pour SNIR={use_snir} ({campaign_name}): {collisions_mean:.3f}"
@@ -219,7 +224,7 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
 
             state_means[use_snir] = {
                 "pdr": pdr_mean,
-                "der": sum(der_values) / len(der_values),
+                "der": der_mean,
                 "mean_snir": snir_mean,
                 "collisions_mean": collisions_mean,
                 "collisions_median": collisions_median,
