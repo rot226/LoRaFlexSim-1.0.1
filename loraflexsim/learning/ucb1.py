@@ -137,6 +137,7 @@ class LoRaSFSelectorUCB1:
         )
         self.success_weight = success_weight
         self.snir_margin_weight = snir_margin_weight
+        self.snir_reward_weight = min(max(self.snir_margin_weight * 2.0, 0.0), 1.0)
         self.fairness_weight = fairness_weight
         self.energy_penalty_weight = energy_penalty_weight
         self.collision_penalty = collision_penalty
@@ -239,7 +240,7 @@ class LoRaSFSelectorUCB1:
 
         weighted_components: List[Tuple[float, float]] = [
             (normalized_success, self.success_weight),
-            (components.snir, self.snir_margin_weight),
+            (components.snir, self.snir_reward_weight),
             (-components.energy, self.energy_penalty_weight),
             (-components.collision, self.collision_penalty),
         ]
@@ -353,3 +354,9 @@ class LoRaSFSelectorUCB1:
         """Variance lissée des récompenses par bras."""
 
         return self.bandit.reward_window_variance
+
+    @property
+    def qos_window_mean(self) -> List[RewardSample]:
+        """Moyenne glissante des composantes QoS (SNIR, collisions, énergie)."""
+
+        return [self._mean_components(window) for window in self._qos_windows]
