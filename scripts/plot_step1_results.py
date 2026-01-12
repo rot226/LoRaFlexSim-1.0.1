@@ -336,8 +336,18 @@ def _format_axes(ax: Any, integer_x: bool = False) -> None:
 
 def _metric_error_bounds(record: Mapping[str, Any], metric: str, value: float) -> Tuple[float, float] | None:
     for base in {metric, metric.lower(), metric.upper()}:
-        ci_low = _maybe_float(record.get(f"{base}_ci_low"))
-        ci_high = _maybe_float(record.get(f"{base}_ci_high"))
+        for prefix in (f"{base}_ci_low", f"{base}_ci95_low", f"{base}_ci_95_low"):
+            ci_low = _maybe_float(record.get(prefix))
+            if ci_low is not None:
+                break
+        else:
+            ci_low = None
+        for prefix in (f"{base}_ci_high", f"{base}_ci95_high", f"{base}_ci_95_high"):
+            ci_high = _maybe_float(record.get(prefix))
+            if ci_high is not None:
+                break
+        else:
+            ci_high = None
         if ci_low is not None and ci_high is not None:
             return max(0.0, value - ci_low), max(0.0, ci_high - value)
         std = _maybe_float(record.get(f"{base}_std"))
@@ -427,6 +437,39 @@ def _load_raw_samples(raw_path: Path, fallback_dir: Path, strict: bool) -> List[
     else:
         records = _load_step1_records(fallback_dir, strict=strict)
     return records
+
+
+def _apply_ieee_filters(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    filtered = [
+        record
+        for record in records
+        if record.get("snir_state") in {"snir_on", "snir_off"}
+        and record.get("snir_detected", True)
+    ]
+    groups: Dict[Tuple[Any, ...], List[Dict[str, Any]]] = defaultdict(list)
+    for record in filtered:
+        key = (
+            record.get("algorithm"),
+            record.get("num_nodes"),
+            record.get("packet_interval_s"),
+            record.get("random_seed"),
+            record.get("simulation_duration_s"),
+        )
+        groups[key].append(record)
+
+    coherent_records: List[Dict[str, Any]] = []
+    for items in groups.values():
+        states = {item.get("snir_state") for item in items}
+        if {"snir_on", "snir_off"}.issubset(states):
+            coherent_records.extend(items)
+
+    dropped = len(records) - len(coherent_records)
+    if dropped > 0:
+        warnings.warn(
+            f"Filtre IEEE : {dropped} enregistrement(s) incohérents ou SNIR inconnus exclus.",
+            RuntimeWarning,
+        )
+    return coherent_records
 
 
 def _plot_global_metric(
@@ -598,6 +641,8 @@ def _plot_summary_bars(
                 offsets = [p + (idx - (len(snir_states) - 1) / 2) * width for p in positions]
                 values: List[float] = []
                 errors: List[float] = []
+                lower_errors: List[float] = []
+                upper_errors: List[float] = []
                 for combo in combinations:
                     num_nodes, algorithm = combo
                     match = next(
@@ -615,18 +660,37 @@ def _plot_summary_bars(
                             signal_value, error_metric = _select_signal_mean(match)
                             values.append(signal_value or 0.0)
                             errors.append(_maybe_float(match.get(f"{error_metric}_std")) or 0.0)
+                        elif metric in {"PDR", "DER"}:
+                            value = match.get(f"{metric}_mean", 0.0)
+                            values.append(value)
+                            error = _metric_error_bounds(match, metric, value)
+                            if error is None:
+                                lower_errors.append(0.0)
+                                upper_errors.append(0.0)
+                            else:
+                                lower, upper = error
+                                lower_errors.append(lower)
+                                upper_errors.append(upper)
                         else:
                             values.append(match.get(f"{metric}_mean", 0.0))
                             errors.append(_maybe_float(match.get(f"{metric}_std")) or 0.0)
                     else:
                         values.append(0.0)
-                        errors.append(0.0)
+                        if metric in {"PDR", "DER"}:
+                            lower_errors.append(0.0)
+                            upper_errors.append(0.0)
+                        else:
+                            errors.append(0.0)
 
+                if metric in {"PDR", "DER"}:
+                    yerr = [lower_errors, upper_errors]
+                else:
+                    yerr = errors
                 ax.bar(
                     offsets,
                     values,
                     width=width,
-                    yerr=errors,
+                    yerr=yerr,
                     label=_snir_label(state),
                     color=_snir_color(state),
                     capsize=4,
@@ -1274,6 +1338,7 @@ def generate_step1_figures(
     strict: bool = False,
     official: bool = False,
     official_only: bool = False,
+    ieee: bool = False,
 ) -> None:
     if plt is None:
         print("matplotlib n'est pas disponible ; aucune figure générée.")
@@ -1308,6 +1373,8 @@ def generate_step1_figures(
                 )
             print(f"Aucun summary.csv trouvé dans {summary_path}; aucune barre générée.")
         else:
+            if ieee:
+                summary_records = _apply_ieee_filters(summary_records)
             _plot_summary_bars(
                 summary_records,
                 extended_dir,
@@ -1317,6 +1384,8 @@ def generate_step1_figures(
                 trajectory_records = _load_step1_records(results_dir, strict=strict)
                 if not trajectory_records:
                     trajectory_records = summary_records
+                if ieee:
+                    trajectory_records = _apply_ieee_filters(trajectory_records)
                 _plot_trajectories(trajectory_records, trajectories_dir)
             comparison_records = summary_records
     elif not official_only:
@@ -1324,6 +1393,8 @@ def generate_step1_figures(
         if not records:
             print(f"Aucun CSV trouvé dans {results_dir} ; rien à tracer.")
             return
+        if ieee:
+            records = _apply_ieee_filters(records)
         _plot_cluster_der(records, output_dir)
         _plot_cluster_pdr(records, output_dir)
         _plot_global_metric(records, "PDR", "Overall PDR", "pdr_global", output_dir)
@@ -1342,21 +1413,12 @@ def generate_step1_figures(
 
     if compare_snir:
         comparison_records = _load_comparison_records(results_dir, use_summary, strict)
+        if ieee:
+            comparison_records = _apply_ieee_filters(comparison_records)
         if not comparison_records:
             print("Aucune donnée disponible pour comparer SNIR on/off.")
         else:
-            algorithms = {
-                str(record.get("algorithm") or "unknown")
-                for record in comparison_records
-            }
-            if len(algorithms) > 1:
-                print(
-                    "Plusieurs algorithmes détectés ; privilégiez les figures 3×2 / 1×2 "
-                    "de scripts/plot_step1_comparison.py. Les figures SNIR isolées par "
-                    "algorithme sont ignorées."
-                )
-            else:
-                _plot_snir_comparison(comparison_records, comparison_dir)
+            _plot_snir_comparison(comparison_records, comparison_dir)
             forced_algorithm = (
                 EXTENDED_ALGORITHM if comparison_dir == extended_dir else None
             )
@@ -1384,6 +1446,8 @@ def generate_step1_figures(
                 )
             print(f"Aucun échantillon brut trouvé dans {raw_path} ni dans {results_dir}.")
         else:
+            if ieee:
+                raw_records = _apply_ieee_filters(raw_records)
             _plot_cdf(
                 raw_records,
                 extended_dir,
@@ -1436,6 +1500,13 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--ieee",
+        action="store_true",
+        help=(
+            "Applique un filtre de cohérence IEEE (SNIR on/off cohérents, snir_unknown exclus)."
+        ),
+    )
+    parser.add_argument(
         "--compare-snir",
         action="store_true",
         default=True,
@@ -1476,6 +1547,7 @@ def main(argv: List[str] | None = None) -> None:
         args.strict,
         args.official,
         args.official_only,
+        args.ieee,
     )
 
 
