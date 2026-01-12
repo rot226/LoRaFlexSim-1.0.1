@@ -8,6 +8,8 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups
+
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_DECISION_CSV = Path(__file__).resolve().parents[1] / "ucb1_decision_log.csv"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "plots"
@@ -60,6 +62,7 @@ def _save_plot(fig: plt.Figure, output_dir: Path, name: str) -> Path:
 
 
 def main() -> None:
+    apply_ieee_style()
     args = parse_args()
     df = pd.read_csv(args.decision_csv)
     _ensure_columns(df, ["snir_db", "sf", "tx_power"], args.decision_csv)
@@ -78,7 +81,11 @@ def main() -> None:
     ))
     df["snir_bin"] = pd.cut(df["snir_db"], bins=bins)
 
-    policies = sorted(df["policy"].dropna().unique()) if "policy" in df.columns else ["all"]
+    if "policy" in df.columns:
+        df = filter_top_groups(df, ["policy"], max_groups=3)
+        policies = sorted(df["policy"].dropna().unique())
+    else:
+        policies = ["all"]
     if "policy" not in df.columns:
         df["policy"] = "all"
 
@@ -112,6 +119,7 @@ def main() -> None:
             ax.legend(fontsize=8, ncol=2)
 
     axes[-1].set_xlabel("SNIR (dB)")
+    fig.suptitle("Politique vs SNIR")
     _save_plot(fig, args.output_dir, "ucb1_policy_vs_snir.png")
 
 

@@ -8,6 +8,8 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from experiments.ucb1.plots.plot_style import apply_ieee_style
+
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "plots"
 SNIR_LABELS = {"snir_on": "SNIR activé", "snir_off": "SNIR désactivé"}
@@ -112,9 +114,9 @@ def _plot_heatmaps(
     intervals: list[float],
 ) -> None:
     titles = {
-        "reward": "Récompense moyenne (fenêtre)",
-        "snir": "SNIR moyen (fenêtre)",
-        "der": "DER (fenêtre)",
+        "reward": "Récompense",
+        "snir": "SNIR",
+        "der": "DER",
     }
     labels = {
         "reward": "Récompense",
@@ -184,6 +186,7 @@ def run_plots(*, csv_path: Path, output_dir: Path) -> None:
 
 
 def main() -> None:
+    apply_ieee_style()
     args = parse_args()
     run_plots(csv_path=args.ucb1_csv, output_dir=args.output_dir)
 
