@@ -41,6 +41,33 @@ def _parse_bool(value: str) -> bool:
     )
 
 
+def _parse_snir_window(value: str) -> str | float:
+    text = str(value).strip().lower()
+    if text in {"packet", "preamble", "symbol"}:
+        return text
+    try:
+        return float(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "snir_window doit être 'packet', 'preamble', 'symbol' ou une durée en secondes."
+        ) from exc
+
+
+def _snir_window_label(value: str | float | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return f"{value:g}s"
+
+
+def _snir_window_path(value: str | float | None) -> str | None:
+    label = _snir_window_label(value)
+    if label is None:
+        return None
+    return label.replace(".", "p")
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -89,6 +116,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Durée maximale des simulations (secondes)",
     )
     parser.add_argument(
+        "--snir-windows",
+        nargs="+",
+        type=_parse_snir_window,
+        default=None,
+        metavar="WINDOW",
+        help="Fenêtres SNIR à comparer (packet, preamble, symbol ou secondes)",
+    )
+    parser.add_argument(
         "--results-dir",
         type=Path,
         default=DEFAULT_RESULTS_DIR,
@@ -128,12 +163,16 @@ def _run_one(
     packet_interval: float,
     seed: int,
     use_snir: bool,
+    snir_window: str | float | None,
     duration: float,
     results_dir: Path,
     skip_existing: bool,
 ) -> None:
     state = STATE_LABELS.get(use_snir, "snir_unknown")
     output_dir = results_dir / state / f"seed_{seed}"
+    window_label = _snir_window_path(snir_window)
+    if window_label is not None:
+        output_dir = output_dir / f"window_{window_label}"
     csv_path = output_dir / _csv_filename(algorithm, nodes, packet_interval, use_snir)
 
     if skip_existing and csv_path.exists():
@@ -159,6 +198,8 @@ def _run_one(
         argv.append("--use-snir")
     else:
         argv.append("--no-snir")
+    if snir_window is not None:
+        argv.extend(["--snir-window", str(snir_window)])
 
     print(
         "[RUN] "
@@ -177,21 +218,29 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:  # clarification immédiate pour l'utilisateur
         parser.error(str(exc))
 
+    snir_windows: list[str | float | None]
+    if args.snir_windows is None:
+        snir_windows = [None]
+    else:
+        snir_windows = list(args.snir_windows)
+
     for use_snir in snir_states:
-        for seed in args.seeds:
-            for nodes in args.nodes:
-                for packet_interval in args.packet_intervals:
-                    for algorithm in args.algos:
-                        _run_one(
-                            algorithm=algorithm,
-                            nodes=nodes,
-                            packet_interval=packet_interval,
-                            seed=seed,
-                            use_snir=use_snir,
-                            duration=args.duration,
-                            results_dir=args.results_dir,
-                            skip_existing=args.skip_existing,
-                        )
+        for snir_window in snir_windows:
+            for seed in args.seeds:
+                for nodes in args.nodes:
+                    for packet_interval in args.packet_intervals:
+                        for algorithm in args.algos:
+                            _run_one(
+                                algorithm=algorithm,
+                                nodes=nodes,
+                                packet_interval=packet_interval,
+                                seed=seed,
+                                use_snir=use_snir,
+                                snir_window=snir_window,
+                                duration=args.duration,
+                                results_dir=args.results_dir,
+                                skip_existing=args.skip_existing,
+                            )
 
 
 if __name__ == "__main__":
