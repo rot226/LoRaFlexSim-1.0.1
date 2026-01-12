@@ -26,6 +26,7 @@ MIN_PDR_CURVE_DELTA = 0.06
 MIN_DER_CURVE_DELTA = 0.06
 MIN_SNIR_CURVE_DELTA_DB = 5.0
 MIN_COMBINED_CURVE_DISTANCE = 1.2
+FADING_STD_DB = 3.0
 
 
 def _mean_snir(histogram_source: str) -> float:
@@ -53,6 +54,8 @@ def test_step1_snir_toggle_generates_distinct_csv(tmp_path: Path) -> None:
         "0.1",
         "--duration",
         "60",
+        "--fading-std-db",
+        str(FADING_STD_DB),
         "--results-dir",
         str(results_dir),
     ]
@@ -133,6 +136,8 @@ def test_step1_snir_toggle_curves_are_not_identical(tmp_path: Path) -> None:
         "0.2",
         "--duration",
         "50",
+        "--fading-std-db",
+        str(FADING_STD_DB),
         "--results-dir",
         str(results_dir),
     ]
@@ -213,6 +218,8 @@ def test_step1_snir_toggle_snir_curves_are_not_identical(tmp_path: Path) -> None
         "0.2",
         "--duration",
         "50",
+        "--fading-std-db",
+        str(FADING_STD_DB),
         "--results-dir",
         str(results_dir),
     ]
@@ -264,6 +271,8 @@ def test_step1_snir_toggle_combined_curves_diverge(tmp_path: Path) -> None:
         "0.2",
         "--duration",
         "50",
+        "--fading-std-db",
+        str(FADING_STD_DB),
         "--results-dir",
         str(results_dir),
     ]
