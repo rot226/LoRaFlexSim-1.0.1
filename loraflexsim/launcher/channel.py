@@ -221,6 +221,7 @@ class Channel:
         marginal_snir_drop_prob: float = 0.25,
         snir_penalty_strength: float = 0.0,
         snir_window: str | float | None = None,
+        snir_window_mode: str | None = None,
         use_flora_curves: bool = False,
         residual_collision_prob: float | None = None,
         residual_collision_load_scale: float = 4.0,
@@ -359,6 +360,8 @@ class Channel:
             l'airtime complet). ``"preamble"`` limite la mesure à la durée du
             préambule, ``"symbol"`` à un seul symbole ou bien une durée en
             secondes peut être fournie.
+        :param snir_window_mode: Alias explicite de ``snir_window`` pour fixer
+            une fenêtre ``"packet"``, ``"preamble"`` ou ``"symbol"``.
         :param residual_collision_prob: Probabilité maximale d'une collision
             résiduelle lorsque la charge atteint ``residual_collision_load_scale``.
             Si ``None``, une valeur minimale est injectée uniquement lorsque
@@ -587,7 +590,10 @@ class Channel:
         self.rssi_offset_dB = rssi_offset_dB
         self.snr_offset_dB = snr_offset_dB
         self.processing_gain = bool(processing_gain)
-        self.snir_window = snir_window
+        if snir_window_mode is not None:
+            self.snir_window = self._normalize_snir_window_mode(snir_window_mode)
+        else:
+            self.snir_window = snir_window
 
         # Paramètres LoRa (BW 125 kHz, CR 4/5, préambule 8, CRC activé)
         self.bandwidth = bandwidth
@@ -692,6 +698,27 @@ class Channel:
         omnet_phy = getattr(self, "omnet_phy", None)
         if omnet_phy is not None:
             omnet_phy.capture_window_symbols = self._capture_window_symbols
+
+    @property
+    def snir_window_mode(self) -> str | None:
+        """Retourne le mode de fenêtre SNIR ("packet", "preamble", "symbol")."""
+
+        mode = self.snir_window
+        if mode is None:
+            return "packet"
+        if isinstance(mode, str):
+            try:
+                return self._normalize_snir_window_mode(mode, allow_full=True)
+            except ValueError:
+                return None
+        return None
+
+    @snir_window_mode.setter
+    def snir_window_mode(self, value: str | None) -> None:
+        if value is None:
+            self.snir_window = None
+        else:
+            self.snir_window = self._normalize_snir_window_mode(value, allow_full=True)
 
     def _uses_flora_behaviour(self) -> bool:
         phy = getattr(self, "phy_model", "") or ""
@@ -968,7 +995,16 @@ class Channel:
                 return None
             return min(window, max(packet_duration, 0.0))
 
-        normalized = str(mode).strip().lower()
+        try:
+            normalized = self._normalize_snir_window_mode(mode, allow_full=True)
+        except ValueError:
+            warnings.warn(
+                "snir_window inconnu : %s (valeurs acceptées: packet, preamble, symbol ou durée en secondes)"
+                % mode,
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return None
         if normalized in {"packet", "full", "full_packet", "full-packet"}:
             return None
 
@@ -989,6 +1025,17 @@ class Channel:
             stacklevel=2,
         )
         return None
+
+    @staticmethod
+    def _normalize_snir_window_mode(mode: str, *, allow_full: bool = False) -> str:
+        normalized = str(mode).strip().lower()
+        if normalized in {"packet", "preamble", "symbol"}:
+            return normalized
+        if allow_full and normalized in {"full", "full_packet", "full-packet"}:
+            return "packet"
+        raise ValueError(
+            "snir_window_mode doit être 'packet', 'preamble' ou 'symbol'."
+        )
 
     def compute_snir(
         self,
