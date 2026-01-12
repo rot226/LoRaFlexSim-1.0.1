@@ -8,6 +8,8 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups
+
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_DECISION_CSV = Path(__file__).resolve().parents[1] / "ucb1_decision_log.csv"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "plots"
@@ -66,11 +68,13 @@ def _resolve_time_column(df: pd.DataFrame) -> str:
 
 
 def main() -> None:
+    apply_ieee_style()
     args = parse_args()
     df = pd.read_csv(args.decision_csv)
     _ensure_columns(df, ["sf", "tx_power", "cluster", "decision_idx"], args.decision_csv)
     time_col = _resolve_time_column(df)
 
+    df = filter_top_groups(df, ["cluster"], max_groups=3)
     clusters = sorted(df["cluster"].dropna().unique())
     if not clusters:
         raise ValueError("Aucun cluster détecté dans le CSV de décisions.")
@@ -98,6 +102,7 @@ def main() -> None:
         if idx == 0 and ax.get_legend_handles_labels()[1]:
             ax.legend(fontsize=8, ncol=2)
 
+    fig.suptitle("Stabilité des décisions")
     axes[-1].set_xlabel("Temps (s)" if time_col == "time_s" else "Indice de décision")
     _save_plot(fig, args.output_dir, "ucb1_decision_stability.png")
 

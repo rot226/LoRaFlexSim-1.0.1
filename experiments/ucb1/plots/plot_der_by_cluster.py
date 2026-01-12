@@ -22,6 +22,8 @@ from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups
+
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_STEP1 = ROOT_DIR / "results" / "step1" / "summary.csv"
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_density_metrics.csv"
@@ -347,6 +349,7 @@ def _filter_windows(
 
 
 def _plot_der(df: pd.DataFrame, output: Path) -> None:
+    df = filter_top_groups(df, ["source", "snir_state", "cluster"], max_groups=3)
     fig, ax = plt.subplots(figsize=(8, 5))
     style_by_source = {
         "Step1/QoS": {"linestyle": "-", "marker": "o"},
@@ -365,7 +368,7 @@ def _plot_der(df: pd.DataFrame, output: Path) -> None:
     ax.set_ylim(0, 1.05)
     ax.grid(True, linestyle=":", alpha=0.6)
     ax.legend()
-    ax.set_title("DER par cluster – Step1 vs UCB1")
+    ax.set_title("DER par cluster")
 
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
@@ -374,6 +377,7 @@ def _plot_der(df: pd.DataFrame, output: Path) -> None:
 
 
 def main() -> None:
+    apply_ieee_style()
     args = parse_args()
     time_windows = _parse_time_windows(args.time_window)
     summary_path = _resolve_summary_path(args.step1_csv)

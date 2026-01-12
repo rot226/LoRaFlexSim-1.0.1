@@ -8,6 +8,8 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups
+
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_DECISION_CSV = Path(__file__).resolve().parents[1] / "ucb1_baseline_decision_log.csv"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "plots"
@@ -68,6 +70,7 @@ def _resolve_time_column(df: pd.DataFrame) -> str:
 
 
 def main() -> None:
+    apply_ieee_style()
     args = parse_args()
     df = pd.read_csv(args.decision_csv)
     _ensure_columns(
@@ -78,6 +81,7 @@ def main() -> None:
     time_col = _resolve_time_column(df)
 
     df = df.sort_values(time_col)
+    df = filter_top_groups(df, ["policy"], max_groups=3)
     policies = sorted(df["policy"].dropna().unique())
     policy_colors = {policy: PALETTE[idx % len(PALETTE)] for idx, policy in enumerate(policies)}
 
@@ -126,7 +130,7 @@ def main() -> None:
             label=POLICY_LABELS.get(policy, policy),
             color=policy_colors[policy],
         )
-    ax.set_title("PDR vs densité (num_nodes)")
+    ax.set_title("PDR vs densité")
     ax.set_xlabel("Nombre de nœuds")
     ax.set_ylabel("PDR moyenne")
     ax.grid(True, linestyle=":", alpha=0.5)
@@ -164,13 +168,14 @@ def main() -> None:
             marker="o",
             markersize=3,
         )
-    ax.set_title("Fairness Jain vs temps (fenêtres de décisions)")
+    ax.set_title("Fairness vs temps")
     ax.set_xlabel("Indice de décision (fenêtre)")
     ax.set_ylabel("Indice de fairness")
     ax.grid(True, linestyle=":", alpha=0.5)
     if ax.get_legend_handles_labels()[1]:
         ax.legend(fontsize=8, ncol=2)
 
+    fig.suptitle("ML vs heuristique")
     _save_plot(fig, args.output_dir, "ucb1_ml_vs_heuristic.png")
 
 

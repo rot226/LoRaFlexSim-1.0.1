@@ -7,6 +7,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from experiments.ucb1.plots.plot_style import apply_ieee_style, top_groups
+
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "plots" / "ucb1_regret_snir_overlay.png"
 
@@ -100,6 +102,14 @@ def plot_regret(*, csv_path: Path, output_path: Path, packet_intervals: list[flo
     df["cluster"] = df["cluster"].astype(int)
     df["snir_state"] = df.apply(_detect_snir, axis=1)
 
+    top_pair = top_groups(df, ["cluster", "packet_interval_s"], max_groups=1)
+    if top_pair:
+        df = df.merge(
+            pd.DataFrame(top_pair, columns=["cluster", "packet_interval_s"]),
+            on=["cluster", "packet_interval_s"],
+            how="inner",
+        )
+
     fig, ax = plt.subplots(figsize=(7.0, 4.2))
     clusters = sorted(df["cluster"].unique().tolist())
     intervals = sorted(df["packet_interval_s"].unique().tolist())
@@ -126,7 +136,7 @@ def plot_regret(*, csv_path: Path, output_path: Path, packet_intervals: list[flo
                     markersize=3,
                 )
 
-    ax.set_title("Regret cumulé UCB1 (SNIR activé/désactivé)")
+    ax.set_title("Regret cumulé (SNIR)")
     ax.set_xlabel("Temps (s)")
     ax.set_ylabel("Regret cumulé")
     ax.grid(True, linestyle=":", alpha=0.5)
@@ -141,6 +151,7 @@ def plot_regret(*, csv_path: Path, output_path: Path, packet_intervals: list[flo
 
 
 def main() -> None:
+    apply_ieee_style()
     args = parse_args()
     plot_regret(
         csv_path=args.ucb1_csv,

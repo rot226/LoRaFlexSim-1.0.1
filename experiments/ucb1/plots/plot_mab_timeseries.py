@@ -8,6 +8,8 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups, top_groups
+
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "plots"
@@ -229,16 +231,30 @@ def run_plots(*, csv_path: Path, output_dir: Path, packet_intervals: list[float]
         raise ValueError("Aucune donnée disponible après filtrage.")
 
     df["cluster"] = df["cluster"].astype(int)
-    clusters = sorted(df["cluster"].unique().tolist())
-    intervals = sorted(df["packet_interval_s"].unique().tolist())
+    df_limited = filter_top_groups(df, ["cluster", "packet_interval_s"], max_groups=3)
+    clusters = sorted(df_limited["cluster"].unique().tolist())
+    intervals = sorted(df_limited["packet_interval_s"].unique().tolist())
     colors, styles = _style_maps(clusters, intervals)
 
     df["snir_state"] = df.apply(_detect_snir, axis=1)
+    df_limited["snir_state"] = df_limited.apply(_detect_snir, axis=1)
+
+    top_pair = top_groups(df, ["cluster", "packet_interval_s"], max_groups=1)
+    df_snir = (
+        df.merge(
+            pd.DataFrame(top_pair, columns=["cluster", "packet_interval_s"]),
+            on=["cluster", "packet_interval_s"],
+            how="inner",
+        )
+        if top_pair
+        else df
+    )
+    df_snir["snir_state"] = df_snir.apply(_detect_snir, axis=1)
 
     regret_frames = []
     for cluster in clusters:
         for interval in intervals:
-            subset = df[(df["cluster"] == cluster) & (df["packet_interval_s"] == interval)]
+            subset = df_limited[(df_limited["cluster"] == cluster) & (df_limited["packet_interval_s"] == interval)]
             if subset.empty:
                 continue
             subset = subset.sort_values("time_s").copy()
@@ -251,10 +267,10 @@ def run_plots(*, csv_path: Path, output_dir: Path, packet_intervals: list[float]
     for cluster in clusters:
         for interval in intervals:
             for snir_state in ("snir_off", "snir_on", "snir_unknown"):
-                subset = df[
-                    (df["cluster"] == cluster)
-                    & (df["packet_interval_s"] == interval)
-                    & (df["snir_state"] == snir_state)
+                subset = df_limited[
+                    (df_limited["cluster"] == cluster)
+                    & (df_limited["packet_interval_s"] == interval)
+                    & (df_limited["snir_state"] == snir_state)
                 ]
                 if subset.empty:
                     continue
@@ -270,7 +286,7 @@ def run_plots(*, csv_path: Path, output_dir: Path, packet_intervals: list[float]
     _plot_metric(
         regret_df,
         metric="cumulative_regret",
-        title="Regret cumulé (récompense fenêtre)",
+        title="Regret cumulé",
         ylabel="Regret cumulé",
         output_name="ucb1_mab_cumulative_regret.png",
         clusters=clusters,
@@ -280,29 +296,35 @@ def run_plots(*, csv_path: Path, output_dir: Path, packet_intervals: list[float]
         output_dir=output_dir,
     )
     _plot_metric_snir_overlay(
-        regret_snir_df,
+        regret_snir_df.merge(
+            pd.DataFrame(top_pair, columns=["cluster", "packet_interval_s"]),
+            on=["cluster", "packet_interval_s"],
+            how="inner",
+        )
+        if top_pair
+        else regret_snir_df,
         metric="cumulative_regret",
-        title="Regret cumulé (SNIR activé/désactivé)",
+        title="Regret cumulé (SNIR)",
         ylabel="Regret cumulé",
         output_name="ucb1_mab_cumulative_regret_snir_overlay.png",
-        clusters=clusters,
-        intervals=intervals,
+        clusters=sorted(df_snir["cluster"].unique().tolist()),
+        intervals=sorted(df_snir["packet_interval_s"].unique().tolist()),
         output_dir=output_dir,
     )
     _plot_metric_snir_overlay(
-        df,
+        df_snir,
         metric="reward_window_mean",
-        title="Récompense moyenne (SNIR activé/désactivé)",
+        title="Récompense (SNIR)",
         ylabel="Récompense (fenêtre glissante)",
         output_name="ucb1_mab_reward_vs_time_snir_overlay.png",
-        clusters=clusters,
-        intervals=intervals,
+        clusters=sorted(df_snir["cluster"].unique().tolist()),
+        intervals=sorted(df_snir["packet_interval_s"].unique().tolist()),
         output_dir=output_dir,
     )
     _plot_metric(
-        df,
+        df_limited,
         metric="der_window",
-        title="DER par fenêtre",
+        title="DER",
         ylabel="DER",
         output_name="ucb1_mab_der_vs_time.png",
         clusters=clusters,
@@ -312,9 +334,9 @@ def run_plots(*, csv_path: Path, output_dir: Path, packet_intervals: list[float]
         output_dir=output_dir,
     )
     _plot_metric(
-        df,
+        df_limited,
         metric="snir_window_mean",
-        title="SNIR moyen par fenêtre",
+        title="SNIR moyen",
         ylabel="SNIR (dB)",
         output_name="ucb1_mab_snir_vs_time.png",
         clusters=clusters,
@@ -324,9 +346,9 @@ def run_plots(*, csv_path: Path, output_dir: Path, packet_intervals: list[float]
         output_dir=output_dir,
     )
     _plot_metric(
-        df,
+        df_limited,
         metric="energy_window_mean",
-        title="Énergie moyenne par fenêtre",
+        title="Énergie moyenne",
         ylabel="Énergie (J)",
         output_name="ucb1_mab_energy_vs_time.png",
         clusters=clusters,
@@ -338,6 +360,7 @@ def run_plots(*, csv_path: Path, output_dir: Path, packet_intervals: list[float]
 
 
 def main() -> None:
+    apply_ieee_style()
     args = parse_args()
     run_plots(
         csv_path=args.ucb1_csv,
