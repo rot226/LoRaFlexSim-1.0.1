@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import warnings
 from collections import defaultdict
 from pathlib import Path
@@ -39,6 +40,7 @@ DEFAULT_FIGURES_DIR = ROOT_DIR / "figures"
 __all__ = [
     "generate_step1_figures",
     "plot_distribution_by_state",
+    "plot_histogram_by_algo_and_snir",
     "DEFAULT_RESULTS_DIR",
     "DEFAULT_FIGURES_DIR",
 ]
@@ -209,6 +211,14 @@ def _load_step1_records(results_dir: Path, strict: bool = False) -> List[Dict[st
                     "cluster_der": cluster_der,
                     "cluster_targets": cluster_targets,
                 }
+                if "snir_histogram_json" in row and row.get("snir_histogram_json"):
+                    try:
+                        histogram = json.loads(row["snir_histogram_json"])
+                        record["snir_histogram"] = {
+                            float(bin_key): float(count) for bin_key, count in histogram.items()
+                        }
+                    except Exception:
+                        record["snir_histogram"] = {}
                 snir_state, snir_detected = _detect_snir_state(row)
                 if not snir_detected:
                     warnings.warn(
@@ -990,6 +1000,75 @@ def _select_metric_value(record: Mapping[str, Any], metric: str) -> float:
     return _parse_float(record.get(f"{metric}_mean")) or _parse_float(record.get(metric))
 
 
+def _histogram_weighted_mean(histogram: Mapping[float, float]) -> float | None:
+    total = sum(histogram.values())
+    if total <= 0:
+        return None
+    weighted = sum(bin_value * count for bin_value, count in histogram.items())
+    return weighted / total
+
+
+def plot_histogram_by_algo_and_snir(
+    records: List[Dict[str, Any]],
+    figures_dir: Path,
+) -> None:
+    if not records or plt is None:
+        return
+
+    algorithms = ["adr", "apra", "mixra_h", "mixra_opt"]
+    states = ["snir_on", "snir_off"]
+    means_by_state: Dict[str, List[float]] = {state: [] for state in states}
+
+    for algorithm in algorithms:
+        normalized_algo = _normalize_algorithm_name(algorithm) or algorithm
+        for state in states:
+            combined: Dict[float, float] = {}
+            for record in records:
+                if _normalize_algorithm_name(record.get("algorithm")) != normalized_algo:
+                    continue
+                if not _record_matches_state(record, state):
+                    continue
+                histogram = record.get("snir_histogram") or {}
+                for bin_value, count in histogram.items():
+                    combined[float(bin_value)] = combined.get(float(bin_value), 0.0) + float(count)
+            mean_value = _histogram_weighted_mean(combined)
+            means_by_state[state].append(mean_value or 0.0)
+
+    if not any(any(values) for values in means_by_state.values()):
+        return
+
+    fig, ax = plt.subplots(figsize=(7.5, 4.2))
+    positions = list(range(len(algorithms)))
+    width = 0.35
+
+    for idx, state in enumerate(states):
+        offsets = [pos + (idx - (len(states) - 1) / 2) * width for pos in positions]
+        ax.bar(
+            offsets,
+            means_by_state[state],
+            width=width,
+            color=_snir_color(state),
+            label="SNIR on" if state == "snir_on" else "SNIR off",
+            edgecolor="black",
+            linewidth=0.9,
+        )
+
+    ax.set_xticks(positions)
+    ax.set_xticklabels(algorithms)
+    ax.set_xlabel("Algorithme")
+    ax.set_ylabel("SNIR moyen (dB)")
+    ax.set_title("Histogramme SNIR – comparaison algorithmes")
+    _format_axes(ax, integer_x=False)
+    if ax.get_legend_handles_labels()[0]:
+        ax.legend()
+
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    output = figures_dir / "step1_histogram_by_algo_snir.png"
+    fig.tight_layout()
+    fig.savefig(output, dpi=200)
+    plt.close(fig)
+
+
 def _apply_ieee_style() -> None:
     if plt is None:
         return
@@ -1285,6 +1364,10 @@ def generate_step1_figures(
                 comparison_records,
                 comparison_dir,
                 forced_algorithm=forced_algorithm,
+            )
+            plot_histogram_by_algo_and_snir(
+                comparison_records,
+                comparison_dir,
             )
 
     if plot_cdf:
