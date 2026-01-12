@@ -12,7 +12,7 @@ def test_reward_nominal_case():
 
     reward = selector.reward_from_outcome(True, snir_db=2.0)
 
-    assert reward == pytest.approx(1.5)
+    assert reward == pytest.approx(1.0)
 
 
 def test_reward_marginal_snir_penalty():
@@ -26,7 +26,7 @@ def test_reward_marginal_snir_penalty():
         True, snir_db=0.1, marginal_snir_margin_db=0.5
     )
 
-    assert reward == pytest.approx(0.85)
+    assert reward == pytest.approx(0.35)
 
 
 def test_reward_energy_and_collision_penalties():
@@ -81,7 +81,7 @@ def test_reward_qos_normalization_caps_success():
         expected_der=0.5,
     )
 
-    assert reward == pytest.approx(1.5)
+    assert reward == pytest.approx(1.0)
 
 
 def test_reward_varies_with_snir_enabled():
@@ -93,6 +93,21 @@ def test_reward_varies_with_snir_enabled():
 
     reward_snir_on = selector.reward_from_outcome(True, snir_db=1.5)
     reward_snir_off = selector.reward_from_outcome(True, snir_db=None)
+
+    assert reward_snir_on > reward_snir_off
+
+
+def test_reward_compares_snir_on_off():
+    reward_snir_on = LoRaSFSelectorUCB1(
+        success_weight=1.0,
+        snir_margin_weight=0.4,
+        snir_threshold_db=0.0,
+    ).reward_from_outcome(True, snir_db=1.0)
+    reward_snir_off = LoRaSFSelectorUCB1(
+        success_weight=1.0,
+        snir_margin_weight=0.0,
+        snir_threshold_db=0.0,
+    ).reward_from_outcome(True, snir_db=1.0)
 
     assert reward_snir_on > reward_snir_off
 
@@ -113,6 +128,37 @@ def test_reward_sliding_window_mean():
     assert first == pytest.approx(1.0)
     assert second == pytest.approx(0.5)
     assert third == pytest.approx(0.5)
+
+
+def test_qos_window_mean_includes_snir_collision_energy():
+    selector = LoRaSFSelectorUCB1(
+        success_weight=1.0,
+        snir_margin_weight=0.2,
+        reward_window=2,
+    )
+
+    selector.update(
+        "SF7",
+        success=True,
+        snir_db=1.0,
+        energy_j=1.0,
+        collision=True,
+        energy_normalization=2.0,
+    )
+    selector.update(
+        "SF7",
+        success=False,
+        snir_db=0.0,
+        energy_j=0.0,
+        collision=False,
+        energy_normalization=2.0,
+    )
+
+    mean_components = selector.qos_window_mean[0]
+
+    assert mean_components.snir == pytest.approx(0.5)
+    assert mean_components.energy == pytest.approx(0.25)
+    assert mean_components.collision == pytest.approx(0.5)
 
 
 def test_ucb1_bandit_weighted_statistics():
