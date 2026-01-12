@@ -23,6 +23,7 @@ def test_channel_overrides_and_rng_seed(tmp_path):
         capture_threshold_dB = 7.0
         marginal_snir_margin_db = 0.9
         marginal_snir_drop_prob = 0.4
+        snir_penalty_strength = 0.35
         interference_dB = 0.25
         """
     )
@@ -47,6 +48,7 @@ def test_channel_overrides_and_rng_seed(tmp_path):
     assert math.isclose(channel.capture_threshold_dB, 7.0)
     assert math.isclose(channel.marginal_snir_margin_db, 0.9)
     assert math.isclose(channel.marginal_snir_drop_prob, 0.4)
+    assert math.isclose(channel.snir_penalty_strength, 0.35)
 
     baseline_noise = -174 + 10 * math.log10(channel.bandwidth) + channel.noise_figure_dB
     expected_threshold = baseline_noise + channel.SNR_THRESHOLDS[7] + 1.5

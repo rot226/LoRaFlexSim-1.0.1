@@ -140,6 +140,7 @@ class Gateway:
         snir_fading_std: float = 0.0,
         marginal_snir_db: float = 0.0,
         marginal_drop_prob: float = 0.0,
+        snir_penalty_strength: float = 0.0,
         residual_collision_prob: float = 0.0,
         residual_collision_load_scale: float = 1.0,
         baseline_loss_rate: float = 0.0,
@@ -183,6 +184,8 @@ class Gateway:
             du seuil.
         :param marginal_drop_prob: Probabilité maximale de déclencher cette
             perte marginale lorsque ``margin=0``.
+        :param snir_penalty_strength: Intensité additionnelle appliquée aux
+            pertes marginales lorsque le SNIR est proche du seuil.
         :param residual_collision_prob: Probabilité maximale d'une collision
             résiduelle lorsque la charge atteint ``residual_collision_load_scale``.
         :param residual_collision_load_scale: Nombre de transmissions
@@ -493,10 +496,18 @@ class Gateway:
             failure_reason = "snir_below_threshold"
             capture = False
 
-        if capture and strongest_snir is not None and marginal_drop_prob > 0.0:
+        if (
+            capture
+            and strongest_snir is not None
+            and (marginal_drop_prob > 0.0 or snir_penalty_strength > 0.0)
+        ):
             margin = strongest_snir - snir_threshold
             if margin < marginal_snir_db:
-                drop_prob = marginal_drop_prob * (1.0 - max(margin, 0.0) / max(marginal_snir_db, 1e-9))
+                proximity = 1.0 - max(margin, 0.0) / max(marginal_snir_db, 1e-9)
+                drop_prob = marginal_drop_prob * proximity
+                if snir_penalty_strength > 0.0:
+                    drop_prob += snir_penalty_strength * proximity
+                drop_prob = min(drop_prob, 0.4)
                 if self.rng.random() < drop_prob:
                     capture = False
                     failure_reason = "snir_marginal"

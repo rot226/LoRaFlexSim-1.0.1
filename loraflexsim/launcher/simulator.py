@@ -88,6 +88,7 @@ def _load_channel_overrides(path: str | Path | None) -> dict[str, float]:
         "capture_threshold_dB",
         "marginal_snir_margin_db",
         "marginal_snir_drop_prob",
+        "snir_penalty_strength",
         "baseline_loss_rate",
         "baseline_collision_rate",
         "residual_collision_prob",
@@ -481,6 +482,7 @@ class Simulator:
         capture_threshold_dB: float | None = None,
         marginal_snir_margin_db: float | None = None,
         marginal_snir_drop_prob: float | None = None,
+        snir_penalty_strength: float | None = None,
         debug_rx: bool = False,
         dump_intervals: bool = False,
         pure_poisson_mode: bool = False,
@@ -591,6 +593,8 @@ class Simulator:
             capturé peut encore être perdu aléatoirement (dB).
         :param marginal_snir_drop_prob: Probabilité maximale associée à la
             perte marginale décrite ci-dessus.
+        :param snir_penalty_strength: Intensité additionnelle appliquée aux
+            pertes marginales lorsque le SNIR est proche du seuil.
         :param debug_rx: Active la journalisation détaillée des paquets reçus ou rejetés.
         :param dump_intervals: Exporte la série complète des intervalles dans un fichier Parquet.
         :param lock_step_poisson: Prégénère la séquence Poisson une seule fois et la réutilise.
@@ -746,6 +750,7 @@ class Simulator:
             "capture_threshold_dB": capture_threshold_dB,
             "marginal_snir_margin_db": marginal_snir_margin_db,
             "marginal_snir_drop_prob": marginal_snir_drop_prob,
+            "snir_penalty_strength": snir_penalty_strength,
         }
         for key, value in manual_overrides.items():
             if value is not None:
@@ -766,6 +771,8 @@ class Simulator:
                 channel.marginal_snir_margin_db = channel_overrides["marginal_snir_margin_db"]
             if "marginal_snir_drop_prob" in channel_overrides:
                 channel.marginal_snir_drop_prob = channel_overrides["marginal_snir_drop_prob"]
+            if "snir_penalty_strength" in channel_overrides:
+                channel.snir_penalty_strength = channel_overrides["snir_penalty_strength"]
             if "sensitivity_margin_dB" in channel_overrides:
                 channel.sensitivity_margin_dB = channel_overrides["sensitivity_margin_dB"]
                 if hasattr(channel, "_update_sensitivity"):
@@ -791,6 +798,7 @@ class Simulator:
                 "capture_threshold_dB",
                 "marginal_snir_margin_db",
                 "marginal_snir_drop_prob",
+                "snir_penalty_strength",
                 "baseline_loss_rate",
                 "baseline_collision_rate",
                 "residual_collision_prob",
@@ -1870,6 +1878,9 @@ class Simulator:
                     marginal_drop_prob=getattr(
                         node.channel, "marginal_snir_drop_prob", 0.0
                     ),
+                    snir_penalty_strength=getattr(
+                        node.channel, "snir_penalty_strength", 0.0
+                    ),
                     residual_collision_prob=getattr(
                         node.channel, "residual_collision_prob", 0.0
                     ),
@@ -2755,6 +2766,7 @@ class Simulator:
             "collisions_snir": getattr(self, "packets_lost_snir", 0),
             "baseline_loss_rate": getattr(self.channel, "baseline_loss_rate", 0.0),
             "baseline_collision_rate": getattr(self.channel, "baseline_collision_rate", 0.0),
+            "snir_penalty_strength": getattr(self.channel, "snir_penalty_strength", 0.0),
             "duplicates": self.network_server.duplicate_packets,
             "energy_J": self.total_energy_J,
             "energy_nodes_J": self.energy_nodes_J,
