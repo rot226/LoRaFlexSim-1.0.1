@@ -15,6 +15,8 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 import run_step1_matrix  # noqa: E402  pylint: disable=wrong-import-position
 
+FADING_STD_DB = 3.0
+
 
 def _select_histogram_json(row: dict[str, str]) -> str:
     use_snir = row.get("use_snir") == "True"
@@ -110,6 +112,8 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
             "1.0",
             "--duration",
             "45",
+            "--fading-std-db",
+            str(FADING_STD_DB),
         ],
         "subset_dense": [
             "--algos",
@@ -126,6 +130,8 @@ def test_step1_subset_metrics_stay_within_bounds(tmp_path: Path) -> None:
             "0.6",
             "--duration",
             "60",
+            "--fading-std-db",
+            str(FADING_STD_DB),
         ],
     }
 

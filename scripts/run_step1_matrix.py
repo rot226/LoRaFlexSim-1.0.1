@@ -124,6 +124,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Fenêtres SNIR à comparer (packet, preamble, symbol ou secondes)",
     )
     parser.add_argument(
+        "--fading-std-db",
+        type=float,
+        default=None,
+        help=(
+            "Écart-type (dB) du fading aléatoire appliqué au calcul SNIR "
+            "(obligatoire si SNIR activé, recommandé : 2 à 4 dB)"
+        ),
+    )
+    parser.add_argument(
         "--results-dir",
         type=Path,
         default=DEFAULT_RESULTS_DIR,
@@ -167,6 +176,7 @@ def _run_one(
     duration: float,
     results_dir: Path,
     skip_existing: bool,
+    fading_std_db: float | None,
 ) -> None:
     state = STATE_LABELS.get(use_snir, "snir_unknown")
     output_dir = results_dir / state / f"seed_{seed}"
@@ -194,6 +204,8 @@ def _run_one(
         str(output_dir),
         "--quiet",
     ]
+    if fading_std_db is not None:
+        argv.extend(["--fading-std-db", str(fading_std_db)])
     if use_snir:
         argv.append("--use-snir")
     else:
@@ -217,6 +229,10 @@ def main(argv: list[str] | None = None) -> None:
         snir_states = list(_iter_snir_states(args.with_snir))
     except ValueError as exc:  # clarification immédiate pour l'utilisateur
         parser.error(str(exc))
+    if any(snir_states) and args.fading_std_db is None:
+        parser.error(
+            "--fading-std-db est obligatoire lorsque SNIR est activé (recommandé : 2 à 4 dB)."
+        )
 
     snir_windows: list[str | float | None]
     if args.snir_windows is None:
@@ -240,6 +256,7 @@ def main(argv: list[str] | None = None) -> None:
                                 duration=args.duration,
                                 results_dir=args.results_dir,
                                 skip_existing=args.skip_existing,
+                                fading_std_db=args.fading_std_db,
                             )
 
 

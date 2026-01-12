@@ -15,6 +15,7 @@ import run_step1_matrix  # noqa: E402  pylint: disable=wrong-import-position
 
 
 MIN_MEAN_SNIR_WINDOW_GAP_DB = 1.5
+FADING_STD_DB = 3.0
 
 
 @pytest.mark.slow
@@ -38,6 +39,8 @@ def test_step1_snir_window_gap(tmp_path: Path) -> None:
             "--snir-windows",
             "packet",
             "preamble",
+            "--fading-std-db",
+            str(FADING_STD_DB),
             "--results-dir",
             str(results_dir),
         ]

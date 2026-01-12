@@ -134,7 +134,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--fading-std-db",
         type=float,
         default=None,
-        help="Écart-type (dB) du fading aléatoire appliqué au calcul SNIR",
+        help=(
+            "Écart-type (dB) du fading aléatoire appliqué au calcul SNIR "
+            "(recommandé : 2 à 4 dB)"
+        ),
     )
     parser.add_argument(
         "--noise-floor-std-db",
@@ -416,6 +419,10 @@ def _start_progress_monitor(
 def main(argv: list[str] | None = None) -> Mapping[str, object]:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    if args.use_snir and args.fading_std_db is None:
+        parser.error(
+            "--fading-std-db est obligatoire en mode SNIR (recommandé : 2 à 4 dB)."
+        )
     _configure_qos_logging(args.qos_verbose)
 
     print(

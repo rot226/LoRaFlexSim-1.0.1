@@ -16,6 +16,9 @@ import run_step1_matrix  # noqa: E402  pylint: disable=wrong-import-position
 
 
 MIN_MEAN_SNIR_DELTA_DB = 4.5
+MIN_FADING_GAP_GAIN_DB = 0.5
+FADING_STD_DB = 3.0
+NO_FADING_STD_DB = 0.0
 
 
 def _mean_snir_from_row(row: dict[str, str]) -> float:
@@ -27,41 +30,54 @@ def _mean_snir_from_row(row: dict[str, str]) -> float:
 @pytest.mark.slow
 @pytest.mark.filterwarnings("ignore::RuntimeWarning")
 def test_step1_snir_delta_across_seeds(tmp_path: Path) -> None:
-    results_dir = tmp_path / "step1_snir_delta"
-    run_step1_matrix.main(
-        [
-            "--algos",
-            "adr",
-            "--with-snir",
-            "true",
-            "false",
-            "--seeds",
-            "1",
-            "2",
-            "3",
-            "--nodes",
-            "240",
-            "--packet-intervals",
-            "0.2",
-            "--duration",
-            "45",
-            "--results-dir",
-            str(results_dir),
-        ]
+    def _run_gap(*, fading_std_db: float, label: str) -> float:
+        results_dir = tmp_path / f"step1_snir_delta_{label}"
+        run_step1_matrix.main(
+            [
+                "--algos",
+                "adr",
+                "--with-snir",
+                "true",
+                "false",
+                "--seeds",
+                "1",
+                "2",
+                "3",
+                "--nodes",
+                "240",
+                "--packet-intervals",
+                "0.2",
+                "--duration",
+                "45",
+                "--fading-std-db",
+                str(fading_std_db),
+                "--results-dir",
+                str(results_dir),
+            ]
+        )
+
+        mean_snir_by_state: dict[bool, list[float]] = {True: [], False: []}
+        for csv_path in sorted(results_dir.glob("**/*.csv")):
+            with csv_path.open(newline="", encoding="utf8") as handle:
+                row = next(csv.DictReader(handle))
+            use_snir = row["use_snir"] == "True"
+            mean_snir_by_state[use_snir].append(_mean_snir_from_row(row))
+
+        assert (
+            mean_snir_by_state[True] and mean_snir_by_state[False]
+        ), "Les deux états SNIR sont requis"
+
+        mean_on = sum(mean_snir_by_state[True]) / len(mean_snir_by_state[True])
+        mean_off = sum(mean_snir_by_state[False]) / len(mean_snir_by_state[False])
+        return abs(mean_on - mean_off)
+
+    gap_no_fading = _run_gap(fading_std_db=NO_FADING_STD_DB, label="no_fading")
+    gap_with_fading = _run_gap(fading_std_db=FADING_STD_DB, label="with_fading")
+
+    assert gap_with_fading >= MIN_MEAN_SNIR_DELTA_DB, (
+        f"Écart moyen de SNIR insuffisant entre états avec fading: {gap_with_fading:.2f} dB"
     )
-
-    mean_snir_by_state: dict[bool, list[float]] = {True: [], False: []}
-    for csv_path in sorted(results_dir.glob("**/*.csv")):
-        with csv_path.open(newline="", encoding="utf8") as handle:
-            row = next(csv.DictReader(handle))
-        use_snir = row["use_snir"] == "True"
-        mean_snir_by_state[use_snir].append(_mean_snir_from_row(row))
-
-    assert mean_snir_by_state[True] and mean_snir_by_state[False], "Les deux états SNIR sont requis"
-
-    mean_on = sum(mean_snir_by_state[True]) / len(mean_snir_by_state[True])
-    mean_off = sum(mean_snir_by_state[False]) / len(mean_snir_by_state[False])
-    gap = abs(mean_on - mean_off)
-    assert gap >= MIN_MEAN_SNIR_DELTA_DB, (
-        f"Écart moyen de SNIR insuffisant entre états sur plusieurs graines: {gap:.2f} dB"
+    assert (gap_with_fading - gap_no_fading) >= MIN_FADING_GAP_GAIN_DB, (
+        "Le fading doit accentuer l'écart SNIR on/off "
+        f"(Δgain={gap_with_fading - gap_no_fading:.2f} dB)"
     )
