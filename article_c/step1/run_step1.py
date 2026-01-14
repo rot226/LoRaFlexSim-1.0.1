@@ -30,9 +30,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     snir_defaults = DEFAULT_CONFIG.snir
     parser.add_argument(
         "--densities",
-        type=str,
-        default="0.1,0.5,1.0",
-        help="Liste des densités (ex: 0.1,0.5,1.0).",
+        type=float,
+        nargs="+",
+        default=[0.1, 0.5, 1.0],
+        help="Liste des densités (ex: 0.1 0.5 1.0).",
     )
     parser.add_argument(
         "--replications",
@@ -45,6 +46,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=1000,
         help="Seed de base pour les réplications.",
+    )
+    parser.add_argument(
+        "--seed",
+        dest="seeds_base",
+        type=int,
+        default=argparse.SUPPRESS,
+        help="Alias de --seeds_base (déprécié).",
     )
     parser.add_argument(
         "--snir_modes",
