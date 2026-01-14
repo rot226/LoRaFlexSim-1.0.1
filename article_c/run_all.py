@@ -1,18 +1,89 @@
 """Exécute toutes les étapes de l'article C."""
 
-import subprocess
-import sys
-from pathlib import Path
+from __future__ import annotations
+
+import argparse
+
+from article_c.step1.run_step1 import main as run_step1
+from article_c.step2.run_step2 import main as run_step2
 
 
-def run_script(script_path: Path) -> None:
-    subprocess.check_call([sys.executable, str(script_path)])
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Construit le parseur d'arguments CLI pour l'exécution complète."""
+    parser = argparse.ArgumentParser(
+        description="Exécute les étapes 1 et 2 avec des arguments communs."
+    )
+    parser.add_argument(
+        "--densities",
+        type=str,
+        default=None,
+        help="Liste des densités (ex: 0.1,0.5,1.0).",
+    )
+    parser.add_argument(
+        "--replications",
+        type=int,
+        default=None,
+        help="Nombre de réplications par configuration.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Seed de base commune aux étapes 1 et 2.",
+    )
+    parser.add_argument(
+        "--snir_modes",
+        type=str,
+        default=None,
+        help="Liste des modes SNIR pour l'étape 1 (ex: snir_on,snir_off).",
+    )
+    parser.add_argument(
+        "--timestamp",
+        action="store_true",
+        help="Ajoute un timestamp dans les sorties de l'étape 2.",
+    )
+    parser.add_argument(
+        "--step1-outdir",
+        type=str,
+        default=None,
+        help="Répertoire de sortie de l'étape 1.",
+    )
+    return parser
 
 
-def main() -> None:
-    base_dir = Path(__file__).resolve().parent
-    run_script(base_dir / "step1" / "run_step1.py")
-    run_script(base_dir / "step2" / "run_step2.py")
+def _build_step1_args(args: argparse.Namespace) -> list[str]:
+    step1_args: list[str] = []
+    if args.densities:
+        step1_args.extend(["--densities", args.densities])
+    if args.replications is not None:
+        step1_args.extend(["--replications", str(args.replications)])
+    if args.seed is not None:
+        step1_args.extend(["--seeds_base", str(args.seed)])
+    if args.snir_modes:
+        step1_args.extend(["--snir_modes", args.snir_modes])
+    if args.step1_outdir:
+        step1_args.extend(["--outdir", args.step1_outdir])
+    return step1_args
+
+
+def _build_step2_args(args: argparse.Namespace) -> list[str]:
+    step2_args: list[str] = []
+    if args.densities:
+        step2_args.extend(["--densities", args.densities])
+    if args.replications is not None:
+        step2_args.extend(["--replications", str(args.replications)])
+    if args.seed is not None:
+        step2_args.extend(["--seed", str(args.seed)])
+    if args.timestamp:
+        step2_args.append("--timestamp")
+    return step2_args
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+    run_step1(_build_step1_args(args))
+    run_step2(_build_step2_args(args))
 
 
 if __name__ == "__main__":
