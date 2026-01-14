@@ -46,27 +46,43 @@ def _compute_reward(
     return _clip(reward, 0.0, 1.0)
 
 
-def _simulate_window_metrics(
-    rng: random.Random,
-    arm_index: int,
-    window_size: int,
-    traffic_sent: int,
-    bitrate_norm: float,
-    energy_norm: float,
-    desync_factor: float,
+def _compute_window_metrics(
+    successes: int, traffic_sent: int, bitrate_norm: float, energy_norm: float
 ) -> WindowMetrics:
-    base_success = 0.9 - 0.08 * arm_index
-    traffic_load = traffic_sent / max(1, window_size)
-    penalty = 0.08 * max(0.0, traffic_load - 1.0) * desync_factor
-    success_prob = _clip(base_success - penalty + rng.uniform(-0.05, 0.05), 0.05, 0.95)
-    successes = sum(rng.random() < success_prob for _ in range(traffic_sent))
     success_rate = successes / traffic_sent if traffic_sent > 0 else 0.0
-    energy_norm = _clip(energy_norm + rng.uniform(-0.05, 0.05), 0.0, 1.0)
     return WindowMetrics(
         success_rate=success_rate,
         bitrate_norm=bitrate_norm,
         energy_norm=energy_norm,
     )
+
+
+def _compute_collision_successes(
+    transmissions: dict[int, list[tuple[float, float, int]]]
+) -> dict[int, int]:
+    successes_by_node: dict[int, int] = {}
+    for events in transmissions.values():
+        if not events:
+            continue
+        collided = [False] * len(events)
+        indexed_events = list(enumerate(events))
+        indexed_events.sort(key=lambda item: item[1][0])
+        active: list[tuple[float, int]] = []
+        for event_index, (start, end, _node_id) in indexed_events:
+            active = [
+                (active_end, active_index)
+                for active_end, active_index in active
+                if active_end > start
+            ]
+            if active:
+                collided[event_index] = True
+                for _active_end, active_index in active:
+                    collided[active_index] = True
+            active.append((end, event_index))
+        for event_index, (_start, _end, node_id) in enumerate(events):
+            if not collided[event_index]:
+                successes_by_node[node_id] = successes_by_node.get(node_id, 0) + 1
+    return successes_by_node
 
 
 def _weights_for_algo(algorithm: str, n_arms: int) -> list[float]:
@@ -206,36 +222,53 @@ def run_simulation(
                     else 0.0
                 )
                 window_start_s += window_duration_value + delay_s
+            node_windows: list[dict[str, object]] = []
             for node_id in range(n_nodes):
                 sf_value = sf_values[arm_index]
-                traffic_sent = max(1, int(round(window_size * traffic_coeffs[node_id])))
+                expected_sent = max(1, int(round(window_size * traffic_coeffs[node_id])))
                 traffic_times = generate_traffic_times(
-                    traffic_sent,
+                    expected_sent,
                     duration_s=window_duration_value,
                     traffic_mode=traffic_mode_value,
                     jitter_range_s=jitter_range_value,
                     rng=rng,
                 )
-                traffic_sent = len(traffic_times)
                 node_offset_s = (
                     rng.uniform(0.0, window_delay_range_value)
                     if window_delay_enabled_value and window_delay_range_value > 0
                     else 0.0
                 )
-                desync_factor = (
-                    1.0
-                    - 0.2 * (node_offset_s / window_delay_range_value)
-                    if window_delay_enabled_value and window_delay_range_value > 0
-                    else 1.0
+                tx_starts = [window_start_s + node_offset_s + t for t in traffic_times]
+                node_windows.append(
+                    {
+                        "node_id": node_id,
+                        "arm_index": arm_index,
+                        "sf": sf_value,
+                        "node_offset_s": node_offset_s,
+                        "traffic_coeff": traffic_coeffs[node_id],
+                        "traffic_sent": len(traffic_times),
+                        "tx_starts": tx_starts,
+                    }
                 )
-                metrics = _simulate_window_metrics(
-                    rng,
-                    arm_index,
-                    window_size,
+            transmissions_by_sf: dict[int, list[tuple[float, float, int]]] = {}
+            for node_window in node_windows:
+                sf_value = int(node_window["sf"])
+                airtime = airtime_by_sf[sf_value]
+                for start_time in node_window["tx_starts"]:
+                    transmissions_by_sf.setdefault(sf_value, []).append(
+                        (start_time, start_time + airtime, int(node_window["node_id"]))
+                    )
+            successes_by_node = _compute_collision_successes(transmissions_by_sf)
+            for node_window in node_windows:
+                node_id = int(node_window["node_id"])
+                sf_value = int(node_window["sf"])
+                traffic_sent = int(node_window["traffic_sent"])
+                successes = successes_by_node.get(node_id, 0)
+                metrics = _compute_window_metrics(
+                    successes,
                     traffic_sent,
                     bitrate_norm_by_sf[sf_value],
                     energy_norm_by_sf[sf_value],
-                    desync_factor,
                 )
                 reward = _compute_reward(
                     metrics.success_rate,
@@ -252,10 +285,10 @@ def run_simulation(
                         "cluster": node_clusters[node_id],
                         "round": round_id,
                         "node_id": node_id,
-                        "sf": sf_values[arm_index],
+                        "sf": sf_value,
                         "window_start_s": window_start_s,
-                        "node_offset_s": node_offset_s,
-                        "traffic_coeff": traffic_coeffs[node_id],
+                        "node_offset_s": node_window["node_offset_s"],
+                        "traffic_coeff": node_window["traffic_coeff"],
                         "traffic_sent": traffic_sent,
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
@@ -271,10 +304,10 @@ def run_simulation(
                         "cluster": "all",
                         "round": round_id,
                         "node_id": node_id,
-                        "sf": sf_values[arm_index],
+                        "sf": sf_value,
                         "window_start_s": window_start_s,
-                        "node_offset_s": node_offset_s,
-                        "traffic_coeff": traffic_coeffs[node_id],
+                        "node_offset_s": node_window["node_offset_s"],
+                        "traffic_coeff": node_window["traffic_coeff"],
                         "traffic_sent": traffic_sent,
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
@@ -318,40 +351,57 @@ def run_simulation(
                     else 0.0
                 )
                 window_start_s += window_duration_value + delay_s
+            node_windows: list[dict[str, object]] = []
             for node_id in range(n_nodes):
                 if algorithm == "adr":
                     arm_index = 0
                 else:
                     arm_index = rng.choices(range(n_arms), weights=weights, k=1)[0]
                 sf_value = sf_values[arm_index]
-                traffic_sent = max(1, int(round(window_size * traffic_coeffs[node_id])))
+                expected_sent = max(1, int(round(window_size * traffic_coeffs[node_id])))
                 traffic_times = generate_traffic_times(
-                    traffic_sent,
+                    expected_sent,
                     duration_s=window_duration_value,
                     traffic_mode=traffic_mode_value,
                     jitter_range_s=jitter_range_value,
                     rng=rng,
                 )
-                traffic_sent = len(traffic_times)
                 node_offset_s = (
                     rng.uniform(0.0, window_delay_range_value)
                     if window_delay_enabled_value and window_delay_range_value > 0
                     else 0.0
                 )
-                desync_factor = (
-                    1.0
-                    - 0.2 * (node_offset_s / window_delay_range_value)
-                    if window_delay_enabled_value and window_delay_range_value > 0
-                    else 1.0
+                tx_starts = [window_start_s + node_offset_s + t for t in traffic_times]
+                node_windows.append(
+                    {
+                        "node_id": node_id,
+                        "arm_index": arm_index,
+                        "sf": sf_value,
+                        "node_offset_s": node_offset_s,
+                        "traffic_coeff": traffic_coeffs[node_id],
+                        "traffic_sent": len(traffic_times),
+                        "tx_starts": tx_starts,
+                    }
                 )
-                metrics = _simulate_window_metrics(
-                    rng,
-                    arm_index,
-                    window_size,
+            transmissions_by_sf: dict[int, list[tuple[float, float, int]]] = {}
+            for node_window in node_windows:
+                sf_value = int(node_window["sf"])
+                airtime = airtime_by_sf[sf_value]
+                for start_time in node_window["tx_starts"]:
+                    transmissions_by_sf.setdefault(sf_value, []).append(
+                        (start_time, start_time + airtime, int(node_window["node_id"]))
+                    )
+            successes_by_node = _compute_collision_successes(transmissions_by_sf)
+            for node_window in node_windows:
+                node_id = int(node_window["node_id"])
+                sf_value = int(node_window["sf"])
+                traffic_sent = int(node_window["traffic_sent"])
+                successes = successes_by_node.get(node_id, 0)
+                metrics = _compute_window_metrics(
+                    successes,
                     traffic_sent,
                     bitrate_norm_by_sf[sf_value],
                     energy_norm_by_sf[sf_value],
-                    desync_factor,
                 )
                 reward = _compute_reward(
                     metrics.success_rate,
@@ -368,10 +418,10 @@ def run_simulation(
                         "cluster": node_clusters[node_id],
                         "round": round_id,
                         "node_id": node_id,
-                        "sf": sf_values[arm_index],
+                        "sf": sf_value,
                         "window_start_s": window_start_s,
-                        "node_offset_s": node_offset_s,
-                        "traffic_coeff": traffic_coeffs[node_id],
+                        "node_offset_s": node_window["node_offset_s"],
+                        "traffic_coeff": node_window["traffic_coeff"],
                         "traffic_sent": traffic_sent,
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
@@ -387,10 +437,10 @@ def run_simulation(
                         "cluster": "all",
                         "round": round_id,
                         "node_id": node_id,
-                        "sf": sf_values[arm_index],
+                        "sf": sf_value,
                         "window_start_s": window_start_s,
-                        "node_offset_s": node_offset_s,
-                        "traffic_coeff": traffic_coeffs[node_id],
+                        "node_offset_s": node_window["node_offset_s"],
+                        "traffic_coeff": node_window["traffic_coeff"],
                         "traffic_sent": traffic_sent,
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
