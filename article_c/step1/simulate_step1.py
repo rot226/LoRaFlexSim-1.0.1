@@ -16,17 +16,6 @@ from article_c.common.lora_phy import coding_rate_to_cr, compute_airtime
 from article_c.common.metrics import energy_per_success_bit, packet_delivery_ratio
 from article_c.common.utils import assign_clusters, generate_traffic_times
 
-SF_VALUES = [7, 8, 9, 10, 11, 12]
-SNR_THRESHOLDS = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
-RSSI_THRESHOLDS = {7: -123.0, 8: -126.0, 9: -129.0, 10: -132.0, 11: -134.0, 12: -137.0}
-
-
-@dataclass
-class NodeLink:
-    snr: float
-    rssi: float
-
-
 SF_VALUES = (7, 8, 9, 10, 11, 12)
 
 # Seuils proxy pour SNR/RSSI (inspirés d'ordres de grandeur LoRaWAN).
@@ -54,7 +43,19 @@ class Step1Result:
 
 
 def _qos_ok(node: NodeLink, sf: int) -> bool:
-    return node.snr >= SNR_THRESHOLDS[sf] and node.rssi >= RSSI_THRESHOLDS[sf]
+    snr_margin = _snr_margin_requirement(node)
+    return (
+        node.snr >= SNR_THRESHOLDS[sf] + snr_margin
+        and node.rssi >= RSSI_THRESHOLDS[sf]
+    )
+
+
+def _snr_margin_requirement(node: NodeLink) -> float:
+    """Calcule une marge SNR proxy en fonction de la distance/variabilité."""
+    rssi_span = 30.0
+    distance_factor = min(1.0, max(0.0, (-110.0 - node.rssi) / rssi_span))
+    variability_factor = min(1.0, max(0.0, (-node.snr) / 20.0))
+    return 0.8 + 1.7 * distance_factor + 0.9 * variability_factor
 
 
 def _adr_smallest_sf(node: NodeLink) -> int:
@@ -66,7 +67,7 @@ def _adr_smallest_sf(node: NodeLink) -> int:
 
 
 def _mixra_h_assign(nodes: Iterable[NodeLink]) -> list[int]:
-    """MixRA-H proxy: équilibre la QoS (marge SNR/RSSI) et la charge par SF."""
+    """MixRA-H proxy: équilibre QoS et pénalise la densité par SF."""
     assignments: list[int] = []
     loads = {sf: 0 for sf in SF_VALUES}
     for node in nodes:
@@ -83,7 +84,9 @@ def _mixra_h_assign(nodes: Iterable[NodeLink]) -> list[int]:
             snr_margin = node.snr - SNR_THRESHOLDS[sf]
             rssi_margin = node.rssi - RSSI_THRESHOLDS[sf]
             qos_margin = min(snr_margin, rssi_margin)
-            load_penalty = loads[sf]
+            total_nodes = max(1, len(assignments))
+            density = loads[sf] / total_nodes
+            load_penalty = loads[sf] + 8.0 * density
             score = load_penalty - 0.35 * qos_margin
             if score < best_score:
                 best_score = score
@@ -94,12 +97,24 @@ def _mixra_h_assign(nodes: Iterable[NodeLink]) -> list[int]:
 
 
 def _mixra_opt_assign(nodes: Iterable[NodeLink]) -> list[int]:
-    """MixRA-Opt proxy: glouton + recherche locale pour réduire les collisions."""
+    """MixRA-Opt proxy: glouton + recherche locale (collisions + QoS)."""
     nodes_list = list(nodes)
     assignments = _mixra_h_assign(nodes_list)
 
-    def objective(loads: dict[int, int]) -> int:
+    def collision_cost(loads: dict[int, int]) -> float:
         return sum(load * load for load in loads.values())
+
+    def qos_penalty(assignments_list: list[int]) -> float:
+        penalty = 0.0
+        for node, sf in zip(nodes_list, assignments_list):
+            snr_margin = node.snr - (SNR_THRESHOLDS[sf] + _snr_margin_requirement(node))
+            rssi_margin = node.rssi - RSSI_THRESHOLDS[sf]
+            min_margin = min(snr_margin, rssi_margin)
+            penalty += max(0.0, 2.0 - min_margin)
+        return penalty
+
+    def objective(loads: dict[int, int], assignments_list: list[int]) -> float:
+        return collision_cost(loads) + 2.5 * qos_penalty(assignments_list)
 
     loads = {sf: 0 for sf in SF_VALUES}
     for sf in assignments:
@@ -114,15 +129,17 @@ def _mixra_opt_assign(nodes: Iterable[NodeLink]) -> list[int]:
             if not candidates:
                 continue
             best_sf = current_sf
-            best_obj = objective(loads)
+            best_obj = objective(loads, assignments)
             for sf in candidates:
                 if sf == current_sf:
                     continue
                 loads[current_sf] -= 1
                 loads[sf] += 1
-                candidate_obj = objective(loads)
+                assignments[idx] = sf
+                candidate_obj = objective(loads, assignments)
                 loads[sf] -= 1
                 loads[current_sf] += 1
+                assignments[idx] = current_sf
                 if candidate_obj < best_obj:
                     best_obj = candidate_obj
                     best_sf = sf
