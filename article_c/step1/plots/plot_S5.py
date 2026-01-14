@@ -19,7 +19,7 @@ from article_c.common.plot_helpers import (
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, ax = plt.subplots()
     plot_metric_by_snir(ax, rows, metric_key)
-    ax.set_xlabel("Density")
+    ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Packet Delivery Ratio")
     ax.set_title("Step 1 - Packet Delivery Ratio by SNIR Mode (on/off)")
     place_legend(ax)

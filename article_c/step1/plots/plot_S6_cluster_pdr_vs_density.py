@@ -80,7 +80,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             if cluster_idx == 0:
                 ax.set_ylabel(f"{algo_label(algo)}\nPacket Delivery Ratio")
             if algo_idx == len(algorithms) - 1:
-                ax.set_xlabel("Density")
+                ax.set_xlabel("Network size (number of nodes)")
 
     place_legend(axes[-1][-1])
     fig.suptitle("Step 1 - PDR by Cluster (SNIR on/off, per algorithm)")

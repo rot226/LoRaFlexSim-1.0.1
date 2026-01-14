@@ -96,11 +96,11 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             densities = sorted(points)
             values = [points[density] for density in densities]
             ax.plot(densities, values, marker="o", label=_label_for_algo(str(algo)))
-        ax.set_xlabel("Density")
+        ax.set_xlabel("Network size (number of nodes)")
         ax.set_title(f"Cluster {cluster_labels.get(cluster, cluster)}")
-    axes[0].set_ylabel("Outage Probability")
+    axes[0].set_ylabel("Outage probability")
     place_legend(axes[-1])
-    fig.suptitle("Step 2 - Outage Probability by Cluster (SNIR on)")
+    fig.suptitle("Step 2 - Outage probability by Cluster (SNIR on)")
     return fig
 
 

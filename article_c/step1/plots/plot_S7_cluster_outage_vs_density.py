@@ -59,11 +59,11 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
         plot_metric_by_snir(ax, cluster_rows, metric_key)
-        ax.set_xlabel("Density")
+        ax.set_xlabel("Network size (number of nodes)")
         ax.set_title(f"Cluster {cluster_labels.get(cluster, cluster)}")
-    axes[0].set_ylabel("Outage Probability")
+    axes[0].set_ylabel("Outage probability")
     place_legend(axes[-1])
-    fig.suptitle("Step 1 - Outage Probability by Cluster (SNIR on/off)")
+    fig.suptitle("Step 1 - Outage probability by Cluster (SNIR on/off)")
     return fig
 
 
