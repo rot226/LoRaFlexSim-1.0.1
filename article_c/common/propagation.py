@@ -7,20 +7,46 @@ import random
 from typing import Iterable, List, Tuple
 
 
+def sample_fading_db(
+    fading_type: str | None,
+    *,
+    sigma_db: float = 0.0,
+    rng: random.Random | None = None,
+) -> float:
+    """Échantillonne un fading en dB (log-normal ou Rayleigh)."""
+
+    if fading_type in (None, "", "none"):
+        return 0.0
+    generator = rng or random
+    normalized = fading_type.lower()
+    if normalized in ("lognormal", "log-normal", "log_normal"):
+        if sigma_db <= 0:
+            return 0.0
+        return generator.gauss(0.0, sigma_db)
+    if normalized == "rayleigh":
+        u = max(generator.random(), 1e-12)
+        rayleigh = math.sqrt(-2.0 * math.log(u))
+        return 20.0 * math.log10(rayleigh)
+    raise ValueError(f"Type de fading inconnu: {fading_type}")
+
+
 def log_distance_path_loss(
     distance_m: float,
     freq_mhz: float,
     path_loss_exponent: float = 2.7,
     reference_distance_m: float = 1.0,
-    shadowing_std_db: float = 0.0,
+    shadowing_sigma_db: float = 0.0,
+    fading_type: str | None = None,
+    fading_sigma_db: float = 0.0,
     rng: random.Random | None = None,
 ) -> float:
     """Retourne la perte (dB) via un modèle log-distance avec fading optionnel.
 
     Hypothèses :
     - La perte de référence est celle de l'espace libre à ``reference_distance_m``.
-    - Le fading est un bruit log-normal (en dB) de moyenne 0 et écart-type
-      ``shadowing_std_db``.
+    - Le shadowing est un bruit log-normal (en dB) de moyenne 0 et écart-type
+      ``shadowing_sigma_db``.
+    - Le fading additionnel peut être log-normal ou Rayleigh.
     """
 
     if distance_m <= 0:
@@ -34,9 +60,14 @@ def log_distance_path_loss(
 
     fspl_db = 32.45 + 20 * math.log10(reference_distance_m / 1000) + 20 * math.log10(freq_mhz)
     path_loss_db = fspl_db + 10 * path_loss_exponent * math.log10(distance_m / reference_distance_m)
-    if shadowing_std_db > 0:
-        generator = rng or random
-        path_loss_db += generator.gauss(0.0, shadowing_std_db)
+    generator = rng or random
+    if shadowing_sigma_db > 0:
+        path_loss_db += generator.gauss(0.0, shadowing_sigma_db)
+    path_loss_db += sample_fading_db(
+        fading_type,
+        sigma_db=fading_sigma_db,
+        rng=generator,
+    )
     return path_loss_db
 
 
@@ -92,7 +123,9 @@ def rssi_for_positions(
     ptx_dbm: float,
     freq_mhz: float,
     path_loss_exponent: float = 2.7,
-    shadowing_std_db: float = 0.0,
+    shadowing_sigma_db: float = 0.0,
+    fading_type: str | None = None,
+    fading_sigma_db: float = 0.0,
     rng: random.Random | None = None,
 ) -> List[float]:
     """Calcule un RSSI pour chaque position en supposant une station en (0,0).
@@ -109,7 +142,9 @@ def rssi_for_positions(
             distance_m=distance,
             freq_mhz=freq_mhz,
             path_loss_exponent=path_loss_exponent,
-            shadowing_std_db=shadowing_std_db,
+            shadowing_sigma_db=shadowing_sigma_db,
+            fading_type=fading_type,
+            fading_sigma_db=fading_sigma_db,
             rng=rng,
         )
         rssis.append(rssi_dbm(ptx_dbm, loss_db))

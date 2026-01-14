@@ -12,6 +12,7 @@ import random
 from typing import Iterable
 
 from article_c.common.metrics import packet_delivery_ratio
+from article_c.common.utils import generate_traffic_times
 
 SF_VALUES = [7, 8, 9, 10, 11, 12]
 SNR_THRESHOLDS = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
@@ -157,13 +158,26 @@ def run_simulation(
     sent: int = 120,
     algorithm: str = "adr",
     seed: int = 42,
+    *,
+    duration_s: float = 3600.0,
+    traffic_mode: str = "periodic",
+    jitter_range_s: float = 5.0,
 ) -> Step1Result:
     """Exécute une simulation minimale.
 
     Les résultats reposent sur des proxys ADR/MixRA et ne remplacent pas
     l'implémentation complète des algorithmes.
     """
-    nodes = _generate_nodes(sent, seed)
+    rng = random.Random(seed)
+    traffic_times = generate_traffic_times(
+        sent,
+        duration_s=duration_s,
+        traffic_mode=traffic_mode,
+        jitter_range_s=jitter_range_s,
+        rng=rng,
+    )
+    actual_sent = len(traffic_times)
+    nodes = _generate_nodes(actual_sent, seed)
     if algorithm == "adr":
         assignments = [_adr_smallest_sf(node) for node in nodes]
     elif algorithm == "mixra_h":
@@ -173,4 +187,4 @@ def run_simulation(
     else:
         raise ValueError(f"Algorithme inconnu: {algorithm}")
     received = _estimate_received(assignments)
-    return Step1Result(sent=sent, received=received)
+    return Step1Result(sent=actual_sent, received=received)
