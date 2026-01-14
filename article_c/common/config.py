@@ -40,8 +40,8 @@ class SNIRConfig:
     """Paramètres SNIR."""
 
     enabled: bool = True
-    capture_threshold_db: float = 6.0
-    thermal_noise_dbm: float = -174.0
+    snir_threshold_db: float = 6.0
+    noise_floor_dbm: float = -174.0
 
 
 @dataclass(frozen=True)

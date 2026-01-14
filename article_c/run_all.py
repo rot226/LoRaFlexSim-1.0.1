@@ -38,6 +38,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Liste des modes SNIR pour l'étape 1 (ex: snir_on,snir_off).",
     )
     parser.add_argument(
+        "--snir-threshold-db",
+        type=float,
+        default=None,
+        help="Seuil SNIR/capture (dB).",
+    )
+    parser.add_argument(
+        "--noise-floor-dbm",
+        type=float,
+        default=None,
+        help="Bruit thermique (dBm).",
+    )
+    parser.add_argument(
         "--timestamp",
         action="store_true",
         help="Ajoute un timestamp dans les sorties de l'étape 2.",
@@ -61,6 +73,10 @@ def _build_step1_args(args: argparse.Namespace) -> list[str]:
         step1_args.extend(["--seeds_base", str(args.seed)])
     if args.snir_modes:
         step1_args.extend(["--snir_modes", args.snir_modes])
+    if args.snir_threshold_db is not None:
+        step1_args.extend(["--snir-threshold-db", str(args.snir_threshold_db)])
+    if args.noise_floor_dbm is not None:
+        step1_args.extend(["--noise-floor-dbm", str(args.noise_floor_dbm)])
     if args.step1_outdir:
         step1_args.extend(["--outdir", args.step1_outdir])
     return step1_args
@@ -76,6 +92,10 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         step2_args.extend(["--seed", str(args.seed)])
     if args.timestamp:
         step2_args.append("--timestamp")
+    if args.snir_threshold_db is not None:
+        step2_args.extend(["--snir-threshold-db", str(args.snir_threshold_db)])
+    if args.noise_floor_dbm is not None:
+        step2_args.extend(["--noise-floor-dbm", str(args.noise_floor_dbm)])
     return step2_args
 
 
