@@ -8,6 +8,7 @@ import random
 from typing import Literal
 
 from article_c.common.csv_io import write_simulation_results
+from article_c.common.utils import assign_clusters
 from article_c.step2.bandit_ucb1 import BanditUCB1
 
 
@@ -93,6 +94,7 @@ def run_simulation(
     algo_label = _algo_label(algorithm)
     raw_rows: list[dict[str, object]] = []
     selection_prob_rows: list[dict[str, object]] = []
+    node_clusters = assign_clusters(n_nodes, rng=rng)
 
     sf_values = list(SF_VALUES)
     if n_arms is None:
@@ -118,6 +120,22 @@ def run_simulation(
                         "density": density_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
+                        "cluster": node_clusters[node_id],
+                        "round": round_id,
+                        "node_id": node_id,
+                        "sf": sf_values[arm_index],
+                        "success_rate": metrics.success_rate,
+                        "bitrate_norm": metrics.bitrate_norm,
+                        "energy_norm": metrics.energy_norm,
+                        "reward": reward,
+                    }
+                )
+                raw_rows.append(
+                    {
+                        "density": density_value,
+                        "algo": algo_label,
+                        "snir_mode": snir_mode,
+                        "cluster": "all",
                         "round": round_id,
                         "node_id": node_id,
                         "sf": sf_values[arm_index],
@@ -158,6 +176,22 @@ def run_simulation(
                         "density": density_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
+                        "cluster": node_clusters[node_id],
+                        "round": round_id,
+                        "node_id": node_id,
+                        "sf": sf_values[arm_index],
+                        "success_rate": metrics.success_rate,
+                        "bitrate_norm": metrics.bitrate_norm,
+                        "energy_norm": metrics.energy_norm,
+                        "reward": reward,
+                    }
+                )
+                raw_rows.append(
+                    {
+                        "density": density_value,
+                        "algo": algo_label,
+                        "snir_mode": snir_mode,
+                        "cluster": "all",
                         "round": round_id,
                         "node_id": node_id,
                         "sf": sf_values[arm_index],

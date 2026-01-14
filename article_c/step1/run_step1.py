@@ -103,6 +103,7 @@ def main(argv: list[str] | None = None) -> None:
 
     raw_rows: list[dict[str, object]] = []
     run_index = 0
+    cluster_ids = list(DEFAULT_CONFIG.qos.clusters)
     for density in densities:
         for algo in ALGORITHMS:
             for snir_mode in snir_modes:
@@ -119,11 +120,38 @@ def main(argv: list[str] | None = None) -> None:
                         traffic_mode=args.traffic_mode,
                         jitter_range_s=args.jitter_range,
                     )
+                    cluster_stats = {cluster: {"sent": 0, "received": 0} for cluster in cluster_ids}
+                    for cluster, delivered in zip(
+                        result.node_clusters, result.node_received, strict=True
+                    ):
+                        cluster_stats[cluster]["sent"] += 1
+                        if delivered:
+                            cluster_stats[cluster]["received"] += 1
+                    for cluster, stats in cluster_stats.items():
+                        sent_cluster = stats["sent"]
+                        received_cluster = stats["received"]
+                        pdr_cluster = (
+                            received_cluster / sent_cluster if sent_cluster > 0 else 0.0
+                        )
+                        raw_rows.append(
+                            {
+                                "density": density,
+                                "algo": algo,
+                                "snir_mode": snir_mode,
+                                "cluster": cluster,
+                                "replication": replication,
+                                "seed": seed,
+                                "sent": sent_cluster,
+                                "received": received_cluster,
+                                "pdr": pdr_cluster,
+                            }
+                        )
                     raw_rows.append(
                         {
                             "density": density,
                             "algo": algo,
                             "snir_mode": snir_mode,
+                            "cluster": "all",
                             "replication": replication,
                             "seed": seed,
                             "sent": result.sent,

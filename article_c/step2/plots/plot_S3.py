@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from article_c.common.plot_helpers import (
     ALGO_LABELS,
     apply_plot_style,
+    filter_cluster,
     load_step1_aggregated,
     place_legend,
     save_figure,
@@ -38,7 +39,7 @@ def main() -> None:
     apply_plot_style()
     article_dir = Path(__file__).resolve().parents[2]
     results_path = article_dir / "step1" / "results" / "aggregated_results.csv"
-    rows = load_step1_aggregated(results_path)
+    rows = filter_cluster(load_step1_aggregated(results_path), "all")
     rows = [row for row in rows if row["snir_mode"] == "snir_on"]
 
     fig = _plot_metric(rows, "received_mean")

@@ -7,7 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
 
-GROUP_KEYS = ("density", "algo", "snir_mode")
+GROUP_KEYS = ("density", "algo", "snir_mode", "cluster")
 
 
 def write_rows(path: Path, header: list[str], rows: list[list[object]]) -> None:
