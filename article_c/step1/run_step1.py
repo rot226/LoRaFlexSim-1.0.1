@@ -89,7 +89,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--noise-floor-dbm",
         type=float,
         default=snir_defaults.noise_floor_dbm,
-        help="Bruit thermique (dBm).",
+        help="Bruit thermique (densité en dBm/Hz).",
     )
     parser.add_argument(
         "--outdir",

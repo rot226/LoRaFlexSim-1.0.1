@@ -38,7 +38,7 @@ class ScenarioConfig:
 
 @dataclass(frozen=True)
 class SNIRConfig:
-    """Paramètres SNIR."""
+    """Paramètres SNIR (bruit en dBm/Hz)."""
 
     enabled: bool = True
     snir_threshold_db: float = 6.0
