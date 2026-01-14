@@ -62,6 +62,14 @@ def main(argv: Sequence[str] | None = None) -> None:
                     density=density,
                     snir_mode=snir_mode,
                     seed=seed,
+                    traffic_mode=args.traffic_mode,
+                    jitter_range_s=args.jitter_range,
+                    window_duration_s=args.window_duration_s,
+                    traffic_coeff_min=args.traffic_coeff_min,
+                    traffic_coeff_max=args.traffic_coeff_max,
+                    traffic_coeff_enabled=args.traffic_coeff_enabled,
+                    window_delay_enabled=args.window_delay_enabled,
+                    window_delay_range_s=args.window_delay_range_s,
                 )
                 raw_rows.extend(result.raw_rows)
                 if algorithm == "ucb1_sf":

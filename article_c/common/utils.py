@@ -22,6 +22,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI."""
     parser = argparse.ArgumentParser(description="Outils CLI pour l'article C.")
     snir_defaults = DEFAULT_CONFIG.snir
+    step2_defaults = DEFAULT_CONFIG.step2
     parser.add_argument(
         "--seeds_base",
         type=int,
@@ -64,6 +65,55 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=float,
         default=snir_defaults.noise_floor_dbm,
         help="Bruit thermique (dBm).",
+    )
+    parser.add_argument(
+        "--traffic-mode",
+        type=str,
+        default=step2_defaults.traffic_mode,
+        choices=("periodic", "poisson"),
+        help="Modèle de trafic pour l'étape 2 (periodic ou poisson).",
+    )
+    parser.add_argument(
+        "--jitter-range",
+        type=float,
+        default=step2_defaults.jitter_range_s,
+        help="Amplitude du jitter pour l'étape 2 (secondes).",
+    )
+    parser.add_argument(
+        "--window-duration-s",
+        type=float,
+        default=step2_defaults.window_duration_s,
+        help="Durée d'une fenêtre de simulation (secondes).",
+    )
+    parser.add_argument(
+        "--traffic-coeff-min",
+        type=float,
+        default=step2_defaults.traffic_coeff_min,
+        help="Coefficient de trafic minimal par nœud.",
+    )
+    parser.add_argument(
+        "--traffic-coeff-max",
+        type=float,
+        default=step2_defaults.traffic_coeff_max,
+        help="Coefficient de trafic maximal par nœud.",
+    )
+    parser.add_argument(
+        "--traffic-coeff-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=step2_defaults.traffic_coeff_enabled,
+        help="Active/désactive la variabilité de trafic par nœud.",
+    )
+    parser.add_argument(
+        "--window-delay-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=step2_defaults.window_delay_enabled,
+        help="Active/désactive le délai aléatoire entre fenêtres.",
+    )
+    parser.add_argument(
+        "--window-delay-range-s",
+        type=float,
+        default=step2_defaults.window_delay_range_s,
+        help="Amplitude du délai aléatoire entre fenêtres (secondes).",
     )
     return parser
 

@@ -63,6 +63,55 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Ajoute un timestamp dans les sorties de l'étape 2.",
     )
     parser.add_argument(
+        "--traffic-mode",
+        type=str,
+        default=None,
+        choices=("periodic", "poisson"),
+        help="Modèle de trafic pour l'étape 2 (periodic ou poisson).",
+    )
+    parser.add_argument(
+        "--jitter-range",
+        type=float,
+        default=None,
+        help="Amplitude du jitter pour l'étape 2 (secondes).",
+    )
+    parser.add_argument(
+        "--window-duration-s",
+        type=float,
+        default=None,
+        help="Durée d'une fenêtre de simulation (secondes).",
+    )
+    parser.add_argument(
+        "--traffic-coeff-min",
+        type=float,
+        default=None,
+        help="Coefficient de trafic minimal par nœud.",
+    )
+    parser.add_argument(
+        "--traffic-coeff-max",
+        type=float,
+        default=None,
+        help="Coefficient de trafic maximal par nœud.",
+    )
+    parser.add_argument(
+        "--traffic-coeff-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Active/désactive la variabilité de trafic par nœud.",
+    )
+    parser.add_argument(
+        "--window-delay-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Active/désactive le délai aléatoire entre fenêtres.",
+    )
+    parser.add_argument(
+        "--window-delay-range-s",
+        type=float,
+        default=None,
+        help="Amplitude du délai aléatoire entre fenêtres (secondes).",
+    )
+    parser.add_argument(
         "--step1-outdir",
         type=str,
         default=None,
@@ -106,6 +155,30 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         step2_args.extend(["--snir-threshold-db", str(args.snir_threshold_db)])
     if args.noise_floor_dbm is not None:
         step2_args.extend(["--noise-floor-dbm", str(args.noise_floor_dbm)])
+    if args.traffic_mode is not None:
+        step2_args.extend(["--traffic-mode", args.traffic_mode])
+    if args.jitter_range is not None:
+        step2_args.extend(["--jitter-range", str(args.jitter_range)])
+    if args.window_duration_s is not None:
+        step2_args.extend(["--window-duration-s", str(args.window_duration_s)])
+    if args.traffic_coeff_min is not None:
+        step2_args.extend(["--traffic-coeff-min", str(args.traffic_coeff_min)])
+    if args.traffic_coeff_max is not None:
+        step2_args.extend(["--traffic-coeff-max", str(args.traffic_coeff_max)])
+    if args.traffic_coeff_enabled is not None:
+        step2_args.append(
+            "--traffic-coeff-enabled"
+            if args.traffic_coeff_enabled
+            else "--no-traffic-coeff-enabled"
+        )
+    if args.window_delay_enabled is not None:
+        step2_args.append(
+            "--window-delay-enabled"
+            if args.window_delay_enabled
+            else "--no-window-delay-enabled"
+        )
+    if args.window_delay_range_s is not None:
+        step2_args.extend(["--window-delay-range-s", str(args.window_delay_range_s)])
     return step2_args
 
 
