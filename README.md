@@ -101,9 +101,11 @@ python scripts/run_step1_matrix.py --algos adr apra mixra_h mixra_opt --with-sni
 > **Note sur les proxys Step 1** : les implémentations dans
 > `article_c/step1/simulate_step1.py` servent de substituts fidèles lorsque les
 > formules exactes ne sont pas disponibles. ADR choisit le plus petit SF
-> satisfaisant les seuils SNR/RSSI, MixRA-H applique une heuristique équilibrant
-> la QoS (marges SNR/RSSI) et la charge par SF, et MixRA-Opt utilise un
-> glouton/recherche locale pour réduire les collisions sous contraintes QoS.
+> satisfaisant les seuils SNR/RSSI, avec une marge SNR modulée par la
+> distance/variabilité. MixRA-H applique une heuristique équilibrant la QoS
+> (marges SNR/RSSI) tout en pénalisant les SF surchargés via la densité, et
+> MixRA-Opt optimise un objectif multi-critère combinant collisions et pénalité
+> QoS (glouton + recherche locale).
 
 Pour forcer explicitement le venv via PowerShell (sans déclencher l’erreur
 « Le terme 'elseif' n’est pas reconnu »), utilisez un bloc `if (...) { ... } elseif (...) { ... }`
