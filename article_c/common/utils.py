@@ -86,6 +86,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Durée d'une fenêtre de simulation (secondes).",
     )
     parser.add_argument(
+        "--window_size",
+        type=int,
+        default=10,
+        help="Taille de la fenêtre (W) pour l'étape 2.",
+    )
+    parser.add_argument(
         "--traffic-coeff-min",
         type=float,
         default=step2_defaults.traffic_coeff_min,

@@ -65,6 +65,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                     traffic_mode=args.traffic_mode,
                     jitter_range_s=args.jitter_range,
                     window_duration_s=args.window_duration_s,
+                    window_size=args.window_size,
                     traffic_coeff_min=args.traffic_coeff_min,
                     traffic_coeff_max=args.traffic_coeff_max,
                     traffic_coeff_enabled=args.traffic_coeff_enabled,
