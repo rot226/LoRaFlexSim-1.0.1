@@ -9,7 +9,12 @@ from article_c.common.csv_io import write_simulation_results
 from article_c.common.utils import parse_density_list, replication_ids, set_deterministic_seed
 from article_c.step1.simulate_step1 import run_simulation
 
-ALGORITHMS = ("baseline", "enhanced")
+ALGORITHMS = ("adr", "mixra_h", "mixra_opt")
+
+
+def density_to_sent(density: float, base_sent: int = 120) -> int:
+    """Convertit une densité en nombre de trames simulées."""
+    return max(1, int(round(base_sent * density)))
 
 
 def parse_snir_modes(value: str) -> list[str]:
@@ -71,13 +76,8 @@ def main(argv: list[str] | None = None) -> None:
                     seed = args.seeds_base + run_index
                     run_index += 1
                     set_deterministic_seed(seed)
-                    result = run_simulation(
-                        density=density,
-                        algo=algo,
-                        snir_mode=snir_mode,
-                        replication=replication,
-                        seed=seed,
-                    )
+                    sent = density_to_sent(density)
+                    result = run_simulation(sent=sent, algorithm=algo, seed=seed)
                     raw_rows.append(
                         {
                             "density": density,
