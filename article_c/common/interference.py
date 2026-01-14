@@ -58,14 +58,13 @@ def _signals_overlap(first: Signal, second: Signal) -> bool:
 
 
 def co_sf_interferers(target: Signal, interferers: Iterable[Signal]) -> list[Signal]:
-    """Retourne les interférences co-SF sur le même canal et en overlap temporel."""
+    """Retourne les interférences co-SF en overlap temporel."""
 
     return [
         interferer
         for interferer in interferers
         if (
             interferer.sf == target.sf
-            and interferer.channel_hz == target.channel_hz
             and _signals_overlap(target, interferer)
         )
     ]
@@ -85,6 +84,17 @@ def compute_snir_db(
     if denominator <= 0:
         return float("inf")
     return 10 * math.log10(signal_linear / denominator)
+
+
+def compute_thermal_noise_dbm(
+    noise_floor_dbm: float,
+    bandwidth_hz: float | None,
+) -> float:
+    """Calcule le bruit thermique total (dBm) à partir d'une densité de bruit."""
+
+    if bandwidth_hz is None or bandwidth_hz <= 0:
+        return noise_floor_dbm
+    return noise_floor_dbm + 10 * math.log10(bandwidth_hz)
 
 
 def apply_fading_to_signal(
@@ -140,19 +150,21 @@ def evaluate_reception(
     *,
     sensitivity_dbm: float,
     snir_enabled: bool = True,
-    snir_threshold_db: float = 1.0,
+    snir_threshold_db: float = 6.0,
     noise_floor_dbm: float = -174.0,
+    bandwidth_hz: float | None = 125_000.0,
 ) -> InterferenceOutcome:
     """Évalue la réception avec ou sans SNIR et détecte un outage.
 
     - SNIR OFF: le succès dépend uniquement de ``target.rssi_dbm`` >= sensibilité.
-    - SNIR ON: le SNIR est calculé avec la somme des interférences co-SF.
+    - SNIR ON: le SNIR est calculé avec la somme des interférences co-SF et du bruit.
     """
 
     co_sf = co_sf_interferers(target, interferers)
     interferer_powers_dbm = [entry.rssi_dbm for entry in co_sf]
     interference_dbm = aggregate_interference(interferer_powers_dbm)
-    effective_rssi_dbm = aggregate_interference([target.rssi_dbm, noise_floor_dbm])
+    thermal_noise_dbm = compute_thermal_noise_dbm(noise_floor_dbm, bandwidth_hz)
+    effective_rssi_dbm = aggregate_interference([target.rssi_dbm, thermal_noise_dbm])
     rssi_ok = effective_rssi_dbm >= sensitivity_dbm
 
     snir_db = None
@@ -162,7 +174,7 @@ def evaluate_reception(
         snir_db = compute_snir_db(
             signal_dbm=target.rssi_dbm,
             interferers_dbm=interferer_powers_dbm,
-            noise_dbm=noise_floor_dbm,
+            noise_dbm=thermal_noise_dbm,
         )
         snir_ok = snir_db >= snir_threshold_db
         if interferer_powers_dbm:
