@@ -7,38 +7,20 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from article_c.common.plot_helpers import (
-    ALGO_LABELS,
     apply_plot_style,
     load_step1_aggregated,
     place_legend,
+    plot_metric_by_snir,
     save_figure,
 )
-
-SNIR_LABELS = {
-    "snir_on": "SNIR on",
-    "snir_off": "SNIR off",
-}
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, ax = plt.subplots()
-    algorithms = sorted({row["algo"] for row in rows})
-    for snir_mode in ("snir_on", "snir_off"):
-        for algo in algorithms:
-            points = {
-                row["density"]: row[metric_key]
-                for row in rows
-                if row["algo"] == algo and row["snir_mode"] == snir_mode
-            }
-            if not points:
-                continue
-            densities = sorted(points)
-            values = [points[density] for density in densities]
-            label = f"{ALGO_LABELS.get(algo, algo)} ({SNIR_LABELS[snir_mode]})"
-            ax.plot(densities, values, marker="o", label=label)
+    plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xlabel("Density")
     ax.set_ylabel("Packet Delivery Ratio")
-    ax.set_title("Step 1 - Packet Delivery Ratio by SNIR Mode")
+    ax.set_title("Step 1 - Packet Delivery Ratio by SNIR Mode (on/off)")
     place_legend(ax)
     return fig
 
