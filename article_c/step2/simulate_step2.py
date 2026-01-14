@@ -7,7 +7,9 @@ from pathlib import Path
 import random
 from typing import Literal
 
+from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.csv_io import write_simulation_results
+from article_c.common.lora_phy import bitrate_lora, coding_rate_to_cr, compute_airtime
 from article_c.common.utils import assign_clusters
 from article_c.step2.bandit_ucb1 import BanditUCB1
 
@@ -40,14 +42,17 @@ def _compute_reward(
 
 
 def _simulate_window_metrics(
-    rng: random.Random, arm_index: int, n_arms: int, window_size: int
+    rng: random.Random,
+    arm_index: int,
+    window_size: int,
+    bitrate_norm: float,
+    energy_norm: float,
 ) -> WindowMetrics:
     base_success = 0.9 - 0.08 * arm_index
     success_prob = _clip(base_success + rng.uniform(-0.05, 0.05), 0.1, 0.95)
     successes = sum(rng.random() < success_prob for _ in range(window_size))
     success_rate = successes / window_size
-    bitrate_norm = (arm_index + 1) / n_arms
-    energy_norm = _clip(0.2 + 0.8 * bitrate_norm + rng.uniform(-0.05, 0.05), 0.0, 1.0)
+    energy_norm = _clip(energy_norm + rng.uniform(-0.05, 0.05), 0.0, 1.0)
     return WindowMetrics(
         success_rate=success_rate,
         bitrate_norm=bitrate_norm,
@@ -76,6 +81,12 @@ def _algo_label(algorithm: str) -> str:
     }.get(algorithm, algorithm)
 
 
+def _normalize(value: float, min_value: float, max_value: float) -> float:
+    if max_value <= min_value:
+        return 0.0
+    return (value - min_value) / (max_value - min_value)
+
+
 def run_simulation(
     algorithm: Literal["adr", "mixra_h", "mixra_opt", "ucb1_sf"] = "ucb1_sf",
     n_rounds: int = 20,
@@ -100,6 +111,29 @@ def run_simulation(
     if n_arms is None:
         n_arms = len(sf_values)
     sf_values = sf_values[:n_arms]
+    payload_bytes = DEFAULT_CONFIG.scenario.payload_bytes
+    bw_khz = DEFAULT_CONFIG.radio.bandwidth_khz
+    cr_value = coding_rate_to_cr(DEFAULT_CONFIG.radio.coding_rate)
+
+    airtime_by_sf = {
+        sf: compute_airtime(payload_bytes=payload_bytes, sf=sf, bw_khz=bw_khz, cr=cr_value)
+        for sf in sf_values
+    }
+    bitrate_by_sf = {
+        sf: bitrate_lora(sf=sf, bw=bw_khz, cr=cr_value) for sf in sf_values
+    }
+    min_bitrate = min(bitrate_by_sf.values())
+    max_bitrate = max(bitrate_by_sf.values())
+    min_airtime = min(airtime_by_sf.values())
+    max_airtime = max(airtime_by_sf.values())
+    bitrate_norm_by_sf = {
+        sf: _normalize(bitrate, min_bitrate, max_bitrate)
+        for sf, bitrate in bitrate_by_sf.items()
+    }
+    energy_norm_by_sf = {
+        sf: _normalize(airtime, min_airtime, max_airtime)
+        for sf, airtime in airtime_by_sf.items()
+    }
 
     if algorithm == "ucb1_sf":
         bandit = BanditUCB1(n_arms=n_arms)
@@ -107,7 +141,14 @@ def run_simulation(
             arm_index = bandit.select_arm()
             window_rewards: list[float] = []
             for node_id in range(n_nodes):
-                metrics = _simulate_window_metrics(rng, arm_index, n_arms, window_size)
+                sf_value = sf_values[arm_index]
+                metrics = _simulate_window_metrics(
+                    rng,
+                    arm_index,
+                    window_size,
+                    bitrate_norm_by_sf[sf_value],
+                    energy_norm_by_sf[sf_value],
+                )
                 reward = _compute_reward(
                     metrics.success_rate,
                     metrics.bitrate_norm,
@@ -164,7 +205,14 @@ def run_simulation(
                     arm_index = 0
                 else:
                     arm_index = rng.choices(range(n_arms), weights=weights, k=1)[0]
-                metrics = _simulate_window_metrics(rng, arm_index, n_arms, window_size)
+                sf_value = sf_values[arm_index]
+                metrics = _simulate_window_metrics(
+                    rng,
+                    arm_index,
+                    window_size,
+                    bitrate_norm_by_sf[sf_value],
+                    energy_norm_by_sf[sf_value],
+                )
                 reward = _compute_reward(
                     metrics.success_rate,
                     metrics.bitrate_norm,

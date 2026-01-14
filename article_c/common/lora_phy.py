@@ -73,6 +73,19 @@ def bitrate_lora(sf: int, bw: int, cr: int) -> float:
     return sf * (4 / (4 + cr)) * bw_hz / (2**sf)
 
 
+def coding_rate_to_cr(coding_rate: str) -> int:
+    """Convertit un coding rate '4/5'..'4/8' en valeur CR 1..4."""
+
+    parts = coding_rate.split("/")
+    if len(parts) != 2 or parts[0] != "4":
+        raise ValueError(f"coding_rate invalide: {coding_rate}")
+    denominator = int(parts[1])
+    cr_value = denominator - 4
+    if cr_value < 1 or cr_value > 4:
+        raise ValueError(f"coding_rate hors plage: {coding_rate}")
+    return cr_value
+
+
 def compute_airtime(payload_bytes: int, sf: int, bw_khz: int, cr: int = 1) -> float:
     """Calcule un airtime LoRa en millisecondes via ``toa_lora``.
 

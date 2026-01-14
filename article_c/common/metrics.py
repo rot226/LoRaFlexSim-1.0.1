@@ -23,7 +23,13 @@ def outage_probability(outage_events: int, tx_total: int) -> float:
     return outage_events / tx_total if tx_total else 0.0
 
 
-def energy_per_success_bit(energy_tx: Iterable[float], payload_bits_success: int) -> float:
-    """Calcule l'énergie par bit correctement reçu."""
-    total_energy = sum(energy_tx)
+def energy_per_success_bit(
+    airtime_ms: Iterable[float],
+    payload_bits_success: int,
+    tx_power_dbm: float,
+) -> float:
+    """Calcule l'énergie par bit correctement reçu via le ToA."""
+    total_airtime_s = sum(airtime_ms) / 1000.0
+    power_w = 10 ** ((tx_power_dbm - 30) / 10)
+    total_energy = total_airtime_s * power_w
     return total_energy / payload_bits_success if payload_bits_success else 0.0

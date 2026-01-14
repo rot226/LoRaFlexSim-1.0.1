@@ -11,7 +11,9 @@ from dataclasses import dataclass
 import random
 from typing import Iterable
 
-from article_c.common.metrics import packet_delivery_ratio
+from article_c.common.config import DEFAULT_CONFIG
+from article_c.common.lora_phy import coding_rate_to_cr, compute_airtime
+from article_c.common.metrics import energy_per_success_bit, packet_delivery_ratio
 from article_c.common.utils import assign_clusters, generate_traffic_times
 
 SF_VALUES = [7, 8, 9, 10, 11, 12]
@@ -42,6 +44,7 @@ class NodeLink:
 class Step1Result:
     sent: int
     received: int
+    energy_per_success_bit: float
     node_clusters: list[str]
     node_received: list[bool]
 
@@ -196,9 +199,21 @@ def run_simulation(
     node_received = _estimate_received(assignments, rng)
     node_clusters = assign_clusters(actual_sent, rng=rng)
     received = sum(1 for value in node_received if value)
+    payload_bytes = DEFAULT_CONFIG.scenario.payload_bytes
+    bw_khz = DEFAULT_CONFIG.radio.bandwidth_khz
+    cr = coding_rate_to_cr(DEFAULT_CONFIG.radio.coding_rate)
+    airtimes_ms = [
+        compute_airtime(payload_bytes=payload_bytes, sf=sf, bw_khz=bw_khz, cr=cr)
+        for sf in assignments
+    ]
+    payload_bits_success = payload_bytes * 8 * received
+    energy_per_bit = energy_per_success_bit(
+        airtimes_ms, payload_bits_success, DEFAULT_CONFIG.radio.tx_power_dbm
+    )
     return Step1Result(
         sent=actual_sent,
         received=received,
+        energy_per_success_bit=energy_per_bit,
         node_clusters=node_clusters,
         node_received=node_received,
     )
