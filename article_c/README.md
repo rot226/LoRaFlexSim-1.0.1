@@ -86,7 +86,9 @@ Les scripts listés ci‑dessous génèrent les figures de chaque étape. Les co
 - `plot_S5.py`
 - `plot_S6.py`
 - `plot_S6_cluster_pdr_vs_density.py` (nouvelle)
+- `plot_S6_cluster_pdr_vs_network_size.py` (nouvelle)
 - `plot_S7_cluster_outage_vs_density.py` (nouvelle)
+- `plot_S7_cluster_outage_vs_network_size.py` (nouvelle)
 
 ### Étape 2
 
