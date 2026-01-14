@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib
+from pathlib import Path
 
 
 PLOT_MODULES = {
@@ -63,6 +65,19 @@ def _run_plot_module(module_path: str) -> None:
     module.main()
 
 
+def _validate_snir_mode_column(paths: list[Path]) -> None:
+    for path in paths:
+        if not path.exists():
+            continue
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            fieldnames = reader.fieldnames or []
+        if "snir_mode" not in fieldnames:
+            raise ValueError(
+                f"Le CSV {path} doit contenir une colonne 'snir_mode'."
+            )
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
@@ -70,6 +85,14 @@ def main(argv: list[str] | None = None) -> None:
         steps = _parse_steps(args.steps)
     except ValueError as exc:
         parser.error(str(exc))
+    article_dir = Path(__file__).resolve().parent
+    csv_paths: list[Path] = []
+    if "step1" in steps:
+        csv_paths.append(article_dir / "step1" / "results" / "aggregated_results.csv")
+        csv_paths.append(article_dir / "step2" / "results" / "aggregated_results.csv")
+    if "step2" in steps and "step1" not in steps:
+        csv_paths.append(article_dir / "step2" / "results" / "aggregated_results.csv")
+    _validate_snir_mode_column(csv_paths)
     for step in steps:
         for module_path in PLOT_MODULES[step]:
             _run_plot_module(module_path)

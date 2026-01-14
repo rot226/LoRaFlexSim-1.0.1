@@ -17,6 +17,15 @@ ALGO_LABELS = {
     "mixra_opt": "MixRA-Opt",
     "ucb1_sf": "UCB1-SF",
 }
+SNIR_MODES = ("snir_on", "snir_off")
+SNIR_LABELS = {
+    "snir_on": "SNIR on",
+    "snir_off": "SNIR off",
+}
+SNIR_LINESTYLES = {
+    "snir_on": "solid",
+    "snir_off": "dashed",
+}
 
 
 def apply_plot_style() -> None:
@@ -111,6 +120,38 @@ def algo_labels(algorithms: Iterable[str]) -> list[str]:
     return [ALGO_LABELS.get(algo, algo) for algo in algorithms]
 
 
+def algo_label(algo: str) -> str:
+    return ALGO_LABELS.get(algo, algo)
+
+
+def plot_metric_by_snir(
+    ax: plt.Axes,
+    rows: list[dict[str, object]],
+    metric_key: str,
+) -> None:
+    algorithms = sorted({row["algo"] for row in rows})
+    for algo in algorithms:
+        algo_rows = [row for row in rows if row["algo"] == algo]
+        densities = sorted({row["density"] for row in algo_rows})
+        for snir_mode in SNIR_MODES:
+            points = {
+                row["density"]: row[metric_key]
+                for row in algo_rows
+                if row["snir_mode"] == snir_mode
+            }
+            if not points:
+                continue
+            values = [points.get(density, float("nan")) for density in densities]
+            label = f"{algo_label(algo)} ({SNIR_LABELS[snir_mode]})"
+            ax.plot(
+                densities,
+                values,
+                marker="o",
+                linestyle=SNIR_LINESTYLES[snir_mode],
+                label=label,
+            )
+
+
 def _sample_step1_rows() -> list[dict[str, object]]:
     densities = [0.1, 0.5, 1.0]
     algos = ["adr", "mixra_h", "mixra_opt"]
@@ -139,20 +180,24 @@ def _sample_step2_rows() -> list[dict[str, object]]:
     densities = [0.5, 1.0, 1.5]
     algos = ["ADR", "MixRA-H", "MixRA-Opt", "UCB1-SF"]
     rows: list[dict[str, object]] = []
-    for algo_idx, algo in enumerate(algos):
-        for density in densities:
-            reward = max(0.2, 0.7 - 0.05 * algo_idx - 0.1 * (density - 0.5))
-            rows.append(
-                {
-                    "density": density,
-                    "algo": algo,
-                    "snir_mode": "snir_on",
-                    "success_rate_mean": max(0.3, 0.9 - 0.05 * algo_idx),
-                    "bitrate_norm_mean": 0.4 + 0.1 * algo_idx,
-                    "energy_norm_mean": 0.3 + 0.1 * algo_idx,
-                    "reward_mean": reward,
-                }
-            )
+    for snir_mode in SNIR_MODES:
+        for algo_idx, algo in enumerate(algos):
+            for density in densities:
+                reward = max(0.2, 0.7 - 0.05 * algo_idx - 0.1 * (density - 0.5))
+                penalty = 0.05 if snir_mode == "snir_off" else 0.0
+                rows.append(
+                    {
+                        "density": density,
+                        "algo": algo,
+                        "snir_mode": snir_mode,
+                        "success_rate_mean": max(
+                            0.3, 0.9 - 0.05 * algo_idx - penalty
+                        ),
+                        "bitrate_norm_mean": 0.4 + 0.1 * algo_idx - penalty,
+                        "energy_norm_mean": 0.3 + 0.1 * algo_idx + penalty,
+                        "reward_mean": reward - penalty,
+                    }
+                )
     return rows
 
 

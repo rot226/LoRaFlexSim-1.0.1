@@ -10,25 +10,17 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     load_step2_aggregated,
     place_legend,
+    plot_metric_by_snir,
     save_figure,
 )
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, ax = plt.subplots()
-    algorithms = sorted({row["algo"] for row in rows})
-    for algo in algorithms:
-        points = {
-            row["density"]: row[metric_key]
-            for row in rows
-            if row["algo"] == algo
-        }
-        densities = sorted(points)
-        values = [points[density] for density in densities]
-        ax.plot(densities, values, marker="o", label=algo)
+    plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xlabel("Density")
     ax.set_ylabel("Mean Normalized Bitrate")
-    ax.set_title("Step 2 - Normalized Bitrate vs Density")
+    ax.set_title("Step 2 - Normalized Bitrate vs Density (SNIR on/off)")
     place_legend(ax)
     return fig
 
@@ -38,7 +30,6 @@ def main() -> None:
     article_dir = Path(__file__).resolve().parents[2]
     results_path = article_dir / "step2" / "results" / "aggregated_results.csv"
     rows = load_step2_aggregated(results_path)
-    rows = [row for row in rows if row["snir_mode"] == "snir_on"]
 
     fig = _plot_metric(rows, "bitrate_norm_mean")
     output_dir = article_dir / "step1" / "plots" / "output"
