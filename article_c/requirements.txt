@@ -1,2 +1,3 @@
-# Dépendances minimales pour les scripts de l'article C.
-# Ajouter ici les bibliothèques nécessaires (ex: numpy, pandas, matplotlib).
+numpy
+pandas
+matplotlib
