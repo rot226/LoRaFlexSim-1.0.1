@@ -25,6 +25,8 @@ PLOT_MODULES = {
         "article_c.step2.plots.plot_RL3",
         "article_c.step2.plots.plot_RL4",
         "article_c.step2.plots.plot_RL5",
+        "article_c.step2.plots.plot_RL6_cluster_outage_vs_density",
+        "article_c.step2.plots.plot_RL7_reward_vs_density",
     ],
 }
 
