@@ -10,6 +10,8 @@ from typing import Iterable, Sequence
 
 import numpy as np
 
+from article_c.common.config import DEFAULT_CONFIG
+
 
 def ensure_dir(path: Path) -> None:
     """Crée le dossier s'il n'existe pas."""
@@ -19,6 +21,7 @@ def ensure_dir(path: Path) -> None:
 def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI."""
     parser = argparse.ArgumentParser(description="Outils CLI pour l'article C.")
+    snir_defaults = DEFAULT_CONFIG.snir
     parser.add_argument("--seed", type=int, default=None, help="Seed déterministe.")
     parser.add_argument(
         "--densities",
@@ -36,6 +39,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--timestamp",
         action="store_true",
         help="Ajoute un timestamp dans les sorties.",
+    )
+    parser.add_argument(
+        "--snir-threshold-db",
+        type=float,
+        default=snir_defaults.snir_threshold_db,
+        help="Seuil SNIR/capture (dB).",
+    )
+    parser.add_argument(
+        "--noise-floor-dbm",
+        type=float,
+        default=snir_defaults.noise_floor_dbm,
+        help="Bruit thermique (dBm).",
     )
     return parser
 

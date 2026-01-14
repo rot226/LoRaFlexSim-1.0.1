@@ -27,6 +27,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour l'étape 1."""
     parser = argparse.ArgumentParser(description="Exécute l'étape 1 de l'article C.")
     scenario_defaults = DEFAULT_CONFIG.scenario
+    snir_defaults = DEFAULT_CONFIG.snir
     parser.add_argument(
         "--densities",
         type=str,
@@ -69,6 +70,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=float,
         default=float(scenario_defaults.duration_s),
         help="Durée de la simulation (secondes).",
+    )
+    parser.add_argument(
+        "--snir-threshold-db",
+        type=float,
+        default=snir_defaults.snir_threshold_db,
+        help="Seuil SNIR/capture (dB).",
+    )
+    parser.add_argument(
+        "--noise-floor-dbm",
+        type=float,
+        default=snir_defaults.noise_floor_dbm,
+        help="Bruit thermique (dBm).",
     )
     parser.add_argument(
         "--outdir",

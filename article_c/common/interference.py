@@ -18,6 +18,8 @@ class Signal:
     rssi_dbm: float
     sf: int
     channel_hz: int
+    start_time_s: float | None = None
+    end_time_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -39,13 +41,33 @@ def aggregate_interference(powers_dbm: Iterable[float]) -> float:
     return 10 * math.log10(total_linear) if total_linear > 0 else float("-inf")
 
 
+def _signals_overlap(first: Signal, second: Signal) -> bool:
+    """Indique si deux signaux se chevauchent temporellement."""
+
+    if (
+        first.start_time_s is None
+        or first.end_time_s is None
+        or second.start_time_s is None
+        or second.end_time_s is None
+    ):
+        return True
+    return not (
+        second.end_time_s <= first.start_time_s
+        or second.start_time_s >= first.end_time_s
+    )
+
+
 def co_sf_interferers(target: Signal, interferers: Iterable[Signal]) -> list[Signal]:
-    """Retourne les interférences co-SF sur le même canal que ``target``."""
+    """Retourne les interférences co-SF sur le même canal et en overlap temporel."""
 
     return [
         interferer
         for interferer in interferers
-        if interferer.sf == target.sf and interferer.channel_hz == target.channel_hz
+        if (
+            interferer.sf == target.sf
+            and interferer.channel_hz == target.channel_hz
+            and _signals_overlap(target, interferer)
+        )
     ]
 
 
@@ -114,8 +136,8 @@ def evaluate_reception(
     *,
     sensitivity_dbm: float,
     snir_enabled: bool = True,
-    capture_threshold_db: float = 1.0,
-    noise_dbm: float = -174.0,
+    snir_threshold_db: float = 1.0,
+    noise_floor_dbm: float = -174.0,
 ) -> InterferenceOutcome:
     """Évalue la réception avec ou sans SNIR et détecte un outage.
 
@@ -124,21 +146,31 @@ def evaluate_reception(
     """
 
     co_sf = co_sf_interferers(target, interferers)
-    interference_dbm = aggregate_interference([entry.rssi_dbm for entry in co_sf])
-    rssi_ok = target.rssi_dbm >= sensitivity_dbm
+    interferer_powers_dbm = [entry.rssi_dbm for entry in co_sf]
+    interference_dbm = aggregate_interference(interferer_powers_dbm)
+    effective_rssi_dbm = aggregate_interference([target.rssi_dbm, noise_floor_dbm])
+    rssi_ok = effective_rssi_dbm >= sensitivity_dbm
 
     snir_db = None
     snir_ok = True
+    capture_ok = True
     if snir_enabled:
         snir_db = compute_snir_db(
             signal_dbm=target.rssi_dbm,
-            interferers_dbm=[entry.rssi_dbm for entry in co_sf],
-            noise_dbm=noise_dbm,
+            interferers_dbm=interferer_powers_dbm,
+            noise_dbm=noise_floor_dbm,
         )
-        snir_ok = snir_db >= capture_threshold_db
+        snir_ok = snir_db >= snir_threshold_db
+        if interferer_powers_dbm:
+            capture_margin_db = target.rssi_dbm - max(interferer_powers_dbm)
+            capture_ok = capture_margin_db >= snir_threshold_db
 
-    success = rssi_ok if not snir_enabled else (rssi_ok and snir_ok)
-    outage = (not rssi_ok) or (snir_enabled and not snir_ok)
+    success = (
+        rssi_ok
+        if not snir_enabled
+        else (rssi_ok and snir_ok and capture_ok)
+    )
+    outage = (not rssi_ok) or (snir_enabled and (not snir_ok or not capture_ok))
 
     return InterferenceOutcome(
         success=success,
