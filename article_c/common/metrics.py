@@ -1,6 +1,29 @@
-"""Calcul de métriques (placeholder)."""
+"""Calcul de métriques pour les simulations."""
+
+from collections.abc import Iterable
 
 
-def packet_delivery_ratio(received: int, sent: int) -> float:
+def packet_delivery_ratio(rx_success: int, tx_total: int) -> float:
     """Calcule le PDR."""
-    return received / sent if sent else 0.0
+    return rx_success / tx_total if tx_total else 0.0
+
+
+def goodput_bps(payload_bits_success: int, duration_s: float) -> float:
+    """Calcule le goodput en bps."""
+    return payload_bits_success / duration_s if duration_s else 0.0
+
+
+def collision_rate(collisions: int, tx_total: int) -> float:
+    """Calcule le taux de collision."""
+    return collisions / tx_total if tx_total else 0.0
+
+
+def outage_probability(outage_events: int, tx_total: int) -> float:
+    """Calcule la probabilité d'outage."""
+    return outage_events / tx_total if tx_total else 0.0
+
+
+def energy_per_success_bit(energy_tx: Iterable[float], payload_bits_success: int) -> float:
+    """Calcule l'énergie par bit correctement reçu."""
+    total_energy = sum(energy_tx)
+    return total_energy / payload_bits_success if payload_bits_success else 0.0
