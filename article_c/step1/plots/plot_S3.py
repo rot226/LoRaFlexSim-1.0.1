@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 from article_c.common.plot_helpers import (
     apply_plot_style,
+    filter_cluster,
     load_step1_aggregated,
     place_legend,
     plot_metric_by_snir,
@@ -29,7 +30,7 @@ def main() -> None:
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "aggregated_results.csv"
-    rows = load_step1_aggregated(results_path)
+    rows = filter_cluster(load_step1_aggregated(results_path), "all")
 
     fig = _plot_metric(rows, "received_mean")
     output_dir = step_dir / "plots" / "output"

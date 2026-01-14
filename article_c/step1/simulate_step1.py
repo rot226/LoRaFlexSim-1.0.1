@@ -12,7 +12,7 @@ import random
 from typing import Iterable
 
 from article_c.common.metrics import packet_delivery_ratio
-from article_c.common.utils import generate_traffic_times
+from article_c.common.utils import assign_clusters, generate_traffic_times
 
 SF_VALUES = [7, 8, 9, 10, 11, 12]
 SNR_THRESHOLDS = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
@@ -42,6 +42,8 @@ class NodeLink:
 class Step1Result:
     sent: int
     received: int
+    node_clusters: list[str]
+    node_received: list[bool]
 
     @property
     def pdr(self) -> float:
@@ -129,19 +131,24 @@ def _mixra_opt_assign(nodes: Iterable[NodeLink]) -> list[int]:
     return assignments
 
 
-def _estimate_received(assignments: Iterable[int]) -> int:
-    """Approxime les collisions en pénalisant les SF surchargés."""
+def _estimate_received(assignments: Iterable[int], rng: random.Random) -> list[bool]:
+    """Approxime les collisions et simule les succès par nœud."""
     loads = {sf: 0 for sf in SF_VALUES}
-    for sf in assignments:
+    assignments_list = list(assignments)
+    for sf in assignments_list:
         loads[sf] += 1
     capacity_per_sf = 25
-    delivered = 0
+    success_prob_by_sf: dict[int, float] = {}
     for sf, load in loads.items():
+        if load <= 0:
+            success_prob_by_sf[sf] = 0.0
+            continue
         if load <= capacity_per_sf:
-            delivered += load
+            delivered = load
         else:
-            delivered += int(capacity_per_sf + (load - capacity_per_sf) * 0.5)
-    return delivered
+            delivered = capacity_per_sf + (load - capacity_per_sf) * 0.5
+        success_prob_by_sf[sf] = max(0.0, min(1.0, delivered / load))
+    return [rng.random() < success_prob_by_sf[sf] for sf in assignments_list]
 
 
 def _generate_nodes(count: int, seed: int) -> list[NodeLink]:
@@ -186,5 +193,12 @@ def run_simulation(
         assignments = _mixra_opt_assign(nodes)
     else:
         raise ValueError(f"Algorithme inconnu: {algorithm}")
-    received = _estimate_received(assignments)
-    return Step1Result(sent=actual_sent, received=received)
+    node_received = _estimate_received(assignments, rng)
+    node_clusters = assign_clusters(actual_sent, rng=rng)
+    received = sum(1 for value in node_received if value)
+    return Step1Result(
+        sent=actual_sent,
+        received=received,
+        node_clusters=node_clusters,
+        node_received=node_received,
+    )

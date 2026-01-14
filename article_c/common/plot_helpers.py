@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 
 from article_c.common.plotting_style import PLOT_STYLE
 from article_c.common.utils import ensure_dir
+from article_c.common.config import DEFAULT_CONFIG
 
 ALGO_LABELS = {
     "adr": "ADR",
@@ -72,6 +73,7 @@ def load_step1_aggregated(path: Path) -> list[dict[str, object]]:
                 "density": _to_float(row.get("density")),
                 "algo": row.get("algo", ""),
                 "snir_mode": row.get("snir_mode", ""),
+                "cluster": row.get("cluster", "all"),
                 "pdr_mean": _to_float(row.get("pdr_mean")),
                 "sent_mean": _to_float(row.get("sent_mean")),
                 "received_mean": _to_float(row.get("received_mean")),
@@ -91,6 +93,7 @@ def load_step2_aggregated(path: Path) -> list[dict[str, object]]:
                 "density": _to_float(row.get("density")),
                 "algo": row.get("algo", ""),
                 "snir_mode": row.get("snir_mode", ""),
+                "cluster": row.get("cluster", "all"),
                 "success_rate_mean": _to_float(row.get("success_rate_mean")),
                 "bitrate_norm_mean": _to_float(row.get("bitrate_norm_mean")),
                 "energy_norm_mean": _to_float(row.get("energy_norm_mean")),
@@ -124,6 +127,12 @@ def algo_label(algo: str) -> str:
     return ALGO_LABELS.get(algo, algo)
 
 
+def filter_cluster(rows: list[dict[str, object]], cluster: str) -> list[dict[str, object]]:
+    if any("cluster" in row for row in rows):
+        return [row for row in rows if row.get("cluster") == cluster]
+    return rows
+
+
 def plot_metric_by_snir(
     ax: plt.Axes,
     rows: list[dict[str, object]],
@@ -155,49 +164,59 @@ def plot_metric_by_snir(
 def _sample_step1_rows() -> list[dict[str, object]]:
     densities = [0.1, 0.5, 1.0]
     algos = ["adr", "mixra_h", "mixra_opt"]
+    clusters = list(DEFAULT_CONFIG.qos.clusters) + ["all"]
     rows: list[dict[str, object]] = []
     for snir_mode in ("snir_on", "snir_off"):
         for algo in algos:
             for idx, density in enumerate(densities):
-                base = 0.9 - 0.1 * idx
-                penalty = 0.05 if snir_mode == "snir_off" else 0.0
-                modifier = 0.02 * algos.index(algo)
-                pdr = max(0.0, min(1.0, base - penalty + modifier))
-                rows.append(
-                    {
-                        "density": density,
-                        "algo": algo,
-                        "snir_mode": snir_mode,
-                        "pdr_mean": pdr,
-                        "sent_mean": 120 * density,
-                        "received_mean": 120 * density * pdr,
-                    }
-                )
+                for cluster in clusters:
+                    base = 0.9 - 0.1 * idx
+                    penalty = 0.05 if snir_mode == "snir_off" else 0.0
+                    modifier = 0.02 * algos.index(algo)
+                    cluster_bonus = 0.02 if cluster == "gold" else 0.0
+                    pdr = max(
+                        0.0, min(1.0, base - penalty + modifier + cluster_bonus)
+                    )
+                    rows.append(
+                        {
+                            "density": density,
+                            "algo": algo,
+                            "snir_mode": snir_mode,
+                            "cluster": cluster,
+                            "pdr_mean": pdr,
+                            "sent_mean": 120 * density,
+                            "received_mean": 120 * density * pdr,
+                        }
+                    )
     return rows
 
 
 def _sample_step2_rows() -> list[dict[str, object]]:
     densities = [0.5, 1.0, 1.5]
     algos = ["ADR", "MixRA-H", "MixRA-Opt", "UCB1-SF"]
+    clusters = list(DEFAULT_CONFIG.qos.clusters) + ["all"]
     rows: list[dict[str, object]] = []
     for snir_mode in SNIR_MODES:
         for algo_idx, algo in enumerate(algos):
             for density in densities:
-                reward = max(0.2, 0.7 - 0.05 * algo_idx - 0.1 * (density - 0.5))
-                penalty = 0.05 if snir_mode == "snir_off" else 0.0
-                rows.append(
-                    {
-                        "density": density,
-                        "algo": algo,
-                        "snir_mode": snir_mode,
-                        "success_rate_mean": max(
-                            0.3, 0.9 - 0.05 * algo_idx - penalty
-                        ),
-                        "bitrate_norm_mean": 0.4 + 0.1 * algo_idx - penalty,
-                        "energy_norm_mean": 0.3 + 0.1 * algo_idx + penalty,
-                        "reward_mean": reward - penalty,
-                    }
-                )
+                for cluster in clusters:
+                    reward = max(0.2, 0.7 - 0.05 * algo_idx - 0.1 * (density - 0.5))
+                    penalty = 0.05 if snir_mode == "snir_off" else 0.0
+                    cluster_bonus = 0.03 if cluster == "gold" else 0.0
+                    rows.append(
+                        {
+                            "density": density,
+                            "algo": algo,
+                            "snir_mode": snir_mode,
+                            "cluster": cluster,
+                            "success_rate_mean": max(
+                                0.3, 0.9 - 0.05 * algo_idx - penalty + cluster_bonus
+                            ),
+                            "bitrate_norm_mean": 0.4 + 0.1 * algo_idx - penalty,
+                            "energy_norm_mean": 0.3 + 0.1 * algo_idx + penalty,
+                            "reward_mean": reward - penalty + cluster_bonus,
+                        }
+                    )
     return rows
 
 

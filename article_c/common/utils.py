@@ -131,3 +131,29 @@ def generate_traffic_times(
         times = sorted(jittered)
 
     return times
+
+
+def assign_clusters(
+    count: int,
+    *,
+    rng: random.Random | None = None,
+    clusters: Sequence[str] | None = None,
+    proportions: Sequence[float] | None = None,
+) -> list[str]:
+    """Attribue un cluster à chaque nœud selon des proportions configurables."""
+
+    if count <= 0:
+        return []
+    generator = rng or random
+    if clusters is None:
+        clusters = DEFAULT_CONFIG.qos.clusters
+    if proportions is None:
+        proportions = DEFAULT_CONFIG.qos.proportions
+    if len(clusters) != len(proportions):
+        raise ValueError("La liste des clusters doit correspondre aux proportions.")
+    total = sum(float(value) for value in proportions)
+    if total <= 0:
+        weights = [1.0 for _ in clusters]
+    else:
+        weights = [float(value) for value in proportions]
+    return generator.choices(list(clusters), weights=weights, k=count)
