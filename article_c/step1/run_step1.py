@@ -1,18 +1,97 @@
 """Point d'entrée pour l'étape 1."""
 
+from __future__ import annotations
+
+import argparse
 from pathlib import Path
 
-from article_c.common.csv_io import write_rows
-from article_c.common.utils import ensure_dir
+from article_c.common.csv_io import write_simulation_results
+from article_c.common.utils import parse_density_list, replication_ids, set_deterministic_seed
 from article_c.step1.simulate_step1 import run_simulation
 
+ALGORITHMS = ("adr", "mixra_h", "mixra_opt")
 
-def main() -> None:
-    result = run_simulation()
-    results_dir = Path(__file__).resolve().parent / "results"
-    ensure_dir(results_dir)
-    output_path = results_dir / "step1_summary.csv"
-    write_rows(output_path, ["sent", "received", "pdr"], [[result.sent, result.received, result.pdr]])
+
+def density_to_sent(density: float, base_sent: int = 120) -> int:
+    """Convertit une densité en nombre de trames simulées."""
+    return max(1, int(round(base_sent * density)))
+
+
+def parse_snir_modes(value: str) -> list[str]:
+    """Parse la liste des modes SNIR depuis une chaîne CSV."""
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Construit le parseur d'arguments CLI pour l'étape 1."""
+    parser = argparse.ArgumentParser(description="Exécute l'étape 1 de l'article C.")
+    parser.add_argument(
+        "--densities",
+        type=str,
+        default="0.1,0.5,1.0",
+        help="Liste des densités (ex: 0.1,0.5,1.0).",
+    )
+    parser.add_argument(
+        "--replications",
+        type=int,
+        default=5,
+        help="Nombre de réplications par configuration.",
+    )
+    parser.add_argument(
+        "--seeds_base",
+        type=int,
+        default=1000,
+        help="Seed de base pour les réplications.",
+    )
+    parser.add_argument(
+        "--snir_modes",
+        type=str,
+        default="snir_on,snir_off",
+        help="Liste des modes SNIR (ex: snir_on,snir_off).",
+    )
+    parser.add_argument(
+        "--outdir",
+        type=str,
+        default=str(Path(__file__).resolve().parent / "results"),
+        help="Répertoire de sortie des CSV.",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+
+    densities = parse_density_list(args.densities)
+    snir_modes = parse_snir_modes(args.snir_modes)
+    replications = replication_ids(args.replications)
+    output_dir = Path(args.outdir)
+
+    raw_rows: list[dict[str, object]] = []
+    run_index = 0
+    for density in densities:
+        for algo in ALGORITHMS:
+            for snir_mode in snir_modes:
+                for replication in replications:
+                    seed = args.seeds_base + run_index
+                    run_index += 1
+                    set_deterministic_seed(seed)
+                    sent = density_to_sent(density)
+                    result = run_simulation(sent=sent, algorithm=algo, seed=seed)
+                    raw_rows.append(
+                        {
+                            "density": density,
+                            "algo": algo,
+                            "snir_mode": snir_mode,
+                            "replication": replication,
+                            "seed": seed,
+                            "sent": result.sent,
+                            "received": result.received,
+                            "pdr": result.pdr,
+                        }
+                    )
+
+    write_simulation_results(output_dir, raw_rows)
 
 
 if __name__ == "__main__":

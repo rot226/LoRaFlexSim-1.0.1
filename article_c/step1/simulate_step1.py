@@ -13,6 +13,16 @@ from typing import Iterable
 
 from article_c.common.metrics import packet_delivery_ratio
 
+SF_VALUES = [7, 8, 9, 10, 11, 12]
+SNR_THRESHOLDS = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
+RSSI_THRESHOLDS = {7: -123.0, 8: -126.0, 9: -129.0, 10: -132.0, 11: -134.0, 12: -137.0}
+
+
+@dataclass
+class NodeLink:
+    snr: float
+    rssi: float
+
 
 SF_VALUES = (7, 8, 9, 10, 11, 12)
 
