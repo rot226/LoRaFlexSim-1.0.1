@@ -22,12 +22,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI."""
     parser = argparse.ArgumentParser(description="Outils CLI pour l'article C.")
     snir_defaults = DEFAULT_CONFIG.snir
-    parser.add_argument("--seed", type=int, default=None, help="Seed déterministe.")
+    parser.add_argument(
+        "--seeds_base",
+        type=int,
+        default=None,
+        help="Seed de base déterministe.",
+    )
+    parser.add_argument(
+        "--seed",
+        dest="seeds_base",
+        type=int,
+        default=argparse.SUPPRESS,
+        help="Alias de --seeds_base (déprécié).",
+    )
     parser.add_argument(
         "--densities",
-        type=str,
-        default="0.1,0.5,1.0",
-        help="Liste des densités (ex: 0.1,0.5,1.0).",
+        type=float,
+        nargs="+",
+        default=[0.1, 0.5, 1.0],
+        help="Liste des densités (ex: 0.1 0.5 1.0).",
     )
     parser.add_argument(
         "--replications",
@@ -70,9 +83,11 @@ def set_deterministic_seed(seed: int | None) -> int:
     return seed
 
 
-def parse_density_list(value: str) -> list[float]:
-    """Parse une liste de densités depuis une chaîne CSV."""
-    return [float(item.strip()) for item in value.split(",") if item.strip()]
+def parse_density_list(value: str | Sequence[float]) -> list[float]:
+    """Parse une liste de densités depuis une chaîne CSV ou une séquence."""
+    if isinstance(value, str):
+        return [float(item.strip()) for item in value.split(",") if item.strip()]
+    return [float(item) for item in value]
 
 
 def replication_ids(count: int) -> list[int]:

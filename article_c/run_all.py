@@ -15,9 +15,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--densities",
-        type=str,
+        type=float,
+        nargs="+",
         default=None,
-        help="Liste des densités (ex: 0.1,0.5,1.0).",
+        help="Liste des densités (ex: 0.1 0.5 1.0).",
     )
     parser.add_argument(
         "--replications",
@@ -26,10 +27,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Nombre de réplications par configuration.",
     )
     parser.add_argument(
-        "--seed",
+        "--seeds_base",
         type=int,
         default=None,
         help="Seed de base commune aux étapes 1 et 2.",
+    )
+    parser.add_argument(
+        "--seed",
+        dest="seeds_base",
+        type=int,
+        default=argparse.SUPPRESS,
+        help="Alias de --seeds_base (déprécié).",
     )
     parser.add_argument(
         "--snir_modes",
@@ -66,11 +74,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def _build_step1_args(args: argparse.Namespace) -> list[str]:
     step1_args: list[str] = []
     if args.densities:
-        step1_args.extend(["--densities", args.densities])
+        step1_args.append("--densities")
+        step1_args.extend([str(density) for density in args.densities])
     if args.replications is not None:
         step1_args.extend(["--replications", str(args.replications)])
-    if args.seed is not None:
-        step1_args.extend(["--seeds_base", str(args.seed)])
+    if args.seeds_base is not None:
+        step1_args.extend(["--seeds_base", str(args.seeds_base)])
     if args.snir_modes:
         step1_args.extend(["--snir_modes", args.snir_modes])
     if args.snir_threshold_db is not None:
@@ -85,11 +94,12 @@ def _build_step1_args(args: argparse.Namespace) -> list[str]:
 def _build_step2_args(args: argparse.Namespace) -> list[str]:
     step2_args: list[str] = []
     if args.densities:
-        step2_args.extend(["--densities", args.densities])
+        step2_args.append("--densities")
+        step2_args.extend([str(density) for density in args.densities])
     if args.replications is not None:
         step2_args.extend(["--replications", str(args.replications)])
-    if args.seed is not None:
-        step2_args.extend(["--seed", str(args.seed)])
+    if args.seeds_base is not None:
+        step2_args.extend(["--seeds_base", str(args.seeds_base)])
     if args.timestamp:
         step2_args.append("--timestamp")
     if args.snir_threshold_db is not None:

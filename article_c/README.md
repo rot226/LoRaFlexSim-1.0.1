@@ -51,13 +51,13 @@ python article_c/run_all.py
 Exécuter uniquement l'étape 1 :
 
 ```powershell
-python article_c/step1/run_step1.py --densities 0.1,0.5,1.0 --replications 5 --seeds_base 1000 --snir_modes snir_on,snir_off
+python article_c/step1/run_step1.py --densities 0.1 0.5 1.0 --replications 5 --seeds_base 1000 --snir_modes snir_on,snir_off
 ```
 
 Exécuter uniquement l'étape 2 :
 
 ```powershell
-python article_c/step2/run_step2.py --densities 0.1,0.5,1.0 --replications 5 --seed 1000
+python article_c/step2/run_step2.py --densities 0.1 0.5 1.0 --replications 5 --seeds_base 1000
 ```
 
 Générer toutes les figures :
@@ -68,7 +68,7 @@ python article_c/make_all_plots.py
 
 ## Seeds et réplications
 
-- **Seeds** : l'étape 1 utilise `--seeds_base` et incrémente le seed à chaque exécution; l'étape 2 utilise `--seed` pour initialiser un seed de base déterministe.
+- **Seeds** : l'étape 1 et l'étape 2 utilisent `--seeds_base` (ex: `--densities 1000 2000 --replications 2 --seeds_base 123`) pour initialiser un seed de base déterministe, puis incrémentent en interne.
 - **Réplications** : `--replications` définit le nombre de répétitions par configuration (densité/algorithme/mode SNIR).
 
 Les résultats sont écrits dans `article_c/step*/results/` et les figures dans `article_c/step*/plots/output/`.

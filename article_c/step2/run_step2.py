@@ -38,7 +38,7 @@ def _aggregate_selection_probs(
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_cli_args(argv)
-    base_seed = set_deterministic_seed(args.seed)
+    base_seed = set_deterministic_seed(args.seeds_base)
     densities = parse_density_list(args.densities)
     replications = replication_ids(args.replications)
     snir_mode = "snir_on"
