@@ -11,7 +11,7 @@ from typing import Literal
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.csv_io import write_rows, write_simulation_results
 from article_c.common.lora_phy import bitrate_lora, coding_rate_to_cr, compute_airtime
-from article_c.common.utils import assign_clusters
+from article_c.common.utils import assign_clusters, generate_traffic_times
 from article_c.step2.bandit_ucb1 import BanditUCB1
 
 
@@ -50,13 +50,17 @@ def _simulate_window_metrics(
     rng: random.Random,
     arm_index: int,
     window_size: int,
+    traffic_sent: int,
     bitrate_norm: float,
     energy_norm: float,
+    desync_factor: float,
 ) -> WindowMetrics:
     base_success = 0.9 - 0.08 * arm_index
-    success_prob = _clip(base_success + rng.uniform(-0.05, 0.05), 0.1, 0.95)
-    successes = sum(rng.random() < success_prob for _ in range(window_size))
-    success_rate = successes / window_size
+    traffic_load = traffic_sent / max(1, window_size)
+    penalty = 0.08 * max(0.0, traffic_load - 1.0) * desync_factor
+    success_prob = _clip(base_success - penalty + rng.uniform(-0.05, 0.05), 0.05, 0.95)
+    successes = sum(rng.random() < success_prob for _ in range(traffic_sent))
+    success_rate = successes / traffic_sent if traffic_sent > 0 else 0.0
     energy_norm = _clip(energy_norm + rng.uniform(-0.05, 0.05), 0.0, 1.0)
     return WindowMetrics(
         success_rate=success_rate,
@@ -102,16 +106,64 @@ def run_simulation(
     density: float | None = None,
     snir_mode: str = "snir_on",
     seed: int = 42,
+    traffic_mode: str | None = None,
+    jitter_range_s: float | None = None,
+    window_duration_s: float | None = None,
+    traffic_coeff_min: float | None = None,
+    traffic_coeff_max: float | None = None,
+    traffic_coeff_enabled: bool | None = None,
+    window_delay_enabled: bool | None = None,
+    window_delay_range_s: float | None = None,
     output_dir: Path | None = None,
 ) -> Step2Result:
     """Exécute une simulation proxy de l'étape 2."""
     rng = random.Random(seed)
+    step2_defaults = DEFAULT_CONFIG.step2
+    traffic_mode_value = traffic_mode or step2_defaults.traffic_mode
+    jitter_range_value = (
+        step2_defaults.jitter_range_s if jitter_range_s is None else jitter_range_s
+    )
+    window_duration_value = (
+        step2_defaults.window_duration_s if window_duration_s is None else window_duration_s
+    )
+    traffic_coeff_min_value = (
+        step2_defaults.traffic_coeff_min if traffic_coeff_min is None else traffic_coeff_min
+    )
+    traffic_coeff_max_value = (
+        step2_defaults.traffic_coeff_max if traffic_coeff_max is None else traffic_coeff_max
+    )
+    if traffic_coeff_min_value > traffic_coeff_max_value:
+        traffic_coeff_min_value, traffic_coeff_max_value = (
+            traffic_coeff_max_value,
+            traffic_coeff_min_value,
+        )
+    traffic_coeff_enabled_value = (
+        step2_defaults.traffic_coeff_enabled
+        if traffic_coeff_enabled is None
+        else traffic_coeff_enabled
+    )
+    window_delay_enabled_value = (
+        step2_defaults.window_delay_enabled
+        if window_delay_enabled is None
+        else window_delay_enabled
+    )
+    window_delay_range_value = (
+        step2_defaults.window_delay_range_s
+        if window_delay_range_s is None
+        else window_delay_range_s
+    )
     density_value = density if density is not None else n_nodes
     algo_label = _algo_label(algorithm)
     raw_rows: list[dict[str, object]] = []
     selection_prob_rows: list[dict[str, object]] = []
     learning_curve_rows: list[dict[str, object]] = []
     node_clusters = assign_clusters(n_nodes, rng=rng)
+    traffic_coeffs = [
+        rng.uniform(traffic_coeff_min_value, traffic_coeff_max_value)
+        if traffic_coeff_enabled_value
+        else 1.0
+        for _ in range(n_nodes)
+    ]
 
     sf_values = list(SF_VALUES)
     if n_arms is None:
@@ -143,17 +195,47 @@ def run_simulation(
 
     if algorithm == "ucb1_sf":
         bandit = BanditUCB1(n_arms=n_arms)
+        window_start_s = 0.0
         for round_id in range(n_rounds):
             arm_index = bandit.select_arm()
             window_rewards: list[float] = []
+            if round_id > 0:
+                delay_s = (
+                    rng.uniform(0.0, window_delay_range_value)
+                    if window_delay_enabled_value
+                    else 0.0
+                )
+                window_start_s += window_duration_value + delay_s
             for node_id in range(n_nodes):
                 sf_value = sf_values[arm_index]
+                traffic_sent = max(1, int(round(window_size * traffic_coeffs[node_id])))
+                traffic_times = generate_traffic_times(
+                    traffic_sent,
+                    duration_s=window_duration_value,
+                    traffic_mode=traffic_mode_value,
+                    jitter_range_s=jitter_range_value,
+                    rng=rng,
+                )
+                traffic_sent = len(traffic_times)
+                node_offset_s = (
+                    rng.uniform(0.0, window_delay_range_value)
+                    if window_delay_enabled_value and window_delay_range_value > 0
+                    else 0.0
+                )
+                desync_factor = (
+                    1.0
+                    - 0.2 * (node_offset_s / window_delay_range_value)
+                    if window_delay_enabled_value and window_delay_range_value > 0
+                    else 1.0
+                )
                 metrics = _simulate_window_metrics(
                     rng,
                     arm_index,
                     window_size,
+                    traffic_sent,
                     bitrate_norm_by_sf[sf_value],
                     energy_norm_by_sf[sf_value],
+                    desync_factor,
                 )
                 reward = _compute_reward(
                     metrics.success_rate,
@@ -171,6 +253,10 @@ def run_simulation(
                         "round": round_id,
                         "node_id": node_id,
                         "sf": sf_values[arm_index],
+                        "window_start_s": window_start_s,
+                        "node_offset_s": node_offset_s,
+                        "traffic_coeff": traffic_coeffs[node_id],
+                        "traffic_sent": traffic_sent,
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
@@ -186,6 +272,10 @@ def run_simulation(
                         "round": round_id,
                         "node_id": node_id,
                         "sf": sf_values[arm_index],
+                        "window_start_s": window_start_s,
+                        "node_offset_s": node_offset_s,
+                        "traffic_coeff": traffic_coeffs[node_id],
+                        "traffic_sent": traffic_sent,
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
@@ -218,20 +308,50 @@ def run_simulation(
                 )
     elif algorithm in {"adr", "mixra_h", "mixra_opt"}:
         weights = _weights_for_algo(algorithm, n_arms)
+        window_start_s = 0.0
         for round_id in range(n_rounds):
             window_rewards: list[float] = []
+            if round_id > 0:
+                delay_s = (
+                    rng.uniform(0.0, window_delay_range_value)
+                    if window_delay_enabled_value
+                    else 0.0
+                )
+                window_start_s += window_duration_value + delay_s
             for node_id in range(n_nodes):
                 if algorithm == "adr":
                     arm_index = 0
                 else:
                     arm_index = rng.choices(range(n_arms), weights=weights, k=1)[0]
                 sf_value = sf_values[arm_index]
+                traffic_sent = max(1, int(round(window_size * traffic_coeffs[node_id])))
+                traffic_times = generate_traffic_times(
+                    traffic_sent,
+                    duration_s=window_duration_value,
+                    traffic_mode=traffic_mode_value,
+                    jitter_range_s=jitter_range_value,
+                    rng=rng,
+                )
+                traffic_sent = len(traffic_times)
+                node_offset_s = (
+                    rng.uniform(0.0, window_delay_range_value)
+                    if window_delay_enabled_value and window_delay_range_value > 0
+                    else 0.0
+                )
+                desync_factor = (
+                    1.0
+                    - 0.2 * (node_offset_s / window_delay_range_value)
+                    if window_delay_enabled_value and window_delay_range_value > 0
+                    else 1.0
+                )
                 metrics = _simulate_window_metrics(
                     rng,
                     arm_index,
                     window_size,
+                    traffic_sent,
                     bitrate_norm_by_sf[sf_value],
                     energy_norm_by_sf[sf_value],
+                    desync_factor,
                 )
                 reward = _compute_reward(
                     metrics.success_rate,
@@ -249,6 +369,10 @@ def run_simulation(
                         "round": round_id,
                         "node_id": node_id,
                         "sf": sf_values[arm_index],
+                        "window_start_s": window_start_s,
+                        "node_offset_s": node_offset_s,
+                        "traffic_coeff": traffic_coeffs[node_id],
+                        "traffic_sent": traffic_sent,
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
@@ -264,6 +388,10 @@ def run_simulation(
                         "round": round_id,
                         "node_id": node_id,
                         "sf": sf_values[arm_index],
+                        "window_start_s": window_start_s,
+                        "node_offset_s": node_offset_s,
+                        "traffic_coeff": traffic_coeffs[node_id],
+                        "traffic_sent": traffic_sent,
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,

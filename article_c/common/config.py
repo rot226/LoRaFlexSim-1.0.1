@@ -31,6 +31,7 @@ class ScenarioConfig:
     duration_s: int = 3600
     payload_bytes: int = 20
     shadowing_sigma_db: float = 0.0
+    shadowing_mean_db: float = 0.0
     traffic_mode: str = "periodic"
     jitter_range: float = 5.0
 
@@ -62,6 +63,20 @@ class RLConfig:
 
 
 @dataclass(frozen=True)
+class Step2Config:
+    """Paramètres spécifiques à l'étape 2."""
+
+    traffic_mode: str = "poisson"
+    jitter_range_s: float = 15.0
+    window_duration_s: float = 60.0
+    traffic_coeff_min: float = 0.7
+    traffic_coeff_max: float = 1.3
+    traffic_coeff_enabled: bool = True
+    window_delay_enabled: bool = True
+    window_delay_range_s: float = 5.0
+
+
+@dataclass(frozen=True)
 class AppConfig:
     """Configuration agrégée."""
 
@@ -73,6 +88,7 @@ class AppConfig:
     snir: SNIRConfig = field(default_factory=SNIRConfig)
     qos: QoSConfig = field(default_factory=QoSConfig)
     rl: RLConfig = field(default_factory=RLConfig)
+    step2: Step2Config = field(default_factory=Step2Config)
 
 
 DEFAULT_CONFIG = AppConfig()

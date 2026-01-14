@@ -92,6 +92,7 @@ def apply_fading_to_signal(
     *,
     fading_type: str | None = None,
     fading_sigma_db: float = 0.0,
+    fading_mean_db: float = 0.0,
     rng: random.Random | None = None,
 ) -> Signal:
     """Applique un fading en dB au RSSI d'un signal."""
@@ -100,6 +101,7 @@ def apply_fading_to_signal(
     fading_db = sample_fading_db(
         fading_type,
         sigma_db=fading_sigma_db,
+        mean_db=fading_mean_db,
         rng=generator,
     )
     return Signal(
@@ -114,6 +116,7 @@ def apply_fading_to_signals(
     *,
     fading_type: str | None = None,
     fading_sigma_db: float = 0.0,
+    fading_mean_db: float = 0.0,
     rng: random.Random | None = None,
 ) -> list[Signal]:
     """Applique un fading à une liste de signaux."""
@@ -124,6 +127,7 @@ def apply_fading_to_signals(
             signal,
             fading_type=fading_type,
             fading_sigma_db=fading_sigma_db,
+            fading_mean_db=fading_mean_db,
             rng=generator,
         )
         for signal in signals
