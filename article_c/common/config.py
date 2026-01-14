@@ -30,7 +30,9 @@ class ScenarioConfig:
     radius_m: int = 1000
     duration_s: int = 3600
     payload_bytes: int = 20
-    traffic_model: str = "poisson"
+    shadowing_sigma_db: float = 0.0
+    traffic_mode: str = "periodic"
+    jitter_range: float = 5.0
 
 
 @dataclass(frozen=True)

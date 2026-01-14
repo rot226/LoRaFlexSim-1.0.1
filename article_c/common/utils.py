@@ -74,3 +74,45 @@ def timestamp_tag(with_timezone: bool = True) -> str:
 def flatten(values: Iterable[Sequence[float]]) -> list[float]:
     """Aplatit une liste de séquences numériques."""
     return [item for sequence in values for item in sequence]
+
+
+def generate_traffic_times(
+    sent: int,
+    *,
+    duration_s: float,
+    traffic_mode: str,
+    jitter_range_s: float,
+    rng: random.Random | None = None,
+) -> list[float]:
+    """Génère des instants de transmission périodiques ou poisson."""
+
+    if sent <= 0:
+        return []
+    if duration_s <= 0:
+        raise ValueError("duration_s doit être positif")
+
+    generator = rng or random
+    base_period = duration_s / sent
+    mode = traffic_mode.lower()
+    times: list[float] = []
+    if mode == "periodic":
+        times = [idx * base_period for idx in range(sent)]
+    elif mode == "poisson":
+        current = 0.0
+        while current < duration_s:
+            current += generator.expovariate(1.0 / base_period)
+            if current < duration_s:
+                times.append(current)
+    else:
+        raise ValueError(f"traffic_mode inconnu: {traffic_mode}")
+
+    if jitter_range_s > 0:
+        jittered: list[float] = []
+        for t in times:
+            jitter = generator.uniform(-jitter_range_s, jitter_range_s)
+            candidate = t + jitter
+            if 0 <= candidate <= duration_s:
+                jittered.append(candidate)
+        times = sorted(jittered)
+
+    return times

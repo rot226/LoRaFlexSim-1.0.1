@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.csv_io import write_simulation_results
 from article_c.common.utils import parse_density_list, replication_ids, set_deterministic_seed
 from article_c.step1.simulate_step1 import run_simulation
@@ -25,6 +26,7 @@ def parse_snir_modes(value: str) -> list[str]:
 def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour l'étape 1."""
     parser = argparse.ArgumentParser(description="Exécute l'étape 1 de l'article C.")
+    scenario_defaults = DEFAULT_CONFIG.scenario
     parser.add_argument(
         "--densities",
         type=str,
@@ -48,6 +50,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default="snir_on,snir_off",
         help="Liste des modes SNIR (ex: snir_on,snir_off).",
+    )
+    parser.add_argument(
+        "--traffic-mode",
+        type=str,
+        default=scenario_defaults.traffic_mode,
+        choices=("periodic", "poisson"),
+        help="Modèle de trafic (periodic ou poisson).",
+    )
+    parser.add_argument(
+        "--jitter-range",
+        type=float,
+        default=scenario_defaults.jitter_range,
+        help="Amplitude du jitter (secondes).",
+    )
+    parser.add_argument(
+        "--duration-s",
+        type=float,
+        default=float(scenario_defaults.duration_s),
+        help="Durée de la simulation (secondes).",
     )
     parser.add_argument(
         "--outdir",
@@ -77,7 +98,14 @@ def main(argv: list[str] | None = None) -> None:
                     run_index += 1
                     set_deterministic_seed(seed)
                     sent = density_to_sent(density)
-                    result = run_simulation(sent=sent, algorithm=algo, seed=seed)
+                    result = run_simulation(
+                        sent=sent,
+                        algorithm=algo,
+                        seed=seed,
+                        duration_s=args.duration_s,
+                        traffic_mode=args.traffic_mode,
+                        jitter_range_s=args.jitter_range,
+                    )
                     raw_rows.append(
                         {
                             "density": density,

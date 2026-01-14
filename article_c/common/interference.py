@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from typing import Iterable, Sequence
 
 import math
+import random
+
+from article_c.common.propagation import sample_fading_db
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,49 @@ def compute_snir_db(
     if denominator <= 0:
         return float("inf")
     return 10 * math.log10(signal_linear / denominator)
+
+
+def apply_fading_to_signal(
+    signal: Signal,
+    *,
+    fading_type: str | None = None,
+    fading_sigma_db: float = 0.0,
+    rng: random.Random | None = None,
+) -> Signal:
+    """Applique un fading en dB au RSSI d'un signal."""
+
+    generator = rng or random
+    fading_db = sample_fading_db(
+        fading_type,
+        sigma_db=fading_sigma_db,
+        rng=generator,
+    )
+    return Signal(
+        rssi_dbm=signal.rssi_dbm - fading_db,
+        sf=signal.sf,
+        channel_hz=signal.channel_hz,
+    )
+
+
+def apply_fading_to_signals(
+    signals: Iterable[Signal],
+    *,
+    fading_type: str | None = None,
+    fading_sigma_db: float = 0.0,
+    rng: random.Random | None = None,
+) -> list[Signal]:
+    """Applique un fading à une liste de signaux."""
+
+    generator = rng or random
+    return [
+        apply_fading_to_signal(
+            signal,
+            fading_type=fading_type,
+            fading_sigma_db=fading_sigma_db,
+            rng=generator,
+        )
+        for signal in signals
+    ]
 
 
 def evaluate_reception(
