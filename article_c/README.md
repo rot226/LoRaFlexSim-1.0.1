@@ -13,7 +13,8 @@ Ce dossier contient une structure minimale pour les scripts de l'article C.
 ## Modèle radio et SNIR
 
 - **Modèle radio (proxy)** : l'étape 1 génère des nœuds avec des niveaux SNR/RSSI aléatoires et applique des seuils par SF pour estimer la QoS, puis approxime les collisions via une capacité par SF (proxy de charge). Les algorithmes ADR/MixRA sont des heuristiques simplifiées pour produire des valeurs reproductibles.
-- **SNIR OFF** : la réception est validée uniquement si le RSSI est au-dessus du seuil de sensibilité.
+- **Modèle d'interférences** : le calcul considère les transmissions **co‑SF** sur le **même canal**; l'interférence agrégée est la somme des puissances reçues des transmissions simultanées, à laquelle on ajoute le bruit thermique pour former le dénominateur du SNIR. Il n'y a pas d'interférences inter‑SF ni de canaux adjacents dans ce proxy.
+- **SNIR OFF** : la réception est validée uniquement si le RSSI est au-dessus du seuil de sensibilité (pas d'impact des interférences dans la décision).
 - **SNIR ON** : le SNIR est calculé à partir de la somme des interférences co‑SF sur le même canal (interférence + bruit) et la réception dépend à la fois du RSSI et du seuil de capture SNIR.
 
 ## UCB1 et fonction de récompense
@@ -71,3 +72,28 @@ python article_c/make_all_plots.py
 - **Réplications** : `--replications` définit le nombre de répétitions par configuration (densité/algorithme/mode SNIR).
 
 Les résultats sont écrits dans `article_c/step*/results/` et les figures dans `article_c/step*/plots/output/`.
+
+## Figures disponibles
+
+Les scripts listés ci‑dessous génèrent les figures de chaque étape. Les courbes par cluster sont produites par les scripts « cluster_* » et s'appuient sur des CSV contenant une colonne `cluster` pour filtrer/agréger les séries.
+
+### Étape 1
+
+- `plot_S1.py`
+- `plot_S2.py`
+- `plot_S3.py`
+- `plot_S4.py`
+- `plot_S5.py`
+- `plot_S6.py`
+- `plot_S6_cluster_pdr_vs_density.py` (nouvelle)
+- `plot_S7_cluster_outage_vs_density.py` (nouvelle)
+
+### Étape 2
+
+- `plot_RL1.py`
+- `plot_RL2.py`
+- `plot_RL3.py`
+- `plot_RL4.py`
+- `plot_RL5.py`
+- `plot_RL6_cluster_outage_vs_density.py` (nouvelle)
+- `plot_RL7_reward_vs_density.py` (nouvelle)
