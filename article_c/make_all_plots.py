@@ -21,6 +21,7 @@ PLOT_MODULES = {
     ],
     "step2": [
         "article_c.step2.plots.plot_RL1",
+        "article_c.step2.plots.plot_RL1_learning_curve_reward",
         "article_c.step2.plots.plot_RL2",
         "article_c.step2.plots.plot_RL3",
         "article_c.step2.plots.plot_RL4",

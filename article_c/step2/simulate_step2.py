@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 import random
 from typing import Literal
 
 from article_c.common.config import DEFAULT_CONFIG
-from article_c.common.csv_io import write_simulation_results
+from article_c.common.csv_io import write_rows, write_simulation_results
 from article_c.common.lora_phy import bitrate_lora, coding_rate_to_cr, compute_airtime
 from article_c.common.utils import assign_clusters
 from article_c.step2.bandit_ucb1 import BanditUCB1
@@ -28,6 +29,10 @@ class WindowMetrics:
 class Step2Result:
     raw_rows: list[dict[str, object]]
     selection_prob_rows: list[dict[str, object]]
+    learning_curve_rows: list[dict[str, object]]
+
+
+logger = logging.getLogger(__name__)
 
 
 def _clip(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float:
@@ -105,6 +110,7 @@ def run_simulation(
     algo_label = _algo_label(algorithm)
     raw_rows: list[dict[str, object]] = []
     selection_prob_rows: list[dict[str, object]] = []
+    learning_curve_rows: list[dict[str, object]] = []
     node_clusters = assign_clusters(n_nodes, rng=rng)
 
     sf_values = list(SF_VALUES)
@@ -187,6 +193,19 @@ def run_simulation(
                     }
                 )
             avg_reward = sum(window_rewards) / len(window_rewards)
+            logger.info(
+                "Round %s - %s : récompense moyenne = %.4f",
+                round_id,
+                algo_label,
+                avg_reward,
+            )
+            learning_curve_rows.append(
+                {
+                    "round": round_id,
+                    "algo": algo_label,
+                    "reward_mean": avg_reward,
+                }
+            )
             bandit.update(arm_index, avg_reward)
             total = sum(bandit.counts) or 1
             for sf_index, sf_value in enumerate(sf_values):
@@ -200,6 +219,7 @@ def run_simulation(
     elif algorithm in {"adr", "mixra_h", "mixra_opt"}:
         weights = _weights_for_algo(algorithm, n_arms)
         for round_id in range(n_rounds):
+            window_rewards: list[float] = []
             for node_id in range(n_nodes):
                 if algorithm == "adr":
                     arm_index = 0
@@ -219,6 +239,7 @@ def run_simulation(
                     metrics.energy_norm,
                     lambda_energy,
                 )
+                window_rewards.append(reward)
                 raw_rows.append(
                     {
                         "density": density_value,
@@ -249,10 +270,38 @@ def run_simulation(
                         "reward": reward,
                     }
                 )
+            avg_reward = sum(window_rewards) / len(window_rewards)
+            logger.info(
+                "Round %s - %s : récompense moyenne = %.4f",
+                round_id,
+                algo_label,
+                avg_reward,
+            )
+            learning_curve_rows.append(
+                {
+                    "round": round_id,
+                    "algo": algo_label,
+                    "reward_mean": avg_reward,
+                }
+            )
     else:
         raise ValueError("algorithm doit être adr, mixra_h, mixra_opt ou ucb1_sf.")
 
     if output_dir is not None:
         write_simulation_results(output_dir, raw_rows)
+        learning_curve_path = output_dir / "learning_curve.csv"
+        learning_curve_header = ["round", "algo", "reward_mean"]
+        write_rows(
+            learning_curve_path,
+            learning_curve_header,
+            [
+                [row.get(key, "") for key in learning_curve_header]
+                for row in learning_curve_rows
+            ],
+        )
 
-    return Step2Result(raw_rows=raw_rows, selection_prob_rows=selection_prob_rows)
+    return Step2Result(
+        raw_rows=raw_rows,
+        selection_prob_rows=selection_prob_rows,
+        learning_curve_rows=learning_curve_rows,
+    )
