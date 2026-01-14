@@ -19,9 +19,9 @@ from article_c.common.plot_helpers import (
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, ax = plt.subplots()
     plot_metric_by_snir(ax, rows, metric_key)
-    ax.set_xlabel("Density")
+    ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Received Frames (mean)")
-    ax.set_title("Step 1 - Received Frames vs Density (SNIR on/off)")
+    ax.set_title("Step 1 - Received Frames vs Network size (number of nodes) (SNIR on/off)")
     place_legend(ax)
     return fig
 

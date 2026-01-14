@@ -27,9 +27,9 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         densities = sorted(points)
         values = [points[density] for density in densities]
         ax.plot(densities, values, marker="o", label=algo)
-    ax.set_xlabel("Density")
+    ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Mean Success Rate")
-    ax.set_title("Step 2 - Success Rate vs Density")
+    ax.set_title("Step 2 - Success Rate vs Network size (number of nodes)")
     place_legend(ax)
     return fig
 
