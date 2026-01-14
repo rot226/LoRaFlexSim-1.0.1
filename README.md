@@ -98,6 +98,13 @@ Le script `scripts/run_step1_matrix_windows.ps1` active le venv détecté
 python scripts/run_step1_matrix.py --algos adr apra mixra_h mixra_opt --with-snir true false --seeds 1 2 3 --nodes 1000 5000 --packet-intervals 300 600
 ```
 
+> **Note sur les proxys Step 1** : les implémentations dans
+> `article_c/step1/simulate_step1.py` servent de substituts fidèles lorsque les
+> formules exactes ne sont pas disponibles. ADR choisit le plus petit SF
+> satisfaisant les seuils SNR/RSSI, MixRA-H applique une heuristique équilibrant
+> la QoS (marges SNR/RSSI) et la charge par SF, et MixRA-Opt utilise un
+> glouton/recherche locale pour réduire les collisions sous contraintes QoS.
+
 Pour forcer explicitement le venv via PowerShell (sans déclencher l’erreur
 « Le terme 'elseif' n’est pas reconnu »), utilisez un bloc `if (...) { ... } elseif (...) { ... }`
 dans la même commande :
