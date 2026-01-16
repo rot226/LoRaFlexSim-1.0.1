@@ -34,7 +34,7 @@ def main() -> None:
 
     fig = _plot_metric(rows, "received_mean")
     output_dir = step_dir / "plots" / "output"
-    save_figure(fig, output_dir, "plot_S3")
+    save_figure(fig, output_dir, "plot_S3", use_tight=False)
     plt.close(fig)
 
 

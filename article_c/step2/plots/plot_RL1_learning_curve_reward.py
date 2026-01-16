@@ -85,7 +85,7 @@ def main() -> None:
 
     fig = _plot_learning_curve(rows)
     output_dir = step_dir / "plots" / "output"
-    save_figure(fig, output_dir, "plot_RL1_learning_curve_reward")
+    save_figure(fig, output_dir, "plot_RL1_learning_curve_reward", use_tight=False)
     plt.close(fig)
 
 

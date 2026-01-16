@@ -77,7 +77,7 @@ def main() -> None:
 
     fig = _plot_metric(rows, "outage_prob")
     output_dir = step_dir / "plots" / "output"
-    save_figure(fig, output_dir, "plot_S7_cluster_outage_vs_density")
+    save_figure(fig, output_dir, "plot_S7_cluster_outage_vs_density", use_tight=False)
     plt.close(fig)
 
 

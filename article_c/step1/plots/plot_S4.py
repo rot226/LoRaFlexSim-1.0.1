@@ -34,7 +34,7 @@ def main() -> None:
 
     fig = _plot_metric(rows, "sent_mean")
     output_dir = step_dir / "plots" / "output"
-    save_figure(fig, output_dir, "plot_S4")
+    save_figure(fig, output_dir, "plot_S4", use_tight=False)
     plt.close(fig)
 
 
