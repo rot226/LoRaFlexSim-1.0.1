@@ -92,6 +92,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Bruit thermique (densité en dBm/Hz).",
     )
     parser.add_argument(
+        "--mixra-opt-max-iterations",
+        type=int,
+        default=200,
+        help="Nombre maximal d'itérations pour MixRA-Opt.",
+    )
+    parser.add_argument(
+        "--mixra-opt-candidate-subset-size",
+        type=int,
+        default=200,
+        help="Nombre maximal de nœuds optimisés par itération en MixRA-Opt.",
+    )
+    parser.add_argument(
+        "--mixra-opt-epsilon",
+        type=float,
+        default=1e-3,
+        help="Seuil d'amélioration pour la convergence MixRA-Opt.",
+    )
+    parser.add_argument(
         "--outdir",
         type=str,
         default=str(Path(__file__).resolve().parent / "results"),
@@ -127,6 +145,9 @@ def main(argv: list[str] | None = None) -> None:
                         duration_s=args.duration_s,
                         traffic_mode=args.traffic_mode,
                         jitter_range_s=args.jitter_range,
+                        mixra_opt_max_iterations=args.mixra_opt_max_iterations,
+                        mixra_opt_candidate_subset_size=args.mixra_opt_candidate_subset_size,
+                        mixra_opt_epsilon=args.mixra_opt_epsilon,
                     )
                     cluster_stats = {cluster: {"sent": 0, "received": 0} for cluster in cluster_ids}
                     for cluster, delivered in zip(
