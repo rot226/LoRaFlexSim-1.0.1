@@ -41,7 +41,7 @@ def main() -> None:
 
     fig = _plot_selection(rows)
     output_dir = step_dir / "plots" / "output"
-    save_figure(fig, output_dir, "plot_RL5")
+    save_figure(fig, output_dir, "plot_RL5", use_tight=False)
     plt.close(fig)
 
 

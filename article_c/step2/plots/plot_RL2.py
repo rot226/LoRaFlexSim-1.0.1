@@ -43,7 +43,7 @@ def main() -> None:
 
     fig = _plot_metric(rows, "success_rate_mean")
     output_dir = step_dir / "plots" / "output"
-    save_figure(fig, output_dir, "plot_RL2")
+    save_figure(fig, output_dir, "plot_RL2", use_tight=False)
     plt.close(fig)
 
 

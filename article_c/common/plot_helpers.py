@@ -40,11 +40,21 @@ def place_legend(ax: plt.Axes) -> None:
     plt.subplots_adjust(top=0.80)
 
 
-def save_figure(fig: plt.Figure, output_dir: Path, stem: str) -> None:
-    """Sauvegarde la figure en PNG et PDF dans le répertoire cible."""
+def save_figure(
+    fig: plt.Figure,
+    output_dir: Path,
+    stem: str,
+    use_tight: bool = False,
+) -> None:
+    """Sauvegarde la figure en PNG et PDF dans le répertoire cible.
+
+    Sur Windows, privilégier bbox_inches=None (valeur par défaut).
+    """
     ensure_dir(output_dir)
+    if use_tight:
+        fig.tight_layout()
     for ext in ("png", "pdf"):
-        fig.savefig(output_dir / f"{stem}.{ext}", dpi=300, bbox_inches="tight")
+        fig.savefig(output_dir / f"{stem}.{ext}", dpi=300, bbox_inches=None)
 
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
