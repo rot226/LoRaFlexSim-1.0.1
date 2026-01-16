@@ -135,10 +135,8 @@ def run_simulation(
     """Exécute une simulation proxy de l'étape 2."""
     rng = random.Random(seed)
     step2_defaults = DEFAULT_CONFIG.step2
-    traffic_mode_value = traffic_mode or step2_defaults.traffic_mode
-    jitter_range_value = (
-        step2_defaults.jitter_range_s if jitter_range_s is None else jitter_range_s
-    )
+    traffic_mode_value = "poisson" if traffic_mode is None else traffic_mode
+    jitter_range_value = jitter_range_s
     window_duration_value = (
         step2_defaults.window_duration_s if window_duration_s is None else window_duration_s
     )
@@ -225,14 +223,26 @@ def run_simulation(
             node_windows: list[dict[str, object]] = []
             for node_id in range(n_nodes):
                 sf_value = sf_values[arm_index]
-                expected_sent = max(1, int(round(window_size * traffic_coeffs[node_id])))
+                rate_multiplier = rng.uniform(0.8, 1.2)
+                expected_sent = max(
+                    1, int(round(window_size * traffic_coeffs[node_id] * rate_multiplier))
+                )
+                base_period_s = window_duration_value / expected_sent
+                jitter_range_node_s = (
+                    0.3 * base_period_s
+                    if jitter_range_value is None
+                    else jitter_range_value
+                )
                 traffic_times = generate_traffic_times(
                     expected_sent,
                     duration_s=window_duration_value,
                     traffic_mode=traffic_mode_value,
-                    jitter_range_s=jitter_range_value,
+                    jitter_range_s=jitter_range_node_s,
                     rng=rng,
                 )
+                shadowing_sigma_db = rng.uniform(4.0, 8.0)
+                shadowing_db = rng.gauss(0.0, shadowing_sigma_db)
+                link_quality = _clip(10 ** (-shadowing_db / 10.0), 0.0, 1.0)
                 node_offset_s = (
                     rng.uniform(0.0, window_delay_range_value)
                     if window_delay_enabled_value and window_delay_range_value > 0
@@ -246,8 +256,12 @@ def run_simulation(
                         "sf": sf_value,
                         "node_offset_s": node_offset_s,
                         "traffic_coeff": traffic_coeffs[node_id],
+                        "rate_multiplier": rate_multiplier,
                         "traffic_sent": len(traffic_times),
                         "tx_starts": tx_starts,
+                        "shadowing_db": shadowing_db,
+                        "shadowing_sigma_db": shadowing_sigma_db,
+                        "link_quality": link_quality,
                     }
                 )
             transmissions_by_sf: dict[int, list[tuple[float, float, int]]] = {}
@@ -264,6 +278,11 @@ def run_simulation(
                 sf_value = int(node_window["sf"])
                 traffic_sent = int(node_window["traffic_sent"])
                 successes = successes_by_node.get(node_id, 0)
+                link_quality = float(node_window["link_quality"])
+                if link_quality < 1.0 and successes > 0:
+                    successes = sum(
+                        1 for _ in range(successes) if rng.random() < link_quality
+                    )
                 metrics = _compute_window_metrics(
                     successes,
                     traffic_sent,
@@ -289,7 +308,11 @@ def run_simulation(
                         "window_start_s": window_start_s,
                         "node_offset_s": node_window["node_offset_s"],
                         "traffic_coeff": node_window["traffic_coeff"],
+                        "rate_multiplier": node_window["rate_multiplier"],
                         "traffic_sent": traffic_sent,
+                        "shadowing_db": node_window["shadowing_db"],
+                        "shadowing_sigma_db": node_window["shadowing_sigma_db"],
+                        "link_quality": node_window["link_quality"],
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
@@ -308,7 +331,11 @@ def run_simulation(
                         "window_start_s": window_start_s,
                         "node_offset_s": node_window["node_offset_s"],
                         "traffic_coeff": node_window["traffic_coeff"],
+                        "rate_multiplier": node_window["rate_multiplier"],
                         "traffic_sent": traffic_sent,
+                        "shadowing_db": node_window["shadowing_db"],
+                        "shadowing_sigma_db": node_window["shadowing_sigma_db"],
+                        "link_quality": node_window["link_quality"],
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
@@ -358,14 +385,26 @@ def run_simulation(
                 else:
                     arm_index = rng.choices(range(n_arms), weights=weights, k=1)[0]
                 sf_value = sf_values[arm_index]
-                expected_sent = max(1, int(round(window_size * traffic_coeffs[node_id])))
+                rate_multiplier = rng.uniform(0.8, 1.2)
+                expected_sent = max(
+                    1, int(round(window_size * traffic_coeffs[node_id] * rate_multiplier))
+                )
+                base_period_s = window_duration_value / expected_sent
+                jitter_range_node_s = (
+                    0.3 * base_period_s
+                    if jitter_range_value is None
+                    else jitter_range_value
+                )
                 traffic_times = generate_traffic_times(
                     expected_sent,
                     duration_s=window_duration_value,
                     traffic_mode=traffic_mode_value,
-                    jitter_range_s=jitter_range_value,
+                    jitter_range_s=jitter_range_node_s,
                     rng=rng,
                 )
+                shadowing_sigma_db = rng.uniform(4.0, 8.0)
+                shadowing_db = rng.gauss(0.0, shadowing_sigma_db)
+                link_quality = _clip(10 ** (-shadowing_db / 10.0), 0.0, 1.0)
                 node_offset_s = (
                     rng.uniform(0.0, window_delay_range_value)
                     if window_delay_enabled_value and window_delay_range_value > 0
@@ -379,8 +418,12 @@ def run_simulation(
                         "sf": sf_value,
                         "node_offset_s": node_offset_s,
                         "traffic_coeff": traffic_coeffs[node_id],
+                        "rate_multiplier": rate_multiplier,
                         "traffic_sent": len(traffic_times),
                         "tx_starts": tx_starts,
+                        "shadowing_db": shadowing_db,
+                        "shadowing_sigma_db": shadowing_sigma_db,
+                        "link_quality": link_quality,
                     }
                 )
             transmissions_by_sf: dict[int, list[tuple[float, float, int]]] = {}
@@ -397,6 +440,11 @@ def run_simulation(
                 sf_value = int(node_window["sf"])
                 traffic_sent = int(node_window["traffic_sent"])
                 successes = successes_by_node.get(node_id, 0)
+                link_quality = float(node_window["link_quality"])
+                if link_quality < 1.0 and successes > 0:
+                    successes = sum(
+                        1 for _ in range(successes) if rng.random() < link_quality
+                    )
                 metrics = _compute_window_metrics(
                     successes,
                     traffic_sent,
@@ -422,7 +470,11 @@ def run_simulation(
                         "window_start_s": window_start_s,
                         "node_offset_s": node_window["node_offset_s"],
                         "traffic_coeff": node_window["traffic_coeff"],
+                        "rate_multiplier": node_window["rate_multiplier"],
                         "traffic_sent": traffic_sent,
+                        "shadowing_db": node_window["shadowing_db"],
+                        "shadowing_sigma_db": node_window["shadowing_sigma_db"],
+                        "link_quality": node_window["link_quality"],
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
@@ -441,7 +493,11 @@ def run_simulation(
                         "window_start_s": window_start_s,
                         "node_offset_s": node_window["node_offset_s"],
                         "traffic_coeff": node_window["traffic_coeff"],
+                        "rate_multiplier": node_window["rate_multiplier"],
                         "traffic_sent": traffic_sent,
+                        "shadowing_db": node_window["shadowing_db"],
+                        "shadowing_sigma_db": node_window["shadowing_sigma_db"],
+                        "link_quality": node_window["link_quality"],
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
