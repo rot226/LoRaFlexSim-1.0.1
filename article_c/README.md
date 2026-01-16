@@ -48,6 +48,20 @@ Exécuter toutes les étapes :
 python article_c/run_all.py
 ```
 
+Exécuter toutes les étapes en sautant l'étape 1 :
+
+```powershell
+python article_c/run_all.py --skip-step1
+```
+
+Exécuter toutes les étapes en sautant l'étape 2 :
+
+```powershell
+python article_c/run_all.py --skip-step2
+```
+
+> Si l'étape 1 bloque, tester `--skip-step1` pour lancer directement l'étape 2.
+
 Exécuter uniquement l'étape 1 :
 
 ```powershell

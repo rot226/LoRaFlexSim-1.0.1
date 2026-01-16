@@ -117,6 +117,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Répertoire de sortie de l'étape 1.",
     )
+    parser.add_argument(
+        "--skip-step1",
+        action="store_true",
+        help="Ignore l'exécution de l'étape 1.",
+    )
+    parser.add_argument(
+        "--skip-step2",
+        action="store_true",
+        help="Ignore l'exécution de l'étape 2.",
+    )
     return parser
 
 
@@ -185,8 +195,10 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
-    run_step1(_build_step1_args(args))
-    run_step2(_build_step2_args(args))
+    if not args.skip_step1:
+        run_step1(_build_step1_args(args))
+    if not args.skip_step2:
+        run_step2(_build_step2_args(args))
 
 
 if __name__ == "__main__":
