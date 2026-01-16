@@ -326,7 +326,7 @@ def run_simulation(
                 {
                     "round": round_id,
                     "algo": algo_label,
-                    "reward_mean": avg_reward,
+                    "avg_reward": avg_reward,
                 }
             )
             bandit.update(arm_index, avg_reward)
@@ -459,7 +459,7 @@ def run_simulation(
                 {
                     "round": round_id,
                     "algo": algo_label,
-                    "reward_mean": avg_reward,
+                    "avg_reward": avg_reward,
                 }
             )
     else:
@@ -468,7 +468,7 @@ def run_simulation(
     if output_dir is not None:
         write_simulation_results(output_dir, raw_rows)
         learning_curve_path = output_dir / "learning_curve.csv"
-        learning_curve_header = ["round", "algo", "reward_mean"]
+        learning_curve_header = ["round", "algo", "avg_reward"]
         write_rows(
             learning_curve_path,
             learning_curve_header,

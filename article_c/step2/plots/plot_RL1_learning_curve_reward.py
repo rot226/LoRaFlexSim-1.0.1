@@ -31,7 +31,7 @@ def _load_learning_curve(path: Path) -> list[dict[str, object]]:
             {
                 "round": int(_to_float(row.get("round"))),
                 "algo": row.get("algo", ""),
-                "reward_mean": _to_float(row.get("reward_mean")),
+                "avg_reward": _to_float(row.get("avg_reward")),
             }
         )
     return parsed
@@ -44,14 +44,14 @@ def _sample_learning_curve() -> list[dict[str, object]]:
             {
                 "round": round_id,
                 "algo": "ADR",
-                "reward_mean": 0.45 + 0.01 * round_id,
+                "avg_reward": 0.45 + 0.01 * round_id,
             }
         )
         rows.append(
             {
                 "round": round_id,
                 "algo": "UCB1-SF",
-                "reward_mean": 0.50 + 0.02 * round_id,
+                "avg_reward": 0.50 + 0.02 * round_id,
             }
         )
     return rows
@@ -66,7 +66,7 @@ def _plot_learning_curve(rows: list[dict[str, object]]) -> plt.Figure:
         algorithms = sorted(available)
     for algo in algorithms:
         algo_rows = [row for row in rows if row["algo"] == algo]
-        points = {row["round"]: row["reward_mean"] for row in algo_rows}
+        points = {row["round"]: row["avg_reward"] for row in algo_rows}
         rounds = sorted(points)
         values = [points[round_id] for round_id in rounds]
         ax.plot(rounds, values, marker="o", label=algo)
