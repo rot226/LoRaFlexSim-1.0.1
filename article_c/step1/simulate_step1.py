@@ -96,10 +96,18 @@ def _mixra_h_assign(nodes: Iterable[NodeLink]) -> list[int]:
     return assignments
 
 
-def _mixra_opt_assign(nodes: Iterable[NodeLink]) -> list[int]:
+def _mixra_opt_assign(
+    nodes: Iterable[NodeLink],
+    *,
+    max_iterations: int = 200,
+    candidate_subset_size: int = 200,
+    convergence_epsilon: float = 1e-3,
+    rng: random.Random | None = None,
+) -> list[int]:
     """MixRA-Opt proxy: glouton + recherche locale (collisions + QoS)."""
     nodes_list = list(nodes)
     assignments = _mixra_h_assign(nodes_list)
+    local_rng = rng or random.Random()
 
     def collision_cost(loads: dict[int, int]) -> float:
         return sum(load * load for load in loads.values())
@@ -120,10 +128,18 @@ def _mixra_opt_assign(nodes: Iterable[NodeLink]) -> list[int]:
     for sf in assignments:
         loads[sf] += 1
 
-    improved = True
-    while improved:
+    small_improvement_streak = 0
+    for _ in range(max_iterations):
         improved = False
-        for idx, node in enumerate(nodes_list):
+        if len(nodes_list) > candidate_subset_size:
+            candidate_indices = local_rng.sample(
+                range(len(nodes_list)), k=candidate_subset_size
+            )
+        else:
+            candidate_indices = list(range(len(nodes_list)))
+        start_obj = objective(loads, assignments)
+        for idx in candidate_indices:
+            node = nodes_list[idx]
             current_sf = assignments[idx]
             candidates = [sf for sf in SF_VALUES if _qos_ok(node, sf)]
             if not candidates:
@@ -148,6 +164,14 @@ def _mixra_opt_assign(nodes: Iterable[NodeLink]) -> list[int]:
                 loads[best_sf] += 1
                 assignments[idx] = best_sf
                 improved = True
+        end_obj = objective(loads, assignments)
+        improvement = start_obj - end_obj
+        if improvement < convergence_epsilon:
+            small_improvement_streak += 1
+        else:
+            small_improvement_streak = 0
+        if not improved or small_improvement_streak >= 10:
+            break
     return assignments
 
 
@@ -189,6 +213,9 @@ def run_simulation(
     duration_s: float = 3600.0,
     traffic_mode: str = "periodic",
     jitter_range_s: float = 5.0,
+    mixra_opt_max_iterations: int = 200,
+    mixra_opt_candidate_subset_size: int = 200,
+    mixra_opt_epsilon: float = 1e-3,
 ) -> Step1Result:
     """Exécute une simulation minimale.
 
@@ -210,7 +237,13 @@ def run_simulation(
     elif algorithm == "mixra_h":
         assignments = _mixra_h_assign(nodes)
     elif algorithm == "mixra_opt":
-        assignments = _mixra_opt_assign(nodes)
+        assignments = _mixra_opt_assign(
+            nodes,
+            max_iterations=mixra_opt_max_iterations,
+            candidate_subset_size=mixra_opt_candidate_subset_size,
+            convergence_epsilon=mixra_opt_epsilon,
+            rng=rng,
+        )
     else:
         raise ValueError(f"Algorithme inconnu: {algorithm}")
     node_received = _estimate_received(assignments, rng)
