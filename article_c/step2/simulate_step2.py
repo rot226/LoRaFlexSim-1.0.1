@@ -118,11 +118,11 @@ def run_simulation(
     n_nodes: int = 12,
     n_arms: int | None = None,
     window_size: int = 10,
-    lambda_energy: float = 0.3,
+    lambda_energy: float = 0.6,
     density: float | None = None,
     snir_mode: str = "snir_on",
     seed: int = 42,
-    traffic_mode: str | None = None,
+    traffic_mode: str = "poisson",
     jitter_range_s: float | None = None,
     window_duration_s: float | None = None,
     traffic_coeff_min: float | None = None,
@@ -135,7 +135,7 @@ def run_simulation(
     """Exécute une simulation proxy de l'étape 2."""
     rng = random.Random(seed)
     step2_defaults = DEFAULT_CONFIG.step2
-    traffic_mode_value = "poisson" if traffic_mode is None else traffic_mode
+    traffic_mode_value = traffic_mode
     jitter_range_value = jitter_range_s
     window_duration_value = (
         step2_defaults.window_duration_s if window_duration_s is None else window_duration_s
@@ -229,7 +229,7 @@ def run_simulation(
                 )
                 base_period_s = window_duration_value / expected_sent
                 jitter_range_node_s = (
-                    0.3 * base_period_s
+                    0.5 * base_period_s
                     if jitter_range_value is None
                     else jitter_range_value
                 )
@@ -391,7 +391,7 @@ def run_simulation(
                 )
                 base_period_s = window_duration_value / expected_sent
                 jitter_range_node_s = (
-                    0.3 * base_period_s
+                    0.5 * base_period_s
                     if jitter_range_value is None
                     else jitter_range_value
                 )
