@@ -7,6 +7,7 @@ from typing import Iterable
 import csv
 
 import matplotlib.pyplot as plt
+from matplotlib import ticker as mticker
 
 from article_c.common.plotting_style import PLOT_STYLE
 from article_c.common.utils import ensure_dir
@@ -148,13 +149,14 @@ def plot_metric_by_snir(
     rows: list[dict[str, object]],
     metric_key: str,
 ) -> None:
+    all_densities = sorted({int(row["density"]) for row in rows})
     algorithms = sorted({row["algo"] for row in rows})
     for algo in algorithms:
         algo_rows = [row for row in rows if row["algo"] == algo]
-        densities = sorted({row["density"] for row in algo_rows})
+        densities = sorted({int(row["density"]) for row in algo_rows})
         for snir_mode in SNIR_MODES:
             points = {
-                row["density"]: row[metric_key]
+                int(row["density"]): row[metric_key]
                 for row in algo_rows
                 if row["snir_mode"] == snir_mode
             }
@@ -169,10 +171,12 @@ def plot_metric_by_snir(
                 linestyle=SNIR_LINESTYLES[snir_mode],
                 label=label,
             )
+    ax.set_xticks(all_densities)
+    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
 
 def _sample_step1_rows() -> list[dict[str, object]]:
-    densities = [0.1, 0.5, 1.0]
+    densities = [50, 100, 150]
     algos = ["adr", "mixra_h", "mixra_opt"]
     clusters = list(DEFAULT_CONFIG.qos.clusters) + ["all"]
     rows: list[dict[str, object]] = []
@@ -202,7 +206,7 @@ def _sample_step1_rows() -> list[dict[str, object]]:
 
 
 def _sample_step2_rows() -> list[dict[str, object]]:
-    densities = [0.5, 1.0, 1.5]
+    densities = [50, 100, 150]
     algos = ["ADR", "MixRA-H", "MixRA-Opt", "UCB1-SF"]
     clusters = list(DEFAULT_CONFIG.qos.clusters) + ["all"]
     rows: list[dict[str, object]] = []

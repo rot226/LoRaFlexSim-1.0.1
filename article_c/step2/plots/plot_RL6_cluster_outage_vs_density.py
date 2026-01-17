@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib import ticker as mticker
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
@@ -83,11 +84,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         axes = [axes]
 
     algorithms = sorted({row["algo"] for row in rows})
+    all_densities = sorted({int(row["density"]) for row in rows})
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
         for algo in algorithms:
             points = {
-                row["density"]: row[metric_key]
+                int(row["density"]): row[metric_key]
                 for row in cluster_rows
                 if row.get("algo") == algo
             }
@@ -98,6 +100,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             ax.plot(densities, values, marker="o", label=_label_for_algo(str(algo)))
         ax.set_xlabel("Network size (number of nodes)")
         ax.set_title(f"Cluster {cluster_labels.get(cluster, cluster)}")
+        ax.set_xticks(all_densities)
+        ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     axes[0].set_ylabel("Outage probability")
     place_legend(axes[-1])
     fig.suptitle("Step 2 - Outage probability by Cluster (SNIR on)")

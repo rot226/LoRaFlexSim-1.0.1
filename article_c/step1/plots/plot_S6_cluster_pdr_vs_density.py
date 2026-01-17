@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib import ticker as mticker
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
@@ -58,10 +59,10 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             cluster_rows = [
                 row for row in algo_rows if row.get("cluster") == cluster
             ]
-            densities = sorted({row["density"] for row in cluster_rows})
+            densities = sorted({int(row["density"]) for row in cluster_rows})
             for snir_mode in SNIR_MODES:
                 points = {
-                    row["density"]: row[metric_key]
+                    int(row["density"]): row[metric_key]
                     for row in cluster_rows
                     if row["snir_mode"] == snir_mode
                 }
@@ -81,6 +82,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
                 ax.set_ylabel(f"{algo_label(algo)}\nPacket Delivery Ratio")
             if algo_idx == len(algorithms) - 1:
                 ax.set_xlabel("Network size (number of nodes)")
+            ax.set_xticks(densities)
+            ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
     place_legend(axes[-1][-1])
     fig.suptitle("Step 1 - PDR by Cluster (SNIR on/off, per algorithm)")

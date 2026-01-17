@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib import ticker as mticker
 
 from article_c.common.plot_helpers import (
     algo_label,
@@ -48,16 +49,19 @@ def _filter_algorithms(rows: list[dict[str, object]]) -> list[dict[str, object]]
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, ax = plt.subplots()
+    all_densities = sorted({int(row["density"]) for row in rows})
     algorithms = sorted({row["algo"] for row in rows})
     for algo in algorithms:
         points = {
-            row["density"]: row[metric_key]
+            int(row["density"]): row[metric_key]
             for row in rows
             if row.get("algo") == algo
         }
         densities = sorted(points)
         values = [points[density] for density in densities]
         ax.plot(densities, values, marker="o", label=_label_for_algo(str(algo)))
+    ax.set_xticks(all_densities)
+    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Mean Window Reward")
     ax.set_title("Step 2 - Mean Window Reward vs Network size (number of nodes)")

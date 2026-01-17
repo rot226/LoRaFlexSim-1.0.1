@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib import ticker as mticker
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
@@ -56,8 +57,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     if len(SNIR_MODES) == 1:
         axes = [axes]
 
-    densities = sorted({row["density"] for row in rows})
-    network_sizes = [_density_to_nodes(density) for density in densities]
+    raw_densities = sorted({row["density"] for row in rows})
+    densities = [_density_to_nodes(density) for density in raw_densities]
 
     for ax, snir_mode in zip(axes, SNIR_MODES, strict=False):
         snir_rows = [row for row in rows if row["snir_mode"] == snir_mode]
@@ -69,12 +70,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             }
             if not points:
                 continue
-            values = [points.get(density, float("nan")) for density in densities]
+            values = [points.get(density, float("nan")) for density in raw_densities]
             target = cluster_targets.get(cluster)
             target_label = f" (target {target:.2f})" if target is not None else ""
             label = f"Cluster {cluster_labels.get(cluster, cluster)}{target_label}"
             ax.plot(
-                network_sizes,
+                densities,
                 values,
                 marker="o",
                 linestyle=SNIR_LINESTYLES[snir_mode],
@@ -85,6 +86,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_ylabel("Packet Delivery Ratio")
         ax.set_ylim(0.0, 1.05)
         ax.grid(True, linestyle=":", alpha=0.4)
+        ax.set_xticks(densities)
+        ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
     place_legend(axes[-1])
     fig.suptitle("Step 1 - PDR by Cluster (network size)")
