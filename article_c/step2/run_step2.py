@@ -10,7 +10,7 @@ from article_c.common.csv_io import write_rows, write_simulation_results
 from article_c.common.utils import (
     ensure_dir,
     parse_cli_args,
-    parse_density_list,
+    parse_network_size_list,
     replication_ids,
     set_deterministic_seed,
     timestamp_tag,
@@ -39,7 +39,7 @@ def _aggregate_selection_probs(
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_cli_args(argv)
     base_seed = set_deterministic_seed(args.seeds_base)
-    densities = parse_density_list(args.densities)
+    densities = parse_network_size_list(args.network_sizes)
     replications = replication_ids(args.replications)
     snir_mode = "snir_on"
 

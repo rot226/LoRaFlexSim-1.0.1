@@ -14,11 +14,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Exécute les étapes 1 et 2 avec des arguments communs."
     )
     parser.add_argument(
-        "--densities",
-        type=float,
+        "--network-sizes",
+        dest="network_sizes",
+        type=int,
         nargs="+",
         default=None,
-        help="Liste des densités (ex: 0.1 0.5 1.0).",
+        help="Tailles de réseau (nombre de nœuds entiers, ex: 50 100 150).",
+    )
+    parser.add_argument(
+        "--densities",
+        dest="network_sizes",
+        type=int,
+        nargs="+",
+        default=argparse.SUPPRESS,
+        help="Alias de --network-sizes (déprécié).",
     )
     parser.add_argument(
         "--replications",
@@ -132,9 +141,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def _build_step1_args(args: argparse.Namespace) -> list[str]:
     step1_args: list[str] = []
-    if args.densities:
-        step1_args.append("--densities")
-        step1_args.extend([str(density) for density in args.densities])
+    if args.network_sizes:
+        step1_args.append("--network-sizes")
+        step1_args.extend([str(size) for size in args.network_sizes])
     if args.replications is not None:
         step1_args.extend(["--replications", str(args.replications)])
     if args.seeds_base is not None:
@@ -152,9 +161,9 @@ def _build_step1_args(args: argparse.Namespace) -> list[str]:
 
 def _build_step2_args(args: argparse.Namespace) -> list[str]:
     step2_args: list[str] = []
-    if args.densities:
-        step2_args.append("--densities")
-        step2_args.extend([str(density) for density in args.densities])
+    if args.network_sizes:
+        step2_args.append("--network-sizes")
+        step2_args.extend([str(size) for size in args.network_sizes])
     if args.replications is not None:
         step2_args.extend(["--replications", str(args.replications)])
     if args.seeds_base is not None:

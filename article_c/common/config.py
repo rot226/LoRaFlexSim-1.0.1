@@ -26,7 +26,7 @@ class RadioConfig:
 class ScenarioConfig:
     """Paramètres du scénario."""
 
-    densities_per_km2: Sequence[float] = (0.1, 0.5, 1.0)
+    network_sizes: Sequence[int] = (50, 100, 150)
     radius_m: int = 1000
     duration_s: int = 3600
     payload_bytes: int = 20
