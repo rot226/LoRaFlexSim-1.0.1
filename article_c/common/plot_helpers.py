@@ -79,17 +79,17 @@ def load_step1_aggregated(path: Path) -> list[dict[str, object]]:
         return _sample_step1_rows()
     parsed: list[dict[str, object]] = []
     for row in rows:
-        parsed.append(
-            {
-                "density": _to_float(row.get("density")),
-                "algo": row.get("algo", ""),
-                "snir_mode": row.get("snir_mode", ""),
-                "cluster": row.get("cluster", "all"),
-                "pdr_mean": _to_float(row.get("pdr_mean")),
-                "sent_mean": _to_float(row.get("sent_mean")),
-                "received_mean": _to_float(row.get("received_mean")),
-            }
-        )
+        parsed_row: dict[str, object] = {
+            "density": _to_float(row.get("density")),
+            "algo": row.get("algo", ""),
+            "snir_mode": row.get("snir_mode", ""),
+            "cluster": row.get("cluster", "all"),
+        }
+        for key, value in row.items():
+            if key in {"density", "algo", "snir_mode", "cluster"}:
+                continue
+            parsed_row[key] = _to_float(value)
+        parsed.append(parsed_row)
     return parsed
 
 
@@ -179,6 +179,7 @@ def _sample_step1_rows() -> list[dict[str, object]]:
     densities = [50, 100, 150]
     algos = ["adr", "mixra_h", "mixra_opt"]
     clusters = list(DEFAULT_CONFIG.qos.clusters) + ["all"]
+    sf_values = list(DEFAULT_CONFIG.radio.spreading_factors)
     rows: list[dict[str, object]] = []
     for snir_mode in ("snir_on", "snir_off"):
         for algo in algos:
@@ -191,17 +192,32 @@ def _sample_step1_rows() -> list[dict[str, object]]:
                     pdr = max(
                         0.0, min(1.0, base - penalty + modifier + cluster_bonus)
                     )
-                    rows.append(
-                        {
-                            "density": density,
-                            "algo": algo,
-                            "snir_mode": snir_mode,
-                            "cluster": cluster,
-                            "pdr_mean": pdr,
-                            "sent_mean": 120 * density,
-                            "received_mean": 120 * density * pdr,
-                        }
-                    )
+                    algo_idx = algos.index(algo)
+                    weights = []
+                    for sf in sf_values:
+                        sf_idx = sf_values.index(sf)
+                        bias = 1.2 - 0.15 * sf_idx + 0.05 * algo_idx
+                        if snir_mode == "snir_off":
+                            bias += 0.05 * sf_idx
+                        weights.append(max(0.05, bias))
+                    total_weight = sum(weights) or 1.0
+                    sf_shares = [weight / total_weight for weight in weights]
+                    base_toa = 40.0 + 8.0 * idx + 4.0 * algo_idx
+                    if snir_mode == "snir_off":
+                        base_toa += 5.0
+                    row = {
+                        "density": density,
+                        "algo": algo,
+                        "snir_mode": snir_mode,
+                        "cluster": cluster,
+                        "pdr_mean": pdr,
+                        "sent_mean": 120 * density,
+                        "received_mean": 120 * density * pdr,
+                        "toa_ms_mean": base_toa + 0.2 * density,
+                    }
+                    for sf, share in zip(sf_values, sf_shares, strict=False):
+                        row[f"sf{sf}_share_mean"] = share
+                    rows.append(row)
     return rows
 
 

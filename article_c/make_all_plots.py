@@ -20,6 +20,8 @@ PLOT_MODULES = {
         "article_c.step1.plots.plot_S6_cluster_pdr_vs_network_size",
         "article_c.step1.plots.plot_S7_cluster_outage_vs_density",
         "article_c.step1.plots.plot_S7_cluster_outage_vs_network_size",
+        "article_c.step1.plots.plot_S8_spreading_factor_distribution",
+        "article_c.step1.plots.plot_S9_latency_or_toa_vs_network_size",
     ],
     "step2": [
         "article_c.step2.plots.plot_RL1",
