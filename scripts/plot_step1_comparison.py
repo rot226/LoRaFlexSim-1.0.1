@@ -18,6 +18,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 try:  # pragma: no cover - optional dependency in CI
     import matplotlib.pyplot as plt  # type: ignore
+    from matplotlib import ticker as mticker  # type: ignore
 except Exception:  # pragma: no cover - allow script import without matplotlib
     plt = None  # type: ignore
 
@@ -204,6 +205,23 @@ def _snir_color(state: str) -> str:
     return SNIR_COLORS.get(state, SNIR_COLORS["snir_unknown"])
 
 
+def _ensure_network_sizes(values: Iterable[Any]) -> List[int]:
+    network_sizes = sorted({int(value) for value in values if value is not None})
+    if not all(isinstance(value, int) for value in network_sizes):
+        raise ValueError("network_sizes doit être une liste d'entiers.")
+    return network_sizes
+
+
+def _apply_network_ticks(ax: Any, network_sizes: Sequence[int]) -> None:
+    if not network_sizes:
+        return
+    network_sizes = [int(value) for value in network_sizes]
+    if not all(isinstance(value, int) for value in network_sizes):
+        raise ValueError("network_sizes doit être une liste d'entiers.")
+    ax.set_xticks(network_sizes)
+    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
+
+
 def _plot_pdr_der(
     records: List[Mapping[str, Any]],
     output_dir: Path,
@@ -222,6 +240,8 @@ def _plot_pdr_der(
     for row_idx, cluster_id in enumerate(clusters):
         for col_idx, state in enumerate(states):
             ax = axes[row_idx][col_idx]
+            state_records = [record for record in records if record.get("snir_state") == state]
+            network_sizes = _ensure_network_sizes(_collect_nodes(state_records))
             for algo in algorithms:
                 algo_records = [
                     record
@@ -272,6 +292,7 @@ def _plot_pdr_der(
             ax.set_ylabel("PDR / DER")
             ax.set_ylim(0.0, 1.0)
             ax.grid(True, linestyle=":", alpha=0.6)
+            _apply_network_ticks(ax, network_sizes)
 
     handles, labels = axes[0][0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=4, frameon=False)
@@ -301,6 +322,8 @@ def _plot_single_metric(
 
     for idx, state in enumerate(states):
         ax = axes[idx]
+        state_records = [record for record in records if record.get("snir_state") == state]
+        network_sizes = _ensure_network_sizes(_collect_nodes(state_records))
         for algo in algorithms:
             algo_records = [
                 record
@@ -333,6 +356,7 @@ def _plot_single_metric(
         if y_limits:
             ax.set_ylim(*y_limits)
         ax.grid(True, linestyle=":", alpha=0.6)
+        _apply_network_ticks(ax, network_sizes)
 
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=4, frameon=False)
@@ -361,6 +385,7 @@ def _plot_pdr_der_overlay(
 
     for row_idx, cluster_id in enumerate(clusters):
         ax = axes[row_idx]
+        network_sizes = _ensure_network_sizes(_collect_nodes(records))
         for algo in algorithms:
             algo_records = [record for record in records if record.get("algorithm") == algo]
             for state in states:
@@ -411,6 +436,7 @@ def _plot_pdr_der_overlay(
         ax.set_ylabel("PDR / DER")
         ax.set_ylim(0.0, 1.0)
         ax.grid(True, linestyle=":", alpha=0.6)
+        _apply_network_ticks(ax, network_sizes)
 
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=3, frameon=False)
@@ -437,6 +463,7 @@ def _plot_single_metric_overlay(
     states = ["snir_off", "snir_on"]
     fig, ax = plt.subplots(1, 1, figsize=(7, 4))
     marker_map = _marker_map(list(algorithms))
+    network_sizes = _ensure_network_sizes(_collect_nodes(records))
 
     for algo in algorithms:
         algo_records = [record for record in records if record.get("algorithm") == algo]
@@ -467,6 +494,7 @@ def _plot_single_metric_overlay(
     if y_limits:
         ax.set_ylim(*y_limits)
     ax.grid(True, linestyle=":", alpha=0.6)
+    _apply_network_ticks(ax, network_sizes)
 
     handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=3, frameon=False)

@@ -10,6 +10,7 @@ from statistics import fmean, pstdev
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 import matplotlib.pyplot as plt
+from matplotlib import ticker as mticker
 from matplotlib.lines import Line2D
 
 from plot_theme import SNIR_COLORS, THEME_LINE_WIDTH, THEME_MARKER_SIZE, apply_plot_theme
@@ -110,6 +111,23 @@ def _style_map(labels: Sequence[str]) -> Dict[str, str]:
 
 def _snir_color(state: str) -> str:
     return SNIR_COLORS.get(state, SNIR_COLORS["snir_unknown"])
+
+
+def _ensure_network_sizes(values: Iterable[Any]) -> List[int]:
+    network_sizes = sorted({int(value) for value in values if value is not None})
+    if not all(isinstance(value, int) for value in network_sizes):
+        raise ValueError("network_sizes doit être une liste d'entiers.")
+    return network_sizes
+
+
+def _apply_network_ticks(ax: plt.Axes, network_sizes: Sequence[int]) -> None:
+    if not network_sizes:
+        return
+    network_sizes = [int(value) for value in network_sizes]
+    if not all(isinstance(value, int) for value in network_sizes):
+        raise ValueError("network_sizes doit être une liste d'entiers.")
+    ax.set_xticks(network_sizes)
+    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
 
 def _add_state_legend(fig: plt.Figure) -> None:
@@ -450,6 +468,7 @@ def _plot_metrics(
     *,
     figure_name: str,
     x_label: str,
+    network_sizes: Sequence[int] | None = None,
 ) -> None:
     if not records:
         return
@@ -496,6 +515,8 @@ def _plot_metrics(
             ax.grid(True, linestyle=":", alpha=0.4)
             if row_idx == 0 and ax.get_legend_handles_labels()[1]:
                 ax.legend(fontsize=8, ncol=2)
+            if network_sizes:
+                _apply_network_ticks(ax, network_sizes)
     axes[-1][0].set_xlabel(x_label)
     axes[-1][1].set_xlabel(x_label)
     _add_state_legend(fig)
@@ -595,6 +616,11 @@ def main() -> None:
             "pdr",
         ]
         aggregated_metrics = _aggregate_metrics(metrics_rows, metric_keys, x_key)
+        network_sizes = None
+        if x_key == "num_nodes":
+            network_sizes = _ensure_network_sizes(
+                rec.get("x_value") for rec in aggregated_metrics if rec.get("x_value") is not None
+            )
         _plot_metrics(
             aggregated_metrics,
             args.output_dir,
@@ -609,6 +635,7 @@ def main() -> None:
             ],
             figure_name="step2_reward_components_ci95.png",
             x_label=x_label,
+            network_sizes=network_sizes,
         )
         _plot_metrics(
             aggregated_metrics,
@@ -622,6 +649,7 @@ def main() -> None:
             ],
             figure_name="step2_metrics_ci95.png",
             x_label=x_label,
+            network_sizes=network_sizes,
         )
         _plot_metrics(
             aggregated_metrics,
@@ -636,6 +664,7 @@ def main() -> None:
             ],
             figure_name="step2_key_metrics_combined.png",
             x_label=x_label,
+            network_sizes=network_sizes,
         )
 
     if not args.skip_distribution and not args.only_core_figures:
