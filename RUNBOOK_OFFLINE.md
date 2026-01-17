@@ -34,6 +34,10 @@ Résultats attendus :
 
 ## 3) Exécuter les tests SNIR/QoS
 
+> Les tests **rapides** doivent inclure **plusieurs tailles** de réseau ;
+> utilisez par exemple `--network-sizes 80 160 320 640 1280` pour couvrir
+> rapidement plusieurs échelles.
+
 ### SNIR
 
 ```bash
