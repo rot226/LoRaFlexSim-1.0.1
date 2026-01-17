@@ -43,11 +43,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     replications = replication_ids(args.replications)
     snir_mode = "snir_on"
 
-    results_dir = Path(__file__).resolve().parent / "results"
-    ensure_dir(results_dir)
+    base_results_dir = Path(__file__).resolve().parent / "results"
+    ensure_dir(base_results_dir)
+    timestamp_dir: Path | None = None
     if args.timestamp:
-        results_dir = results_dir / timestamp_tag()
-        ensure_dir(results_dir)
+        timestamp_dir = base_results_dir / timestamp_tag()
+        ensure_dir(timestamp_dir)
 
     raw_rows: list[dict[str, object]] = []
     selection_rows: list[dict[str, object]] = []
@@ -76,14 +77,19 @@ def main(argv: Sequence[str] | None = None) -> None:
                 if algorithm == "ucb1_sf":
                     selection_rows.extend(result.selection_prob_rows)
 
-    write_simulation_results(results_dir, raw_rows)
+    write_simulation_results(base_results_dir, raw_rows)
+    if timestamp_dir is not None:
+        write_simulation_results(timestamp_dir, raw_rows)
 
     if selection_rows:
         rl5_rows = _aggregate_selection_probs(selection_rows)
-        rl5_path = results_dir / "rl5_selection_prob.csv"
+        rl5_path = base_results_dir / "rl5_selection_prob.csv"
         rl5_header = ["round", "sf", "selection_prob"]
         rl5_values = [[row["round"], row["sf"], row["selection_prob"]] for row in rl5_rows]
         write_rows(rl5_path, rl5_header, rl5_values)
+        if timestamp_dir is not None:
+            rl5_timestamp_path = timestamp_dir / "rl5_selection_prob.csv"
+            write_rows(rl5_timestamp_path, rl5_header, rl5_values)
 
 
 if __name__ == "__main__":
