@@ -18,6 +18,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 try:  # pragma: no cover - dépend de l'environnement de test
     import matplotlib.pyplot as plt  # type: ignore
+    from matplotlib import ticker as mticker  # type: ignore
     from matplotlib.ticker import MaxNLocator, ScalarFormatter  # type: ignore
 except Exception:  # pragma: no cover - permet de continuer même sans matplotlib
     plt = None  # type: ignore
@@ -334,6 +335,23 @@ def _format_axes(ax: Any, integer_x: bool = False) -> None:
         line.set_markeredgewidth(THEME_MARKER_EDGE_WIDTH)
 
 
+def _apply_network_ticks(ax: Any, network_sizes: Sequence[int]) -> None:
+    if not network_sizes:
+        return
+    network_sizes = [int(value) for value in network_sizes]
+    if not all(isinstance(value, int) for value in network_sizes):
+        raise ValueError("network_sizes doit être une liste d'entiers.")
+    ax.set_xticks(network_sizes)
+    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
+
+
+def _ensure_network_sizes(values: Iterable[Any]) -> List[int]:
+    network_sizes = sorted({int(value) for value in values if value is not None})
+    if not all(isinstance(value, int) for value in network_sizes):
+        raise ValueError("network_sizes doit être une liste d'entiers.")
+    return network_sizes
+
+
 def _metric_error_bounds(record: Mapping[str, Any], metric: str, value: float) -> Tuple[float, float] | None:
     for base in {metric, metric.lower(), metric.upper()}:
         for prefix in (f"{base}_ci_low", f"{base}_ci95_low", f"{base}_ci_95_low"):
@@ -488,6 +506,9 @@ def _plot_global_metric(
     def render(states: List[str], suffix: str, title: str) -> None:
         for period in periods:
             fig, ax = plt.subplots(figsize=(6, 4))
+            network_sizes = _ensure_network_sizes(
+                r.get("num_nodes") for r in records if r.get("packet_interval_s") == period
+            )
             for state in states:
                 state_records = [r for r in records if _record_matches_state(r, state)]
                 if not state_records:
@@ -572,6 +593,7 @@ def _plot_global_metric(
             ax.set_ylabel(ylabel)
             title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
             ax.set_title(f"{title} – period {title_period} s")
+            _apply_network_ticks(ax, network_sizes)
             _format_axes(ax, integer_x=True)
             if ax.get_legend_handles_labels()[0]:
                 ax.legend()
@@ -786,6 +808,7 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
             ]
             if not filtered:
                 continue
+            network_sizes = _ensure_network_sizes(r.get("num_nodes") for r in filtered)
             fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 4), sharey=True)
             if len(clusters) == 1:
                 axes = [axes]
@@ -832,6 +855,7 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
                 if idx == 0:
                     ax.set_ylabel("PDR")
                 ax.set_ylim(0.0, 1.05)
+                _apply_network_ticks(ax, network_sizes)
                 _format_axes(ax, integer_x=True)
             handles, labels = axes[0].get_legend_handles_labels()
             if handles:
@@ -872,6 +896,7 @@ def _plot_cluster_der(records: List[Dict[str, Any]], figures_dir: Path) -> None:
         ]
         if not filtered:
             continue
+        network_sizes = _ensure_network_sizes(r.get("num_nodes") for r in filtered)
         fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 4), sharey=True)
         if len(clusters) == 1:
             axes = [axes]
@@ -907,6 +932,7 @@ def _plot_cluster_der(records: List[Dict[str, Any]], figures_dir: Path) -> None:
             if idx == 0:
                 ax.set_ylabel("DER")
             ax.set_ylim(0.0, 1.05)
+            _apply_network_ticks(ax, network_sizes)
             _format_axes(ax, integer_x=True)
         handles, labels = axes[0].get_legend_handles_labels()
         if handles:
@@ -1009,6 +1035,9 @@ def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None
                 f"Trajectories {ylabel} – {algorithm} – {fixed_desc}"
             )
             integer_x = all(float(x).is_integer() for x in collected_xs)
+            if x_key == "num_nodes":
+                network_sizes = _ensure_network_sizes(collected_xs)
+                _apply_network_ticks(ax, network_sizes)
             _format_axes(ax, integer_x=integer_x)
             if ax.get_legend_handles_labels()[0]:
                 ax.legend(ncol=2)
@@ -1241,6 +1270,10 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
                     ax.set_ylabel(ylabel)
                     period_label = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
                     ax.set_title(f"{title} – {algorithm} – period {period_label} s")
+                    network_sizes = _ensure_network_sizes(
+                        r.get("num_nodes") for r in period_records if r.get("num_nodes") is not None
+                    )
+                    _apply_network_ticks(ax, network_sizes)
                     _format_axes(ax, integer_x=True)
                     if ax.get_legend_handles_labels()[0]:
                         ax.legend()
