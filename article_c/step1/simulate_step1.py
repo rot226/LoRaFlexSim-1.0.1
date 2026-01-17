@@ -17,6 +17,7 @@ from article_c.common.metrics import energy_per_success_bit, packet_delivery_rat
 from article_c.common.utils import assign_clusters, generate_traffic_times
 
 SF_VALUES = (7, 8, 9, 10, 11, 12)
+SF_INDEX = {sf: idx for idx, sf in enumerate(SF_VALUES)}
 
 # Seuils proxy pour SNR/RSSI (inspirés d'ordres de grandeur LoRaWAN).
 SNR_THRESHOLDS = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
@@ -27,6 +28,9 @@ RSSI_THRESHOLDS = {7: -123.0, 8: -126.0, 9: -129.0, 10: -132.0, 11: -134.5, 12: 
 class NodeLink:
     snr: float
     rssi: float
+    qos_margin: float
+    snr_margins: tuple[float, ...]
+    rssi_margins: tuple[float, ...]
 
 
 @dataclass
@@ -43,18 +47,15 @@ class Step1Result:
 
 
 def _qos_ok(node: NodeLink, sf: int) -> bool:
-    snr_margin = _snr_margin_requirement(node)
-    return (
-        node.snr >= SNR_THRESHOLDS[sf] + snr_margin
-        and node.rssi >= RSSI_THRESHOLDS[sf]
-    )
+    index = SF_INDEX[sf]
+    return node.snr_margins[index] >= node.qos_margin and node.rssi_margins[index] >= 0.0
 
 
-def _snr_margin_requirement(node: NodeLink) -> float:
+def _snr_margin_requirement(snr: float, rssi: float) -> float:
     """Calcule une marge SNR proxy en fonction de la distance/variabilité."""
     rssi_span = 30.0
-    distance_factor = min(1.0, max(0.0, (-110.0 - node.rssi) / rssi_span))
-    variability_factor = min(1.0, max(0.0, (-node.snr) / 20.0))
+    distance_factor = min(1.0, max(0.0, (-110.0 - rssi) / rssi_span))
+    variability_factor = min(1.0, max(0.0, (-snr) / 20.0))
     return 0.8 + 1.7 * distance_factor + 0.9 * variability_factor
 
 
@@ -81,8 +82,9 @@ def _mixra_h_assign(nodes: Iterable[NodeLink]) -> list[int]:
         best_sf = candidates[0]
         best_score = float("inf")
         for sf in candidates:
-            snr_margin = node.snr - SNR_THRESHOLDS[sf]
-            rssi_margin = node.rssi - RSSI_THRESHOLDS[sf]
+            index = SF_INDEX[sf]
+            snr_margin = node.snr_margins[index]
+            rssi_margin = node.rssi_margins[index]
             qos_margin = min(snr_margin, rssi_margin)
             total_nodes = max(1, len(assignments))
             density = loads[sf] / total_nodes
@@ -115,8 +117,9 @@ def _mixra_opt_assign(
     def qos_penalty(assignments_list: list[int]) -> float:
         penalty = 0.0
         for node, sf in zip(nodes_list, assignments_list):
-            snr_margin = node.snr - (SNR_THRESHOLDS[sf] + _snr_margin_requirement(node))
-            rssi_margin = node.rssi - RSSI_THRESHOLDS[sf]
+            index = SF_INDEX[sf]
+            snr_margin = node.snr_margins[index] - node.qos_margin
+            rssi_margin = node.rssi_margins[index]
             min_margin = min(snr_margin, rssi_margin)
             penalty += max(0.0, 2.0 - min_margin)
         return penalty
@@ -201,7 +204,18 @@ def _generate_nodes(count: int, seed: int) -> list[NodeLink]:
     for _ in range(count):
         snr = rng.uniform(-22.0, 5.0)
         rssi = rng.uniform(-140.0, -110.0)
-        nodes.append(NodeLink(snr=snr, rssi=rssi))
+        qos_margin = _snr_margin_requirement(snr, rssi)
+        snr_margins = tuple(snr - SNR_THRESHOLDS[sf] for sf in SF_VALUES)
+        rssi_margins = tuple(rssi - RSSI_THRESHOLDS[sf] for sf in SF_VALUES)
+        nodes.append(
+            NodeLink(
+                snr=snr,
+                rssi=rssi,
+                qos_margin=qos_margin,
+                snr_margins=snr_margins,
+                rssi_margins=rssi_margins,
+            )
+        )
     return nodes
 
 
