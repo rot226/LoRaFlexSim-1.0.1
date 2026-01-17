@@ -215,6 +215,10 @@ Le scénario de validation QoS multi-algorithmes est automatisé via les scripts
 pour les commandes complètes, les préréglages (rapide, intermédiaire, complet)
 et la checklist de vérification.【F:scripts/run_qos_cluster_bench.py†L1-L119】【F:scripts/run_qos_cluster_pipeline.py†L1-L153】【F:docs/qos_cluster_validation_pipeline.md†L1-L142】
 
+Les tests **rapides** doivent couvrir **plusieurs tailles** de réseau ; utilisez
+par exemple l'option `--network-sizes 80 160 320 640 1280` afin d'échantillonner
+plusieurs densités dès la vérification initiale.
+
 Pour générer manuellement les figures QoS à partir d'un dossier de résultats,
 utilisez la CLI dédiée :
 
