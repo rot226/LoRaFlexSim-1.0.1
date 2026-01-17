@@ -136,6 +136,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Active ou désactive MixRA-Opt.",
     )
     parser.add_argument(
+        "--mixra-opt-mode",
+        choices=("fast", "full"),
+        default="fast",
+        help="Mode MixRA-Opt (fast par défaut, full pour une optimisation plus longue).",
+    )
+    parser.add_argument(
         "--outdir",
         type=str,
         default=str(Path(__file__).resolve().parent / "results"),
@@ -176,6 +182,7 @@ def main(argv: list[str] | None = None) -> None:
                         mixra_opt_epsilon=args.mixra_opt_epsilon,
                         mixra_opt_max_evaluations=args.mixra_opt_max_evals,
                         mixra_opt_enabled=args.mixra_opt_enabled,
+                        mixra_opt_mode=args.mixra_opt_mode,
                     )
                     cluster_stats = {
                         cluster: {"sent": 0, "received": 0} for cluster in cluster_ids

@@ -105,7 +105,10 @@ python scripts/run_step1_matrix.py --algos adr apra mixra_h mixra_opt --with-sni
 > distance/variabilité. MixRA-H applique une heuristique équilibrant la QoS
 > (marges SNR/RSSI) tout en pénalisant les SF surchargés via la densité, et
 > MixRA-Opt optimise un objectif multi-critère combinant collisions et pénalité
-> QoS (glouton + recherche locale).
+> QoS (glouton + recherche locale). Par défaut, MixRA-Opt tourne en mode rapide
+> (`fast_opt`) qui réduit le nombre d'itérations et la taille d'échantillonnage ;
+> utilisez `--mixra-opt-mode fast` pour forcer ce mode ou `--mixra-opt-mode full`
+> pour une optimisation plus exhaustive.
 
 Pour forcer explicitement le venv via PowerShell (sans déclencher l’erreur
 « Le terme 'elseif' n’est pas reconnu »), utilisez un bloc `if (...) { ... } elseif (...) { ... }`
