@@ -8,6 +8,7 @@ cohérents lorsque les formules exactes ne sont pas disponibles.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import random
 from typing import Iterable
 
@@ -21,6 +22,8 @@ SF_VALUES = (7, 8, 9, 10, 11, 12)
 # Seuils proxy pour SNR/RSSI (inspirés d'ordres de grandeur LoRaWAN).
 SNR_THRESHOLDS = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
 RSSI_THRESHOLDS = {7: -123.0, 8: -126.0, 9: -129.0, 10: -132.0, 11: -134.5, 12: -137.0}
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -102,6 +105,7 @@ def _mixra_opt_assign(
     max_iterations: int = 200,
     candidate_subset_size: int = 200,
     convergence_epsilon: float = 1e-3,
+    max_evaluations: int = 200,
     rng: random.Random | None = None,
 ) -> list[int]:
     """MixRA-Opt proxy: glouton + recherche locale (collisions + QoS)."""
@@ -129,6 +133,7 @@ def _mixra_opt_assign(
         loads[sf] += 1
 
     small_improvement_streak = 0
+    evaluations = 0
     for _ in range(max_iterations):
         improved = False
         if len(nodes_list) > candidate_subset_size:
@@ -139,6 +144,10 @@ def _mixra_opt_assign(
             candidate_indices = list(range(len(nodes_list)))
         start_obj = objective(loads, assignments)
         for idx in candidate_indices:
+            evaluations += 1
+            if evaluations > max_evaluations:
+                LOGGER.warning("MixRA-Opt fallback used")
+                return _mixra_h_assign(nodes_list)
             node = nodes_list[idx]
             current_sf = assignments[idx]
             candidates = [sf for sf in SF_VALUES if _qos_ok(node, sf)]
@@ -216,6 +225,8 @@ def run_simulation(
     mixra_opt_max_iterations: int = 200,
     mixra_opt_candidate_subset_size: int = 200,
     mixra_opt_epsilon: float = 1e-3,
+    mixra_opt_max_evaluations: int = 200,
+    mixra_opt_enabled: bool = True,
 ) -> Step1Result:
     """Exécute une simulation minimale.
 
@@ -236,14 +247,17 @@ def run_simulation(
         assignments = [_adr_smallest_sf(node) for node in nodes]
     elif algorithm == "mixra_h":
         assignments = _mixra_h_assign(nodes)
-    elif algorithm == "mixra_opt":
+    elif algorithm == "mixra_opt" and mixra_opt_enabled:
         assignments = _mixra_opt_assign(
             nodes,
             max_iterations=mixra_opt_max_iterations,
             candidate_subset_size=mixra_opt_candidate_subset_size,
             convergence_epsilon=mixra_opt_epsilon,
+            max_evaluations=mixra_opt_max_evaluations,
             rng=rng,
         )
+    elif algorithm == "mixra_opt":
+        assignments = _mixra_h_assign(nodes)
     else:
         raise ValueError(f"Algorithme inconnu: {algorithm}")
     node_received = _estimate_received(assignments, rng)

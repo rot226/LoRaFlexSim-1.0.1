@@ -110,6 +110,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Seuil d'amélioration pour la convergence MixRA-Opt.",
     )
     parser.add_argument(
+        "--mixra-opt-max-evals",
+        type=int,
+        default=200,
+        help="Nombre maximal d'évaluations pour MixRA-Opt.",
+    )
+    parser.add_argument(
+        "--mixra-opt-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Active ou désactive MixRA-Opt.",
+    )
+    parser.add_argument(
         "--outdir",
         type=str,
         default=str(Path(__file__).resolve().parent / "results"),
@@ -148,6 +160,8 @@ def main(argv: list[str] | None = None) -> None:
                         mixra_opt_max_iterations=args.mixra_opt_max_iterations,
                         mixra_opt_candidate_subset_size=args.mixra_opt_candidate_subset_size,
                         mixra_opt_epsilon=args.mixra_opt_epsilon,
+                        mixra_opt_max_evaluations=args.mixra_opt_max_evals,
+                        mixra_opt_enabled=args.mixra_opt_enabled,
                     )
                     cluster_stats = {cluster: {"sent": 0, "received": 0} for cluster in cluster_ids}
                     for cluster, delivered in zip(
