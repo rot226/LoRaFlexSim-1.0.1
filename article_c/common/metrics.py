@@ -33,3 +33,11 @@ def energy_per_success_bit(
     power_w = 10 ** ((tx_power_dbm - 30) / 10)
     total_energy = total_airtime_s * power_w
     return total_energy / payload_bits_success if payload_bits_success else 0.0
+
+
+def mean_toa_s(airtime_ms: Iterable[float]) -> float:
+    """Calcule le ToA moyen en secondes à partir d'airtimes en millisecondes."""
+    airtimes = list(airtime_ms)
+    if not airtimes:
+        return 0.0
+    return sum(airtimes) / (len(airtimes) * 1000.0)

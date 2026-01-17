@@ -16,32 +16,8 @@ from article_c.common.plot_helpers import (
 )
 
 
-CANDIDATE_METRICS: list[tuple[str, str]] = [
-    ("toa_ms_mean", "Mean ToA (ms)"),
-    ("toa_mean", "Mean ToA (ms)"),
-    ("airtime_ms_mean", "Mean ToA (ms)"),
-    ("airtime_mean", "Mean ToA (ms)"),
-    ("latency_ms_mean", "Mean latency (ms)"),
-    ("latency_mean", "Mean latency"),
-    ("delay_ms_mean", "Mean latency (ms)"),
-    ("delay_mean", "Mean latency"),
-]
-
-
-def _select_metric(rows: list[dict[str, object]]) -> tuple[str, str]:
-    for key, label in CANDIDATE_METRICS:
-        if any(key in row for row in rows):
-            return key, label
-    available_keys = {key for row in rows for key in row}
-    for key in sorted(available_keys):
-        if key.endswith("_mean") and ("toa" in key or "latency" in key or "delay" in key):
-            label = "Mean latency"
-            if "toa" in key or "airtime" in key:
-                label = "Mean ToA"
-            if "ms" in key:
-                label = f"{label} (ms)"
-            return key, label
-    raise ValueError("Aucune métrique de ToA/latence trouvée dans les résultats.")
+METRIC_KEY = "mean_toa_s"
+METRIC_LABEL = "Mean ToA (s)"
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str, y_label: str) -> plt.Figure:
@@ -60,8 +36,9 @@ def main() -> None:
     results_path = step_dir / "results" / "aggregated_results.csv"
     rows = filter_cluster(load_step1_aggregated(results_path), "all")
 
-    metric_key, label = _select_metric(rows)
-    fig = _plot_metric(rows, metric_key, label)
+    if not any(METRIC_KEY in row for row in rows):
+        raise ValueError("La métrique mean_toa_s est absente des résultats.")
+    fig = _plot_metric(rows, METRIC_KEY, METRIC_LABEL)
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_S9", use_tight=False)
     plt.close(fig)

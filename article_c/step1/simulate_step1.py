@@ -14,7 +14,11 @@ from typing import Iterable
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.lora_phy import coding_rate_to_cr, compute_airtime
-from article_c.common.metrics import energy_per_success_bit, packet_delivery_ratio
+from article_c.common.metrics import (
+    energy_per_success_bit,
+    mean_toa_s,
+    packet_delivery_ratio,
+)
 from article_c.common.utils import assign_clusters, generate_traffic_times
 
 SF_VALUES = (7, 8, 9, 10, 11, 12)
@@ -41,8 +45,10 @@ class Step1Result:
     sent: int
     received: int
     energy_per_success_bit: float
+    mean_toa_s: float
     node_clusters: list[str]
     node_received: list[bool]
+    toa_s_by_node: list[float]
 
     @property
     def pdr(self) -> float:
@@ -284,6 +290,8 @@ def run_simulation(
         compute_airtime(payload_bytes=payload_bytes, sf=sf, bw_khz=bw_khz, cr=cr)
         for sf in assignments
     ]
+    toa_s_by_node = [airtime_ms / 1000.0 for airtime_ms in airtimes_ms]
+    mean_toa = mean_toa_s(airtimes_ms)
     payload_bits_success = payload_bytes * 8 * received
     energy_per_bit = energy_per_success_bit(
         airtimes_ms, payload_bits_success, DEFAULT_CONFIG.radio.tx_power_dbm
@@ -292,6 +300,8 @@ def run_simulation(
         sent=actual_sent,
         received=received,
         energy_per_success_bit=energy_per_bit,
+        mean_toa_s=mean_toa,
         node_clusters=node_clusters,
         node_received=node_received,
+        toa_s_by_node=toa_s_by_node,
     )
