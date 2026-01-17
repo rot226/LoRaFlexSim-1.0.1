@@ -88,12 +88,22 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:
         parser.error(str(exc))
     article_dir = Path(__file__).resolve().parent
+    step1_csv = article_dir / "step1" / "results" / "aggregated_results.csv"
+    step2_csv = article_dir / "step2" / "results" / "aggregated_results.csv"
     csv_paths: list[Path] = []
     if "step1" in steps:
-        csv_paths.append(article_dir / "step1" / "results" / "aggregated_results.csv")
-        csv_paths.append(article_dir / "step2" / "results" / "aggregated_results.csv")
-    if "step2" in steps and "step1" not in steps:
-        csv_paths.append(article_dir / "step2" / "results" / "aggregated_results.csv")
+        csv_paths.append(step1_csv)
+    if "step2" in steps:
+        if step2_csv.exists():
+            csv_paths.append(step2_csv)
+        else:
+            print(
+                "CSV Step2 absent : "
+                f"{step2_csv}. "
+                "Exécutez l'étape 2 pour générer aggregated_results.csv "
+                "avant de lancer les plots Step2."
+            )
+            steps = [step for step in steps if step != "step2"]
     _validate_snir_mode_column(csv_paths)
     for step in steps:
         for module_path in PLOT_MODULES[step]:
