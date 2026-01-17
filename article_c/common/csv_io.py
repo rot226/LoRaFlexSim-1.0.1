@@ -8,6 +8,7 @@ from pathlib import Path
 from statistics import mean, stdev
 
 GROUP_KEYS = ("density", "algo", "snir_mode", "cluster")
+EXTRA_MEAN_KEYS = {"mean_toa_s", "mean_latency_s"}
 
 
 def write_rows(path: Path, header: list[str], rows: list[list[object]]) -> None:
@@ -43,6 +44,8 @@ def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, objec
             else:
                 aggregated_row[f"{key}_mean"] = 0.0
                 aggregated_row[f"{key}_std"] = 0.0
+            if key in EXTRA_MEAN_KEYS:
+                aggregated_row[key] = aggregated_row[f"{key}_mean"]
         aggregated.append(aggregated_row)
     return aggregated
 

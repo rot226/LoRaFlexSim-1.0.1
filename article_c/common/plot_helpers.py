@@ -205,6 +205,7 @@ def _sample_step1_rows() -> list[dict[str, object]]:
                     base_toa = 40.0 + 8.0 * idx + 4.0 * algo_idx
                     if snir_mode == "snir_off":
                         base_toa += 5.0
+                    mean_toa_s = (base_toa + 0.2 * density) / 1000.0
                     row = {
                         "density": density,
                         "algo": algo,
@@ -213,7 +214,7 @@ def _sample_step1_rows() -> list[dict[str, object]]:
                         "pdr_mean": pdr,
                         "sent_mean": 120 * density,
                         "received_mean": 120 * density * pdr,
-                        "toa_ms_mean": base_toa + 0.2 * density,
+                        "mean_toa_s": mean_toa_s,
                     }
                     for sf, share in zip(sf_values, sf_shares, strict=False):
                         row[f"sf{sf}_share_mean"] = share

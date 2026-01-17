@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from statistics import mean
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.csv_io import write_simulation_results
@@ -176,19 +177,27 @@ def main(argv: list[str] | None = None) -> None:
                         mixra_opt_max_evaluations=args.mixra_opt_max_evals,
                         mixra_opt_enabled=args.mixra_opt_enabled,
                     )
-                    cluster_stats = {cluster: {"sent": 0, "received": 0} for cluster in cluster_ids}
+                    cluster_stats = {
+                        cluster: {"sent": 0, "received": 0} for cluster in cluster_ids
+                    }
+                    cluster_toa: dict[str, list[float]] = {cluster: [] for cluster in cluster_ids}
                     for cluster, delivered in zip(
                         result.node_clusters, result.node_received, strict=True
                     ):
                         cluster_stats[cluster]["sent"] += 1
                         if delivered:
                             cluster_stats[cluster]["received"] += 1
+                    for cluster, toa_s in zip(
+                        result.node_clusters, result.toa_s_by_node, strict=True
+                    ):
+                        cluster_toa[cluster].append(toa_s)
                     for cluster, stats in cluster_stats.items():
                         sent_cluster = stats["sent"]
                         received_cluster = stats["received"]
                         pdr_cluster = (
                             received_cluster / sent_cluster if sent_cluster > 0 else 0.0
                         )
+                        mean_toa_s = mean(cluster_toa[cluster]) if cluster_toa[cluster] else 0.0
                         raw_rows.append(
                             {
                                 "density": density,
@@ -200,6 +209,7 @@ def main(argv: list[str] | None = None) -> None:
                                 "sent": sent_cluster,
                                 "received": received_cluster,
                                 "pdr": pdr_cluster,
+                                "mean_toa_s": mean_toa_s,
                             }
                         )
                     raw_rows.append(
@@ -213,6 +223,7 @@ def main(argv: list[str] | None = None) -> None:
                             "sent": result.sent,
                             "received": result.received,
                             "pdr": result.pdr,
+                            "mean_toa_s": result.mean_toa_s,
                         }
                     )
 
