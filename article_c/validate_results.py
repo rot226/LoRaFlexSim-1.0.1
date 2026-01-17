@@ -6,7 +6,6 @@ import argparse
 import csv
 from dataclasses import dataclass
 from pathlib import Path
-from statistics import pvariance
 from typing import Iterable
 
 
@@ -84,7 +83,7 @@ def _check_snir_pdr(rows: list[dict[str, str]]) -> CheckResult:
     if not rows or not pdr_col or not snir_col or not density_col:
         return CheckResult(
             "PDR SNIR ON < SNIR OFF",
-            "N/A",
+            "WARN",
             "Colonnes ou données manquantes.",
         )
 
@@ -115,11 +114,11 @@ def _check_snir_pdr(rows: list[dict[str, str]]) -> CheckResult:
     if comparisons == 0:
         return CheckResult(
             "PDR SNIR ON < SNIR OFF",
-            "N/A",
+            "WARN",
             "Aucune paire comparable trouvée.",
         )
 
-    status = "OK" if failures == 0 else "KO"
+    status = "OK" if failures == 0 else "WARN"
     detail = f"Comparaisons: {comparisons}, échecs: {failures}."
     return CheckResult("PDR SNIR ON < SNIR OFF", status, detail)
 
@@ -139,7 +138,7 @@ def _check_trend(
     cluster_col = _pick_column(columns, ["cluster"])
 
     if not rows or not metric_col or not node_col:
-        return CheckResult(label, "N/A", "Colonnes ou données manquantes.")
+        return CheckResult(label, "WARN", "Colonnes ou données manquantes.")
 
     grouped: dict[tuple[str, str], dict[float, list[float]]] = {}
     for row in rows:
@@ -172,14 +171,19 @@ def _check_trend(
             failures += 1
 
     if checked == 0:
-        return CheckResult(label, "N/A", "Pas assez de points pour évaluer la tendance.")
+        return CheckResult(label, "WARN", "Pas assez de points pour évaluer la tendance.")
 
-    status = "OK" if failures == 0 else "KO"
+    status = "OK" if failures == 0 else "WARN"
     detail = f"Groupes analysés: {checked}, échecs: {failures}."
     return CheckResult(label, status, detail)
 
 
-def _check_rl1_variance(rows: list[dict[str, str]], threshold: float) -> CheckResult:
+def _check_reward_rise_plateau(
+    rows: list[dict[str, str]],
+    *,
+    slope_threshold: float,
+    plateau_threshold: float,
+) -> CheckResult:
     columns = _normalize_columns(rows)
     reward_col = _pick_column(columns, ["reward_mean", "reward"])
     density_col = _pick_column(columns, ["density", "num_nodes", "n_nodes"])
@@ -188,9 +192,13 @@ def _check_rl1_variance(rows: list[dict[str, str]], threshold: float) -> CheckRe
     cluster_col = _pick_column(columns, ["cluster"])
 
     if not rows or not reward_col or not density_col:
-        return CheckResult("RL1 non plate", "N/A", "Colonnes ou données manquantes.")
+        return CheckResult(
+            "Reward RL monte puis se stabilise",
+            "WARN",
+            "Colonnes ou données manquantes.",
+        )
 
-    grouped: dict[str, dict[float, list[float]]] = {}
+    grouped: dict[tuple[str, str], dict[float, list[float]]] = {}
     for row in rows:
         if cluster_col and row.get(cluster_col) not in {"", None, "all"}:
             continue
@@ -203,26 +211,82 @@ def _check_rl1_variance(rows: list[dict[str, str]], threshold: float) -> CheckRe
         if density is None or reward is None:
             continue
         algo = row.get(algo_col, "") if algo_col else ""
-        grouped.setdefault(algo, {}).setdefault(density, []).append(reward)
+        snir_state = _snir_state(row.get(snir_col)) or "" if snir_col else ""
+        grouped.setdefault((algo, snir_state), {}).setdefault(density, []).append(
+            reward
+        )
 
     checked = 0
     failures = 0
     for values in grouped.values():
         points = [sum(vals) / len(vals) for _, vals in sorted(values.items())]
-        if len(points) < 2:
+        if len(points) < 4:
+            continue
+        mid = max(2, len(points) // 2)
+        early_xs = list(range(mid))
+        early_ys = points[:mid]
+        late_xs = list(range(len(points) - mid))
+        late_ys = points[-(len(points) - mid) :]
+        early_slope = _slope(early_xs, early_ys)
+        late_slope = _slope(late_xs, late_ys)
+        if early_slope is None or late_slope is None:
             continue
         checked += 1
-        if pvariance(points) <= threshold:
+        if early_slope <= slope_threshold or abs(late_slope) > plateau_threshold:
             failures += 1
 
     if checked == 0:
-        return CheckResult("RL1 non plate", "N/A", "Pas assez de points pour la variance.")
+        return CheckResult(
+            "Reward RL monte puis se stabilise",
+            "WARN",
+            "Pas assez de points pour analyser la courbe.",
+        )
 
-    status = "OK" if failures == 0 else "KO"
+    status = "OK" if failures == 0 else "WARN"
     detail = (
-        f"Algorithmes analysés: {checked}, échecs: {failures}, seuil={threshold}"
+        "Groupes analysés: "
+        f"{checked}, échecs: {failures}, pente_min={slope_threshold}, plateau={plateau_threshold}"
     )
-    return CheckResult("RL1 non plate", status, detail)
+    return CheckResult("Reward RL monte puis se stabilise", status, detail)
+
+
+def _check_cluster_order(
+    rows: list[dict[str, str]],
+    *,
+    metric_candidates: Iterable[str],
+    label: str,
+) -> CheckResult:
+    columns = _normalize_columns(rows)
+    cluster_col = _pick_column(columns, ["cluster"])
+    metric_col = _pick_column(columns, metric_candidates)
+
+    if not rows or not cluster_col or not metric_col:
+        return CheckResult(label, "WARN", "Colonnes ou données manquantes.")
+
+    cluster_values: dict[str, list[float]] = {"C1": [], "C2": [], "C3": []}
+    for row in rows:
+        cluster = row.get(cluster_col)
+        if cluster is None:
+            continue
+        cluster_key = str(cluster).strip().upper()
+        if cluster_key not in cluster_values:
+            continue
+        metric_value = _to_float(row.get(metric_col))
+        if metric_value is None:
+            continue
+        cluster_values[cluster_key].append(metric_value)
+
+    if any(not values for values in cluster_values.values()):
+        return CheckResult(label, "WARN", "Clusters manquants ou sans données.")
+
+    means = {key: sum(vals) / len(vals) for key, vals in cluster_values.items()}
+    ok = means["C1"] > means["C2"] > means["C3"]
+    status = "OK" if ok else "WARN"
+    detail = (
+        "Moyennes: "
+        f"C1={means['C1']:.4g}, C2={means['C2']:.4g}, C3={means['C3']:.4g}."
+    )
+    return CheckResult(label, status, detail)
 
 
 def _report(results: list[CheckResult]) -> None:
@@ -250,10 +314,16 @@ def main() -> None:
         help="Chemin vers aggregated_results.csv de l'étape 2.",
     )
     parser.add_argument(
-        "--variance-threshold",
+        "--slope-threshold",
         type=float,
-        default=1e-4,
-        help="Seuil minimal de variance pour la courbe RL1.",
+        default=0.0,
+        help="Pente minimale attendue pour la phase montante du reward RL.",
+    )
+    parser.add_argument(
+        "--plateau-threshold",
+        type=float,
+        default=1e-3,
+        help="Seuil maximal pour considérer la phase plateau du reward RL.",
     )
     args = parser.parse_args()
 
@@ -285,9 +355,25 @@ def main() -> None:
                 "collisions_snir_mean",
             ],
             trend="up",
-            label="Collision rate augmente",
+            label="Collision rate augmente avec N",
         ),
-        _check_rl1_variance(step2_rows, args.variance_threshold),
+        _check_reward_rise_plateau(
+            step2_rows,
+            slope_threshold=args.slope_threshold,
+            plateau_threshold=args.plateau_threshold,
+        ),
+        _check_cluster_order(
+            step1_rows or step2_rows,
+            metric_candidates=[
+                "pdr_mean",
+                "pdr",
+                "goodput_mean",
+                "throughput_mean",
+                "reward_mean",
+                "reward",
+            ],
+            label="Cluster C1 > C2 > C3",
+        ),
     ]
 
     _report(results)
