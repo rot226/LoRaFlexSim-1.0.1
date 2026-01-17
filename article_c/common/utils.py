@@ -37,11 +37,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Alias de --seeds_base (déprécié).",
     )
     parser.add_argument(
-        "--densities",
-        type=float,
+        "--network-sizes",
+        dest="network_sizes",
+        type=int,
         nargs="+",
-        default=[0.1, 0.5, 1.0],
-        help="Liste des densités (ex: 0.1 0.5 1.0).",
+        default=list(DEFAULT_CONFIG.scenario.network_sizes),
+        help="Tailles de réseau (nombre de nœuds entiers, ex: 50 100 150).",
+    )
+    parser.add_argument(
+        "--densities",
+        dest="network_sizes",
+        type=int,
+        nargs="+",
+        default=argparse.SUPPRESS,
+        help="Alias de --network-sizes (déprécié).",
     )
     parser.add_argument(
         "--replications",
@@ -139,11 +148,11 @@ def set_deterministic_seed(seed: int | None) -> int:
     return seed
 
 
-def parse_density_list(value: str | Sequence[float]) -> list[float]:
-    """Parse une liste de densités depuis une chaîne CSV ou une séquence."""
+def parse_network_size_list(value: str | Sequence[int]) -> list[int]:
+    """Parse une liste de tailles de réseau (nombre de nœuds)."""
     if isinstance(value, str):
-        return [float(item.strip()) for item in value.split(",") if item.strip()]
-    return [float(item) for item in value]
+        return [int(item.strip()) for item in value.split(",") if item.strip()]
+    return [int(item) for item in value]
 
 
 def replication_ids(count: int) -> list[int]:

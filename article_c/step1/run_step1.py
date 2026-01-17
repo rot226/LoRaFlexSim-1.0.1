@@ -7,14 +7,18 @@ from pathlib import Path
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.csv_io import write_simulation_results
-from article_c.common.utils import parse_density_list, replication_ids, set_deterministic_seed
+from article_c.common.utils import (
+    parse_network_size_list,
+    replication_ids,
+    set_deterministic_seed,
+)
 from article_c.step1.simulate_step1 import run_simulation
 
 ALGORITHMS = ("adr", "mixra_h", "mixra_opt")
 
 
 def density_to_sent(density: float, base_sent: int = 120) -> int:
-    """Convertit une densité en nombre de trames simulées."""
+    """Convertit une taille de réseau en nombre de trames simulées."""
     return max(1, int(round(base_sent * density)))
 
 
@@ -29,11 +33,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
     scenario_defaults = DEFAULT_CONFIG.scenario
     snir_defaults = DEFAULT_CONFIG.snir
     parser.add_argument(
-        "--densities",
-        type=float,
+        "--network-sizes",
+        dest="network_sizes",
+        type=int,
         nargs="+",
-        default=[0.1, 0.5, 1.0],
-        help="Liste des densités (ex: 0.1 0.5 1.0).",
+        default=list(DEFAULT_CONFIG.scenario.network_sizes),
+        help="Tailles de réseau (nombre de nœuds entiers, ex: 50 100 150).",
+    )
+    parser.add_argument(
+        "--densities",
+        dest="network_sizes",
+        type=int,
+        nargs="+",
+        default=argparse.SUPPRESS,
+        help="Alias de --network-sizes (déprécié).",
     )
     parser.add_argument(
         "--replications",
@@ -134,7 +147,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
-    densities = parse_density_list(args.densities)
+    densities = parse_network_size_list(args.network_sizes)
     snir_modes = parse_snir_modes(args.snir_modes)
     replications = replication_ids(args.replications)
     output_dir = Path(args.outdir)
