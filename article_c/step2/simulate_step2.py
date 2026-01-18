@@ -85,6 +85,13 @@ def _compute_collision_successes(
     return successes_by_node
 
 
+def _sample_log_normal_shadowing(
+    rng: random.Random, mean_db: float, sigma_db: float
+) -> tuple[float, float]:
+    shadowing_db = rng.gauss(mean_db, sigma_db)
+    return shadowing_db, 10 ** (-shadowing_db / 10.0)
+
+
 def _weights_for_algo(algorithm: str, n_arms: int) -> list[float]:
     if algorithm == "mixra_h":
         base = [0.3, 0.25, 0.2, 0.15, 0.07, 0.03]
@@ -117,7 +124,7 @@ def run_simulation(
     n_rounds: int = 20,
     n_nodes: int = 12,
     n_arms: int | None = None,
-    window_size: int = 10,
+    window_size: int = 5,
     lambda_energy: float = 0.6,
     density: float | None = None,
     snir_mode: str = "snir_on",
@@ -135,7 +142,7 @@ def run_simulation(
     """Exécute une simulation proxy de l'étape 2."""
     rng = random.Random(seed)
     step2_defaults = DEFAULT_CONFIG.step2
-    traffic_mode_value = traffic_mode
+    traffic_mode_value = step2_defaults.traffic_mode
     jitter_range_value = jitter_range_s
     window_duration_value = (
         step2_defaults.window_duration_s if window_duration_s is None else window_duration_s
@@ -178,6 +185,7 @@ def run_simulation(
         else 1.0
         for _ in range(n_nodes)
     ]
+    base_rate_multipliers = [rng.uniform(0.7, 1.3) for _ in range(n_nodes)]
 
     sf_values = list(SF_VALUES)
     if n_arms is None:
@@ -206,9 +214,15 @@ def run_simulation(
         sf: _normalize(airtime, min_airtime, max_airtime)
         for sf, airtime in airtime_by_sf.items()
     }
+    shadowing_mean_db = DEFAULT_CONFIG.scenario.shadowing_mean_db
+    shadowing_sigma_db = DEFAULT_CONFIG.scenario.shadowing_sigma_db or 6.0
 
     if algorithm == "ucb1_sf":
-        bandit = BanditUCB1(n_arms=n_arms)
+        bandit = BanditUCB1(
+            n_arms=n_arms,
+            warmup_rounds=DEFAULT_CONFIG.rl.warmup,
+            epsilon_min=0.05,
+        )
         window_start_s = 0.0
         for round_id in range(n_rounds):
             arm_index = bandit.select_arm()
@@ -223,7 +237,7 @@ def run_simulation(
             node_windows: list[dict[str, object]] = []
             for node_id in range(n_nodes):
                 sf_value = sf_values[arm_index]
-                rate_multiplier = rng.uniform(0.8, 1.2)
+                rate_multiplier = base_rate_multipliers[node_id] * rng.uniform(0.9, 1.1)
                 expected_sent = max(
                     1, int(round(window_size * traffic_coeffs[node_id] * rate_multiplier))
                 )
@@ -240,9 +254,12 @@ def run_simulation(
                     jitter_range_s=jitter_range_node_s,
                     rng=rng,
                 )
-                shadowing_sigma_db = rng.uniform(4.0, 8.0)
-                shadowing_db = rng.gauss(0.0, shadowing_sigma_db)
-                link_quality = _clip(10 ** (-shadowing_db / 10.0), 0.0, 1.0)
+                shadowing_db, shadowing_linear = _sample_log_normal_shadowing(
+                    rng,
+                    mean_db=shadowing_mean_db,
+                    sigma_db=shadowing_sigma_db,
+                )
+                link_quality = _clip(shadowing_linear, 0.0, 1.0)
                 node_offset_s = (
                     rng.uniform(0.0, window_delay_range_value)
                     if window_delay_enabled_value and window_delay_range_value > 0
@@ -385,7 +402,7 @@ def run_simulation(
                 else:
                     arm_index = rng.choices(range(n_arms), weights=weights, k=1)[0]
                 sf_value = sf_values[arm_index]
-                rate_multiplier = rng.uniform(0.8, 1.2)
+                rate_multiplier = base_rate_multipliers[node_id] * rng.uniform(0.9, 1.1)
                 expected_sent = max(
                     1, int(round(window_size * traffic_coeffs[node_id] * rate_multiplier))
                 )
@@ -402,9 +419,12 @@ def run_simulation(
                     jitter_range_s=jitter_range_node_s,
                     rng=rng,
                 )
-                shadowing_sigma_db = rng.uniform(4.0, 8.0)
-                shadowing_db = rng.gauss(0.0, shadowing_sigma_db)
-                link_quality = _clip(10 ** (-shadowing_db / 10.0), 0.0, 1.0)
+                shadowing_db, shadowing_linear = _sample_log_normal_shadowing(
+                    rng,
+                    mean_db=shadowing_mean_db,
+                    sigma_db=shadowing_sigma_db,
+                )
+                link_quality = _clip(shadowing_linear, 0.0, 1.0)
                 node_offset_s = (
                     rng.uniform(0.0, window_delay_range_value)
                     if window_delay_enabled_value and window_delay_range_value > 0
