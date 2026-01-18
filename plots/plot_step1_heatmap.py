@@ -34,7 +34,7 @@ DEFAULT_ALGORITHMS = ["adr", "apra", "mixra_h", "mixra_opt"]
 HEATMAP_COLORMAP = "cividis"
 
 METRIC_LABELS = {
-    "DER": ("DER", "DER"),
+    "DER": ("DER", "DER (probability)"),
     "SNIR": ("snir_mean", "Mean SNIR (dB)"),
 }
 
@@ -158,7 +158,7 @@ def _plot_heatmaps(
         ax.set_yticklabels([str(node) for node in nodes])
         ax.set_xticks(range(len(intervals)))
         ax.set_xticklabels(_format_axis_labels(intervals))
-        ax.set_ylabel("Nodes")
+        ax.set_ylabel("Network size (number of nodes)")
         ax.set_title(f"{metric_label} – {SNIR_TITLES[state]}")
         ax.tick_params(axis="both", direction="in", length=4.5, width=1.0, labelsize=9)
 

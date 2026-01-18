@@ -43,9 +43,9 @@ def main() -> None:
     ax1.plot(stats["channels"], stats["PDR(%)"], marker="o", color="C0")
     ax2.plot(stats["channels"], stats["collisions"], marker="s", color="C1")
 
-    ax1.set_xlabel("channels")
-    ax1.set_ylabel("PDR(%)", color="C0")
-    ax2.set_ylabel("collisions", color="C1")
+    ax1.set_xlabel("Channels (count)")
+    ax1.set_ylabel("PDR (%)", color="C0")
+    ax2.set_ylabel("Collisions (count)", color="C1")
     ax1.tick_params(axis="y", labelcolor="C0")
     ax2.tick_params(axis="y", labelcolor="C1")
 

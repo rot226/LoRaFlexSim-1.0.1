@@ -67,7 +67,7 @@ def plot(
         (
             "avg_sf",
             "Average SF",
-            "",
+            "SF",
             "%.1f",
             "C4",
             "avg_sf_vs_scenario.svg",

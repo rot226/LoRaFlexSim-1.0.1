@@ -158,7 +158,7 @@ def load_metrics(path: Path) -> pd.DataFrame:
         aggregated["pdr_label"] = "PDR (%)"
     else:
         aggregated["pdr_percent"] = pdr_values
-        aggregated["pdr_label"] = "PDR"
+        aggregated["pdr_label"] = "PDR (probability)"
 
     aggregated["avg_delay_s_value"] = aggregated[delay_column].astype(float)
 
