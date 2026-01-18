@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 
 from article_c.common.plot_helpers import (
     apply_plot_style,
@@ -21,6 +22,9 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Packet Delivery Ratio")
+    ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.2f}"))
+    ax.yaxis.set_label_coords(-0.08, 0.5)
+    ax.set_ylim(0.0, 1.0)
     ax.set_title("Step 1 - Packet Delivery Ratio (SNIR on/off)")
     place_legend(ax)
     return fig
