@@ -58,13 +58,14 @@ def _signals_overlap(first: Signal, second: Signal) -> bool:
 
 
 def co_sf_interferers(target: Signal, interferers: Iterable[Signal]) -> list[Signal]:
-    """Retourne les interférences co-SF en overlap temporel."""
+    """Retourne les interférences co-SF (même canal) en overlap temporel."""
 
     return [
         interferer
         for interferer in interferers
         if (
             interferer.sf == target.sf
+            and interferer.channel_hz == target.channel_hz
             and _signals_overlap(target, interferer)
         )
     ]
@@ -118,6 +119,8 @@ def apply_fading_to_signal(
         rssi_dbm=signal.rssi_dbm - fading_db,
         sf=signal.sf,
         channel_hz=signal.channel_hz,
+        start_time_s=signal.start_time_s,
+        end_time_s=signal.end_time_s,
     )
 
 

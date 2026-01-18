@@ -13,12 +13,14 @@ import random
 from typing import Iterable
 
 from article_c.common.config import DEFAULT_CONFIG
+from article_c.common.interference import Signal, co_sf_interferers
 from article_c.common.lora_phy import coding_rate_to_cr, compute_airtime
 from article_c.common.metrics import (
     energy_per_success_bit,
     mean_toa_s,
     packet_delivery_ratio,
 )
+from article_c.common.propagation import sample_fading_db
 from article_c.common.utils import assign_clusters, generate_traffic_times
 
 SF_VALUES = (7, 8, 9, 10, 11, 12)
@@ -193,8 +195,15 @@ def _mixra_opt_assign(
     return assignments
 
 
-def _estimate_received(assignments: Iterable[int], rng: random.Random) -> list[bool]:
-    """Approxime les collisions et simule les succès par nœud."""
+def _estimate_received(
+    assignments: Iterable[int],
+    traffic_times: Iterable[float],
+    toa_s_by_node: Iterable[float],
+    channels: Iterable[int],
+    rssis: Iterable[float],
+    rng: random.Random,
+) -> list[bool]:
+    """Approxime les collisions en tenant compte des overlaps temps/canal."""
     loads = {sf: 0 for sf in SF_VALUES}
     assignments_list = list(assignments)
     for sf in assignments_list:
@@ -210,15 +219,62 @@ def _estimate_received(assignments: Iterable[int], rng: random.Random) -> list[b
         else:
             delivered = capacity_per_sf + (load - capacity_per_sf) * 0.5
         success_prob_by_sf[sf] = max(0.0, min(1.0, delivered / load))
-    return [rng.random() < success_prob_by_sf[sf] for sf in assignments_list]
+    signals = [
+        Signal(
+            rssi_dbm=rssi,
+            sf=sf,
+            channel_hz=channel,
+            start_time_s=start_time,
+            end_time_s=start_time + toa_s,
+        )
+        for sf, start_time, toa_s, channel, rssi in zip(
+            assignments_list,
+            traffic_times,
+            toa_s_by_node,
+            channels,
+            rssis,
+        )
+    ]
+    results: list[bool] = []
+    for index, signal in enumerate(signals):
+        interferers = signals[:index] + signals[index + 1 :]
+        overlaps = co_sf_interferers(signal, interferers)
+        overlap_penalty = 1.0 / (1.0 + len(overlaps))
+        success_probability = success_prob_by_sf[signal.sf] * overlap_penalty
+        results.append(rng.random() < success_probability)
+    return results
 
 
-def _generate_nodes(count: int, seed: int) -> list[NodeLink]:
+def _generate_nodes(
+    count: int,
+    seed: int,
+    *,
+    shadowing_sigma_db: float,
+    shadowing_mean_db: float,
+    fading_type: str | None,
+    fading_sigma_db: float,
+    fading_mean_db: float,
+) -> list[NodeLink]:
     rng = random.Random(seed)
     nodes: list[NodeLink] = []
     for _ in range(count):
         snr = rng.uniform(-22.0, 5.0)
         rssi = rng.uniform(-140.0, -110.0)
+        shadowing_db = (
+            rng.gauss(shadowing_mean_db, shadowing_sigma_db)
+            if shadowing_sigma_db > 0
+            else shadowing_mean_db
+        )
+        fading_db = sample_fading_db(
+            fading_type,
+            sigma_db=fading_sigma_db,
+            mean_db=fading_mean_db,
+            rng=rng,
+        )
+        variation_db = shadowing_db + fading_db
+        if variation_db != 0.0:
+            snr -= variation_db
+            rssi -= variation_db
         qos_margin = _snr_margin_requirement(snr, rssi)
         snr_margins = tuple(snr - SNR_THRESHOLDS[sf] for sf in SF_VALUES)
         rssi_margins = tuple(rssi - RSSI_THRESHOLDS[sf] for sf in SF_VALUES)
@@ -240,19 +296,26 @@ def run_simulation(
     seed: int = 42,
     *,
     duration_s: float = 3600.0,
-    traffic_mode: str = "periodic",
-    jitter_range_s: float = 5.0,
+    traffic_mode: str = DEFAULT_CONFIG.step2.traffic_mode,
+    jitter_range_s: float = DEFAULT_CONFIG.step2.jitter_range_s,
     mixra_opt_max_iterations: int = 200,
     mixra_opt_candidate_subset_size: int = 200,
     mixra_opt_epsilon: float = 1e-3,
     mixra_opt_max_evaluations: int = 200,
     mixra_opt_enabled: bool = True,
     mixra_opt_mode: str = "fast_opt",
+    shadowing_sigma_db: float = 2.0,
+    shadowing_mean_db: float = 0.0,
+    fading_type: str | None = "lognormal",
+    fading_sigma_db: float = 1.2,
+    fading_mean_db: float = 0.0,
 ) -> Step1Result:
     """Exécute une simulation minimale.
 
     Les résultats reposent sur des proxys ADR/MixRA et ne remplacent pas
-    l'implémentation complète des algorithmes.
+    l'implémentation complète des algorithmes. Le trafic et le canal
+    incluent une variabilité temporelle, et le lien radio applique
+    shadowing/fading pour rendre les déclenchements plus fluctuants.
     """
     rng = random.Random(seed)
     traffic_times = generate_traffic_times(
@@ -263,7 +326,15 @@ def run_simulation(
         rng=rng,
     )
     actual_sent = len(traffic_times)
-    nodes = _generate_nodes(actual_sent, seed)
+    nodes = _generate_nodes(
+        actual_sent,
+        seed,
+        shadowing_sigma_db=shadowing_sigma_db,
+        shadowing_mean_db=shadowing_mean_db,
+        fading_type=fading_type,
+        fading_sigma_db=fading_sigma_db,
+        fading_mean_db=fading_mean_db,
+    )
     if algorithm == "adr":
         assignments = [_adr_smallest_sf(node) for node in nodes]
     elif algorithm == "mixra_h":
@@ -289,9 +360,6 @@ def run_simulation(
         assignments = _mixra_h_assign(nodes)
     else:
         raise ValueError(f"Algorithme inconnu: {algorithm}")
-    node_received = _estimate_received(assignments, rng)
-    node_clusters = assign_clusters(actual_sent, rng=rng)
-    received = sum(1 for value in node_received if value)
     payload_bytes = DEFAULT_CONFIG.scenario.payload_bytes
     bw_khz = DEFAULT_CONFIG.radio.bandwidth_khz
     cr = coding_rate_to_cr(DEFAULT_CONFIG.radio.coding_rate)
@@ -300,6 +368,18 @@ def run_simulation(
         for sf in assignments
     ]
     toa_s_by_node = [airtime_ms / 1000.0 for airtime_ms in airtimes_ms]
+    channels = DEFAULT_CONFIG.radio.channels_hz
+    node_channels = [rng.choice(channels) for _ in range(actual_sent)]
+    node_received = _estimate_received(
+        assignments,
+        traffic_times,
+        toa_s_by_node,
+        node_channels,
+        [node.rssi for node in nodes],
+        rng,
+    )
+    node_clusters = assign_clusters(actual_sent, rng=rng)
+    received = sum(1 for value in node_received if value)
     mean_toa = mean_toa_s(airtimes_ms)
     payload_bits_success = payload_bytes * 8 * received
     energy_per_bit = energy_per_success_bit(
