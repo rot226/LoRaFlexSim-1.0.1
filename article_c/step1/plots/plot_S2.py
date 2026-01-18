@@ -1,4 +1,4 @@
-"""Trace la figure S2 (PDR vs densité, SNIR on/off)."""
+"""Trace la figure S2 (ToA moyen vs densité, SNIR on/off)."""
 
 from __future__ import annotations
 
@@ -20,9 +20,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, ax = plt.subplots()
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xlabel("Network size (number of nodes)")
-    ax.set_ylabel("Packet Delivery Ratio")
-    ax.set_title("Step 1 - Packet Delivery Ratio (SNIR on/off)")
+    ax.set_ylabel("Mean Time on Air (s)")
+    ax.set_title("Step 1 - Mean Time on Air vs Network Size (SNIR on/off)")
     place_legend(ax)
+    legend = ax.get_legend()
+    if legend is not None:
+        legend.set_title("Mean Time on Air (s)")
     return fig
 
 
@@ -32,7 +35,7 @@ def main() -> None:
     results_path = step_dir / "results" / "aggregated_results.csv"
     rows = filter_cluster(load_step1_aggregated(results_path), "all")
 
-    fig = _plot_metric(rows, "pdr_mean")
+    fig = _plot_metric(rows, "mean_toa_s")
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_S2", use_tight=False)
     plt.close(fig)
