@@ -2,7 +2,9 @@
 
 
 class BanditUCB1:
-    def __init__(self, n_arms: int, warmup_rounds: int = 5) -> None:
+    def __init__(
+        self, n_arms: int, warmup_rounds: int = 5, epsilon_min: float = 0.05
+    ) -> None:
         if n_arms <= 0:
             raise ValueError("Le nombre de bras doit être positif.")
         self.n_arms = n_arms
@@ -10,6 +12,7 @@ class BanditUCB1:
         self.values = [0.0] * n_arms
         self.t = 0
         self.warmup_rounds = warmup_rounds
+        self.epsilon_min = max(0.0, min(1.0, epsilon_min))
 
     def select_arm(self) -> int:
         if self.t < self.warmup_rounds:
@@ -20,6 +23,10 @@ class BanditUCB1:
                 return idx
 
         import math
+        import random
+
+        if self.epsilon_min > 0.0 and random.random() < self.epsilon_min:
+            return random.randrange(self.n_arms)
 
         total = max(1, self.t)
         scores = [
