@@ -51,6 +51,7 @@ class Step1Result:
     node_clusters: list[str]
     node_received: list[bool]
     toa_s_by_node: list[float]
+    sf_selected_by_node: list[int]
 
     @property
     def pdr(self) -> float:
@@ -393,4 +394,5 @@ def run_simulation(
         node_clusters=node_clusters,
         node_received=node_received,
         toa_s_by_node=toa_s_by_node,
+        sf_selected_by_node=list(assignments),
     )

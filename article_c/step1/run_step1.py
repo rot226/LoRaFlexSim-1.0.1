@@ -198,6 +198,22 @@ def main(argv: list[str] | None = None) -> None:
                         result.node_clusters, result.toa_s_by_node, strict=True
                     ):
                         cluster_toa[cluster].append(toa_s)
+                    for node_id, (cluster, sf_selected) in enumerate(
+                        zip(result.node_clusters, result.sf_selected_by_node, strict=True)
+                    ):
+                        raw_rows.append(
+                            {
+                                "density": density,
+                                "algo": algo,
+                                "snir_mode": snir_mode,
+                                "cluster": cluster,
+                                "replication": replication,
+                                "seed": seed,
+                                "node_id": node_id,
+                                "packet_id": node_id,
+                                "sf_selected": sf_selected,
+                            }
+                        )
                     for cluster, stats in cluster_stats.items():
                         sent_cluster = stats["sent"]
                         received_cluster = stats["received"]
