@@ -41,7 +41,7 @@ class SNIRConfig:
     """Paramètres SNIR (bruit en dBm/Hz)."""
 
     enabled: bool = True
-    snir_threshold_db: float = 6.0
+    snir_threshold_db: float = 5.0
     noise_floor_dbm: float = -174.0
 
 

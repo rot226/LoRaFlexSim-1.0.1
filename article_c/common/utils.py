@@ -67,7 +67,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--snir-threshold-db",
         type=float,
         default=snir_defaults.snir_threshold_db,
-        help="Seuil SNIR/capture (dB).",
+        help="Seuil SNIR (dB).",
     )
     parser.add_argument(
         "--noise-floor-dbm",
