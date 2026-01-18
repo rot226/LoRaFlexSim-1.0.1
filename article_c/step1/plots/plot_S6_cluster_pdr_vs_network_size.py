@@ -15,7 +15,6 @@ from article_c.common.plot_helpers import (
     SNIR_MODES,
     apply_plot_style,
     load_step1_aggregated,
-    place_legend,
     save_figure,
 )
 
@@ -58,7 +57,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         axes = [axes]
 
     raw_densities = sorted({row["density"] for row in rows})
-    densities = [_density_to_nodes(density) for density in raw_densities]
+    network_sizes = [_density_to_nodes(density) for density in raw_densities]
 
     for ax, snir_mode in zip(axes, SNIR_MODES, strict=False):
         snir_rows = [row for row in rows if row["snir_mode"] == snir_mode]
@@ -75,7 +74,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             target_label = f" (target {target:.2f})" if target is not None else ""
             label = f"Cluster {cluster_labels.get(cluster, cluster)}{target_label}"
             ax.plot(
-                densities,
+                network_sizes,
                 values,
                 marker="o",
                 linestyle=SNIR_LINESTYLES[snir_mode],
@@ -86,10 +85,19 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_ylabel("Packet Delivery Ratio")
         ax.set_ylim(0.0, 1.05)
         ax.grid(True, linestyle=":", alpha=0.4)
-        ax.set_xticks(densities)
+        ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
-    place_legend(axes[-1])
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.08),
+        ncol=3,
+        frameon=False,
+    )
+    fig.subplots_adjust(top=0.78)
     fig.suptitle("Step 1 - PDR by Cluster (network size)")
     return fig
 
