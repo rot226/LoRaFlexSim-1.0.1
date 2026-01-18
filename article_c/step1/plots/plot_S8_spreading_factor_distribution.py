@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import logging
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -56,6 +58,50 @@ def _extract_sf_distribution(
     if total > 0.0 and (uses_counts or total > 1.05):
         distribution = {sf: value / total for sf, value in distribution.items()}
     return distribution
+
+
+def _read_raw_rows(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _parse_sf_selected(value: str | None) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = int(float(value))
+    except ValueError:
+        return None
+    return parsed
+
+
+def _aggregate_sf_selected(
+    rows: list[dict[str, str]],
+    sf_values: list[int],
+) -> dict[tuple[str, str], dict[int, float]]:
+    counts: dict[tuple[str, str], dict[int, int]] = {}
+    for row in rows:
+        sf_value = _parse_sf_selected(row.get("sf_selected"))
+        if sf_value is None or sf_value not in sf_values:
+            continue
+        algo = (row.get("algo") or "").strip()
+        snir_mode = (row.get("snir_mode") or "").strip()
+        if not algo or not snir_mode:
+            continue
+        key = (algo, snir_mode)
+        if key not in counts:
+            counts[key] = {sf: 0 for sf in sf_values}
+        counts[key][sf_value] += 1
+
+    aggregated: dict[tuple[str, str], dict[int, float]] = {}
+    for key, sf_counts in counts.items():
+        total = sum(sf_counts.values())
+        if total <= 0:
+            continue
+        aggregated[key] = {sf: count / total for sf, count in sf_counts.items()}
+    return aggregated
 
 
 def _aggregate_distributions(
@@ -131,9 +177,31 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
 
 def main() -> None:
     apply_plot_style()
+    logger = logging.getLogger(__name__)
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "aggregated_results.csv"
-    rows = filter_cluster(load_step1_aggregated(results_path), "all")
+    raw_results_path = step_dir / "results" / "raw_results.csv"
+    aggregated_results_path = step_dir / "results" / "aggregated_results.csv"
+    sf_values = list(DEFAULT_CONFIG.radio.spreading_factors)
+    raw_rows = _read_raw_rows(raw_results_path)
+    sf_rows = [row for row in raw_rows if _parse_sf_selected(row.get("sf_selected")) is not None]
+    distribution_by_group: dict[tuple[str, str], dict[int, float]] = {}
+    if sf_rows:
+        distribution_by_group = _aggregate_sf_selected(sf_rows, sf_values)
+        if not distribution_by_group:
+            logger.warning(
+                "Les filtres S8 ont supprimé toutes les lignes: utilisation des résultats agrégés."
+            )
+    elif raw_rows:
+        logger.warning(
+            "Aucune ligne sf_selected détectée dans raw_results.csv: utilisation des résultats agrégés."
+        )
+    if distribution_by_group:
+        rows = [
+            {"algo": algo, "snir_mode": snir_mode, **{f"sf{sf}_share": share for sf, share in values.items()}}
+            for (algo, snir_mode), values in distribution_by_group.items()
+        ]
+    else:
+        rows = filter_cluster(load_step1_aggregated(aggregated_results_path), "all")
 
     fig = _plot_distribution(rows)
     output_dir = step_dir / "plots" / "output"

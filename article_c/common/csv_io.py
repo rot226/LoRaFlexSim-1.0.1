@@ -56,7 +56,16 @@ def write_simulation_results(output_dir: Path, raw_rows: list[dict[str, object]]
     raw_path = output_dir / "raw_results.csv"
     aggregated_path = output_dir / "aggregated_results.csv"
 
-    raw_header = list(raw_rows[0].keys()) if raw_rows else list(GROUP_KEYS)
+    raw_header: list[str] = []
+    seen: set[str] = set()
+    if raw_rows:
+        for row in raw_rows:
+            for key in row.keys():
+                if key not in seen:
+                    seen.add(key)
+                    raw_header.append(key)
+    else:
+        raw_header = list(GROUP_KEYS)
     write_rows(
         raw_path,
         raw_header,
