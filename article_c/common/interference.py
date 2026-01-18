@@ -150,26 +150,24 @@ def evaluate_reception(
     *,
     sensitivity_dbm: float,
     snir_enabled: bool = True,
-    snir_threshold_db: float = 6.0,
+    snir_threshold_db: float = 5.0,
     noise_floor_dbm: float = -174.0,
     bandwidth_hz: float | None = 125_000.0,
 ) -> InterferenceOutcome:
     """Évalue la réception avec ou sans SNIR et détecte un outage.
 
     - SNIR OFF: le succès dépend uniquement de ``target.rssi_dbm`` >= sensibilité.
-    - SNIR ON: le SNIR est calculé avec la somme des interférences co-SF et du bruit.
+    - SNIR ON: succès si RSSI >= sensibilité ET SNIR >= seuil (bruit thermique inclus).
     """
 
     co_sf = co_sf_interferers(target, interferers)
     interferer_powers_dbm = [entry.rssi_dbm for entry in co_sf]
     interference_dbm = aggregate_interference(interferer_powers_dbm)
     thermal_noise_dbm = compute_thermal_noise_dbm(noise_floor_dbm, bandwidth_hz)
-    effective_rssi_dbm = aggregate_interference([target.rssi_dbm, thermal_noise_dbm])
-    rssi_ok = effective_rssi_dbm >= sensitivity_dbm
+    rssi_ok = target.rssi_dbm >= sensitivity_dbm
 
     snir_db = None
     snir_ok = True
-    capture_ok = True
     if snir_enabled:
         snir_db = compute_snir_db(
             signal_dbm=target.rssi_dbm,
@@ -177,16 +175,13 @@ def evaluate_reception(
             noise_dbm=thermal_noise_dbm,
         )
         snir_ok = snir_db >= snir_threshold_db
-        if interferer_powers_dbm:
-            capture_margin_db = target.rssi_dbm - max(interferer_powers_dbm)
-            capture_ok = capture_margin_db >= snir_threshold_db
 
     success = (
         rssi_ok
         if not snir_enabled
-        else (rssi_ok and snir_ok and capture_ok)
+        else (rssi_ok and snir_ok)
     )
-    outage = (not rssi_ok) or (snir_enabled and (not snir_ok or not capture_ok))
+    outage = (not rssi_ok) or (snir_enabled and (not snir_ok))
 
     return InterferenceOutcome(
         success=success,
