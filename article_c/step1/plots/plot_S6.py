@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib import ticker as mticker
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
@@ -30,6 +31,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         plot_metric_by_snir(ax, cluster_rows, metric_key)
         ax.set_xlabel("Network size (number of nodes)")
         ax.set_title(f"Cluster {cluster}")
+        ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
+        ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     axes[0].set_ylabel("Packet Delivery Ratio")
     place_legend(axes[-1])
     fig.suptitle("Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)")
