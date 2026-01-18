@@ -28,6 +28,7 @@ def toa_lora(sf: int, bw: int, cr: int, payload_bytes: int) -> float:
     - En-tête explicite (IH=0) et CRC activé (CRC=1).
     - L'optimisation bas débit (DE=1) est appliquée pour SF>=11 et BW<=125 kHz.
     - Le taux de codage ``cr`` est codé 1..4 pour 4/5..4/8.
+    - La durée de symbole dépend du SF via ``2**SF / BW``.
     """
 
     if sf < 6 or sf > 12:
@@ -40,7 +41,7 @@ def toa_lora(sf: int, bw: int, cr: int, payload_bytes: int) -> float:
         raise ValueError("payload_bytes doit être positif ou nul")
 
     bw_hz = bw * 1000
-    ts = (2**sf) / bw_hz
+    symbol_time_s = (2**sf) / bw_hz
     de = 1 if (sf >= 11 and bw <= 125) else 0
     ih = 0
     crc = 1
@@ -56,7 +57,7 @@ def toa_lora(sf: int, bw: int, cr: int, payload_bytes: int) -> float:
     )
     payload_symbols = 8 + payload_term
     total_symbols = preamble_symbols + 4.25 + payload_symbols
-    return total_symbols * ts * 1000
+    return total_symbols * symbol_time_s * 1000
 
 
 def bitrate_lora(sf: int, bw: int, cr: int) -> float:

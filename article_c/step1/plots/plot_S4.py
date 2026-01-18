@@ -21,6 +21,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Sent Frames (mean)")
+    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    ax.yaxis.set_label_coords(-0.12, 0.5)
     ax.set_title("Step 1 - Sent Frames vs Network size (number of nodes) (SNIR on/off)")
     place_legend(ax)
     return fig

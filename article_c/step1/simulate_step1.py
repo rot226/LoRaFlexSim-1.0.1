@@ -363,11 +363,11 @@ def run_simulation(
     payload_bytes = DEFAULT_CONFIG.scenario.payload_bytes
     bw_khz = DEFAULT_CONFIG.radio.bandwidth_khz
     cr = coding_rate_to_cr(DEFAULT_CONFIG.radio.coding_rate)
-    airtimes_ms = [
+    airtimes_ms_by_packet = [
         compute_airtime(payload_bytes=payload_bytes, sf=sf, bw_khz=bw_khz, cr=cr)
         for sf in assignments
     ]
-    toa_s_by_node = [airtime_ms / 1000.0 for airtime_ms in airtimes_ms]
+    toa_s_by_node = [airtime_ms / 1000.0 for airtime_ms in airtimes_ms_by_packet]
     channels = DEFAULT_CONFIG.radio.channels_hz
     node_channels = [rng.choice(channels) for _ in range(actual_sent)]
     node_received = _estimate_received(
@@ -380,10 +380,10 @@ def run_simulation(
     )
     node_clusters = assign_clusters(actual_sent, rng=rng)
     received = sum(1 for value in node_received if value)
-    mean_toa = mean_toa_s(airtimes_ms)
+    mean_toa = mean_toa_s(airtimes_ms_by_packet)
     payload_bits_success = payload_bytes * 8 * received
     energy_per_bit = energy_per_success_bit(
-        airtimes_ms, payload_bits_success, DEFAULT_CONFIG.radio.tx_power_dbm
+        airtimes_ms_by_packet, payload_bits_success, DEFAULT_CONFIG.radio.tx_power_dbm
     )
     return Step1Result(
         sent=actual_sent,
