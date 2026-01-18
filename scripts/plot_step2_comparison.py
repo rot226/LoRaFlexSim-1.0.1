@@ -287,8 +287,8 @@ def _plot_performance(
     algorithms: Sequence[str],
 ) -> None:
     metrics = [
-        ("reward_mean", "reward_ci95", "Average reward"),
-        ("pdr_mean", "pdr_ci95", "Average PDR"),
+        ("reward_mean", "reward_ci95", "Average reward (unitless)"),
+        ("pdr_mean", "pdr_ci95", "Average PDR (probability)"),
         ("throughput_mean", "throughput_ci95", "Average throughput (bps)"),
     ]
     fig, axes = plt.subplots(nrows=len(metrics), ncols=2, figsize=(12, 4.5 * len(metrics)), sharex=True)
@@ -344,8 +344,8 @@ def _plot_convergence(
     algorithms: Sequence[str],
 ) -> None:
     metrics = [
-        ("reward_mean", "reward_ci95", "Average reward"),
-        ("pdr_mean", "pdr_ci95", "Average PDR"),
+        ("reward_mean", "reward_ci95", "Average reward (unitless)"),
+        ("pdr_mean", "pdr_ci95", "Average PDR (probability)"),
         ("throughput_mean", "throughput_ci95", "Average throughput (bps)"),
     ]
     fig, axes = plt.subplots(nrows=len(metrics), ncols=2, figsize=(12, 4.5 * len(metrics)), sharex=True)
@@ -449,7 +449,7 @@ def _plot_distribution(
 
         axes[row_idx][0].set_title(f"{SNIR_TITLES.get(state, state)} - SF")
         axes[row_idx][1].set_title(f"{SNIR_TITLES.get(state, state)} - TX Power")
-        axes[row_idx][0].set_ylabel("Share (0–1)")
+        axes[row_idx][0].set_ylabel("Share (probability)")
         axes[row_idx][0].grid(True, linestyle=":", alpha=0.4)
         axes[row_idx][1].grid(True, linestyle=":", alpha=0.4)
         if axes[row_idx][0].get_legend_handles_labels()[1]:
@@ -626,12 +626,12 @@ def main() -> None:
             args.output_dir,
             algorithms,
             [
-                ("reward_mean", "Récompense moyenne"),
-                ("success_rate", "Succès moyen"),
-                ("snir_avg", "SNIR moyen"),
+                ("reward_mean", "Récompense moyenne (unité arbitraire)"),
+                ("success_rate", "Succès moyen (probabilité)"),
+                ("snir_avg", "SNIR moyen (dB)"),
                 ("energy_j", "Énergie (J)"),
-                ("collision_rate", "Collision (1 - PDR)"),
-                ("fairness", "Équité"),
+                ("collision_rate", "Collision (1 - PDR, probabilité)"),
+                ("fairness", "Équité (sans unité)"),
             ],
             figure_name="step2_reward_components_ci95.png",
             x_label=x_label,
@@ -642,10 +642,10 @@ def main() -> None:
             args.output_dir,
             algorithms,
             [
-                ("der", "DER"),
-                ("snir_avg", "SNIR moyen"),
+                ("der", "DER (probabilité)"),
+                ("snir_avg", "SNIR moyen (dB)"),
                 ("energy_j", "Énergie (J)"),
-                ("fairness", "Équité"),
+                ("fairness", "Équité (sans unité)"),
             ],
             figure_name="step2_metrics_ci95.png",
             x_label=x_label,
@@ -656,11 +656,11 @@ def main() -> None:
             args.output_dir,
             algorithms,
             [
-                ("pdr", "PDR"),
-                ("der", "DER"),
-                ("snir_avg", "SNIR moyen"),
+                ("pdr", "PDR (probabilité)"),
+                ("der", "DER (probabilité)"),
+                ("snir_avg", "SNIR moyen (dB)"),
                 ("energy_j", "Énergie (J)"),
-                ("fairness", "Équité"),
+                ("fairness", "Équité (sans unité)"),
             ],
             figure_name="step2_key_metrics_combined.png",
             x_label=x_label,

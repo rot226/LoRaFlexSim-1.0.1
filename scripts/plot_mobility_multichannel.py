@@ -56,7 +56,7 @@ def plot(
         ("pdr", "PDR", "%", "%.1f%%", "C0"),
         ("avg_delay_s", "Average delay", "s", "%.2f s", "C2"),
         ("energy_per_node", "Average energy per node", "J", "%.2f J", "C3"),
-        ("avg_sf", "Average SF", "", "%.1f", "C4"),
+        ("avg_sf", "Average SF", "SF", "%.1f", "C4"),
     ]
 
     for metric, name, unit, fmt, color in metrics:

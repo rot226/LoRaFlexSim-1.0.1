@@ -20,6 +20,10 @@ DEFAULT_FIGURES_DIR = ROOT_DIR / "figures" / "step1" / "extended"
 
 SNIR_LABELS = {"snir_on": "SNIR activé", "snir_off": "SNIR désactivé"}
 METRICS = ("PDR", "DER")
+METRIC_LABELS = {
+    "PDR": "PDR (probability)",
+    "DER": "DER (probability)",
+}
 CLUSTER_PATTERN = re.compile(r"cluster_(pdr|der)[^0-9]*([0-9]+)", re.IGNORECASE)
 
 
@@ -105,9 +109,10 @@ def _plot_histograms(records: Sequence[Mapping[str, Any]], output_dir: Path) -> 
                         label=SNIR_LABELS[state],
                         edgecolor="white",
                     )
-                ax.set_title(f"{metric} cluster {cluster_id} ({algorithm})")
-                ax.set_xlabel(metric)
-                ax.set_ylabel("Occurrences")
+                metric_label = METRIC_LABELS.get(metric, metric)
+                ax.set_title(f"{metric_label} cluster {cluster_id} ({algorithm})")
+                ax.set_xlabel(metric_label)
+                ax.set_ylabel("Occurrences (count)")
                 ax.legend()
                 ax.grid(True, linestyle=":", alpha=0.5)
                 output_dir.mkdir(parents=True, exist_ok=True)
@@ -146,9 +151,10 @@ def _plot_ecdf(records: Sequence[Mapping[str, Any]], output_dir: Path) -> None:
                     continue
                 xs, ys = _compute_ecdf(values)
                 ax.step(xs, ys, where="post", color=SNIR_COLORS[state], label=SNIR_LABELS[state], linewidth=2)
-            ax.set_title(f"ECDF {metric} ({algorithm})")
-            ax.set_xlabel(metric)
-            ax.set_ylabel("ECDF")
+            metric_label = METRIC_LABELS.get(metric, metric)
+            ax.set_title(f"ECDF {metric_label} ({algorithm})")
+            ax.set_xlabel(metric_label)
+            ax.set_ylabel("ECDF (probability)")
             ax.set_ylim(0.0, 1.05)
             ax.legend()
             ax.grid(True, linestyle=":", alpha=0.5)
@@ -191,12 +197,13 @@ def _plot_heatmaps(records: Sequence[Mapping[str, Any]], output_dir: Path) -> No
                     grid[row_idx][col_idx] = float(value)
                 fig, ax = plt.subplots(figsize=(6.8, 4.6))
                 image = ax.imshow(grid, aspect="auto", origin="lower", cmap="viridis")
-                ax.set_title(f"Heatmap {metric} ({algorithm}, {SNIR_LABELS[state]})")
+                metric_label = METRIC_LABELS.get(metric, metric)
+                ax.set_title(f"Heatmap {metric_label} ({algorithm}, {SNIR_LABELS[state]})")
                 ax.set_xlabel("Intervalle paquet (s)")
-                ax.set_ylabel("Nombre de nœuds")
+                ax.set_ylabel("Nombre de nœuds (nœuds)")
                 ax.set_xticks(range(len(intervals)), [str(val) for val in intervals])
                 ax.set_yticks(range(len(nodes)), [str(val) for val in nodes])
-                fig.colorbar(image, ax=ax, label=metric)
+                fig.colorbar(image, ax=ax, label=metric_label)
                 output_dir.mkdir(parents=True, exist_ok=True)
                 stem = f"step1_heatmap_{metric.lower()}_{algorithm}_{state}"
                 fig.tight_layout()

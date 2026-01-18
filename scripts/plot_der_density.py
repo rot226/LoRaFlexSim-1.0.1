@@ -108,12 +108,12 @@ def _plot_for_cluster(
         label="PDR cible" if show_target_label else None,
     )
     pdr_ax.set_title(f"Cluster {cluster_label}")
-    pdr_ax.set_ylabel("PDR")
+    pdr_ax.set_ylabel("PDR (probability)")
     pdr_ax.set_ylim(0.0, 1.05)
     pdr_ax.grid(True, linestyle=":", alpha=0.5)
 
     der_ax.set_xlabel("Nombre de nœuds")
-    der_ax.set_ylabel("DER")
+    der_ax.set_ylabel("DER (probability)")
     der_ax.set_ylim(0.0, 1.05)
     der_ax.grid(True, linestyle=":", alpha=0.5)
     return plotted

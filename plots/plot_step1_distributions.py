@@ -36,13 +36,13 @@ DEFAULT_FIGURES_DIR = ROOT_DIR / "figures" / "step1" / "distributions"
 SNIR_STATES = ("snir_on", "snir_off")
 
 METRICS = {
-    "PDR": "Overall PDR",
-    "DER": "Overall DER",
+    "PDR": "Overall PDR (probability)",
+    "DER": "Overall DER (probability)",
     "snir_mean": "Mean SNIR (dB)",
     "snr_mean": "Mean SNR (dB)",
-    "collisions": "Collisions",
-    "collisions_snir": "Collisions (SNIR)",
-    "jain_index": "Jain index",
+    "collisions": "Collisions (probability)",
+    "collisions_snir": "Collisions (SNIR, probability)",
+    "jain_index": "Jain index (unitless)",
     "throughput_bps": "Aggregate throughput (bps)",
 }
 

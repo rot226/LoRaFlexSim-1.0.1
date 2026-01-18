@@ -625,13 +625,13 @@ def _plot_summary_bars(
             return
 
     metrics = {
-        "PDR": "Overall PDR",
-        "DER": "Overall DER",
+        "PDR": "Overall PDR (probability)",
+        "DER": "Overall DER (probability)",
         "snir_mean": "Mean SNIR (dB)",
         "snr_mean": "Mean SNR (dB)",
-        "collisions": "Collisions",
-        "collisions_snir": "Collisions (SNIR)",
-        "jain_index": "Jain index",
+        "collisions": "Collisions (probability)",
+        "collisions_snir": "Collisions (SNIR, probability)",
+        "jain_index": "Jain index (unitless)",
         "throughput_bps": "Aggregate throughput (bps)",
     }
 
@@ -776,9 +776,9 @@ def _plot_cdf(
                 linewidth=2,
             )
 
-        ax.set_xlabel("DER")
-        ax.set_ylabel("F(x)")
-        ax.set_title(f"CDF DER – {algorithm}")
+        ax.set_xlabel("DER (probability)")
+        ax.set_ylabel("F(x) (probability)")
+        ax.set_title(f"CDF DER (probability) – {algorithm}")
         _format_axes(ax, integer_x=False)
         if ax.get_legend_handles_labels()[0]:
             ax.legend()
@@ -853,7 +853,7 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
                 ax.set_title(f"Cluster {cluster_id}")
                 ax.set_xlabel("Nodes")
                 if idx == 0:
-                    ax.set_ylabel("PDR")
+                    ax.set_ylabel("PDR (probability)")
                 ax.set_ylim(0.0, 1.05)
                 _apply_network_ticks(ax, network_sizes)
                 _format_axes(ax, integer_x=True)
@@ -870,9 +870,9 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
 
     _render_snir_variants(
         render,
-        on_title="Cluster PDR – SNIR enabled",
-        off_title="Cluster PDR – SNIR disabled",
-        mixed_title="Cluster PDR – mixed SNIR",
+        on_title="Cluster PDR (probability) – SNIR enabled",
+        off_title="Cluster PDR (probability) – SNIR disabled",
+        mixed_title="Cluster PDR (probability) – mixed SNIR",
     )
 
 
@@ -930,7 +930,7 @@ def _plot_cluster_der(records: List[Dict[str, Any]], figures_dir: Path) -> None:
             ax.set_title(f"Cluster {cluster_id}")
             ax.set_xlabel("Nodes")
             if idx == 0:
-                ax.set_ylabel("DER")
+                ax.set_ylabel("DER (probability)")
             ax.set_ylim(0.0, 1.05)
             _apply_network_ticks(ax, network_sizes)
             _format_axes(ax, integer_x=True)
@@ -938,7 +938,9 @@ def _plot_cluster_der(records: List[Dict[str, Any]], figures_dir: Path) -> None:
         if handles:
             fig.legend(handles, labels, loc="upper center", ncol=min(len(labels), 4))
         title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
-        fig.suptitle(f"DER par cluster – SNIR ON/OFF superposés (period {title_period} s)")
+        fig.suptitle(
+            f"DER (probability) par cluster – SNIR ON/OFF superposés (period {title_period} s)"
+        )
         figures_dir.mkdir(parents=True, exist_ok=True)
         output = figures_dir / f"step1_cluster_der_overlay_tx_{title_period}.png"
         fig.tight_layout(rect=(0, 0, 1, 0.92))
@@ -950,7 +952,7 @@ def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None
     if not records or plt is None:
         return
 
-    metrics = {"PDR": "PDR", "DER": "DER"}
+    metrics = {"PDR": "PDR (probability)", "DER": "DER (probability)"}
     def normalize_algorithm(value: Any) -> str:
         normalized = _normalize_algorithm_name(value)
         if normalized:
@@ -1180,13 +1182,13 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
         return
 
     metrics = {
-        "PDR": "Overall PDR",
-        "DER": "Overall DER",
+        "PDR": "Overall PDR (probability)",
+        "DER": "Overall DER (probability)",
         "snir_mean": "Mean SNIR (dB)",
         "snr_mean": "Mean SNR (dB)",
-        "collisions": "Collisions",
-        "collisions_snir": "Collisions (SNIR)",
-        "jain_index": "Jain index",
+        "collisions": "Collisions (probability)",
+        "collisions_snir": "Collisions (SNIR, probability)",
+        "jain_index": "Jain index (unitless)",
         "throughput_bps": "Aggregate throughput (bps)",
     }
 
@@ -1309,8 +1311,8 @@ def plot_distribution_by_state(
 
     metrics = {
         "snir_mean": "Mean SNIR (dB)",
-        "DER": "Overall DER",
-        "collisions": "Collisions",
+        "DER": "Overall DER (probability)",
+        "collisions": "Collisions (probability)",
     }
     states = ["snir_on", "snir_off"]
 
@@ -1430,11 +1432,17 @@ def generate_step1_figures(
             records = _apply_ieee_filters(records)
         _plot_cluster_der(records, output_dir)
         _plot_cluster_pdr(records, output_dir)
-        _plot_global_metric(records, "PDR", "Overall PDR", "pdr_global", output_dir)
-        _plot_global_metric(records, "DER", "Overall DER", "der_global", output_dir)
-        _plot_global_metric(records, "collisions", "Collisions", "collisions", output_dir)
-        _plot_global_metric(records, "collisions_snir", "Collisions (SNIR)", "collisions_snir", output_dir)
-        _plot_global_metric(records, "jain_index", "Jain index", "jain_index", output_dir)
+        _plot_global_metric(records, "PDR", "Overall PDR (probability)", "pdr_global", output_dir)
+        _plot_global_metric(records, "DER", "Overall DER (probability)", "der_global", output_dir)
+        _plot_global_metric(records, "collisions", "Collisions (probability)", "collisions", output_dir)
+        _plot_global_metric(
+            records,
+            "collisions_snir",
+            "Collisions (SNIR, probability)",
+            "collisions_snir",
+            output_dir,
+        )
+        _plot_global_metric(records, "jain_index", "Jain index (unitless)", "jain_index", output_dir)
         _plot_global_metric(records, "throughput_bps", "Aggregate throughput (bps)", "throughput", output_dir)
         if any((r.get("snir_mean") is not None or r.get("snr_mean") is not None) for r in records):
             _plot_global_metric(records, "snir_mean", "Mean SNIR (dB)", "snir_mean", output_dir)

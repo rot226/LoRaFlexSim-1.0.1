@@ -276,7 +276,7 @@ def _plot_pdr_der(
                     marker=marker,
                     linestyle="-",
                     capsize=3,
-                    label=f"{algo} PDR",
+                    label=f"{algo} PDR (probability)",
                 )
                 ax.errorbar(
                     nodes,
@@ -285,18 +285,18 @@ def _plot_pdr_der(
                     color=color,
                     linestyle="--",
                     capsize=3,
-                    label=f"{algo} DER",
+                    label=f"{algo} DER (probability)",
                 )
             ax.set_title(f"Cluster {cluster_id} - {SNIR_LABELS[state]}")
             ax.set_xlabel("Nodes")
-            ax.set_ylabel("PDR / DER")
+            ax.set_ylabel("PDR / DER (probability)")
             ax.set_ylim(0.0, 1.0)
             ax.grid(True, linestyle=":", alpha=0.6)
             _apply_network_ticks(ax, network_sizes)
 
     handles, labels = axes[0][0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=4, frameon=False)
-    fig.suptitle("PDR and DER vs Nodes")
+    fig.suptitle("PDR and DER (probability) vs Nodes")
     fig.tight_layout(rect=(0, 0, 1, 0.92))
     output_dir.mkdir(parents=True, exist_ok=True)
     for ext in ("png", "pdf"):
@@ -419,7 +419,7 @@ def _plot_pdr_der_overlay(
                     marker=marker,
                     linestyle="-",
                     capsize=3,
-                    label=f"{algo} {SNIR_LABELS[state]} PDR",
+                    label=f"{algo} {SNIR_LABELS[state]} PDR (probability)",
                 )
                 ax.errorbar(
                     nodes,
@@ -429,18 +429,18 @@ def _plot_pdr_der_overlay(
                     marker=marker,
                     linestyle="--",
                     capsize=3,
-                    label=f"{algo} {SNIR_LABELS[state]} DER",
+                    label=f"{algo} {SNIR_LABELS[state]} DER (probability)",
                 )
         ax.set_title(f"Cluster {cluster_id} - SNIR ON/OFF")
         ax.set_xlabel("Nodes")
-        ax.set_ylabel("PDR / DER")
+        ax.set_ylabel("PDR / DER (probability)")
         ax.set_ylim(0.0, 1.0)
         ax.grid(True, linestyle=":", alpha=0.6)
         _apply_network_ticks(ax, network_sizes)
 
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=3, frameon=False)
-    fig.suptitle("PDR and DER vs Nodes (SNIR ON/OFF overlay)")
+    fig.suptitle("PDR and DER (probability) vs Nodes (SNIR ON/OFF overlay)")
     fig.tight_layout(rect=(0, 0, 1, 0.9))
     output_dir.mkdir(parents=True, exist_ok=True)
     for ext in ("png", "pdf"):
@@ -533,8 +533,8 @@ def generate_figures(
             output_dir,
             selected_algorithms,
             "jain_index",
-            "Jain Index vs Nodes",
-            "Jain Index",
+            "Jain Index (unitless) vs Nodes",
+            "Jain Index (unitless)",
             "step1_jain_comparison",
             y_limits=(0.0, 1.0),
         )
@@ -555,8 +555,8 @@ def generate_figures(
             output_dir,
             selected_algorithms,
             "jain_index",
-            "Jain Index vs Nodes (SNIR ON/OFF overlay)",
-            "Jain Index",
+            "Jain Index (unitless) vs Nodes (SNIR ON/OFF overlay)",
+            "Jain Index (unitless)",
             "step1_jain_overlay",
             y_limits=(0.0, 1.0),
         )

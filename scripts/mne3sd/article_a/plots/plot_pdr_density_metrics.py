@@ -1,4 +1,4 @@
-"""Plot packet delivery ratio, delay and energy metrics for the density sweep."""
+"""Plot packet delivery ratio, delay and energy metrics for the network size (number of nodes) sweep."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(
         description=(
-            "Generate figures for the gateway density sweep, including packet delivery "
+            "Generate figures for the network size (number of nodes) sweep, including packet delivery "
             "ratio, mean delay and per-node energy consumption."
         )
     )
@@ -75,7 +75,7 @@ def load_summary(path: Path) -> pd.DataFrame:
     df["density_gw_per_km2"] = pd.to_numeric(df["density_gw_per_km2"], errors="coerce")
     df["nodes"] = pd.to_numeric(df["nodes"], errors="coerce")
     if df["density_gw_per_km2"].isna().any() or df["nodes"].isna().any():
-        raise ValueError("Density or node count columns contain invalid values")
+        raise ValueError("Gateway density or network size (number of nodes) columns contain invalid values")
 
     df.sort_values(["sf_mode", "nodes", "density_gw_per_km2"], inplace=True)
 
@@ -150,7 +150,7 @@ def plot_pdr(summary: pd.DataFrame, *, figures_dir: Path | None) -> None:
             label=label,
         )
 
-    ax.set_xlabel("Gateway density (gateways/km²)")
+    ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Packet delivery ratio (%)")
     ax.set_ylim(0, 105)
     ax.legend(title="Configuration")
@@ -193,7 +193,7 @@ def plot_delay(summary: pd.DataFrame, *, figures_dir: Path | None) -> bool:
             label=label,
         )
 
-    ax.set_xlabel("Gateway density (gateways/km²)")
+    ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Average delay (s)")
     ax.legend(title="Configuration")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
@@ -236,7 +236,7 @@ def plot_energy(summary: pd.DataFrame, *, figures_dir: Path | None) -> bool:
             label=label,
         )
 
-    ax.set_xlabel("Gateway density (gateways/km²)")
+    ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Energy per node (J)")
     ax.legend(title="Configuration")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)

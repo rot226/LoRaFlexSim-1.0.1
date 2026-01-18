@@ -30,9 +30,9 @@ DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
 DEFAULT_FIGURES_DIR = ROOT_DIR / "figures" / "step1" / "radar"
 
 METRICS = [
-    ("DER", "DER"),
-    ("PDR", "PDR"),
-    ("collisions", "Collisions"),
+    ("DER", "DER (probability)"),
+    ("PDR", "PDR (probability)"),
+    ("collisions", "Collisions (probability)"),
     ("avg_energy_per_node_J", "Mean energy (J)"),
     ("snir_mean", "Mean SNIR/SNR (dB)"),
 ]

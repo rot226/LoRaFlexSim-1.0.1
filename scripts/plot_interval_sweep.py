@@ -35,7 +35,7 @@ def main() -> None:
     axes[0].set_ylabel("Packet delivery ratio (%)")
 
     axes[1].plot(agg["interval"], agg["collisions"], marker="o")
-    axes[1].set_ylabel("Collisions per interval")
+    axes[1].set_ylabel("Collisions per interval (count)")
     axes[1].set_xlabel("Packet interval (s)")
 
     fig.tight_layout()

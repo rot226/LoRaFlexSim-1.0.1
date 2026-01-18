@@ -50,12 +50,12 @@ def plot(csv_path: str, output_dir: str = "figures", by_model: bool = False) -> 
         yerr=df["avg_sf_std"],
         capsize=4,
         color="C0",
-        label="Average SF",
+        label="Average SF (unitless)",
     )
     ax.set_xticks(x)
     ax.set_xticklabels(df[x_col], rotation=45, ha="right")
     ax.set_xlabel("Mobility model" if by_model else "Scenario")
-    ax.set_ylabel("Average spreading factor")
+    ax.set_ylabel("Average spreading factor (SF)")
     ax.bar_label(bars, fmt="%.2f", label_type="center")
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.4), ncol=3)
     fig.tight_layout(rect=[0, 0, 1, 0.85])

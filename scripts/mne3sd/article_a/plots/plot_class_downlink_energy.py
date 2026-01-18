@@ -148,8 +148,8 @@ def plot_pdr_comparison(
     downlink = (summary["downlink_pdr"].to_numpy() * 100.0).clip(min=0.0)
 
     fig, ax = plt.subplots(figsize=(3.8, 2.4))
-    ax.bar(indices - width / 2, uplink, width=width, label="Uplink PDR")
-    ax.bar(indices + width / 2, downlink, width=width, label="Downlink PDR")
+    ax.bar(indices - width / 2, uplink, width=width, label="Uplink PDR (%)")
+    ax.bar(indices + width / 2, downlink, width=width, label="Downlink PDR (%)")
 
     ax.set_xticks(indices)
     ax.set_xticklabels([f"Class {name}" for name in classes])

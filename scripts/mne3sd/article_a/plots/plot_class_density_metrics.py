@@ -1,4 +1,4 @@
-"""Plot class density metrics for the MNE3SD article A analysis."""
+"""Plot class network size (number of nodes) metrics for the MNE3SD article A analysis."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def parse_arguments() -> argparse.Namespace:
     """Return the parsed command line arguments."""
     parser = argparse.ArgumentParser(
         description=(
-            "Generate node density plots showing packet delivery ratio and "
+            "Generate network size (number of nodes) plots showing packet delivery ratio and "
             "optionally per-node energy consumption for LoRaWAN classes."
         )
     )
@@ -66,7 +66,7 @@ def load_metrics(path: Path) -> pd.DataFrame:
     """Read the metrics CSV, ensuring mandatory columns are present."""
     if not path.exists():
         raise FileNotFoundError(
-            f"Metrics file not found: {path}. Run the class density sweep first."
+            f"Metrics file not found: {path}. Run the class network size (number of nodes) sweep first."
         )
 
     df = pd.read_csv(path)
