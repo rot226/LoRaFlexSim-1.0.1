@@ -34,6 +34,7 @@ PLOT_MODULES = {
         "article_c.step2.plots.plot_RL7_reward_vs_density",
         "article_c.step2.plots.plot_RL8_reward_distribution",
         "article_c.step2.plots.plot_RL9_sf_selection_entropy",
+        "article_c.step2.plots.plot_RL10_reward_vs_pdr_scatter",
     ],
 }
 
