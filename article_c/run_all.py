@@ -219,11 +219,13 @@ def main(argv: list[str] | None = None) -> None:
         if args.network_sizes
         else list(DEFAULT_CONFIG.scenario.network_sizes)
     )
-    if not args.skip_step1:
-        run_step1(_build_step1_args(args))
-    if not args.skip_step2:
-        run_step2(_build_step2_args(args))
     for size in network_sizes:
+        size_args = argparse.Namespace(**vars(args))
+        size_args.network_sizes = [size]
+        if not size_args.skip_step1:
+            run_step1(_build_step1_args(size_args))
+        if not size_args.skip_step2:
+            run_step2(_build_step2_args(size_args))
         print(f"Résumé: taille de réseau {size} terminée.")
 
 

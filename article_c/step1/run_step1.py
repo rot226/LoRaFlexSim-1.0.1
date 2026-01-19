@@ -17,6 +17,11 @@ from article_c.common.utils import (
 from article_c.step1.simulate_step1 import run_simulation
 
 ALGORITHMS = ("adr", "mixra_h", "mixra_opt")
+ALGORITHM_LABELS = {
+    "adr": "ADR",
+    "mixra_h": "MixRA-H",
+    "mixra_opt": "MixRA-Opt",
+}
 
 
 def density_to_sent(density: float, base_sent: int = 120) -> int:
@@ -27,6 +32,24 @@ def density_to_sent(density: float, base_sent: int = 120) -> int:
 def parse_snir_modes(value: str) -> list[str]:
     """Parse la liste des modes SNIR depuis une chaîne CSV."""
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def format_progress(
+    *,
+    size: int,
+    algo: str,
+    snir_mode: str,
+    replication_index: int,
+    replication_total: int,
+    percent: float,
+) -> str:
+    """Construit la ligne de progression pour l'étape 1."""
+    algo_label = ALGORITHM_LABELS.get(algo, algo)
+    snir_label = "on" if snir_mode.lower().endswith("on") else "off"
+    return (
+        f"Size {size} | Algo {algo_label} | SNIR {snir_label} | "
+        f"Rep {replication_index}/{replication_total} | {percent:.0f}%"
+    )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -185,7 +208,7 @@ def main(argv: list[str] | None = None) -> None:
         timing_runs = 0
         for algo in ALGORITHMS:
             for snir_mode in snir_modes:
-                for replication in replications:
+                for rep_index, replication in enumerate(replications, start=1):
                     seed = args.seeds_base + run_index
                     run_index += 1
                     set_deterministic_seed(seed)
@@ -284,7 +307,14 @@ def main(argv: list[str] | None = None) -> None:
                     if args.progress and total_runs > 0:
                         percent = (completed_runs / total_runs) * 100
                         print(
-                            f"Progress: {completed_runs}/{total_runs} ({percent:.1f}%)"
+                            format_progress(
+                                size=density,
+                                algo=algo,
+                                snir_mode=snir_mode,
+                                replication_index=rep_index,
+                                replication_total=len(replications),
+                                percent=percent,
+                            )
                         )
         if args.profile_timing and timing_runs > 0:
             mean_assignment = timing_totals["sf_assignment_s"] / timing_runs
