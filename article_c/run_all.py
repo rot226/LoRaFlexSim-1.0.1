@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 
+from article_c.common.config import DEFAULT_CONFIG
+from article_c.common.utils import parse_network_size_list
 from article_c.step1.run_step1 import main as run_step1
 from article_c.step2.run_step2 import main as run_step2
 
@@ -136,6 +138,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Ignore l'exécution de l'étape 2.",
     )
+    parser.add_argument(
+        "--progress",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Affiche la progression de l'étape 1.",
+    )
     return parser
 
 
@@ -156,6 +164,8 @@ def _build_step1_args(args: argparse.Namespace) -> list[str]:
         step1_args.extend(["--noise-floor-dbm", str(args.noise_floor_dbm)])
     if args.step1_outdir:
         step1_args.extend(["--outdir", args.step1_outdir])
+    if args.progress is not None:
+        step1_args.append("--progress" if args.progress else "--no-progress")
     return step1_args
 
 
@@ -204,10 +214,17 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    network_sizes = (
+        parse_network_size_list(args.network_sizes)
+        if args.network_sizes
+        else list(DEFAULT_CONFIG.scenario.network_sizes)
+    )
     if not args.skip_step1:
         run_step1(_build_step1_args(args))
     if not args.skip_step2:
         run_step2(_build_step2_args(args))
+    for size in network_sizes:
+        print(f"Résumé: taille de réseau {size} terminée.")
 
 
 if __name__ == "__main__":
