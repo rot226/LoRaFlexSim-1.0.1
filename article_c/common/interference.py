@@ -5,8 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
+import heapq
 import math
 import random
+from collections import defaultdict
 
 from article_c.common.propagation import sample_fading_db
 
@@ -31,6 +33,14 @@ class InterferenceOutcome:
     snir_db: float | None
     interference_dbm: float
     co_sf_collisions: int
+
+
+@dataclass(frozen=True)
+class InterferenceSweepResult:
+    """Résultat d'un sweep line pour les overlaps co-SF."""
+
+    overlaps_by_index: list[list[int]]
+    load_counter: int
 
 
 def aggregate_interference(powers_dbm: Iterable[float]) -> float:
@@ -69,6 +79,66 @@ def co_sf_interferers(target: Signal, interferers: Iterable[Signal]) -> list[Sig
             and _signals_overlap(target, interferer)
         )
     ]
+
+
+def compute_co_sf_overlaps(signals: Sequence[Signal]) -> InterferenceSweepResult:
+    """Construit les overlaps co-SF avec un sweep line (fenêtre glissante).
+
+    Les signaux sont triés par canal, SF et temps de départ. Le compteur de charge
+    estime le nombre de comparaisons effectuées.
+    """
+
+    overlaps: list[list[int]] = [[] for _ in signals]
+    load_counter = 0
+    grouped: dict[tuple[int, int], list[tuple[int, Signal]]] = defaultdict(list)
+    for idx, signal in enumerate(signals):
+        grouped[(signal.channel_hz, signal.sf)].append((idx, signal))
+
+    for entries in grouped.values():
+        known: list[tuple[int, Signal]] = []
+        unknown: list[tuple[int, Signal]] = []
+        for idx, signal in entries:
+            if signal.start_time_s is None or signal.end_time_s is None:
+                unknown.append((idx, signal))
+            else:
+                known.append((idx, signal))
+
+        known.sort(key=lambda item: (item[1].start_time_s, item[1].end_time_s))
+        active_heap: list[tuple[float, int]] = []
+        active_set: set[int] = set()
+        for idx, signal in known:
+            start_time = signal.start_time_s
+            end_time = signal.end_time_s
+            if start_time is None or end_time is None:
+                continue
+            while active_heap and active_heap[0][0] <= start_time:
+                _, expired_idx = heapq.heappop(active_heap)
+                active_set.discard(expired_idx)
+            for other_idx in active_set:
+                load_counter += 1
+                overlaps[idx].append(other_idx)
+                overlaps[other_idx].append(idx)
+            heapq.heappush(active_heap, (end_time, idx))
+            active_set.add(idx)
+
+        if unknown:
+            known_indices = [idx for idx, _ in known]
+            unknown_indices = [idx for idx, _ in unknown]
+            for unknown_idx in unknown_indices:
+                for other_idx in known_indices:
+                    load_counter += 1
+                    overlaps[unknown_idx].append(other_idx)
+                    overlaps[other_idx].append(unknown_idx)
+            for index, first_idx in enumerate(unknown_indices):
+                for second_idx in unknown_indices[index + 1 :]:
+                    load_counter += 1
+                    overlaps[first_idx].append(second_idx)
+                    overlaps[second_idx].append(first_idx)
+
+    return InterferenceSweepResult(
+        overlaps_by_index=overlaps,
+        load_counter=load_counter,
+    )
 
 
 def compute_snir_db(

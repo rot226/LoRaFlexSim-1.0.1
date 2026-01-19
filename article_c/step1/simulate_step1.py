@@ -13,7 +13,7 @@ import random
 from typing import Iterable
 
 from article_c.common.config import DEFAULT_CONFIG
-from article_c.common.interference import Signal, co_sf_interferers
+from article_c.common.interference import Signal, compute_co_sf_overlaps
 from article_c.common.lora_phy import coding_rate_to_cr, compute_airtime
 from article_c.common.metrics import (
     energy_per_success_bit,
@@ -236,11 +236,11 @@ def _estimate_received(
             rssis,
         )
     ]
+    sweep_result = compute_co_sf_overlaps(signals)
+    overlaps_by_index = sweep_result.overlaps_by_index
     results: list[bool] = []
     for index, signal in enumerate(signals):
-        interferers = signals[:index] + signals[index + 1 :]
-        overlaps = co_sf_interferers(signal, interferers)
-        overlap_penalty = 1.0 / (1.0 + len(overlaps))
+        overlap_penalty = 1.0 / (1.0 + len(overlaps_by_index[index]))
         success_probability = success_prob_by_sf[signal.sf] * overlap_penalty
         results.append(rng.random() < success_probability)
     return results
