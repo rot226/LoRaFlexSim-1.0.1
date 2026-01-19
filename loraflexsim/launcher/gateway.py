@@ -252,6 +252,21 @@ class Gateway:
             if overlap > min_interference_time:
                 interfering_transmissions.append(t)
 
+        duration_new = max(end_time - current_time, 1e-9)
+
+        def _overlap_equivalent(transmissions) -> float:
+            total = 0.0
+            for t in transmissions:
+                overlap_start = max(current_time, t.get('start_time', current_time))
+                overlap_end = min(end_time, t.get('end_time', end_time))
+                overlap = overlap_end - overlap_start
+                if overlap <= 0.0:
+                    continue
+                total += overlap / duration_new
+            return total
+
+        overlap_equivalent = _overlap_equivalent(interfering_transmissions)
+
         # Liste des transmissions en collision potentielles (y compris la nouvelle)
         colliders = interfering_transmissions.copy()
         if noise_floor is not None:
@@ -297,12 +312,14 @@ class Gateway:
             self.active_by_event[event_id] = (key, new_transmission)
             return
 
-        def _load_factor(count: int) -> float:
+        def _load_factor(overlap_load: float) -> float:
             scale = max(residual_collision_load_scale, 1.0)
-            return min(count / scale, 1.0)
+            return min(overlap_load / scale, 1.0)
 
-        def _baseline_drop_prob(count: int) -> float:
-            load_factor = _load_factor(count)
+        def _baseline_drop_prob(overlap_load: float) -> float:
+            if overlap_load <= 0.0:
+                return 0.0
+            load_factor = _load_factor(overlap_load)
             base = max(baseline_loss_rate, 0.0)
             min_loss = base * (1.0 + load_factor)
             extra = max(baseline_collision_rate, 0.0) * load_factor
@@ -310,7 +327,7 @@ class Gateway:
 
         if not interfering_transmissions:
             # Aucun paquet actif (ou chevauchement inférieur au seuil)
-            drop_prob = _baseline_drop_prob(len(concurrent_transmissions))
+            drop_prob = _baseline_drop_prob(overlap_equivalent)
             if drop_prob > 0.0 and self.rng.random() < drop_prob:
                 new_transmission["lost_flag"] = True
                 new_transmission["collision_reason"] = "baseline_loss"
@@ -515,7 +532,7 @@ class Gateway:
 
         if capture and residual_collision_prob > 0.0 and interfering_transmissions:
             scale = max(residual_collision_load_scale, 1.0)
-            load_factor = min(len(interfering_transmissions) / scale, 1.0)
+            load_factor = min(overlap_equivalent / scale, 1.0)
             drop_prob = residual_collision_prob * load_factor
             if drop_prob > 0.0 and self.rng.random() < drop_prob:
                 capture = False
@@ -529,7 +546,7 @@ class Gateway:
                     failure_reason = "snir_off_noise"
 
         if capture and (baseline_loss_rate > 0.0 or baseline_collision_rate > 0.0):
-            drop_prob = _baseline_drop_prob(len(concurrent_transmissions))
+            drop_prob = _baseline_drop_prob(overlap_equivalent)
             if drop_prob > 0.0 and self.rng.random() < drop_prob:
                 capture = False
                 if failure_reason is None:

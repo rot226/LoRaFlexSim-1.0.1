@@ -641,8 +641,13 @@ class Node:
         rng: "np.random.Generator | None" = None,
         *,
         variation: float = 0.0,
+        min_interval: float = 0.0,
     ) -> None:
-        """Generate ``count`` Poisson arrival times once and keep a copy."""
+        """Generate ``count`` Poisson arrival times once and keep a copy.
+
+        ``min_interval`` enforces a lower bound on the sampled gaps, and
+        ``variation`` applies a multiplicative jitter on each accepted interval.
+        """
 
         self.arrival_queue = []
         self.precomputed_arrivals = None
@@ -654,7 +659,7 @@ class Node:
             float("inf"),
             mean_interval,
             rng,
-            min_interval=0.0,
+            min_interval=min_interval,
             variation=variation,
             limit=count,
         )
