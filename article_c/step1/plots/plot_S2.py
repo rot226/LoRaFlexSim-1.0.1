@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+import warnings
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+import pandas as pd
 
 from article_c.common.plot_helpers import (
     apply_plot_style,
+    ensure_network_size,
     filter_cluster,
     load_step1_aggregated,
     place_legend,
@@ -19,7 +22,11 @@ from article_c.common.plot_helpers import (
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, ax = plt.subplots()
-    network_sizes = sorted({int(row["density"]) for row in rows})
+    ensure_network_size(rows)
+    df = pd.DataFrame(rows)
+    network_sizes = sorted(df["network_size"].unique())
+    if len(network_sizes) < 2:
+        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Mean Time on Air (s)")

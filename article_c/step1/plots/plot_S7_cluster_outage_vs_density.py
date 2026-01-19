@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+import warnings
 
 import matplotlib.pyplot as plt
 from matplotlib import ticker as mticker
+import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
     apply_plot_style,
+    ensure_network_size,
     load_step1_aggregated,
     place_legend,
     plot_metric_by_snir,
@@ -41,6 +44,11 @@ def _with_outage(rows: list[dict[str, object]]) -> list[dict[str, object]]:
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
+    ensure_network_size(rows)
+    df = pd.DataFrame(rows)
+    network_sizes = sorted(df["network_size"].unique())
+    if len(network_sizes) < 2:
+        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     available_clusters = {
         row["cluster"] for row in rows if row.get("cluster") not in (None, "all")
     }
@@ -64,6 +72,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_title(f"Cluster {cluster_labels.get(cluster, cluster)}")
         ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
+        ax.set_xticks(network_sizes)
     axes[0].set_ylabel("Outage probability")
     place_legend(axes[-1])
     fig.suptitle("Step 1 - Outage probability by Cluster (SNIR on/off)")

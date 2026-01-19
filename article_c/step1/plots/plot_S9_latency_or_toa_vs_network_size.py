@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import warnings
 
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from article_c.common.plot_helpers import (
     apply_plot_style,
+    ensure_network_size,
     filter_cluster,
     load_step1_aggregated,
     place_legend,
@@ -22,7 +25,13 @@ METRIC_LABEL = "Mean ToA (s)"
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str, y_label: str) -> plt.Figure:
     fig, ax = plt.subplots()
+    ensure_network_size(rows)
+    df = pd.DataFrame(rows)
+    network_sizes = sorted(df["network_size"].unique())
+    if len(network_sizes) < 2:
+        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     plot_metric_by_snir(ax, rows, metric_key)
+    ax.set_xticks(network_sizes)
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel(y_label)
     ax.set_title("Step 1 - ToA/Latency vs Network Size (SNIR on/off)")

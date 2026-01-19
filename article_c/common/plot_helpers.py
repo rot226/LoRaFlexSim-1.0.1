@@ -144,19 +144,31 @@ def filter_cluster(rows: list[dict[str, object]], cluster: str) -> list[dict[str
     return rows
 
 
+def ensure_network_size(rows: list[dict[str, object]]) -> None:
+    for row in rows:
+        if "network_size" not in row and "density" in row:
+            row["network_size"] = row["density"]
+
+
+def _network_size_value(row: dict[str, object]) -> int:
+    if "network_size" in row:
+        return int(_to_float(row.get("network_size")))
+    return int(_to_float(row.get("density")))
+
+
 def plot_metric_by_snir(
     ax: plt.Axes,
     rows: list[dict[str, object]],
     metric_key: str,
 ) -> None:
-    all_densities = sorted({int(row["density"]) for row in rows})
+    all_densities = sorted({_network_size_value(row) for row in rows})
     algorithms = sorted({row["algo"] for row in rows})
     for algo in algorithms:
         algo_rows = [row for row in rows if row["algo"] == algo]
-        densities = sorted({int(row["density"]) for row in algo_rows})
+        densities = sorted({_network_size_value(row) for row in algo_rows})
         for snir_mode in SNIR_MODES:
             points = {
-                int(row["density"]): row[metric_key]
+                _network_size_value(row): row[metric_key]
                 for row in algo_rows
                 if row["snir_mode"] == snir_mode
             }

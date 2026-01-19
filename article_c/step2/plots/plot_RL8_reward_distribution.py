@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+import warnings
 
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
+    ensure_network_size,
     filter_cluster,
     load_step2_aggregated,
     save_figure,
@@ -46,6 +49,11 @@ def main() -> None:
     results_path = step_dir / "results" / "aggregated_results.csv"
     rows = filter_cluster(load_step2_aggregated(results_path), "all")
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
+    ensure_network_size(rows)
+    df = pd.DataFrame(rows)
+    network_sizes = sorted(df["network_size"].unique())
+    if len(network_sizes) < 2:
+        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
 
     fig = _plot_distribution(rows)
     output_dir = step_dir / "plots" / "output"

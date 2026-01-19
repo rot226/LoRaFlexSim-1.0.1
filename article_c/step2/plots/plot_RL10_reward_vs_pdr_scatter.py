@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+import warnings
 
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
+    ensure_network_size,
     filter_cluster,
     load_step1_aggregated,
     load_step2_aggregated,
@@ -198,6 +201,12 @@ def main() -> None:
     learning_curve_path = step_dir / "results" / "learning_curve.csv"
     step1_results_path = step_dir.parents[1] / "step1" / "results" / "aggregated_results.csv"
     step2_results_path = step_dir / "results" / "aggregated_results.csv"
+    size_rows = load_step2_aggregated(step2_results_path)
+    ensure_network_size(size_rows)
+    df = pd.DataFrame(size_rows)
+    network_sizes = sorted(df["network_size"].unique())
+    if len(network_sizes) < 2:
+        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     points = _collect_points(learning_curve_path, step1_results_path, step2_results_path)
 
     fig = _plot_scatter(points)
