@@ -157,6 +157,19 @@ def compute_snir_db(
     return 10 * math.log10(signal_linear / denominator)
 
 
+def compute_sir_db(
+    signal_dbm: float,
+    interferers_dbm: Sequence[float],
+) -> float:
+    """Calcule le SIR (dB) à partir du signal et des interférences."""
+
+    signal_linear = 10 ** (signal_dbm / 10)
+    interference_linear = sum(10 ** (p / 10) for p in interferers_dbm)
+    if interference_linear <= 0:
+        return float("inf")
+    return 10 * math.log10(signal_linear / interference_linear)
+
+
 def compute_thermal_noise_dbm(
     noise_floor_dbm: float,
     bandwidth_hz: float | None,
@@ -231,6 +244,7 @@ def evaluate_reception(
 
     - SNIR OFF: le succès dépend uniquement de ``target.rssi_dbm`` >= sensibilité.
     - SNIR ON: succès si RSSI >= sensibilité ET SNIR >= seuil (bruit thermique inclus).
+    - Capture effect: en co-SF, succès seulement si SIR >= seuil.
     """
 
     co_sf = co_sf_interferers(target, interferers)
@@ -238,6 +252,7 @@ def evaluate_reception(
     interference_dbm = aggregate_interference(interferer_powers_dbm)
     thermal_noise_dbm = compute_thermal_noise_dbm(noise_floor_dbm, bandwidth_hz)
     rssi_ok = target.rssi_dbm >= sensitivity_dbm
+    effective_snir_threshold_db = min(max(snir_threshold_db, 3.0), 6.0)
 
     snir_db = None
     snir_ok = True
@@ -247,14 +262,23 @@ def evaluate_reception(
             interferers_dbm=interferer_powers_dbm,
             noise_dbm=thermal_noise_dbm,
         )
-        snir_ok = snir_db >= snir_threshold_db
+        snir_ok = snir_db >= effective_snir_threshold_db
+
+    capture_ok = True
+    if co_sf:
+        sir_db = compute_sir_db(
+            signal_dbm=target.rssi_dbm,
+            interferers_dbm=interferer_powers_dbm,
+        )
+        capture_ok = sir_db >= effective_snir_threshold_db
 
     success = (
         rssi_ok
         if not snir_enabled
         else (rssi_ok and snir_ok)
     )
-    outage = (not rssi_ok) or (snir_enabled and (not snir_ok))
+    success = success and capture_ok
+    outage = (not rssi_ok) or (snir_enabled and (not snir_ok)) or (not capture_ok)
 
     return InterferenceOutcome(
         success=success,
