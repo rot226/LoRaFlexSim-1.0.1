@@ -129,7 +129,7 @@ def run_simulation(
     density: float | None = None,
     snir_mode: str = "snir_on",
     seed: int = 42,
-    traffic_mode: str = "poisson",
+    traffic_mode: str | None = None,
     jitter_range_s: float | None = None,
     window_duration_s: float | None = None,
     traffic_coeff_min: float | None = None,
@@ -142,8 +142,10 @@ def run_simulation(
     """Exécute une simulation proxy de l'étape 2."""
     rng = random.Random(seed)
     step2_defaults = DEFAULT_CONFIG.step2
-    traffic_mode_value = step2_defaults.traffic_mode
-    jitter_range_value = jitter_range_s
+    traffic_mode_value = step2_defaults.traffic_mode if traffic_mode is None else traffic_mode
+    jitter_range_value = (
+        step2_defaults.jitter_range_s if jitter_range_s is None else jitter_range_s
+    )
     window_duration_value = (
         step2_defaults.window_duration_s if window_duration_s is None else window_duration_s
     )
@@ -215,7 +217,7 @@ def run_simulation(
         for sf, airtime in airtime_by_sf.items()
     }
     shadowing_mean_db = DEFAULT_CONFIG.scenario.shadowing_mean_db
-    shadowing_sigma_db = DEFAULT_CONFIG.scenario.shadowing_sigma_db or 6.0
+    shadowing_sigma_db = DEFAULT_CONFIG.scenario.shadowing_sigma_db
 
     if algorithm == "ucb1_sf":
         bandit = BanditUCB1(
@@ -237,7 +239,7 @@ def run_simulation(
             node_windows: list[dict[str, object]] = []
             for node_id in range(n_nodes):
                 sf_value = sf_values[arm_index]
-                rate_multiplier = base_rate_multipliers[node_id] * rng.uniform(0.9, 1.1)
+                rate_multiplier = base_rate_multipliers[node_id]
                 expected_sent = max(
                     1, int(round(window_size * traffic_coeffs[node_id] * rate_multiplier))
                 )
@@ -402,7 +404,7 @@ def run_simulation(
                 else:
                     arm_index = rng.choices(range(n_arms), weights=weights, k=1)[0]
                 sf_value = sf_values[arm_index]
-                rate_multiplier = base_rate_multipliers[node_id] * rng.uniform(0.9, 1.1)
+                rate_multiplier = base_rate_multipliers[node_id]
                 expected_sent = max(
                     1, int(round(window_size * traffic_coeffs[node_id] * rate_multiplier))
                 )

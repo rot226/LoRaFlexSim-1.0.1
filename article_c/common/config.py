@@ -30,10 +30,10 @@ class ScenarioConfig:
     radius_m: int = 1000
     duration_s: int = 3600
     payload_bytes: int = 20
-    shadowing_sigma_db: float = 0.0
+    shadowing_sigma_db: float = 7.0
     shadowing_mean_db: float = 0.0
     traffic_mode: str = "periodic"
-    jitter_range: float = 5.0
+    jitter_range: float | None = None
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,7 @@ class Step2Config:
     """Paramètres spécifiques à l'étape 2."""
 
     traffic_mode: str = "poisson"
-    jitter_range_s: float = 15.0
+    jitter_range_s: float | None = None
     window_duration_s: float = 60.0
     traffic_coeff_min: float = 0.7
     traffic_coeff_max: float = 1.3

@@ -304,14 +304,14 @@ def run_simulation(
     *,
     duration_s: float = 3600.0,
     traffic_mode: str = "poisson",
-    jitter_range_s: float = 30.0,
+    jitter_range_s: float | None = None,
     mixra_opt_max_iterations: int = 30,
     mixra_opt_candidate_subset_size: int = 100,
     mixra_opt_epsilon: float = 1e-3,
     mixra_opt_max_evaluations: int = 200,
     mixra_opt_enabled: bool = True,
     mixra_opt_mode: str = "fast_opt",
-    shadowing_sigma_db: float = 6.0,
+    shadowing_sigma_db: float = 7.0,
     shadowing_mean_db: float = 0.0,
     fading_type: str | None = "lognormal",
     fading_sigma_db: float = 1.2,
@@ -326,11 +326,15 @@ def run_simulation(
     shadowing/fading pour rendre les déclenchements plus fluctuants.
     """
     rng = random.Random(seed)
+    jitter_range_value = jitter_range_s
+    if jitter_range_value is None:
+        base_period = duration_s / max(1, sent)
+        jitter_range_value = 0.5 * base_period
     traffic_times = generate_traffic_times(
         sent,
         duration_s=duration_s,
         traffic_mode=traffic_mode,
-        jitter_range_s=jitter_range_s,
+        jitter_range_s=jitter_range_value,
         rng=rng,
     )
     actual_sent = len(traffic_times)

@@ -36,7 +36,7 @@ def log_distance_path_loss(
     freq_mhz: float,
     path_loss_exponent: float = 2.7,
     reference_distance_m: float = 1.0,
-    shadowing_sigma_db: float = 0.0,
+    shadowing_sigma_db: float | None = None,
     shadowing_mean_db: float = 0.0,
     fading_type: str | None = None,
     fading_sigma_db: float = 0.0,
@@ -48,7 +48,8 @@ def log_distance_path_loss(
     Hypothèses :
     - La perte de référence est celle de l'espace libre à ``reference_distance_m``.
     - Le shadowing est un bruit log-normal (en dB) de moyenne
-      ``shadowing_mean_db`` et écart-type ``shadowing_sigma_db``.
+      ``shadowing_mean_db`` et écart-type ``shadowing_sigma_db`` (6-8 dB
+      par défaut).
     - Le fading additionnel peut être log-normal ou Rayleigh.
     """
 
@@ -64,6 +65,8 @@ def log_distance_path_loss(
     fspl_db = 32.45 + 20 * math.log10(reference_distance_m / 1000) + 20 * math.log10(freq_mhz)
     path_loss_db = fspl_db + 10 * path_loss_exponent * math.log10(distance_m / reference_distance_m)
     generator = rng or random
+    if shadowing_sigma_db is None:
+        shadowing_sigma_db = generator.uniform(6.0, 8.0)
     if shadowing_sigma_db > 0:
         path_loss_db += generator.gauss(shadowing_mean_db, shadowing_sigma_db)
     elif shadowing_mean_db != 0.0:
@@ -129,7 +132,7 @@ def rssi_for_positions(
     ptx_dbm: float,
     freq_mhz: float,
     path_loss_exponent: float = 2.7,
-    shadowing_sigma_db: float = 0.0,
+    shadowing_sigma_db: float | None = None,
     shadowing_mean_db: float = 0.0,
     fading_type: str | None = None,
     fading_sigma_db: float = 0.0,
