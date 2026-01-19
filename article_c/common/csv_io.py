@@ -7,7 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
 
-GROUP_KEYS = ("density", "network_size", "algo", "snir_mode", "cluster")
+GROUP_KEYS = ("network_size", "algo", "snir_mode", "seed", "cluster")
 EXTRA_MEAN_KEYS = {"mean_toa_s", "mean_latency_s"}
 
 
@@ -25,7 +25,7 @@ def write_rows(path: Path, header: list[str], rows: list[list[object]]) -> None:
 
 
 def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    """Agrège les résultats avec moyenne et écart-type par (density, algo, snir_mode)."""
+    """Agrège les résultats avec moyenne et écart-type par clés de simulation."""
     groups: dict[tuple[object, ...], list[dict[str, object]]] = defaultdict(list)
     numeric_keys: set[str] = set()
     for row in raw_rows:
