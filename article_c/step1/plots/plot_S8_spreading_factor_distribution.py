@@ -77,6 +77,26 @@ def _parse_sf_selected(value: str | None) -> int | None:
     return parsed
 
 
+def _normalize_algo(value: str | None) -> str:
+    if not value:
+        return ""
+    normalized = value.strip().lower()
+    normalized = normalized.replace("-", "_").replace(" ", "_")
+    return normalized
+
+
+def _normalize_snir_mode(value: str | None) -> str:
+    if not value:
+        return ""
+    normalized = value.strip().lower()
+    normalized = normalized.replace("-", "_").replace(" ", "_")
+    if normalized in {"on", "snir_on"}:
+        return "snir_on"
+    if normalized in {"off", "snir_off"}:
+        return "snir_off"
+    return normalized
+
+
 def _aggregate_sf_selected(
     rows: list[dict[str, str]],
     sf_values: list[int],
@@ -86,8 +106,10 @@ def _aggregate_sf_selected(
         sf_value = _parse_sf_selected(row.get("sf_selected"))
         if sf_value is None or sf_value not in sf_values:
             continue
-        algo = (row.get("algo") or "").strip()
-        snir_mode = (row.get("snir_mode") or "").strip()
+        algo_raw = (row.get("algo") or "").strip()
+        snir_raw = (row.get("snir_mode") or "").strip()
+        algo = _normalize_algo(algo_raw) or algo_raw
+        snir_mode = _normalize_snir_mode(snir_raw) or snir_raw
         if not algo or not snir_mode:
             continue
         key = (algo, snir_mode)
@@ -137,9 +159,15 @@ def _aggregate_distributions(
 def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
     sf_values = list(DEFAULT_CONFIG.radio.spreading_factors)
     snir_modes = [mode for mode in SNIR_MODES if any(row.get("snir_mode") == mode for row in rows)]
+    extra_snir_modes = [
+        mode
+        for mode in sorted({row.get("snir_mode", "") for row in rows})
+        if mode and mode not in snir_modes
+    ]
+    snir_modes = snir_modes + extra_snir_modes
     if not snir_modes:
-        snir_modes = sorted({row.get("snir_mode", "") for row in rows})
-    algorithms = sorted({row.get("algo", "") for row in rows})
+        snir_modes = sorted({row.get("snir_mode", "") for row in rows if row.get("snir_mode")})
+    algorithms = sorted({row.get("algo", "") for row in rows if row.get("algo")})
     distribution_by_group = _aggregate_distributions(rows, sf_values)
 
     fig, axes = plt.subplots(1, len(snir_modes), figsize=(6 * len(snir_modes), 4), sharey=True)
@@ -197,11 +225,24 @@ def main() -> None:
         )
     if distribution_by_group:
         rows = [
-            {"algo": algo, "snir_mode": snir_mode, **{f"sf{sf}_share": share for sf, share in values.items()}}
+            {
+                "algo": algo,
+                "snir_mode": snir_mode,
+                **{f"sf{sf}_share": share for sf, share in values.items()},
+            }
             for (algo, snir_mode), values in distribution_by_group.items()
         ]
     else:
         rows = filter_cluster(load_step1_aggregated(aggregated_results_path), "all")
+    rows = [
+        {
+            **row,
+            "algo": _normalize_algo(str(row.get("algo", ""))) or row.get("algo", ""),
+            "snir_mode": _normalize_snir_mode(str(row.get("snir_mode", "")))
+            or row.get("snir_mode", ""),
+        }
+        for row in rows
+    ]
 
     fig = _plot_distribution(rows)
     output_dir = step_dir / "plots" / "output"

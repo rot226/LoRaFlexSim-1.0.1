@@ -220,8 +220,13 @@ def main(argv: list[str] | None = None) -> None:
                         result.node_clusters, result.toa_s_by_node, strict=True
                     ):
                         cluster_toa[cluster].append(toa_s)
-                    for node_id, (cluster, sf_selected) in enumerate(
-                        zip(result.node_clusters, result.sf_selected_by_node, strict=True)
+                    for node_id, (packet_id, cluster, sf_selected) in enumerate(
+                        zip(
+                            result.packet_ids,
+                            result.node_clusters,
+                            result.sf_selected_by_node,
+                            strict=True,
+                        )
                     ):
                         raw_rows.append(
                             {
@@ -232,7 +237,7 @@ def main(argv: list[str] | None = None) -> None:
                                 "replication": replication,
                                 "seed": seed,
                                 "node_id": node_id,
-                                "packet_id": node_id,
+                                "packet_id": packet_id,
                                 "sf_selected": sf_selected,
                             }
                         )

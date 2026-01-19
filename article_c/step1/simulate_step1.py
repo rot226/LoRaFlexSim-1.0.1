@@ -52,6 +52,7 @@ class Step1Result:
     node_clusters: list[str]
     node_received: list[bool]
     toa_s_by_node: list[float]
+    packet_ids: list[int]
     sf_selected_by_node: list[int]
     timing_s: dict[str, float] | None = None
 
@@ -404,6 +405,7 @@ def run_simulation(
     energy_per_bit = energy_per_success_bit(
         airtimes_ms_by_packet, payload_bits_success, DEFAULT_CONFIG.radio.tx_power_dbm
     )
+    packet_ids = list(range(actual_sent))
     return Step1Result(
         sent=actual_sent,
         received=received,
@@ -412,6 +414,7 @@ def run_simulation(
         node_clusters=node_clusters,
         node_received=node_received,
         toa_s_by_node=toa_s_by_node,
+        packet_ids=packet_ids,
         sf_selected_by_node=list(assignments),
         timing_s=timings,
     )
