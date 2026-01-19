@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 
 from article_c.common.plot_helpers import (
     apply_plot_style,
@@ -18,11 +19,14 @@ from article_c.common.plot_helpers import (
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, ax = plt.subplots()
+    network_sizes = sorted({int(row["density"]) for row in rows})
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Sent Frames (mean)")
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.set_label_coords(-0.12, 0.5)
+    ax.yaxis.set_label_coords(-0.08, 0.5)
+    ax.set_xticks(network_sizes)
+    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_title("Step 1 - Sent Frames vs Network size (number of nodes) (SNIR on/off)")
     place_legend(ax)
     return fig

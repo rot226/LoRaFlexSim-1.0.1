@@ -19,11 +19,14 @@ from article_c.common.plot_helpers import (
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, ax = plt.subplots()
+    network_sizes = sorted({int(row["density"]) for row in rows})
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Packet Delivery Ratio")
     ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.2f}"))
     ax.yaxis.set_label_coords(-0.08, 0.5)
+    ax.set_xticks(network_sizes)
+    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_ylim(0.0, 1.0)
     ax.set_title("Step 1 - Packet Delivery Ratio (SNIR on/off)")
     place_legend(ax)
