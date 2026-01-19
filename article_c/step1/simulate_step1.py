@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 import random
+from time import perf_counter
 from typing import Iterable
 
 from article_c.common.config import DEFAULT_CONFIG
@@ -52,6 +53,7 @@ class Step1Result:
     node_received: list[bool]
     toa_s_by_node: list[float]
     sf_selected_by_node: list[int]
+    timing_s: dict[str, float] | None = None
 
     @property
     def pdr(self) -> float:
@@ -314,6 +316,7 @@ def run_simulation(
     fading_type: str | None = "lognormal",
     fading_sigma_db: float = 1.2,
     fading_mean_db: float = 0.0,
+    profile_timing: bool = False,
 ) -> Step1Result:
     """Exécute une simulation minimale.
 
@@ -340,6 +343,8 @@ def run_simulation(
         fading_sigma_db=fading_sigma_db,
         fading_mean_db=fading_mean_db,
     )
+    timings: dict[str, float] | None = {} if profile_timing else None
+    start_assignment = perf_counter() if profile_timing else 0.0
     if algorithm == "adr":
         assignments = [_adr_smallest_sf(node) for node in nodes]
     elif algorithm == "mixra_h":
@@ -365,6 +370,8 @@ def run_simulation(
         assignments = _mixra_h_assign(nodes)
     else:
         raise ValueError(f"Algorithme inconnu: {algorithm}")
+    if profile_timing and timings is not None:
+        timings["sf_assignment_s"] = perf_counter() - start_assignment
     payload_bytes = DEFAULT_CONFIG.scenario.payload_bytes
     bw_khz = DEFAULT_CONFIG.radio.bandwidth_khz
     cr = coding_rate_to_cr(DEFAULT_CONFIG.radio.coding_rate)
@@ -375,6 +382,7 @@ def run_simulation(
     toa_s_by_node = [airtime_ms / 1000.0 for airtime_ms in airtimes_ms_by_packet]
     channels = DEFAULT_CONFIG.radio.channels_hz
     node_channels = [rng.choice(channels) for _ in range(actual_sent)]
+    start_interference = perf_counter() if profile_timing else 0.0
     node_received = _estimate_received(
         assignments,
         traffic_times,
@@ -383,6 +391,8 @@ def run_simulation(
         [node.rssi for node in nodes],
         rng,
     )
+    if profile_timing and timings is not None:
+        timings["interference_s"] = perf_counter() - start_interference
     node_clusters = assign_clusters(actual_sent, rng=rng)
     received = sum(1 for value in node_received if value)
     mean_toa = mean_toa_s(airtimes_ms_by_packet)
@@ -399,4 +409,5 @@ def run_simulation(
         node_received=node_received,
         toa_s_by_node=toa_s_by_node,
         sf_selected_by_node=list(assignments),
+        timing_s=timings,
     )

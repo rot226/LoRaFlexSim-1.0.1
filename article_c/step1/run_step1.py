@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from statistics import mean
+from time import perf_counter
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.csv_io import write_simulation_results
@@ -153,6 +154,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=True,
         help="Affiche la progression des simulations.",
     )
+    parser.add_argument(
+        "--profile-timing",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Affiche les durées des étapes (assignation SF, interférences, "
+            "agrégation métriques) par taille de réseau."
+        ),
+    )
     return parser
 
 
@@ -171,6 +181,8 @@ def main(argv: list[str] | None = None) -> None:
     completed_runs = 0
     cluster_ids = list(DEFAULT_CONFIG.qos.clusters)
     for density in densities:
+        timing_totals = {"sf_assignment_s": 0.0, "interference_s": 0.0, "metrics_s": 0.0}
+        timing_runs = 0
         for algo in ALGORITHMS:
             for snir_mode in snir_modes:
                 for replication in replications:
@@ -191,7 +203,9 @@ def main(argv: list[str] | None = None) -> None:
                         mixra_opt_max_evaluations=args.mixra_opt_max_evals,
                         mixra_opt_enabled=args.mixra_opt_enabled,
                         mixra_opt_mode=args.mixra_opt_mode,
+                        profile_timing=args.profile_timing,
                     )
+                    metrics_start = perf_counter() if args.profile_timing else 0.0
                     cluster_stats = {
                         cluster: {"sent": 0, "received": 0} for cluster in cluster_ids
                     }
@@ -257,12 +271,32 @@ def main(argv: list[str] | None = None) -> None:
                             "mean_toa_s": result.mean_toa_s,
                         }
                     )
+                    if args.profile_timing and result.timing_s is not None:
+                        timing_totals["sf_assignment_s"] += result.timing_s.get(
+                            "sf_assignment_s", 0.0
+                        )
+                        timing_totals["interference_s"] += result.timing_s.get(
+                            "interference_s", 0.0
+                        )
+                        timing_totals["metrics_s"] += perf_counter() - metrics_start
+                        timing_runs += 1
                     completed_runs += 1
                     if args.progress and total_runs > 0:
                         percent = (completed_runs / total_runs) * 100
                         print(
                             f"Progress: {completed_runs}/{total_runs} ({percent:.1f}%)"
                         )
+        if args.profile_timing and timing_runs > 0:
+            mean_assignment = timing_totals["sf_assignment_s"] / timing_runs
+            mean_interference = timing_totals["interference_s"] / timing_runs
+            mean_metrics = timing_totals["metrics_s"] / timing_runs
+            print(
+                "Profiling taille réseau "
+                f"{density}: assignation SF {mean_assignment:.6f}s, "
+                f"interférences {mean_interference:.6f}s, "
+                f"agrégation métriques {mean_metrics:.6f}s "
+                f"(moyenne sur {timing_runs} runs)."
+            )
 
     write_simulation_results(output_dir, raw_rows)
 
