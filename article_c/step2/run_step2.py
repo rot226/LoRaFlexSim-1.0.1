@@ -36,6 +36,13 @@ def _aggregate_selection_probs(
     return aggregated
 
 
+def _log_results_written(output_dir: Path) -> None:
+    raw_path = output_dir / "raw_results.csv"
+    aggregated_path = output_dir / "aggregated_results.csv"
+    print(f"Création : {raw_path}")
+    print(f"Création : {aggregated_path}")
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_cli_args(argv)
     base_seed = set_deterministic_seed(args.seeds_base)
@@ -78,8 +85,10 @@ def main(argv: Sequence[str] | None = None) -> None:
                     selection_rows.extend(result.selection_prob_rows)
 
     write_simulation_results(base_results_dir, raw_rows)
+    _log_results_written(base_results_dir)
     if timestamp_dir is not None:
         write_simulation_results(timestamp_dir, raw_rows)
+        _log_results_written(timestamp_dir)
     print(f"Rows written: {len(raw_rows)}")
 
     if selection_rows:

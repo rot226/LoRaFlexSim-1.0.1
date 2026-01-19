@@ -154,7 +154,7 @@ def main(argv: list[str] | None = None) -> None:
         else:
             print(
                 "CSV Step2 absent : "
-                f"{step2_csv}. "
+                f"{step2_csv} introuvable. "
                 "Exécutez l'étape 2 pour générer aggregated_results.csv "
                 "avant de lancer les plots Step2."
             )
@@ -164,6 +164,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     for step in steps:
         for module_path in PLOT_MODULES[step]:
+            if step == "step2":
+                figure = module_path.split(".")[-1]
+                print(f"Plotting Step2: {figure}")
             _run_plot_module(module_path)
 
 
