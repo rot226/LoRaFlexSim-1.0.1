@@ -113,16 +113,16 @@ def _mixra_h_assign(nodes: Iterable[NodeLink]) -> list[int]:
 def _mixra_opt_assign(
     nodes: Iterable[NodeLink],
     *,
-    max_iterations: int = 200,
-    candidate_subset_size: int = 200,
+    max_iterations: int = 30,
+    candidate_subset_size: int = 100,
     convergence_epsilon: float = 1e-3,
     max_evaluations: int = 200,
-    rng: random.Random | None = None,
+    subset_seed: int = 0,
 ) -> list[int]:
     """MixRA-Opt proxy: glouton + recherche locale (collisions + QoS)."""
     nodes_list = list(nodes)
     assignments = _mixra_h_assign(nodes_list)
-    local_rng = rng or random.Random()
+    local_rng = random.Random(subset_seed)
 
     def collision_cost(loads: dict[int, int]) -> float:
         return sum(load * load for load in loads.values())
@@ -158,7 +158,11 @@ def _mixra_opt_assign(
         for idx in candidate_indices:
             evaluations += 1
             if evaluations > max_evaluations:
-                LOGGER.warning("MixRA-Opt fallback used")
+                LOGGER.warning(
+                    "MixRA-Opt dépasse le budget (%s > %s évaluations), fallback MixRA-H.",
+                    evaluations,
+                    max_evaluations,
+                )
                 return _mixra_h_assign(nodes_list)
             node = nodes_list[idx]
             current_sf = assignments[idx]
@@ -299,8 +303,8 @@ def run_simulation(
     duration_s: float = 3600.0,
     traffic_mode: str = "poisson",
     jitter_range_s: float = 30.0,
-    mixra_opt_max_iterations: int = 200,
-    mixra_opt_candidate_subset_size: int = 200,
+    mixra_opt_max_iterations: int = 30,
+    mixra_opt_candidate_subset_size: int = 100,
     mixra_opt_epsilon: float = 1e-3,
     mixra_opt_max_evaluations: int = 200,
     mixra_opt_enabled: bool = True,
@@ -355,7 +359,7 @@ def run_simulation(
             candidate_subset_size=mixra_opt_candidate_subset_size,
             convergence_epsilon=mixra_opt_epsilon,
             max_evaluations=mixra_opt_max_evaluations,
-            rng=rng,
+            subset_seed=seed,
         )
     elif algorithm == "mixra_opt":
         assignments = _mixra_h_assign(nodes)
