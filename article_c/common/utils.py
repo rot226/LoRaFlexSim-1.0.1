@@ -97,7 +97,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--window_size",
         type=int,
-        default=10,
+        default=DEFAULT_CONFIG.rl.window_w,
         help="Taille de la fenêtre (W) pour l'étape 2.",
     )
     parser.add_argument(
