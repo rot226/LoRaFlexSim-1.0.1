@@ -73,6 +73,15 @@ def _to_float(value: object, default: float = 0.0) -> float:
         return default
 
 
+def _to_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    text = str(value).strip().lower()
+    return text in {"1", "true", "yes", "y", "vrai"}
+
+
 def load_step1_aggregated(path: Path) -> list[dict[str, object]]:
     rows = _read_csv_rows(path)
     if not rows:
@@ -84,9 +93,10 @@ def load_step1_aggregated(path: Path) -> list[dict[str, object]]:
             "algo": row.get("algo", ""),
             "snir_mode": row.get("snir_mode", ""),
             "cluster": row.get("cluster", "all"),
+            "mixra_opt_fallback": _to_bool(row.get("mixra_opt_fallback")),
         }
         for key, value in row.items():
-            if key in {"density", "algo", "snir_mode", "cluster"}:
+            if key in {"density", "algo", "snir_mode", "cluster", "mixra_opt_fallback"}:
                 continue
             parsed_row[key] = _to_float(value)
         parsed.append(parsed_row)
@@ -130,11 +140,20 @@ def load_step2_selection_probs(path: Path) -> list[dict[str, object]]:
     return parsed
 
 
-def algo_labels(algorithms: Iterable[str]) -> list[str]:
-    return [ALGO_LABELS.get(algo, algo) for algo in algorithms]
+def algo_labels(algorithms: Iterable[object]) -> list[str]:
+    labels: list[str] = []
+    for algo in algorithms:
+        if isinstance(algo, tuple) and len(algo) == 2:
+            label = algo_label(str(algo[0]), bool(algo[1]))
+        else:
+            label = algo_label(str(algo))
+        labels.append(label)
+    return labels
 
 
-def algo_label(algo: str) -> str:
+def algo_label(algo: str, fallback: bool = False) -> str:
+    if algo == "mixra_opt" and fallback:
+        return "MixRA-Opt (fallback)"
     return ALGO_LABELS.get(algo, algo)
 
 
@@ -162,9 +181,15 @@ def plot_metric_by_snir(
     metric_key: str,
 ) -> None:
     all_densities = sorted({_network_size_value(row) for row in rows})
-    algorithms = sorted({row["algo"] for row in rows})
-    for algo in algorithms:
-        algo_rows = [row for row in rows if row["algo"] == algo]
+
+    def _algo_key(row: dict[str, object]) -> tuple[str, bool]:
+        algo_value = str(row.get("algo", ""))
+        fallback = bool(row.get("mixra_opt_fallback")) if algo_value == "mixra_opt" else False
+        return algo_value, fallback
+
+    algorithms = sorted({_algo_key(row) for row in rows})
+    for algo, fallback in algorithms:
+        algo_rows = [row for row in rows if _algo_key(row) == (algo, fallback)]
         densities = sorted({_network_size_value(row) for row in algo_rows})
         for snir_mode in SNIR_MODES:
             points = {
@@ -175,7 +200,7 @@ def plot_metric_by_snir(
             if not points:
                 continue
             values = [points.get(density, float("nan")) for density in densities]
-            label = f"{algo_label(algo)} ({SNIR_LABELS[snir_mode]})"
+            label = f"{algo_label(algo, fallback)} ({SNIR_LABELS[snir_mode]})"
             ax.plot(
                 densities,
                 values,
@@ -223,6 +248,7 @@ def _sample_step1_rows() -> list[dict[str, object]]:
                         "algo": algo,
                         "snir_mode": snir_mode,
                         "cluster": cluster,
+                        "mixra_opt_fallback": False,
                         "pdr_mean": pdr,
                         "sent_mean": 120 * density,
                         "received_mean": 120 * density * pdr,

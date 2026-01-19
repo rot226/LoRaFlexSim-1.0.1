@@ -54,6 +54,7 @@ class Step1Result:
     toa_s_by_node: list[float]
     packet_ids: list[int]
     sf_selected_by_node: list[int]
+    mixra_opt_fallback: bool
     timing_s: dict[str, float] | None = None
 
     @property
@@ -121,7 +122,7 @@ def _mixra_opt_assign(
     convergence_epsilon: float = 1e-3,
     max_evaluations: int = 200,
     subset_seed: int = 0,
-) -> list[int]:
+) -> tuple[list[int], bool]:
     """MixRA-Opt proxy: glouton + recherche locale (collisions + QoS)."""
     nodes_list = list(nodes)
     assignments = _mixra_h_assign(nodes_list)
@@ -166,7 +167,7 @@ def _mixra_opt_assign(
                     evaluations,
                     max_evaluations,
                 )
-                return _mixra_h_assign(nodes_list)
+                return _mixra_h_assign(nodes_list), True
             node = nodes_list[idx]
             current_sf = assignments[idx]
             candidates = [sf for sf in SF_VALUES if _qos_ok(node, sf)]
@@ -201,7 +202,7 @@ def _mixra_opt_assign(
         if not improved or small_improvement_streak >= 10:
             break
     LOGGER.info("MixRA-Opt executed %s evaluations, no fallback.", evaluations)
-    return assignments
+    return assignments, False
 
 
 def _estimate_received(
@@ -351,6 +352,7 @@ def run_simulation(
     )
     timings: dict[str, float] | None = {} if profile_timing else None
     start_assignment = perf_counter() if profile_timing else 0.0
+    mixra_opt_fallback = False
     if algorithm == "adr":
         assignments = [_adr_smallest_sf(node) for node in nodes]
     elif algorithm == "mixra_h":
@@ -370,7 +372,7 @@ def run_simulation(
                 mixra_opt_max_evaluations = min(mixra_opt_max_evaluations, 1000)
             else:
                 mixra_opt_max_evaluations = min(mixra_opt_max_evaluations, 120)
-        assignments = _mixra_opt_assign(
+        assignments, mixra_opt_fallback = _mixra_opt_assign(
             nodes,
             max_iterations=mixra_opt_max_iterations,
             candidate_subset_size=mixra_opt_candidate_subset_size,
@@ -380,6 +382,7 @@ def run_simulation(
         )
     elif algorithm == "mixra_opt":
         assignments = _mixra_h_assign(nodes)
+        mixra_opt_fallback = True
     else:
         raise ValueError(f"Algorithme inconnu: {algorithm}")
     if profile_timing and timings is not None:
@@ -423,5 +426,6 @@ def run_simulation(
         toa_s_by_node=toa_s_by_node,
         packet_ids=packet_ids,
         sf_selected_by_node=list(assignments),
+        mixra_opt_fallback=mixra_opt_fallback,
         timing_s=timings,
     )

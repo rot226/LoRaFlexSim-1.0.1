@@ -14,10 +14,10 @@ from matplotlib.lines import Line2D
 import pandas as pd
 
 from article_c.common.plot_helpers import (
-    ALGO_LABELS,
     SNIR_LABELS,
     SNIR_MODES,
     _sample_step1_rows,
+    algo_label,
     apply_plot_style,
     ensure_network_size,
     save_figure,
@@ -29,6 +29,7 @@ PDR_COLUMNS = ("pdr", "pdr_mean")
 ALGO_COLUMNS = ("algo", "algorithm", "method")
 SNIR_COLUMNS = ("snir_mode", "snir_state", "snir", "with_snir")
 CLUSTER_COLUMNS = ("cluster",)
+MIXRA_FALLBACK_COLUMNS = ("mixra_opt_fallback", "mixra_fallback", "fallback")
 
 
 def _read_rows(path: Path) -> list[dict[str, str]]:
@@ -86,6 +87,12 @@ def _as_float(value: str | None) -> float | None:
         return None
 
 
+def _as_bool(value: str | None) -> bool:
+    if value is None or value == "":
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "vrai"}
+
+
 def _filtered_sample_rows() -> list[dict[str, object]]:
     rows = []
     for row in _sample_step1_rows():
@@ -104,7 +111,7 @@ def _filtered_sample_rows() -> list[dict[str, object]]:
 
 def _extract_pdr_groups(
     rows: list[dict[str, str]],
-) -> dict[int, dict[tuple[str, str], list[float]]]:
+) -> dict[int, dict[tuple[str, bool, str], list[float]]]:
     if not rows:
         return {}
     columns = rows[0].keys()
@@ -113,10 +120,11 @@ def _extract_pdr_groups(
     snir_col = _pick_column(columns, SNIR_COLUMNS)
     pdr_col = _pick_column(columns, PDR_COLUMNS)
     cluster_col = _pick_column(columns, CLUSTER_COLUMNS)
+    fallback_col = _pick_column(columns, MIXRA_FALLBACK_COLUMNS)
     if not size_col or not algo_col or not snir_col or not pdr_col:
         return {}
 
-    values_by_size: dict[int, dict[tuple[str, str], list[float]]] = {}
+    values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]] = {}
     for row in rows:
         if cluster_col and row.get(cluster_col) not in {"all", "", None}:
             continue
@@ -124,6 +132,9 @@ def _extract_pdr_groups(
         snir_mode = _normalize_snir(row.get(snir_col))
         if algo is None or snir_mode not in SNIR_LABELS:
             continue
+        fallback = _as_bool(row.get(fallback_col)) if fallback_col else False
+        if algo != "mixra_opt":
+            fallback = False
         pdr = _as_float(row.get(pdr_col))
         if pdr is None:
             continue
@@ -131,21 +142,23 @@ def _extract_pdr_groups(
         if size_value is None:
             continue
         size = int(size_value)
-        values_by_size.setdefault(size, {}).setdefault((algo, snir_mode), []).append(pdr)
+        values_by_size.setdefault(size, {}).setdefault((algo, fallback, snir_mode), []).append(pdr)
     return values_by_size
 
 
 def _plot_pdr_distribution(
     ax: plt.Axes,
-    values_by_group: dict[tuple[str, str], list[float]],
+    values_by_group: dict[tuple[str, bool, str], list[float]],
     *,
     target_size: int,
 ) -> None:
-    algorithms = [
-        algo for algo in ALGO_LABELS.keys() if any(key[0] == algo for key in values_by_group)
-    ]
+    algorithms: list[tuple[str, bool]] = []
+    for algo in ("adr", "mixra_h", "mixra_opt", "ucb1_sf"):
+        for fallback in (False, True):
+            if any(key[0] == algo and key[1] == fallback for key in values_by_group):
+                algorithms.append((algo, fallback))
     if not algorithms:
-        algorithms = sorted({algo for algo, _ in values_by_group})
+        algorithms = sorted({(algo, fallback) for algo, fallback, _ in values_by_group})
 
     rng = Random(42)
     base_positions = list(range(len(algorithms)))
@@ -153,7 +166,7 @@ def _plot_pdr_distribution(
     colors = {"snir_on": "#4c78a8", "snir_off": "#f58518"}
 
     for snir_mode in SNIR_MODES:
-        data = [values_by_group.get((algo, snir_mode), []) for algo in algorithms]
+        data = [values_by_group.get((algo, fallback, snir_mode), []) for algo, fallback in algorithms]
         positions = [pos + offsets[snir_mode] for pos in base_positions]
         violins = ax.violinplot(
             data,
@@ -193,7 +206,7 @@ def _plot_pdr_distribution(
                 )
 
     ax.set_xticks(base_positions)
-    ax.set_xticklabels([ALGO_LABELS.get(algo, algo) for algo in algorithms])
+    ax.set_xticklabels([algo_label(algo, fallback) for algo, fallback in algorithms])
     ax.set_xlabel("Algorithme")
     ax.set_ylabel("Packet Delivery Ratio")
     ax.set_title(f"Step 1 - Distribution du PDR (network size = {target_size})")
