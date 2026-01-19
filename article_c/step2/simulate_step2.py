@@ -124,8 +124,9 @@ def run_simulation(
     n_rounds: int = 20,
     n_nodes: int = 12,
     n_arms: int | None = None,
-    window_size: int = 5,
-    lambda_energy: float = 0.6,
+    window_size: int = DEFAULT_CONFIG.rl.window_w,
+    lambda_energy: float = DEFAULT_CONFIG.rl.lambda_energy,
+    epsilon_greedy: float = 0.03,
     density: float | None = None,
     snir_mode: str = "snir_on",
     seed: int = 42,
@@ -175,6 +176,7 @@ def run_simulation(
         if window_delay_range_s is None
         else window_delay_range_s
     )
+    epsilon_greedy = _clip(epsilon_greedy, 0.0, 1.0)
     density_value = density if density is not None else n_nodes
     algo_label = _algo_label(algorithm)
     raw_rows: list[dict[str, object]] = []
@@ -223,11 +225,13 @@ def run_simulation(
         bandit = BanditUCB1(
             n_arms=n_arms,
             warmup_rounds=DEFAULT_CONFIG.rl.warmup,
-            epsilon_min=0.05,
+            epsilon_min=0.02,
         )
         window_start_s = 0.0
         for round_id in range(n_rounds):
             arm_index = bandit.select_arm()
+            if epsilon_greedy > 0.0 and rng.random() < epsilon_greedy:
+                arm_index = rng.randrange(n_arms)
             window_rewards: list[float] = []
             if round_id > 0:
                 delay_s = (

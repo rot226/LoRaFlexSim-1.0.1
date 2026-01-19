@@ -57,9 +57,9 @@ class QoSConfig:
 class RLConfig:
     """Paramètres RL."""
 
-    window_w: int = 20
+    window_w: int = 12
     warmup: int = 5
-    lambda_energy: float = 0.1
+    lambda_energy: float = 0.2
 
 
 @dataclass(frozen=True)
