@@ -147,6 +147,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=str(Path(__file__).resolve().parent / "results"),
         help="Répertoire de sortie des CSV.",
     )
+    parser.add_argument(
+        "--progress",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Affiche la progression des simulations.",
+    )
     return parser
 
 
@@ -161,6 +167,8 @@ def main(argv: list[str] | None = None) -> None:
 
     raw_rows: list[dict[str, object]] = []
     run_index = 0
+    total_runs = len(densities) * len(ALGORITHMS) * len(snir_modes) * len(replications)
+    completed_runs = 0
     cluster_ids = list(DEFAULT_CONFIG.qos.clusters)
     for density in densities:
         for algo in ALGORITHMS:
@@ -249,6 +257,12 @@ def main(argv: list[str] | None = None) -> None:
                             "mean_toa_s": result.mean_toa_s,
                         }
                     )
+                    completed_runs += 1
+                    if args.progress and total_runs > 0:
+                        percent = (completed_runs / total_runs) * 100
+                        print(
+                            f"Progress: {completed_runs}/{total_runs} ({percent:.1f}%)"
+                        )
 
     write_simulation_results(output_dir, raw_rows)
 
