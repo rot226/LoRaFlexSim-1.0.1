@@ -7,6 +7,8 @@ import csv
 import importlib
 from pathlib import Path
 
+from article_c.common.config import DEFAULT_CONFIG
+
 
 PLOT_MODULES = {
     "step1": [
@@ -50,6 +52,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="step1,step2",
         help="Étapes à tracer (ex: step1,step2).",
     )
+    parser.add_argument(
+        "--network-sizes",
+        dest="network_sizes",
+        type=int,
+        nargs="+",
+        default=list(DEFAULT_CONFIG.scenario.network_sizes),
+        help="Tailles de réseau attendues (ex: 50 100 150).",
+    )
     return parser
 
 
@@ -79,6 +89,42 @@ def _validate_snir_mode_column(paths: list[Path]) -> None:
             raise ValueError(
                 f"Le CSV {path} doit contenir une colonne 'snir_mode'."
             )
+
+
+def _extract_network_sizes(path: Path) -> set[int]:
+    if not path.exists():
+        return set()
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = reader.fieldnames or []
+        if "network_size" in fieldnames:
+            size_key = "network_size"
+        elif "density" in fieldnames:
+            size_key = "density"
+        else:
+            return set()
+        sizes: set[int] = set()
+        for row in reader:
+            raw_value = row.get(size_key)
+            if raw_value in (None, ""):
+                continue
+            try:
+                sizes.add(int(float(raw_value)))
+            except ValueError:
+                continue
+    return sizes
+
+
+def _validate_network_sizes(paths: list[Path], expected_sizes: list[int]) -> bool:
+    expected_set = {int(size) for size in expected_sizes}
+    for path in paths:
+        found_sizes = _extract_network_sizes(path)
+        missing = sorted(expected_set - found_sizes)
+        if missing:
+            missing_list = ", ".join(str(size) for size in missing)
+            print(f"Missing sizes: {missing_list}")
+            return False
+    return True
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -114,6 +160,8 @@ def main(argv: list[str] | None = None) -> None:
             )
             steps = [step for step in steps if step != "step2"]
     _validate_snir_mode_column(csv_paths)
+    if not _validate_network_sizes(csv_paths, args.network_sizes):
+        return
     for step in steps:
         for module_path in PLOT_MODULES[step]:
             _run_plot_module(module_path)
