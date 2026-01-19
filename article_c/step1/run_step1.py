@@ -299,6 +299,7 @@ def main(argv: list[str] | None = None) -> None:
             )
 
     write_simulation_results(output_dir, raw_rows)
+    (output_dir / "done.flag").write_text("done\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

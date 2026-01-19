@@ -89,6 +89,14 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:
         parser.error(str(exc))
     article_dir = Path(__file__).resolve().parent
+    step1_results_dir = article_dir / "step1" / "results"
+    step2_results_dir = article_dir / "step2" / "results"
+    if "step1" in steps and not (step1_results_dir / "done.flag").exists():
+        print("Step1 incomplete, skipping plots")
+        return
+    if "step2" in steps and not (step2_results_dir / "done.flag").exists():
+        print("Step2 incomplete, skipping plots")
+        return
     step1_csv = article_dir / "step1" / "results" / "aggregated_results.csv"
     step2_csv = article_dir / "step2" / "results" / "aggregated_results.csv"
     csv_paths: list[Path] = []

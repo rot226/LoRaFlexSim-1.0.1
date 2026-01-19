@@ -91,6 +91,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             rl5_timestamp_path = timestamp_dir / "rl5_selection_prob.csv"
             write_rows(rl5_timestamp_path, rl5_header, rl5_values)
 
+    (base_results_dir / "done.flag").write_text("done\n", encoding="utf-8")
+
 
 if __name__ == "__main__":
     main()
