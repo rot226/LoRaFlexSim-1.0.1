@@ -7,7 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
 
-GROUP_KEYS = ("network_size", "algo", "snir_mode", "seed", "cluster")
+GROUP_KEYS = ("network_size", "algo", "snir_mode", "seed", "cluster", "mixra_opt_fallback")
 EXTRA_MEAN_KEYS = {"mean_toa_s", "mean_latency_s"}
 
 

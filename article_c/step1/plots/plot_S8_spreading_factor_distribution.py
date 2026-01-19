@@ -100,11 +100,29 @@ def _normalize_snir_mode(value: str | None) -> str:
     return normalized
 
 
+MIXRA_FALLBACK_COLUMNS = ("mixra_opt_fallback", "mixra_fallback", "fallback")
+
+
+def _parse_fallback(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "vrai"}
+
+
+def _fallback_from_row(row: dict[str, object]) -> bool:
+    for key in MIXRA_FALLBACK_COLUMNS:
+        if key in row:
+            return _parse_fallback(row.get(key))
+    return False
+
+
 def _aggregate_sf_selected(
     rows: list[dict[str, str]],
     sf_values: list[int],
-) -> dict[tuple[str, str], dict[int, float]]:
-    counts: dict[tuple[str, str], dict[int, int]] = {}
+) -> dict[tuple[str, bool, str], dict[int, float]]:
+    counts: dict[tuple[str, bool, str], dict[int, int]] = {}
     for row in rows:
         sf_value = _parse_sf_selected(row.get("sf_selected"))
         if sf_value is None or sf_value not in sf_values:
@@ -115,12 +133,15 @@ def _aggregate_sf_selected(
         snir_mode = _normalize_snir_mode(snir_raw) or snir_raw
         if not algo or not snir_mode:
             continue
-        key = (algo, snir_mode)
+        fallback = _fallback_from_row(row)
+        if algo != "mixra_opt":
+            fallback = False
+        key = (algo, fallback, snir_mode)
         if key not in counts:
             counts[key] = {sf: 0 for sf in sf_values}
         counts[key][sf_value] += 1
 
-    aggregated: dict[tuple[str, str], dict[int, float]] = {}
+    aggregated: dict[tuple[str, bool, str], dict[int, float]] = {}
     for key, sf_counts in counts.items():
         total = sum(sf_counts.values())
         if total <= 0:
@@ -132,13 +153,15 @@ def _aggregate_sf_selected(
 def _aggregate_distributions(
     rows: list[dict[str, object]],
     sf_values: list[int],
-) -> dict[tuple[str, str], dict[int, float]]:
-    grouped: dict[tuple[str, str], dict[str, object]] = {}
+) -> dict[tuple[str, bool, str], dict[int, float]]:
+    grouped: dict[tuple[str, bool, str], dict[str, object]] = {}
     for row in rows:
         distribution = _extract_sf_distribution(row, sf_values)
         if not distribution:
             continue
-        key = (str(row.get("algo", "")), str(row.get("snir_mode", "")))
+        algo = str(row.get("algo", ""))
+        fallback = _fallback_from_row(row) if algo == "mixra_opt" else False
+        key = (algo, fallback, str(row.get("snir_mode", "")))
         if key not in grouped:
             grouped[key] = {
                 "count": 0,
@@ -149,7 +172,7 @@ def _aggregate_distributions(
         for sf, share in distribution.items():
             values[sf] += share
 
-    aggregated: dict[tuple[str, str], dict[int, float]] = {}
+    aggregated: dict[tuple[str, bool, str], dict[int, float]] = {}
     for key, payload in grouped.items():
         count = int(payload["count"])
         values: dict[int, float] = payload["values"]
@@ -170,7 +193,13 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
     snir_modes = snir_modes + extra_snir_modes
     if not snir_modes:
         snir_modes = sorted({row.get("snir_mode", "") for row in rows if row.get("snir_mode")})
-    algorithms = sorted({row.get("algo", "") for row in rows if row.get("algo")})
+    algorithms = sorted(
+        {
+            (row.get("algo", ""), _fallback_from_row(row))
+            for row in rows
+            if row.get("algo")
+        }
+    )
     distribution_by_group = _aggregate_distributions(rows, sf_values)
 
     fig, axes = plt.subplots(1, len(snir_modes), figsize=(6 * len(snir_modes), 4), sharey=True)
@@ -184,8 +213,8 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         bottoms = [0.0 for _ in algorithms]
         for sf_idx, sf in enumerate(sf_values):
             heights = [
-                distribution_by_group.get((algo, snir_mode), {}).get(sf, 0.0)
-                for algo in algorithms
+                distribution_by_group.get((algo, fallback, snir_mode), {}).get(sf, 0.0)
+                for algo, fallback in algorithms
             ]
             ax.bar(
                 x_positions,
@@ -215,7 +244,7 @@ def main() -> None:
     sf_values = list(DEFAULT_CONFIG.radio.spreading_factors)
     raw_rows = _read_raw_rows(raw_results_path)
     sf_rows = [row for row in raw_rows if _parse_sf_selected(row.get("sf_selected")) is not None]
-    distribution_by_group: dict[tuple[str, str], dict[int, float]] = {}
+    distribution_by_group: dict[tuple[str, bool, str], dict[int, float]] = {}
     if sf_rows:
         distribution_by_group = _aggregate_sf_selected(sf_rows, sf_values)
         if not distribution_by_group:
@@ -231,9 +260,10 @@ def main() -> None:
             {
                 "algo": algo,
                 "snir_mode": snir_mode,
+                "mixra_opt_fallback": fallback,
                 **{f"sf{sf}_share": share for sf, share in values.items()},
             }
-            for (algo, snir_mode), values in distribution_by_group.items()
+            for (algo, fallback, snir_mode), values in distribution_by_group.items()
         ]
     else:
         rows = filter_cluster(load_step1_aggregated(aggregated_results_path), "all")
