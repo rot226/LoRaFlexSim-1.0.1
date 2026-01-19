@@ -161,9 +161,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--mixra-opt-mode",
-        choices=("fast", "full"),
-        default="fast",
-        help="Mode MixRA-Opt (fast par défaut, full pour une optimisation plus longue).",
+        choices=("fast", "balanced", "full"),
+        default="balanced",
+        help=(
+            "Mode MixRA-Opt (balanced par défaut, fast pour accélérer, "
+            "full pour une optimisation plus longue)."
+        ),
     )
     parser.add_argument(
         "--outdir",

@@ -200,6 +200,7 @@ def _mixra_opt_assign(
             small_improvement_streak = 0
         if not improved or small_improvement_streak >= 10:
             break
+    LOGGER.info("MixRA-Opt executed %s evaluations, no fallback.", evaluations)
     return assignments
 
 
@@ -311,7 +312,7 @@ def run_simulation(
     mixra_opt_epsilon: float = 1e-3,
     mixra_opt_max_evaluations: int = 200,
     mixra_opt_enabled: bool = True,
-    mixra_opt_mode: str = "fast_opt",
+    mixra_opt_mode: str = "balanced",
     shadowing_sigma_db: float = 7.0,
     shadowing_mean_db: float = 0.0,
     fading_type: str | None = "lognormal",
@@ -355,14 +356,20 @@ def run_simulation(
     elif algorithm == "mixra_h":
         assignments = _mixra_h_assign(nodes)
     elif algorithm == "mixra_opt" and mixra_opt_enabled:
-        if mixra_opt_mode not in {"fast", "fast_opt", "full"}:
+        if mixra_opt_mode not in {"fast", "fast_opt", "full", "balanced"}:
             raise ValueError(
-                "mixra_opt_mode doit être 'fast_opt', 'fast' ou 'full' pour l'algorithme mixra_opt."
+                "mixra_opt_mode doit être 'fast_opt', 'fast', 'balanced' ou 'full' pour l'algorithme mixra_opt."
             )
         if mixra_opt_mode in {"fast", "fast_opt"}:
             mixra_opt_max_iterations = min(mixra_opt_max_iterations, 60)
             mixra_opt_candidate_subset_size = min(mixra_opt_candidate_subset_size, 80)
             mixra_opt_max_evaluations = min(mixra_opt_max_evaluations, 120)
+        elif mixra_opt_mode == "balanced":
+            if actual_sent <= 320:
+                mixra_opt_max_evaluations = max(mixra_opt_max_evaluations, 500)
+                mixra_opt_max_evaluations = min(mixra_opt_max_evaluations, 1000)
+            else:
+                mixra_opt_max_evaluations = min(mixra_opt_max_evaluations, 120)
         assignments = _mixra_opt_assign(
             nodes,
             max_iterations=mixra_opt_max_iterations,
