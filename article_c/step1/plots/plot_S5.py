@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import csv
+import math
 from pathlib import Path
 from random import Random
 from typing import Iterable
+import warnings
 
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+import pandas as pd
 
 from article_c.common.plot_helpers import (
     ALGO_LABELS,
@@ -16,6 +19,7 @@ from article_c.common.plot_helpers import (
     SNIR_MODES,
     _sample_step1_rows,
     apply_plot_style,
+    ensure_network_size,
     save_figure,
 )
 
@@ -88,6 +92,7 @@ def _filtered_sample_rows() -> list[dict[str, object]]:
         rows.append(
             {
                 "density": row.get("density"),
+                "network_size": row.get("density"),
                 "algo": row.get("algo"),
                 "snir_mode": row.get("snir_mode"),
                 "cluster": row.get("cluster", "all"),
@@ -97,33 +102,11 @@ def _filtered_sample_rows() -> list[dict[str, object]]:
     return rows
 
 
-def _select_network_size(
-    rows: list[dict[str, str]],
-    size_col: str,
-) -> tuple[int, list[dict[str, str]]]:
-    sizes = sorted(
-        {
-            int(value)
-            for row in rows
-            if (value := _as_float(row.get(size_col))) is not None
-        }
-    )
-    if not sizes:
-        return TARGET_NETWORK_SIZE, []
-    target = TARGET_NETWORK_SIZE if TARGET_NETWORK_SIZE in sizes else sizes[-1]
-    filtered = [
-        row
-        for row in rows
-        if (value := _as_float(row.get(size_col))) is not None and int(value) == target
-    ]
-    return target, filtered
-
-
 def _extract_pdr_groups(
     rows: list[dict[str, str]],
-) -> tuple[int, dict[tuple[str, str], list[float]]]:
+) -> dict[int, dict[tuple[str, str], list[float]]]:
     if not rows:
-        return TARGET_NETWORK_SIZE, {}
+        return {}
     columns = rows[0].keys()
     size_col = _pick_column(columns, NETWORK_SIZE_COLUMNS)
     algo_col = _pick_column(columns, ALGO_COLUMNS)
@@ -131,11 +114,10 @@ def _extract_pdr_groups(
     pdr_col = _pick_column(columns, PDR_COLUMNS)
     cluster_col = _pick_column(columns, CLUSTER_COLUMNS)
     if not size_col or not algo_col or not snir_col or not pdr_col:
-        return TARGET_NETWORK_SIZE, {}
+        return {}
 
-    target_size, filtered_rows = _select_network_size(rows, size_col)
-    values_by_group: dict[tuple[str, str], list[float]] = {}
-    for row in filtered_rows:
+    values_by_size: dict[int, dict[tuple[str, str], list[float]]] = {}
+    for row in rows:
         if cluster_col and row.get(cluster_col) not in {"all", "", None}:
             continue
         algo = _normalize_algo(row.get(algo_col))
@@ -145,22 +127,26 @@ def _extract_pdr_groups(
         pdr = _as_float(row.get(pdr_col))
         if pdr is None:
             continue
-        values_by_group.setdefault((algo, snir_mode), []).append(pdr)
-    return target_size, values_by_group
+        size_value = _as_float(row.get(size_col))
+        if size_value is None:
+            continue
+        size = int(size_value)
+        values_by_size.setdefault(size, {}).setdefault((algo, snir_mode), []).append(pdr)
+    return values_by_size
 
 
 def _plot_pdr_distribution(
+    ax: plt.Axes,
     values_by_group: dict[tuple[str, str], list[float]],
     *,
     target_size: int,
-) -> plt.Figure:
+) -> None:
     algorithms = [
         algo for algo in ALGO_LABELS.keys() if any(key[0] == algo for key in values_by_group)
     ]
     if not algorithms:
         algorithms = sorted({algo for algo, _ in values_by_group})
 
-    fig, ax = plt.subplots()
     rng = Random(42)
     base_positions = list(range(len(algorithms)))
     offsets = {"snir_on": -0.18, "snir_off": 0.18}
@@ -213,18 +199,42 @@ def _plot_pdr_distribution(
     ax.set_title(f"Step 1 - Distribution du PDR (network size = {target_size})")
     ax.set_ylim(0.0, 1.05)
 
+
+def _plot_pdr_distributions(
+    values_by_size: dict[int, dict[tuple[str, str], list[float]]],
+    network_sizes: list[int],
+) -> plt.Figure:
+    if not network_sizes:
+        network_sizes = [TARGET_NETWORK_SIZE]
+    n_sizes = len(network_sizes)
+    ncols = 2 if n_sizes > 1 else 1
+    nrows = math.ceil(n_sizes / ncols)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 4 * nrows), sharey=True)
+    if nrows == 1 and ncols == 1:
+        axes = [axes]
+    else:
+        axes = list(axes.ravel())
+
+    for ax, size in zip(axes, network_sizes, strict=False):
+        values_by_group = values_by_size.get(size, {})
+        _plot_pdr_distribution(ax, values_by_group, target_size=size)
+
+    for ax in axes[len(network_sizes) :]:
+        ax.axis("off")
+
     legend_items = [
-        Line2D([0], [0], color=colors[mode], lw=4, label=SNIR_LABELS[mode])
-        for mode in SNIR_MODES
+        Line2D([0], [0], color="#4c78a8", lw=4, label=SNIR_LABELS["snir_on"]),
+        Line2D([0], [0], color="#f58518", lw=4, label=SNIR_LABELS["snir_off"]),
     ]
-    ax.legend(
+    fig.legend(
         handles=legend_items,
         loc="lower center",
         bbox_to_anchor=(0.5, 1.02),
         ncol=2,
         frameon=False,
     )
-    plt.subplots_adjust(top=0.82)
+    fig.suptitle("Step 1 - Distribution du PDR par taille de réseau")
+    fig.subplots_adjust(top=0.86)
     return fig
 
 
@@ -235,8 +245,11 @@ def main() -> None:
     raw_rows = _read_rows(results_path)
     if not raw_rows:
         sample_rows = _filtered_sample_rows()
-        target_size = TARGET_NETWORK_SIZE
-        values_by_group: dict[tuple[str, str], list[float]] = {}
+        df = pd.DataFrame(sample_rows)
+        network_sizes = sorted(df["network_size"].unique())
+        if len(network_sizes) < 2:
+            warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+        values_by_size: dict[int, dict[tuple[str, str], list[float]]] = {}
         for row in sample_rows:
             if row.get("cluster") != "all":
                 continue
@@ -244,13 +257,19 @@ def main() -> None:
             snir_mode = row.get("snir_mode")
             pdr_value = row.get("pdr")
             if isinstance(pdr_value, (int, float)) and algo and snir_mode in SNIR_LABELS:
-                values_by_group.setdefault((str(algo), str(snir_mode)), []).append(
-                    float(pdr_value)
-                )
+                size = int(row.get("network_size") or TARGET_NETWORK_SIZE)
+                values_by_size.setdefault(size, {}).setdefault(
+                    (str(algo), str(snir_mode)), []
+                ).append(float(pdr_value))
     else:
-        target_size, values_by_group = _extract_pdr_groups(raw_rows)
+        ensure_network_size(raw_rows)
+        df = pd.DataFrame(raw_rows)
+        network_sizes = sorted(df["network_size"].unique())
+        if len(network_sizes) < 2:
+            warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+        values_by_size = _extract_pdr_groups(raw_rows)
 
-    fig = _plot_pdr_distribution(values_by_group, target_size=target_size)
+    fig = _plot_pdr_distributions(values_by_size, network_sizes)
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_S5", use_tight=False)
     plt.close(fig)

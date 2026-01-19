@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+import warnings
 
 import matplotlib.pyplot as plt
 from matplotlib import ticker as mticker
+import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
@@ -39,6 +41,13 @@ def _density_to_nodes(density: float) -> int:
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
+    for row in rows:
+        if "network_size" not in row and "density" in row:
+            row["network_size"] = _density_to_nodes(float(row["density"]))
+    df = pd.DataFrame(rows)
+    network_sizes = sorted(df["network_size"].unique())
+    if len(network_sizes) < 2:
+        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     available_clusters = {
         row["cluster"] for row in rows if row.get("cluster") not in (None, "all")
     }
@@ -56,20 +65,17 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     if len(SNIR_MODES) == 1:
         axes = [axes]
 
-    raw_densities = sorted({row["density"] for row in rows})
-    network_sizes = [_density_to_nodes(density) for density in raw_densities]
-
     for ax, snir_mode in zip(axes, SNIR_MODES, strict=False):
         snir_rows = [row for row in rows if row["snir_mode"] == snir_mode]
         for cluster in clusters:
             points = {
-                row["density"]: row[metric_key]
+                int(row["network_size"]): row[metric_key]
                 for row in snir_rows
                 if row.get("cluster") == cluster
             }
             if not points:
                 continue
-            values = [points.get(density, float("nan")) for density in raw_densities]
+            values = [points.get(size, float("nan")) for size in network_sizes]
             target = cluster_targets.get(cluster)
             target_label = f" (target {target:.2f})" if target is not None else ""
             label = f"Cluster {cluster_labels.get(cluster, cluster)}{target_label}"

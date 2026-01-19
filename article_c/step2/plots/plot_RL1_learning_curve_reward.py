@@ -4,10 +4,18 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+import warnings
 
 import matplotlib.pyplot as plt
+import pandas as pd
 
-from article_c.common.plot_helpers import apply_plot_style, place_legend, save_figure
+from article_c.common.plot_helpers import (
+    apply_plot_style,
+    ensure_network_size,
+    load_step2_aggregated,
+    place_legend,
+    save_figure,
+)
 
 
 def _to_float(value: object, default: float = 0.0) -> float:
@@ -82,6 +90,13 @@ def main() -> None:
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "learning_curve.csv"
     rows = _load_learning_curve(results_path)
+    aggregated_results_path = step_dir / "results" / "aggregated_results.csv"
+    size_rows = load_step2_aggregated(aggregated_results_path)
+    ensure_network_size(size_rows)
+    df = pd.DataFrame(size_rows)
+    network_sizes = sorted(df["network_size"].unique())
+    if len(network_sizes) < 2:
+        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
 
     fig = _plot_learning_curve(rows)
     output_dir = step_dir / "plots" / "output"

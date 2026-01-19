@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import warnings
 
 import matplotlib.pyplot as plt
 from matplotlib import ticker as mticker
+import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
@@ -14,6 +16,7 @@ from article_c.common.plot_helpers import (
     SNIR_MODES,
     algo_label,
     apply_plot_style,
+    ensure_network_size,
     load_step1_aggregated,
     place_legend,
     save_figure,
@@ -25,6 +28,11 @@ def _cluster_labels(clusters: list[str]) -> dict[str, str]:
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
+    ensure_network_size(rows)
+    df = pd.DataFrame(rows)
+    network_sizes = sorted(df["network_size"].unique())
+    if len(network_sizes) < 2:
+        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     available_clusters = {
         row["cluster"] for row in rows if row.get("cluster") not in (None, "all")
     }
@@ -59,18 +67,17 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             cluster_rows = [
                 row for row in algo_rows if row.get("cluster") == cluster
             ]
-            densities = sorted({int(row["density"]) for row in cluster_rows})
             for snir_mode in SNIR_MODES:
                 points = {
-                    int(row["density"]): row[metric_key]
+                    int(row["network_size"]): row[metric_key]
                     for row in cluster_rows
                     if row["snir_mode"] == snir_mode
                 }
                 if not points:
                     continue
-                values = [points.get(density, float("nan")) for density in densities]
+                values = [points.get(size, float("nan")) for size in network_sizes]
                 ax.plot(
-                    densities,
+                    network_sizes,
                     values,
                     marker="o",
                     linestyle=SNIR_LINESTYLES[snir_mode],
@@ -82,7 +89,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
                 ax.set_ylabel(f"{algo_label(algo)}\nPacket Delivery Ratio")
             if algo_idx == len(algorithms) - 1:
                 ax.set_xlabel("Network size (number of nodes)")
-            ax.set_xticks(densities)
+            ax.set_xticks(network_sizes)
             ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
     place_legend(axes[-1][-1])

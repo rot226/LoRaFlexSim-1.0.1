@@ -5,8 +5,10 @@ from __future__ import annotations
 import csv
 import logging
 from pathlib import Path
+import warnings
 
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
@@ -14,6 +16,7 @@ from article_c.common.plot_helpers import (
     SNIR_MODES,
     algo_labels,
     apply_plot_style,
+    ensure_network_size,
     filter_cluster,
     load_step1_aggregated,
     place_legend,
@@ -243,6 +246,12 @@ def main() -> None:
         }
         for row in rows
     ]
+    size_rows = load_step1_aggregated(aggregated_results_path)
+    ensure_network_size(size_rows)
+    df = pd.DataFrame(size_rows)
+    network_sizes = sorted(df["network_size"].unique())
+    if len(network_sizes) < 2:
+        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
 
     fig = _plot_distribution(rows)
     output_dir = step_dir / "plots" / "output"

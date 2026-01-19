@@ -6,14 +6,17 @@ import argparse
 import csv
 from pathlib import Path
 from typing import Iterable
+import warnings
 
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from article_c.common.plot_helpers import (
     ALGO_LABELS,
     SNIR_LABELS,
     SNIR_LINESTYLES,
     apply_plot_style,
+    ensure_network_size,
     save_figure,
 )
 
@@ -203,6 +206,14 @@ def main() -> None:
     args = parse_args()
     apply_plot_style()
     rows = _read_rows(args.input)
+    ensure_network_size(rows)
+    for row in rows:
+        if "network_size" not in row:
+            row["network_size"] = row.get("density", "0")
+    df = pd.DataFrame(rows)
+    network_sizes = sorted(df["network_size"].unique())
+    if len(network_sizes) < 2:
+        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     plot_cdf_by_algo(rows, args.metric, args.output_dir)
 
 
