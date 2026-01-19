@@ -80,6 +80,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     write_simulation_results(base_results_dir, raw_rows)
     if timestamp_dir is not None:
         write_simulation_results(timestamp_dir, raw_rows)
+    print(f"Rows written: {len(raw_rows)}")
 
     if selection_rows:
         rl5_rows = _aggregate_selection_probs(selection_rows)

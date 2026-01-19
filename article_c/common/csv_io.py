@@ -7,16 +7,20 @@ from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
 
-GROUP_KEYS = ("density", "algo", "snir_mode", "cluster")
+GROUP_KEYS = ("density", "network_size", "algo", "snir_mode", "cluster")
 EXTRA_MEAN_KEYS = {"mean_toa_s", "mean_latency_s"}
 
 
 def write_rows(path: Path, header: list[str], rows: list[list[object]]) -> None:
     """Écrit un fichier CSV simple."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
+    write_header = True
+    if path.exists() and path.stat().st_size > 0:
+        write_header = False
+    with path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(header)
+        if write_header:
+            writer.writerow(header)
         writer.writerows(rows)
 
 
@@ -55,6 +59,10 @@ def write_simulation_results(output_dir: Path, raw_rows: list[dict[str, object]]
     output_dir.mkdir(parents=True, exist_ok=True)
     raw_path = output_dir / "raw_results.csv"
     aggregated_path = output_dir / "aggregated_results.csv"
+
+    for row in raw_rows:
+        if "network_size" not in row and "density" in row:
+            row["network_size"] = row["density"]
 
     raw_header: list[str] = []
     seen: set[str] = set()
