@@ -54,12 +54,18 @@ def write_rows(path: Path, header: list[str], rows: list[list[object]]) -> None:
 
 def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, object]]:
     """Agrège les résultats avec moyenne et écart-type par clés de simulation."""
+    if "network_size" not in GROUP_KEYS:
+        raise AssertionError("network_size doit être inclus dans les clés de regroupement.")
     groups: dict[tuple[object, ...], list[dict[str, object]]] = defaultdict(list)
     numeric_keys: set[str] = set()
     for row in raw_rows:
         network_size = row.get("network_size")
         if (network_size is None or network_size == "") and "density" in row:
             row["network_size"] = row["density"]
+            if row["network_size"] == 0.0:
+                raise AssertionError(
+                    "network_size ne doit pas être remplacé par une valeur par défaut 0.0."
+                )
         group_key = tuple(row.get(key) for key in GROUP_KEYS)
         groups[group_key].append(row)
         for key, value in row.items():
@@ -101,10 +107,18 @@ def write_simulation_results(
     for row in raw_rows:
         row_network_size = row.get("network_size")
         if row_network_size is None or row_network_size == "":
+            if expected_network_size == 0.0:
+                raise AssertionError(
+                    "network_size ne doit pas être remplacé par une valeur par défaut 0.0."
+                )
             if expected_network_size is not None:
                 row["network_size"] = expected_network_size
             elif "density" in row:
                 row["network_size"] = row["density"]
+                if row["network_size"] == 0.0:
+                    raise AssertionError(
+                        "network_size ne doit pas être remplacé par une valeur par défaut 0.0."
+                    )
 
     if raw_rows:
         missing_network_size = [
