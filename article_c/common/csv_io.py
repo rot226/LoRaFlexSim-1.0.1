@@ -27,6 +27,9 @@ def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, objec
     groups: dict[tuple[object, ...], list[dict[str, object]]] = defaultdict(list)
     numeric_keys: set[str] = set()
     for row in raw_rows:
+        network_size = row.get("network_size")
+        if (network_size is None or network_size == "") and "density" in row:
+            row["network_size"] = row["density"]
         group_key = tuple(row.get(key) for key in GROUP_KEYS)
         groups[group_key].append(row)
         for key, value in row.items():

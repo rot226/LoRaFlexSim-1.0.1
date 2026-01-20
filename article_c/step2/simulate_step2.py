@@ -321,6 +321,7 @@ def run_simulation(
                 window_rewards.append(reward)
                 raw_rows.append(
                     {
+                        "network_size": density_value,
                         "density": density_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
@@ -344,6 +345,7 @@ def run_simulation(
                 )
                 raw_rows.append(
                     {
+                        "network_size": density_value,
                         "density": density_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
@@ -486,6 +488,7 @@ def run_simulation(
                 window_rewards.append(reward)
                 raw_rows.append(
                     {
+                        "network_size": density_value,
                         "density": density_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
@@ -509,6 +512,7 @@ def run_simulation(
                 )
                 raw_rows.append(
                     {
+                        "network_size": density_value,
                         "density": density_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
