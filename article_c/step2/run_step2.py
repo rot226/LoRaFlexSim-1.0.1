@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import csv
 from multiprocessing import get_context
 from pathlib import Path
 from typing import Sequence
@@ -44,6 +45,23 @@ def _log_results_written(output_dir: Path, row_count: int) -> None:
     print(f"Append rows: {row_count} -> {aggregated_path}")
 
 
+def _log_unique_network_sizes(output_dir: Path) -> None:
+    raw_path = output_dir / "raw_results.csv"
+    if not raw_path.exists():
+        print(f"Aucun raw_results.csv détecté: {raw_path}")
+        return
+    with raw_path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames or "network_size" not in reader.fieldnames:
+            print(f"Colonne network_size absente dans {raw_path}")
+            return
+        sizes = sorted(
+            {row.get("network_size") for row in reader if row.get("network_size")}
+        )
+    sizes_label = ", ".join(map(str, sizes)) if sizes else "aucune"
+    print(f"Tailles détectées dans raw_results: {sizes_label}")
+
+
 def _simulate_density(
     task: tuple[int, int, list[int], dict[str, object], Path, Path | None]
 ) -> dict[str, object]:
@@ -78,9 +96,11 @@ def _simulate_density(
 
     write_simulation_results(base_results_dir, raw_rows)
     _log_results_written(base_results_dir, len(raw_rows))
+    _log_unique_network_sizes(base_results_dir)
     if timestamp_dir is not None:
         write_simulation_results(timestamp_dir, raw_rows)
         _log_results_written(timestamp_dir, len(raw_rows))
+        _log_unique_network_sizes(timestamp_dir)
     return {"density": density, "row_count": len(raw_rows), "selection_rows": selection_rows}
 
 
