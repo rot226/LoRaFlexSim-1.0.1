@@ -72,6 +72,115 @@ def _slope(xs: list[float], ys: list[float]) -> float | None:
     return sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys)) / denom
 
 
+def _to_bool(value: object) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    lowered = str(value).strip().lower()
+    if lowered in {"1", "true", "yes", "y", "t"}:
+        return True
+    if lowered in {"0", "false", "no", "n", "f", ""}:
+        return False
+    return None
+
+
+def _collect_network_sizes(
+    rows: Iterable[dict[str, str]],
+) -> tuple[list[float], str | None]:
+    columns = _normalize_columns(rows)
+    size_col = _pick_column(columns, ["network_size", "density", "num_nodes", "n_nodes"])
+    if not size_col:
+        return [], None
+    sizes = []
+    for row in rows:
+        value = _to_float(row.get(size_col))
+        if value is None:
+            continue
+        sizes.append(value)
+    return sizes, size_col
+
+
+def _check_expected_network_sizes(
+    rows: list[dict[str, str]],
+    *,
+    expected_sizes: set[int],
+    label: str,
+) -> CheckResult:
+    sizes, size_col = _collect_network_sizes(rows)
+    if not rows or not size_col:
+        return CheckResult(label, "WARN", "Colonnes ou données manquantes.")
+    found = {int(size) for size in sizes}
+    missing = sorted(expected_sizes - found)
+    extra = sorted(found - expected_sizes)
+    if not missing and not extra:
+        return CheckResult(label, "OK", f"Tailles trouvées: {sorted(found)}.")
+    detail = (
+        f"Tailles trouvées: {sorted(found)}; "
+        f"manquantes={missing or 'aucune'}, "
+        f"supplémentaires={extra or 'aucune'}."
+    )
+    return CheckResult(label, "WARN", detail)
+
+
+def _check_step2_no_zero_network_size(rows: list[dict[str, str]]) -> CheckResult:
+    sizes, size_col = _collect_network_sizes(rows)
+    if not rows or not size_col:
+        return CheckResult(
+            "Step2 sans network_size à 0.0",
+            "WARN",
+            "Colonnes ou données manquantes.",
+        )
+    zero_count = sum(1 for size in sizes if float(size) == 0.0)
+    status = "OK" if zero_count == 0 else "WARN"
+    detail = f"Entrées à 0.0: {zero_count}."
+    return CheckResult("Step2 sans network_size à 0.0", status, detail)
+
+
+def _check_mixra_opt_fallback(rows: list[dict[str, str]]) -> CheckResult:
+    columns = _normalize_columns(rows)
+    algo_col = _pick_column(columns, ["algo", "algorithm"])
+    fallback_col = _pick_column(
+        columns, ["mixra_opt_fallback", "mixra_fallback", "fallback"]
+    )
+
+    if not rows or not algo_col or not fallback_col:
+        return CheckResult(
+            "MixRA-Opt pas 100% fallback",
+            "WARN",
+            "Colonnes ou données manquantes.",
+        )
+
+    total = 0
+    fallback_total = 0
+    for row in rows:
+        algo = row.get(algo_col)
+        if algo is None:
+            continue
+        algo_key = str(algo).strip().lower()
+        if algo_key not in {"mixra_opt", "mixra-opt", "mixra opt"}:
+            continue
+        fallback = _to_bool(row.get(fallback_col))
+        if fallback is None:
+            continue
+        total += 1
+        if fallback:
+            fallback_total += 1
+
+    if total == 0:
+        return CheckResult(
+            "MixRA-Opt pas 100% fallback",
+            "WARN",
+            "Aucune ligne MixRA-Opt exploitable.",
+        )
+
+    status = "OK" if fallback_total < total else "WARN"
+    detail = f"Lignes MixRA-Opt: {total}, fallback: {fallback_total}."
+    return CheckResult("MixRA-Opt pas 100% fallback", status, detail)
+
+
 def _check_snir_pdr(rows: list[dict[str, str]]) -> CheckResult:
     columns = _normalize_columns(rows)
     pdr_col = _pick_column(columns, ["pdr_mean", "pdr", "PDR_mean", "PDR"])
@@ -329,8 +438,19 @@ def main() -> None:
 
     step1_rows = _read_rows(args.step1)
     step2_rows = _read_rows(args.step2)
+    expected_sizes = {80, 160, 320, 640, 1280}
 
     results = [
+        _check_expected_network_sizes(
+            step1_rows,
+            expected_sizes=expected_sizes,
+            label="Tailles réseau attendues (step1)",
+        ),
+        _check_expected_network_sizes(
+            step2_rows,
+            expected_sizes=expected_sizes,
+            label="Tailles réseau attendues (step2)",
+        ),
         _check_snir_pdr(step1_rows),
         _check_trend(
             step1_rows,
@@ -362,6 +482,8 @@ def main() -> None:
             slope_threshold=args.slope_threshold,
             plateau_threshold=args.plateau_threshold,
         ),
+        _check_step2_no_zero_network_size(step2_rows),
+        _check_mixra_opt_fallback(step1_rows),
         _check_cluster_order(
             step1_rows or step2_rows,
             metric_candidates=[
