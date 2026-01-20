@@ -10,7 +10,7 @@ import csv
 import matplotlib.pyplot as plt
 from matplotlib import ticker as mticker
 
-from article_c.common.plotting_style import PLOT_STYLE
+from article_c.common.plotting_style import LEGEND_STYLE, PLOT_STYLE
 from article_c.common.utils import ensure_dir
 from article_c.common.config import DEFAULT_CONFIG
 
@@ -34,12 +34,12 @@ SNIR_LINESTYLES = {
 def apply_plot_style() -> None:
     """Applique le style de tracé commun."""
     plt.rcParams.update(PLOT_STYLE)
+    plt.subplots_adjust(top=PLOT_STYLE["figure.subplot.top"])
 
 
 def place_legend(ax: plt.Axes) -> None:
     """Place la légende en haut du graphique selon les consignes."""
-    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3, frameon=False)
-    plt.subplots_adjust(top=0.80)
+    ax.legend(**LEGEND_STYLE)
 
 
 def save_figure(
