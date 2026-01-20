@@ -8,9 +8,12 @@ import warnings
 import csv
 
 import matplotlib.pyplot as plt
-from matplotlib import ticker as mticker
 
-from article_c.common.plotting_style import LEGEND_STYLE, PLOT_STYLE
+from article_c.common.plotting_style import (
+    LEGEND_STYLE,
+    apply_plot_style,
+    set_network_size_ticks,
+)
 from article_c.common.utils import ensure_dir
 from article_c.common.config import DEFAULT_CONFIG
 
@@ -30,12 +33,6 @@ SNIR_LINESTYLES = {
     "snir_off": "dashed",
 }
 MIXRA_FALLBACK_COLUMNS = ("mixra_opt_fallback", "mixra_fallback", "fallback")
-
-
-def apply_plot_style() -> None:
-    """Applique le style de tracé commun."""
-    plt.rcParams.update(PLOT_STYLE)
-    plt.subplots_adjust(top=PLOT_STYLE["figure.subplot.top"])
 
 
 def place_legend(ax: plt.Axes) -> None:
@@ -229,7 +226,7 @@ def plot_metric_by_snir(
     rows: list[dict[str, object]],
     metric_key: str,
 ) -> None:
-    all_densities = sorted({_network_size_value(row) for row in rows})
+    network_sizes = sorted({_network_size_value(row) for row in rows})
 
     def _algo_key(row: dict[str, object]) -> tuple[str, bool]:
         algo_value = str(row.get("algo", ""))
@@ -257,8 +254,7 @@ def plot_metric_by_snir(
                 linestyle=SNIR_LINESTYLES[snir_mode],
                 label=label,
             )
-    ax.set_xticks(all_densities)
-    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
+    set_network_size_ticks(ax, network_sizes)
 
 
 def _sample_step1_rows() -> list[dict[str, object]]:
