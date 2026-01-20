@@ -167,11 +167,6 @@ def _mixra_opt_assign(
                     evaluations,
                     max_evaluations,
                 )
-                LOGGER.info(
-                    "MixRA-Opt executed (N=%s, evals=%s).",
-                    len(nodes_list),
-                    evaluations,
-                )
                 return _mixra_h_assign(nodes_list), True
             node = nodes_list[idx]
             current_sf = assignments[idx]
@@ -206,11 +201,7 @@ def _mixra_opt_assign(
             small_improvement_streak = 0
         if not improved or small_improvement_streak >= 10:
             break
-    LOGGER.info(
-        "MixRA-Opt executed (N=%s, evals=%s).",
-        len(nodes_list),
-        evaluations,
-    )
+    LOGGER.info("MixRA-Opt executed (evals=%s).", evaluations)
     return assignments, False
 
 
@@ -321,6 +312,7 @@ def run_simulation(
     mixra_opt_candidate_subset_size: int = 100,
     mixra_opt_epsilon: float = 1e-3,
     mixra_opt_max_evaluations: int = 200,
+    mixra_opt_budget: int | None = None,
     mixra_opt_enabled: bool = True,
     mixra_opt_mode: str = "balanced",
     shadowing_sigma_db: float = 7.0,
@@ -374,12 +366,14 @@ def run_simulation(
         if mixra_opt_mode in {"fast", "fast_opt"}:
             mixra_opt_max_iterations = min(mixra_opt_max_iterations, 60)
             mixra_opt_candidate_subset_size = min(mixra_opt_candidate_subset_size, 80)
-            mixra_opt_max_evaluations = min(mixra_opt_max_evaluations, 120)
-        if actual_sent <= 320:
-            mixra_opt_max_evaluations = max(mixra_opt_max_evaluations, 500)
-            mixra_opt_max_evaluations = min(mixra_opt_max_evaluations, 800)
+        if mixra_opt_budget is None:
+            if actual_sent <= 320:
+                computed_budget = 1500
+            else:
+                computed_budget = int(500 + 0.5 * actual_sent)
+            mixra_opt_max_evaluations = max(mixra_opt_max_evaluations, computed_budget)
         else:
-            mixra_opt_max_evaluations = min(mixra_opt_max_evaluations, 120)
+            mixra_opt_max_evaluations = mixra_opt_budget
         assignments, mixra_opt_fallback = _mixra_opt_assign(
             nodes,
             max_iterations=mixra_opt_max_iterations,

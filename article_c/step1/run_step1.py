@@ -155,6 +155,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Nombre maximal d'évaluations pour MixRA-Opt.",
     )
     parser.add_argument(
+        "--mixra-opt-budget",
+        type=int,
+        default=None,
+        help=(
+            "Budget cible d'évaluations pour MixRA-Opt. "
+            "Si absent, un budget élevé est appliqué pour N≤320, sinon 500 + 0.5*N."
+        ),
+    )
+    parser.add_argument(
         "--mixra-opt-enabled",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -229,6 +238,7 @@ def main(argv: list[str] | None = None) -> None:
                         mixra_opt_candidate_subset_size=args.mixra_opt_candidate_subset_size,
                         mixra_opt_epsilon=args.mixra_opt_epsilon,
                         mixra_opt_max_evaluations=args.mixra_opt_max_evals,
+                        mixra_opt_budget=args.mixra_opt_budget,
                         mixra_opt_enabled=args.mixra_opt_enabled,
                         mixra_opt_mode=args.mixra_opt_mode,
                         profile_timing=args.profile_timing,
