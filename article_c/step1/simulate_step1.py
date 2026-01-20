@@ -167,6 +167,11 @@ def _mixra_opt_assign(
                     evaluations,
                     max_evaluations,
                 )
+                LOGGER.info(
+                    "MixRA-Opt executed (N=%s, evals=%s).",
+                    len(nodes_list),
+                    evaluations,
+                )
                 return _mixra_h_assign(nodes_list), True
             node = nodes_list[idx]
             current_sf = assignments[idx]
@@ -202,7 +207,7 @@ def _mixra_opt_assign(
         if not improved or small_improvement_streak >= 10:
             break
     LOGGER.info(
-        "MixRA-Opt OK (N=%s, evals=%s).",
+        "MixRA-Opt executed (N=%s, evals=%s).",
         len(nodes_list),
         evaluations,
     )
@@ -372,7 +377,7 @@ def run_simulation(
             mixra_opt_max_evaluations = min(mixra_opt_max_evaluations, 120)
         if actual_sent <= 320:
             mixra_opt_max_evaluations = max(mixra_opt_max_evaluations, 500)
-            mixra_opt_max_evaluations = min(mixra_opt_max_evaluations, 1000)
+            mixra_opt_max_evaluations = min(mixra_opt_max_evaluations, 800)
         else:
             mixra_opt_max_evaluations = min(mixra_opt_max_evaluations, 120)
         assignments, mixra_opt_fallback = _mixra_opt_assign(
