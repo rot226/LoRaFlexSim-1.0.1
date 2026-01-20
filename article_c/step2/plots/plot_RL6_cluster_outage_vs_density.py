@@ -40,6 +40,17 @@ def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | No
     return network_sizes
 
 
+def _has_invalid_network_sizes(network_sizes: list[float]) -> bool:
+    if any(float(size) == 0.0 for size in network_sizes):
+        warnings.warn(
+            "Erreur: taille de réseau invalide détectée (0.0). "
+            "Aucune figure ne sera tracée.",
+            stacklevel=2,
+        )
+        return True
+    return False
+
+
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
     return {cluster: f"C{idx + 1}" for idx, cluster in enumerate(clusters)}
 
@@ -77,10 +88,12 @@ def _filter_algorithms(rows: list[dict[str, object]]) -> list[dict[str, object]]
     return filtered or rows
 
 
-def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
+def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure | None:
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
+    if _has_invalid_network_sizes(network_sizes):
+        return None
     if len(network_sizes) < 2:
         warnings.warn(
             f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
@@ -146,6 +159,8 @@ def main() -> None:
     rows = _with_outage(rows)
 
     fig = _plot_metric(rows, "outage_prob")
+    if fig is None:
+        return
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_RL6_cluster_outage_vs_density", use_tight=False)
     plt.close(fig)
