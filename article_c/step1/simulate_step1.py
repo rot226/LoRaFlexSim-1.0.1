@@ -210,8 +210,7 @@ def _mixra_opt_assign(
     def _finalize(
         result: list[int], fallback: bool, *, success: bool
     ) -> tuple[list[int], bool]:
-        if success:
-            LOGGER.info("MixRA-Opt executed (evals=%s).", evaluations)
+        LOGGER.info("MixRA-Opt executed (evals=%s).", evaluations)
         return result, fallback
 
     for _ in range(max_iterations):
@@ -459,7 +458,8 @@ def run_simulation(
     l'implémentation complète des algorithmes. Le trafic et le canal
     incluent une variabilité temporelle, et le lien radio applique
     shadowing/fading pour rendre les déclenchements plus fluctuants.
-    Le budget MixRA-Opt correspond au nombre maximal d'évaluations.
+    Le budget MixRA-Opt correspond au nombre maximal d'évaluations, et
+    mixra_opt_no_fallback permet d'interdire le basculement MixRA-H.
     """
     rng = random.Random(seed)
     if mixra_opt_timeout_s is None:
