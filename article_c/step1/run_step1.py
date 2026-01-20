@@ -26,9 +26,9 @@ ALGORITHM_LABELS = {
 }
 
 
-def density_to_sent(density: float, base_sent: int = 120) -> int:
+def density_to_sent(network_size: float, base_sent: int = 120) -> int:
     """Convertit une taille de réseau en nombre de trames simulées."""
-    return max(1, int(round(base_sent * density)))
+    return max(1, int(round(base_sent * network_size)))
 
 
 def parse_snir_modes(value: str) -> list[str]:
@@ -257,19 +257,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def _simulate_density(
     task: tuple[int, int, list[str], list[int], dict[str, object], Path, list[str]]
 ) -> dict[str, object]:
-    density, density_idx, snir_modes, replications, config, output_dir, cluster_ids = task
+    network_size, size_idx, snir_modes, replications, config, output_dir, cluster_ids = task
     raw_rows: list[dict[str, object]] = []
     run_index = 0
     timing_totals = {"sf_assignment_s": 0.0, "interference_s": 0.0, "metrics_s": 0.0}
     timing_runs = 0
     jitter_range_s = float(config.get("jitter_range_s", 30.0))
     print(f"Jitter range utilisé (s): {jitter_range_s}")
-    runs_per_density = len(ALGORITHMS) * len(snir_modes) * len(replications)
+    runs_per_size = len(ALGORITHMS) * len(snir_modes) * len(replications)
     mixra_opt_budget = (
         config["mixra_opt_budget"]
         if config["mixra_opt_budget"] is not None
         else mixra_opt_budget_for_size(
-            density,
+            network_size,
             base=int(config["mixra_opt_budget_base"]),
             scale=float(config["mixra_opt_budget_scale"]),
         )
@@ -277,10 +277,10 @@ def _simulate_density(
     for algo in ALGORITHMS:
         for snir_mode in snir_modes:
             for replication in replications:
-                seed = int(config["seeds_base"]) + density_idx * runs_per_density + run_index
+                seed = int(config["seeds_base"]) + size_idx * runs_per_size + run_index
                 run_index += 1
                 set_deterministic_seed(seed)
-                sent = density_to_sent(density)
+                sent = density_to_sent(network_size)
                 result = run_simulation(
                     sent=sent,
                     algorithm=algo,
@@ -328,8 +328,7 @@ def _simulate_density(
                 ):
                     raw_rows.append(
                         {
-                            "density": density,
-                            "network_size": density,
+                            "network_size": network_size,
                             "algo": algo,
                             "snir_mode": snir_mode,
                             "cluster": cluster,
@@ -348,8 +347,7 @@ def _simulate_density(
                     mean_toa_s = mean(cluster_toa[cluster]) if cluster_toa[cluster] else 0.0
                     raw_rows.append(
                         {
-                            "density": density,
-                            "network_size": density,
+                            "network_size": network_size,
                             "algo": algo,
                             "snir_mode": snir_mode,
                             "cluster": cluster,
@@ -364,8 +362,7 @@ def _simulate_density(
                     )
                 raw_rows.append(
                     {
-                        "density": density,
-                        "network_size": density,
+                        "network_size": network_size,
                         "algo": algo,
                         "snir_mode": snir_mode,
                         "cluster": "all",
@@ -395,16 +392,16 @@ def _simulate_density(
         mean_metrics = timing_totals["metrics_s"] / timing_runs
         timing_summary = (
             "Profiling taille réseau "
-            f"{density}: assignation SF {mean_assignment:.6f}s, "
+            f"{network_size}: assignation SF {mean_assignment:.6f}s, "
             f"interférences {mean_interference:.6f}s, "
             f"agrégation métriques {mean_metrics:.6f}s "
             f"(moyenne sur {timing_runs} runs)."
         )
     return {
-        "density": density,
+        "network_size": network_size,
         "row_count": len(raw_rows),
         "timing_summary": timing_summary,
-        "run_count": runs_per_density,
+        "run_count": runs_per_size,
     }
 
 
@@ -412,13 +409,16 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
-    densities = parse_network_size_list(args.network_sizes)
+    # Compat: "density" est déprécié, utiliser "network_size".
+    network_sizes = parse_network_size_list(args.network_sizes)
     snir_modes = parse_snir_modes(args.snir_modes)
     replications = replication_ids(args.replications)
     output_dir = Path(args.outdir)
     simulated_sizes: list[int] = []
 
-    total_runs = len(densities) * len(ALGORITHMS) * len(snir_modes) * len(replications)
+    total_runs = (
+        len(network_sizes) * len(ALGORITHMS) * len(snir_modes) * len(replications)
+    )
     completed_runs = 0
     total_rows = 0
     rows_per_size: Counter[int] = Counter()
@@ -445,8 +445,16 @@ def main(argv: list[str] | None = None) -> None:
     }
 
     tasks = [
-        (density, density_idx, snir_modes, replications, config, output_dir, cluster_ids)
-        for density_idx, density in enumerate(densities)
+        (
+            network_size,
+            size_idx,
+            snir_modes,
+            replications,
+            config,
+            output_dir,
+            cluster_ids,
+        )
+        for size_idx, network_size in enumerate(network_sizes)
     ]
 
     worker_count = max(1, int(args.workers))
@@ -457,9 +465,9 @@ def main(argv: list[str] | None = None) -> None:
         with ctx.Pool(processes=worker_count) as pool:
             results = pool.imap_unordered(_simulate_density, tasks)
             for result in results:
-                simulated_sizes.append(int(result["density"]))
+                simulated_sizes.append(int(result["network_size"]))
                 total_rows += int(result["row_count"])
-                rows_per_size[int(result["density"])] += int(result["row_count"])
+                rows_per_size[int(result["network_size"])] += int(result["row_count"])
                 completed_runs += int(result["run_count"])
                 if args.progress and total_runs > 0:
                     percent = (completed_runs / total_runs) * 100
@@ -479,9 +487,9 @@ def main(argv: list[str] | None = None) -> None:
             results = None
     if worker_count == 1:
         for result in results:
-            simulated_sizes.append(int(result["density"]))
+            simulated_sizes.append(int(result["network_size"]))
             total_rows += int(result["row_count"])
-            rows_per_size[int(result["density"])] += int(result["row_count"])
+            rows_per_size[int(result["network_size"])] += int(result["row_count"])
             completed_runs += int(result["run_count"])
             if args.progress and total_runs > 0:
                 percent = (completed_runs / total_runs) * 100
