@@ -100,8 +100,14 @@ def _mixra_opt_fallback(row: dict[str, object]) -> bool:
 
 
 def filter_mixra_opt_fallback(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    filtered = [row for row in rows if _is_mixra_opt(row) and not _mixra_opt_fallback(row)]
-    if not filtered:
+    has_mixra_opt = any(_is_mixra_opt(row) for row in rows)
+    filtered = [
+        row
+        for row in rows
+        if not (_is_mixra_opt(row) and _mixra_opt_fallback(row))
+    ]
+    has_valid_mixra_opt = any(_is_mixra_opt(row) for row in filtered)
+    if has_mixra_opt and not has_valid_mixra_opt:
         warnings.warn("MixRA-Opt absent (fallback)", stacklevel=2)
     return filtered
 
