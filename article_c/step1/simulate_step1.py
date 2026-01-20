@@ -127,18 +127,23 @@ def _mixra_opt_assign(
     nodes_list = list(nodes)
     assignments = _mixra_h_assign(nodes_list)
     local_rng = random.Random(subset_seed)
+    snr_margins_by_node = [node.snr_margins for node in nodes_list]
+    rssi_margins_by_node = [node.rssi_margins for node in nodes_list]
+    qos_margins_by_node = [node.qos_margin for node in nodes_list]
     qos_penalties_by_node: list[tuple[float, ...]] = []
     qos_candidates_by_node: list[tuple[int, ...]] = []
-    for node in nodes_list:
+    for snr_margins, rssi_margins, qos_margin in zip(
+        snr_margins_by_node, rssi_margins_by_node, qos_margins_by_node
+    ):
         penalties: list[float] = []
         candidates: list[int] = []
         for sf in SF_VALUES:
             index = SF_INDEX[sf]
-            snr_margin = node.snr_margins[index] - node.qos_margin
-            rssi_margin = node.rssi_margins[index]
+            snr_margin = snr_margins[index] - qos_margin
+            rssi_margin = rssi_margins[index]
             min_margin = min(snr_margin, rssi_margin)
             penalties.append(max(0.0, 2.0 - min_margin))
-            if _qos_ok(node, sf):
+            if snr_margin >= 0.0 and rssi_margin >= 0.0:
                 candidates.append(sf)
         qos_penalties_by_node.append(tuple(penalties))
         qos_candidates_by_node.append(tuple(candidates))
@@ -177,10 +182,13 @@ def _mixra_opt_assign(
     loads = {sf: 0 for sf in SF_VALUES}
     for sf in assignments:
         loads[sf] += 1
-    qos_penalty_total = 0.0
-    for idx, sf in enumerate(assignments):
-        qos_penalty_total += qos_penalties_by_node[idx][SF_INDEX[sf]]
-    current_obj = collision_cost(loads) + 2.5 * qos_penalty_total
+    current_qos_penalty_by_node = [
+        qos_penalties_by_node[idx][SF_INDEX[sf]]
+        for idx, sf in enumerate(assignments)
+    ]
+    qos_penalty_total = sum(current_qos_penalty_by_node)
+    collision_cost_total = collision_cost(loads)
+    current_obj = collision_cost_total + 2.5 * qos_penalty_total
 
     small_improvement_streak = 0
     evaluations = 0
@@ -204,7 +212,7 @@ def _mixra_opt_assign(
             best_sf = current_sf
             best_obj = current_obj
             current_load = loads[current_sf]
-            current_qos_penalty = qos_penalties_by_node[idx][SF_INDEX[current_sf]]
+            current_qos_penalty = current_qos_penalty_by_node[idx]
             for sf in candidates:
                 if sf == current_sf:
                     continue
@@ -212,7 +220,11 @@ def _mixra_opt_assign(
                 delta_collision = 2.0 * (candidate_load - current_load + 1.0)
                 candidate_qos_penalty = qos_penalties_by_node[idx][SF_INDEX[sf]]
                 delta_qos = candidate_qos_penalty - current_qos_penalty
-                candidate_obj = current_obj + delta_collision + 2.5 * delta_qos
+                candidate_obj = (
+                    collision_cost_total
+                    + delta_collision
+                    + 2.5 * (qos_penalty_total + delta_qos)
+                )
                 if candidate_obj < best_obj:
                     best_obj = candidate_obj
                     best_sf = sf
@@ -223,10 +235,11 @@ def _mixra_opt_assign(
                 assignments[idx] = best_sf
                 delta_collision = 2.0 * (best_load - current_load + 1.0)
                 new_qos_penalty = qos_penalties_by_node[idx][SF_INDEX[best_sf]]
-                qos_penalty_total += new_qos_penalty - current_qos_penalty
-                current_obj += delta_collision + 2.5 * (
-                    new_qos_penalty - current_qos_penalty
-                )
+                qos_penalty_delta = new_qos_penalty - current_qos_penalty
+                collision_cost_total += delta_collision
+                qos_penalty_total += qos_penalty_delta
+                current_qos_penalty_by_node[idx] = new_qos_penalty
+                current_obj = collision_cost_total + 2.5 * qos_penalty_total
                 improved = True
         end_obj = current_obj
         improvement = start_obj - end_obj
