@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import csv
 from pathlib import Path
-import warnings
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -242,27 +241,39 @@ def main(network_sizes: list[int] | None = None, argv: list[str] | None = None) 
     learning_curve_path = step_dir / "results" / "learning_curve.csv"
     step1_results_path = step_dir.parents[1] / "step1" / "results" / "aggregated_results.csv"
     step2_results_path = step_dir / "results" / "aggregated_results.csv"
-    size_rows = load_step2_aggregated(step2_results_path)
-    normalize_network_size_rows(size_rows)
+    step1_rows = load_step1_aggregated(step1_results_path)
+    step2_rows = load_step2_aggregated(step2_results_path)
+    normalize_network_size_rows(step1_rows)
+    normalize_network_size_rows(step2_rows)
     network_sizes_filter = _normalized_network_sizes(network_sizes)
-    size_rows, _ = filter_rows_by_network_sizes(size_rows, network_sizes_filter)
+    step1_rows, _ = filter_rows_by_network_sizes(step1_rows, network_sizes_filter)
+    step2_rows, _ = filter_rows_by_network_sizes(step2_rows, network_sizes_filter)
     if network_sizes_filter is None:
-        df = pd.DataFrame(size_rows)
-        network_sizes = sorted(df["network_size"].unique())
+        step1_df = pd.DataFrame(step1_rows)
+        step2_df = pd.DataFrame(step2_rows)
+        step1_sizes = (
+            sorted(step1_df["network_size"].unique()) if not step1_df.empty else []
+        )
+        step2_sizes = (
+            sorted(step2_df["network_size"].unique()) if not step2_df.empty else []
+        )
     else:
-        network_sizes = network_sizes_filter
+        step1_sizes = network_sizes_filter
+        step2_sizes = network_sizes_filter
+    network_sizes = sorted(set(step1_sizes) & set(step2_sizes))
     if _has_invalid_network_sizes(network_sizes):
         return
     if len(network_sizes) < 2:
-        warnings.warn(
-            f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
-            stacklevel=2,
+        print(
+            "INFO: moins de deux tailles de réseau communes entre step1 et step2 "
+            f"({network_sizes}). Le plot RL10 est ignoré."
         )
+        return
     points = _collect_points(
         learning_curve_path,
         step1_results_path,
         step2_results_path,
-        network_sizes_filter,
+        network_sizes,
     )
 
     fig = _plot_scatter(points)
