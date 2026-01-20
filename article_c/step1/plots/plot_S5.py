@@ -104,7 +104,7 @@ def _filtered_sample_rows() -> list[dict[str, object]]:
         rows.append(
             {
                 "density": row.get("density"),
-                "network_size": row.get("density"),
+                "network_size": row.get("network_size") or row.get("density"),
                 "algo": row.get("algo"),
                 "snir_mode": row.get("snir_mode"),
                 "cluster": row.get("cluster", "all"),

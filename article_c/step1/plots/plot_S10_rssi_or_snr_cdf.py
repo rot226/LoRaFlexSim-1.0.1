@@ -223,8 +223,10 @@ def main() -> None:
     rows = _read_rows(args.input)
     ensure_network_size(rows)
     for row in rows:
-        if "network_size" not in row:
-            row["network_size"] = row.get("density", "0")
+        network_size = row.get("network_size")
+        if not network_size:
+            network_size = row.get("density", "0")
+        row["network_size"] = network_size
     rows, _ = filter_rows_by_network_sizes(rows, args.network_sizes)
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
