@@ -55,9 +55,20 @@ def _log_unique_network_sizes(output_dir: Path) -> None:
         if not reader.fieldnames or "network_size" not in reader.fieldnames:
             print(f"Colonne network_size absente dans {raw_path}")
             return
-        sizes = sorted(
-            {row.get("network_size") for row in reader if row.get("network_size")}
+        values: list[float] = []
+        for row in reader:
+            value = row.get("network_size")
+            if value in (None, ""):
+                continue
+            try:
+                values.append(float(value))
+            except ValueError:
+                print(f"Valeur network_size invalide détectée: {value}")
+    if any(value == 0.0 for value in values):
+        print(
+            "ERREUR: network_size à 0.0 détecté dans raw_results.csv, vérifiez la configuration."
         )
+    sizes = sorted({int(value) for value in values})
     sizes_label = ", ".join(map(str, sizes)) if sizes else "aucune"
     print(f"Tailles détectées dans raw_results: {sizes_label}")
 
