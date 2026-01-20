@@ -69,6 +69,16 @@ class Step1Result:
     def pdr(self) -> float:
         return packet_delivery_ratio(self.received, self.sent)
 
+    def summary_row(self) -> dict[str, object]:
+        return {
+            "sent": self.sent,
+            "received": self.received,
+            "pdr": self.pdr,
+            "mean_toa_s": self.mean_toa_s,
+            "energy_per_success_bit": self.energy_per_success_bit,
+            "mixra_opt_fallback": self.mixra_opt_fallback,
+        }
+
 
 def _qos_ok(node: NodeLink, sf: int) -> bool:
     index = SF_INDEX[sf]
