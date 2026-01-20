@@ -49,7 +49,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     densities = parse_network_size_list(args.network_sizes)
     replications = replication_ids(args.replications)
     snir_mode = "snir_on"
-    simulated_network_sizes: list[int] = []
+    simulated_sizes: list[int] = []
 
     base_results_dir = Path(__file__).resolve().parent / "results"
     ensure_dir(base_results_dir)
@@ -63,8 +63,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     algorithms = ("adr", "mixra_h", "mixra_opt", "ucb1_sf")
 
     for density_idx, density in enumerate(densities):
-        if density not in simulated_network_sizes:
-            simulated_network_sizes.append(density)
         for replication in replications:
             seed = base_seed + density_idx * 1000 + replication
             for algorithm in algorithms:
@@ -86,6 +84,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 raw_rows.extend(result.raw_rows)
                 if algorithm == "ucb1_sf":
                     selection_rows.extend(result.selection_prob_rows)
+        simulated_sizes.append(density)
 
     write_simulation_results(base_results_dir, raw_rows)
     _log_results_written(base_results_dir, len(raw_rows))
@@ -105,8 +104,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             write_rows(rl5_timestamp_path, rl5_header, rl5_values)
 
     (base_results_dir / "done.flag").write_text("done\n", encoding="utf-8")
-    if simulated_network_sizes:
-        sizes_label = ",".join(str(size) for size in simulated_network_sizes)
+    if simulated_sizes:
+        sizes_label = ",".join(str(size) for size in simulated_sizes)
         print(f"Tailles simulées: {sizes_label}")
 
 
