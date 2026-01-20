@@ -15,7 +15,7 @@ from article_c.common.utils import (
     replication_ids,
     set_deterministic_seed,
 )
-from article_c.step1.simulate_step1 import run_simulation
+from article_c.step1.simulate_step1 import mixra_opt_budget_for_size, run_simulation
 
 ALGORITHMS = ("adr", "mixra_h", "mixra_opt")
 ALGORITHM_LABELS = {
@@ -157,8 +157,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help=(
-            "Budget cible d'évaluations pour MixRA-Opt. "
-            "Si absent, un budget élevé est appliqué pour N≤320, sinon 500 + 0.5*N."
+            "Budget cible d'évaluations pour MixRA-Opt (max d'évaluations). "
+            "Si absent, un budget par taille est appliqué "
+            "(ex: N=80→5000, N=160→10000, N=320→20000, N=640→40000, N=1280→80000)."
         ),
     )
     parser.add_argument(
@@ -220,6 +221,11 @@ def main(argv: list[str] | None = None) -> None:
         simulated_sizes.append(density)
         timing_totals = {"sf_assignment_s": 0.0, "interference_s": 0.0, "metrics_s": 0.0}
         timing_runs = 0
+        mixra_opt_budget = (
+            args.mixra_opt_budget
+            if args.mixra_opt_budget is not None
+            else mixra_opt_budget_for_size(density)
+        )
         for algo in ALGORITHMS:
             for snir_mode in snir_modes:
                 for rep_index, replication in enumerate(replications, start=1):
@@ -238,7 +244,7 @@ def main(argv: list[str] | None = None) -> None:
                         mixra_opt_candidate_subset_size=args.mixra_opt_candidate_subset_size,
                         mixra_opt_epsilon=args.mixra_opt_epsilon,
                         mixra_opt_max_evaluations=args.mixra_opt_max_evals,
-                        mixra_opt_budget=args.mixra_opt_budget,
+                        mixra_opt_budget=mixra_opt_budget,
                         mixra_opt_enabled=args.mixra_opt_enabled,
                         mixra_opt_mode=args.mixra_opt_mode,
                         profile_timing=args.profile_timing,

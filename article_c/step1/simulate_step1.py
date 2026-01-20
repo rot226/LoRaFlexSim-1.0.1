@@ -26,6 +26,14 @@ from article_c.common.utils import assign_clusters, generate_traffic_times
 
 SF_VALUES = (7, 8, 9, 10, 11, 12)
 SF_INDEX = {sf: idx for idx, sf in enumerate(SF_VALUES)}
+MIXRA_OPT_BUDGET_BY_SIZE = {
+    80: 5000,
+    160: 10000,
+    320: 20000,
+    640: 40000,
+    1280: 80000,
+}
+MIXRA_OPT_BUDGET_PER_NODE = 5000 / 80
 
 # Seuils proxy pour SNR/RSSI (inspirés d'ordres de grandeur LoRaWAN).
 SNR_THRESHOLDS = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
@@ -240,6 +248,15 @@ def _mixra_opt_assign(
     return assignments, False
 
 
+def mixra_opt_budget_for_size(network_size: int) -> int:
+    """Retourne un budget d'évaluations MixRA-Opt en fonction de la taille réseau."""
+    if network_size <= 0:
+        return 0
+    if network_size in MIXRA_OPT_BUDGET_BY_SIZE:
+        return MIXRA_OPT_BUDGET_BY_SIZE[network_size]
+    return int(round(network_size * MIXRA_OPT_BUDGET_PER_NODE))
+
+
 def _estimate_received(
     assignments: Iterable[int],
     traffic_times: Iterable[float],
@@ -363,6 +380,7 @@ def run_simulation(
     l'implémentation complète des algorithmes. Le trafic et le canal
     incluent une variabilité temporelle, et le lien radio applique
     shadowing/fading pour rendre les déclenchements plus fluctuants.
+    Le budget MixRA-Opt correspond au nombre maximal d'évaluations.
     """
     rng = random.Random(seed)
     jitter_range_value = jitter_range_s
@@ -402,16 +420,11 @@ def run_simulation(
             mixra_opt_max_iterations = min(mixra_opt_max_iterations, 60)
             mixra_opt_candidate_subset_size = min(mixra_opt_candidate_subset_size, 80)
         if mixra_opt_budget is None:
-            if actual_sent <= 320:
-                base_budget = 1500
-            else:
-                base_budget = int(500 + 0.5 * actual_sent)
+            computed_budget = mixra_opt_budget_for_size(actual_sent)
             if mixra_opt_mode == "full":
-                computed_budget = int(base_budget * 1.5)
+                computed_budget = int(computed_budget * 1.5)
             elif mixra_opt_mode in {"fast", "fast_opt"}:
-                computed_budget = max(200, int(base_budget * 0.4))
-            else:
-                computed_budget = base_budget
+                computed_budget = max(200, int(computed_budget * 0.4))
             mixra_opt_max_evaluations = max(mixra_opt_max_evaluations, computed_budget)
         else:
             mixra_opt_max_evaluations = mixra_opt_budget
