@@ -118,12 +118,12 @@ def load_step1_aggregated(path: Path) -> list[dict[str, object]]:
         return _sample_step1_rows()
     parsed: list[dict[str, object]] = []
     for row in rows:
+        network_size_value = row.get("density")
         if "network_size" in row and row.get("network_size") not in (None, ""):
             network_size_value = row.get("network_size")
-        else:
-            network_size_value = row.get("density")
+        network_size = _to_float(network_size_value)
         parsed_row: dict[str, object] = {
-            "network_size": _to_float(network_size_value),
+            "network_size": network_size,
             "algo": row.get("algo", ""),
             "snir_mode": row.get("snir_mode", ""),
             "cluster": row.get("cluster", "all"),
@@ -152,12 +152,12 @@ def load_step2_aggregated(path: Path) -> list[dict[str, object]]:
         return _sample_step2_rows()
     parsed: list[dict[str, object]] = []
     for row in rows:
+        network_size_value = row.get("density")
         if "network_size" in row and row.get("network_size") not in (None, ""):
             network_size_value = row.get("network_size")
-        else:
-            network_size_value = row.get("density")
+        network_size = _to_float(network_size_value)
         parsed_row = {
-            "network_size": _to_float(network_size_value),
+            "network_size": network_size,
             "algo": row.get("algo", ""),
             "snir_mode": row.get("snir_mode", ""),
             "cluster": row.get("cluster", "all"),
