@@ -34,6 +34,12 @@ ALGO_ALIASES = {
 TARGET_ALGOS = {"adr", "mixra_h", "mixra_opt", "ucb1_sf"}
 
 
+def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
+    if not network_sizes or len(network_sizes) < 2:
+        return None
+    return network_sizes
+
+
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
     return {cluster: f"C{idx + 1}" for idx, cluster in enumerate(clusters)}
 
@@ -76,7 +82,10 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
-        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+        warnings.warn(
+            f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
+            stacklevel=2,
+        )
     available_clusters = {
         row["cluster"] for row in rows if row.get("cluster") not in (None, "all")
     }
@@ -131,7 +140,8 @@ def main() -> None:
     rows = load_step2_aggregated(results_path)
     rows = [row for row in rows if row.get("cluster") != "all"]
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
-    rows, _ = filter_rows_by_network_sizes(rows, args.network_sizes)
+    network_sizes_filter = _normalized_network_sizes(args.network_sizes)
+    rows, _ = filter_rows_by_network_sizes(rows, network_sizes_filter)
     rows = _filter_algorithms(rows)
     rows = _with_outage(rows)
 

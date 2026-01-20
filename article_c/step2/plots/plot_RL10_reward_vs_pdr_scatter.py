@@ -35,6 +35,12 @@ ALGO_ALIASES = {
 TARGET_ALGOS = ("ucb1_sf", "adr", "mixra_h", "mixra_opt")
 
 
+def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
+    if not network_sizes or len(network_sizes) < 2:
+        return None
+    return network_sizes
+
+
 def _canonical_algo(algo: str) -> str | None:
     return ALGO_ALIASES.get(algo)
 
@@ -222,16 +228,20 @@ def main() -> None:
     step2_results_path = step_dir / "results" / "aggregated_results.csv"
     size_rows = load_step2_aggregated(step2_results_path)
     ensure_network_size(size_rows)
-    size_rows, _ = filter_rows_by_network_sizes(size_rows, args.network_sizes)
+    network_sizes_filter = _normalized_network_sizes(args.network_sizes)
+    size_rows, _ = filter_rows_by_network_sizes(size_rows, network_sizes_filter)
     df = pd.DataFrame(size_rows)
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
-        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+        warnings.warn(
+            f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
+            stacklevel=2,
+        )
     points = _collect_points(
         learning_curve_path,
         step1_results_path,
         step2_results_path,
-        args.network_sizes,
+        network_sizes_filter,
     )
 
     fig = _plot_scatter(points)

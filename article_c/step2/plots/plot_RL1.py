@@ -21,13 +21,22 @@ from article_c.common.plot_helpers import (
 )
 
 
+def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
+    if not network_sizes or len(network_sizes) < 2:
+        return None
+    return network_sizes
+
+
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, ax = plt.subplots()
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
-        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+        warnings.warn(
+            f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
+            stacklevel=2,
+        )
     algorithms = sorted({row["algo"] for row in rows})
     for algo in algorithms:
         points = {
@@ -60,7 +69,8 @@ def main() -> None:
     results_path = step_dir / "results" / "aggregated_results.csv"
     rows = filter_cluster(load_step2_aggregated(results_path), "all")
     rows = [row for row in rows if row["snir_mode"] == "snir_on"]
-    rows, _ = filter_rows_by_network_sizes(rows, args.network_sizes)
+    network_sizes_filter = _normalized_network_sizes(args.network_sizes)
+    rows, _ = filter_rows_by_network_sizes(rows, network_sizes_filter)
 
     fig = _plot_metric(rows, "reward_mean")
     output_dir = step_dir / "plots" / "output"
