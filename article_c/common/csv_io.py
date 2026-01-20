@@ -14,9 +14,7 @@ EXTRA_MEAN_KEYS = {"mean_toa_s", "mean_latency_s"}
 def write_rows(path: Path, header: list[str], rows: list[list[object]]) -> None:
     """Écrit un fichier CSV simple."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_header = True
-    if path.exists() and path.stat().st_size > 0:
-        write_header = False
+    write_header = not path.exists()
     with path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         if write_header:
