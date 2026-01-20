@@ -34,6 +34,7 @@ MIXRA_OPT_BUDGET_BY_SIZE = {
     1280: 250000,
 }
 MIXRA_OPT_BUDGET_PER_NODE = 20000 / 80
+MIXRA_OPT_EMERGENCY_TIMEOUT_S = 300.0
 
 # Seuils proxy pour SNR/RSSI (inspirés d'ordres de grandeur LoRaWAN).
 SNR_THRESHOLDS = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
@@ -420,6 +421,7 @@ def run_simulation(
     mixra_opt_enabled: bool = True,
     mixra_opt_mode: str = "balanced",
     mixra_opt_timeout_s: float | None = None,
+    mixra_opt_no_fallback: bool = False,
     shadowing_sigma_db: float = 7.0,
     shadowing_mean_db: float = 0.0,
     fading_type: str | None = "lognormal",
@@ -436,6 +438,10 @@ def run_simulation(
     Le budget MixRA-Opt correspond au nombre maximal d'évaluations.
     """
     rng = random.Random(seed)
+    if mixra_opt_timeout_s is None:
+        mixra_opt_timeout_s = MIXRA_OPT_EMERGENCY_TIMEOUT_S
+    elif mixra_opt_timeout_s <= 0:
+        mixra_opt_timeout_s = None
     jitter_range_value = jitter_range_s
     if jitter_range_value is None:
         base_period = duration_s / max(1, sent)
@@ -469,7 +475,7 @@ def run_simulation(
             raise ValueError(
                 "mixra_opt_mode doit être 'fast_opt', 'fast', 'balanced' ou 'full' pour l'algorithme mixra_opt."
             )
-        allow_fallback = mixra_opt_mode != "full"
+        allow_fallback = mixra_opt_mode != "full" and not mixra_opt_no_fallback
         if mixra_opt_mode in {"fast", "fast_opt"}:
             mixra_opt_max_iterations = min(mixra_opt_max_iterations, 60)
             mixra_opt_candidate_subset_size = min(mixra_opt_candidate_subset_size, 80)

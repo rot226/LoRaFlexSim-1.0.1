@@ -205,12 +205,23 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--mixra-opt-no-fallback",
+        "--mixra-opt-hard",
+        dest="mixra_opt_no_fallback",
+        action="store_true",
+        default=False,
+        help=(
+            "Désactive explicitement le fallback MixRA-H pour MixRA-Opt, "
+            "même en mode balanced/fast."
+        ),
+    )
+    parser.add_argument(
         "--mixra-opt-timeout",
         type=float,
-        default=None,
+        default=300.0,
         help=(
             "Timeout (secondes) pour MixRA-Opt afin d'éviter les blocages "
-            "(None pour désactiver)."
+            "(<= 0 pour désactiver)."
         ),
     )
     parser.add_argument(
@@ -289,6 +300,7 @@ def _simulate_density(
                     mixra_opt_enabled=bool(config["mixra_opt_enabled"]),
                     mixra_opt_mode=str(config["mixra_opt_mode"]),
                     mixra_opt_timeout_s=config["mixra_opt_timeout"],
+                    mixra_opt_no_fallback=bool(config["mixra_opt_no_fallback"]),
                     profile_timing=bool(config["profile_timing"]),
                 )
                 metrics_start = perf_counter() if config["profile_timing"] else 0.0
@@ -428,6 +440,7 @@ def main(argv: list[str] | None = None) -> None:
         "mixra_opt_enabled": args.mixra_opt_enabled,
         "mixra_opt_mode": args.mixra_opt_mode,
         "mixra_opt_timeout": args.mixra_opt_timeout,
+        "mixra_opt_no_fallback": args.mixra_opt_no_fallback,
         "profile_timing": args.profile_timing,
     }
 
