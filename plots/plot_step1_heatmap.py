@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import statistics
 import sys
+import warnings
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
 
@@ -208,6 +209,34 @@ def _metric_extent(
     return min(values), max(values)
 
 
+def _filter_network_sizes(
+    records: Sequence[Mapping[str, float | int | str]],
+    network_sizes: Sequence[int] | None,
+) -> list[Mapping[str, float | int | str]]:
+    if not network_sizes:
+        return list(records)
+    available = sorted(
+        {
+            int(record["num_nodes"])
+            for record in records
+            if record.get("num_nodes") is not None
+        }
+    )
+    requested = sorted({int(size) for size in network_sizes})
+    missing = sorted(set(requested) - set(available))
+    if missing:
+        warnings.warn(
+            "Tailles de réseau demandées absentes: "
+            + ", ".join(str(size) for size in missing),
+            stacklevel=2,
+        )
+    return [
+        record
+        for record in records
+        if int(record.get("num_nodes", -1)) in requested
+    ]
+
+
 def generate_heatmaps(
     results_dir: Path,
     figures_dir: Path,
@@ -215,6 +244,7 @@ def generate_heatmaps(
     algorithms: Sequence[str] | None,
     strict: bool,
     ieee_mode: bool,
+    network_sizes: Sequence[int] | None,
 ) -> None:
     if plt is None:
         print("matplotlib n'est pas disponible ; aucune heatmap générée.")
@@ -232,6 +262,7 @@ def generate_heatmaps(
         print(f"Aucun CSV trouvé dans {results_dir} ; aucune heatmap générée.")
         return
 
+    records = _filter_network_sizes(records, network_sizes)
     available_algorithms = {str(record.get("algorithm") or "") for record in records}
 
     requested_algorithms = _parse_algorithms(algorithms)
@@ -322,6 +353,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Échoue si les CSV requis sont absents (mode IEEE).",
     )
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
     return parser
 
 
@@ -339,6 +376,7 @@ def main(argv: List[str] | None = None) -> None:
         ),
         strict=args.strict,
         ieee_mode=args.ieee,
+        network_sizes=args.network_sizes,
     )
 
 

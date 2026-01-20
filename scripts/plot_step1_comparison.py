@@ -219,7 +219,34 @@ def _apply_network_ticks(ax: Any, network_sizes: Sequence[int]) -> None:
     if not all(isinstance(value, int) for value in network_sizes):
         raise ValueError("network_sizes doit être une liste d'entiers.")
     ax.set_xticks(network_sizes)
-    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
+
+
+def _filter_network_sizes(
+    records: Sequence[Dict[str, Any]],
+    network_sizes: Sequence[int] | None,
+) -> List[Dict[str, Any]]:
+    if not network_sizes:
+        return list(records)
+    available = sorted(
+        {
+            int(record["num_nodes"])
+            for record in records
+            if record.get("num_nodes") is not None
+        }
+    )
+    requested = sorted({int(size) for size in network_sizes})
+    missing = sorted(set(requested) - set(available))
+    if missing:
+        warnings.warn(
+            "Tailles de réseau demandées absentes: "
+            + ", ".join(str(size) for size in missing),
+            stacklevel=2,
+        )
+    return [
+        record
+        for record in records
+        if int(record.get("num_nodes", -1)) in requested
+    ]
 
 
 def _plot_pdr_der(
@@ -512,12 +539,14 @@ def generate_figures(
     clusters: Sequence[int] | None = None,
     overlay_snir: bool = False,
     overlay_only: bool = False,
+    network_sizes: Sequence[int] | None = None,
 ) -> None:
     if plt is not None:
         apply_plot_theme(plt)
     records = _load_records(results_dir)
     if not records:
         raise ValueError(f"No CSV records found in {results_dir}")
+    records = _filter_network_sizes(records, network_sizes)
     available_algorithms = _available_algorithms(records)
     if algorithms:
         _validate_algorithms(algorithms, available_algorithms)
@@ -619,6 +648,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         action="store_true",
         help="Force ADR/APRA/MixRA-H/MixRA-Opt avec SNIR ON/OFF sur les mêmes figures.",
     )
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
     args = parser.parse_args(argv)
 
     algorithms = _parse_list(args.algorithms)
@@ -638,6 +673,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         clusters,
         overlay_snir=overlay_snir,
         overlay_only=overlay_only,
+        network_sizes=args.network_sizes,
     )
 
 

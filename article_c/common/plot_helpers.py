@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Iterable
+import warnings
 import csv
 
 import matplotlib.pyplot as plt
@@ -173,6 +174,26 @@ def _network_size_value(row: dict[str, object]) -> int:
     if "network_size" in row:
         return int(_to_float(row.get("network_size")))
     return int(_to_float(row.get("density")))
+
+
+def filter_rows_by_network_sizes(
+    rows: list[dict[str, object]],
+    network_sizes: Iterable[int] | None,
+) -> tuple[list[dict[str, object]], list[int]]:
+    ensure_network_size(rows)
+    available = sorted({_network_size_value(row) for row in rows})
+    if not network_sizes:
+        return rows, available
+    requested = sorted({int(size) for size in network_sizes})
+    missing = sorted(set(requested) - set(available))
+    if missing:
+        warnings.warn(
+            "Tailles de réseau demandées absentes: "
+            + ", ".join(str(size) for size in missing),
+            stacklevel=2,
+        )
+    filtered = [row for row in rows if _network_size_value(row) in requested]
+    return filtered, available
 
 
 def plot_metric_by_snir(

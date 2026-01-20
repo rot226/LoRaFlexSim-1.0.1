@@ -352,6 +352,34 @@ def _ensure_network_sizes(values: Iterable[Any]) -> List[int]:
     return network_sizes
 
 
+def _filter_network_sizes(
+    records: List[Dict[str, Any]],
+    network_sizes: Sequence[int] | None,
+) -> List[Dict[str, Any]]:
+    if not network_sizes:
+        return records
+    available = sorted(
+        {
+            int(record["num_nodes"])
+            for record in records
+            if record.get("num_nodes") is not None
+        }
+    )
+    requested = sorted({int(size) for size in network_sizes})
+    missing = sorted(set(requested) - set(available))
+    if missing:
+        warnings.warn(
+            "Tailles de réseau demandées absentes: "
+            + ", ".join(str(size) for size in missing),
+            stacklevel=2,
+        )
+    return [
+        record
+        for record in records
+        if int(record.get("num_nodes", -1)) in requested
+    ]
+
+
 def _metric_error_bounds(record: Mapping[str, Any], metric: str, value: float) -> Tuple[float, float] | None:
     for base in {metric, metric.lower(), metric.upper()}:
         for prefix in (f"{base}_ci_low", f"{base}_ci95_low", f"{base}_ci_95_low"):
@@ -1374,6 +1402,7 @@ def generate_step1_figures(
     official: bool = False,
     official_only: bool = False,
     ieee: bool = False,
+    network_sizes: Sequence[int] | None = None,
 ) -> None:
     if plt is None:
         print("matplotlib n'est pas disponible ; aucune figure générée.")
@@ -1410,6 +1439,7 @@ def generate_step1_figures(
         else:
             if ieee:
                 summary_records = _apply_ieee_filters(summary_records)
+            summary_records = _filter_network_sizes(summary_records, network_sizes)
             _plot_summary_bars(
                 summary_records,
                 extended_dir,
@@ -1421,6 +1451,10 @@ def generate_step1_figures(
                     trajectory_records = summary_records
                 if ieee:
                     trajectory_records = _apply_ieee_filters(trajectory_records)
+                trajectory_records = _filter_network_sizes(
+                    trajectory_records,
+                    network_sizes,
+                )
                 _plot_trajectories(trajectory_records, trajectories_dir)
             comparison_records = summary_records
     elif not official_only:
@@ -1430,6 +1464,7 @@ def generate_step1_figures(
             return
         if ieee:
             records = _apply_ieee_filters(records)
+        records = _filter_network_sizes(records, network_sizes)
         _plot_cluster_der(records, output_dir)
         _plot_cluster_pdr(records, output_dir)
         _plot_global_metric(records, "PDR", "Overall PDR (probability)", "pdr_global", output_dir)
@@ -1456,6 +1491,10 @@ def generate_step1_figures(
         comparison_records = _load_comparison_records(results_dir, use_summary, strict)
         if ieee:
             comparison_records = _apply_ieee_filters(comparison_records)
+        comparison_records = _filter_network_sizes(
+            comparison_records,
+            network_sizes,
+        )
         if not comparison_records:
             print("Aucune donnée disponible pour comparer SNIR on/off.")
         else:
@@ -1570,6 +1609,12 @@ def _build_parser() -> argparse.ArgumentParser:
             "pour aligner la sélection sur les figures extended."
         ),
     )
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
     return parser
 
 
@@ -1589,6 +1634,7 @@ def main(argv: List[str] | None = None) -> None:
         args.official,
         args.official_only,
         args.ieee,
+        args.network_sizes,
     )
 
 

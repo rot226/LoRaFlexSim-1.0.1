@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import warnings
 from pathlib import Path
 from statistics import fmean, pstdev
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
@@ -127,7 +128,34 @@ def _apply_network_ticks(ax: plt.Axes, network_sizes: Sequence[int]) -> None:
     if not all(isinstance(value, int) for value in network_sizes):
         raise ValueError("network_sizes doit être une liste d'entiers.")
     ax.set_xticks(network_sizes)
-    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
+
+
+def _filter_network_sizes(
+    records: List[Dict[str, Any]],
+    network_sizes: Sequence[int] | None,
+) -> List[Dict[str, Any]]:
+    if not network_sizes:
+        return records
+    available = sorted(
+        {
+            int(record["num_nodes"])
+            for record in records
+            if record.get("num_nodes") is not None
+        }
+    )
+    requested = sorted({int(size) for size in network_sizes})
+    missing = sorted(set(requested) - set(available))
+    if missing:
+        warnings.warn(
+            "Tailles de réseau demandées absentes: "
+            + ", ".join(str(size) for size in missing),
+            stacklevel=2,
+        )
+    return [
+        record
+        for record in records
+        if int(record.get("num_nodes", -1)) in requested
+    ]
 
 
 def _add_state_legend(fig: plt.Figure) -> None:
@@ -564,6 +592,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Force ADR/APRA/MixRA-H/MixRA-Opt avec SNIR ON/OFF sur les mêmes figures.",
     )
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
     return parser
 
 
@@ -574,16 +608,31 @@ def main() -> None:
     agg_dir = results_dir / "agg"
     raw_dir = results_dir / "raw"
 
-    performance_rows = _load_csv(agg_dir / "performance_rounds.csv")
-    convergence_rows = _load_csv(agg_dir / "convergence.csv")
+    performance_rows = _filter_network_sizes(
+        _load_csv(agg_dir / "performance_rounds.csv"),
+        args.network_sizes,
+    )
+    convergence_rows = _filter_network_sizes(
+        _load_csv(agg_dir / "convergence.csv"),
+        args.network_sizes,
+    )
     if not performance_rows or not convergence_rows:
         decision_rows = _load_csv(raw_dir / "decisions.csv")
         if decision_rows:
             generated = _build_agg_from_raw(decision_rows)
-            performance_rows = performance_rows or generated["performance"]
-            convergence_rows = convergence_rows or generated["convergence"]
+            performance_rows = performance_rows or _filter_network_sizes(
+                generated["performance"],
+                args.network_sizes,
+            )
+            convergence_rows = convergence_rows or _filter_network_sizes(
+                generated["convergence"],
+                args.network_sizes,
+            )
 
-    metrics_rows = _load_csv(raw_dir / "metrics.csv")
+    metrics_rows = _filter_network_sizes(
+        _load_csv(raw_dir / "metrics.csv"),
+        args.network_sizes,
+    )
 
     all_records = performance_rows or convergence_rows or metrics_rows
     algorithms_input = _parse_list(args.algorithms)
@@ -668,7 +717,10 @@ def main() -> None:
         )
 
     if not args.skip_distribution and not args.only_core_figures:
-        distribution_rows = _load_csv(agg_dir / "sf_tp_distribution.csv")
+        distribution_rows = _filter_network_sizes(
+            _load_csv(agg_dir / "sf_tp_distribution.csv"),
+            args.network_sizes,
+        )
         if distribution_rows:
             _plot_distribution(distribution_rows, args.output_dir, algorithms)
 

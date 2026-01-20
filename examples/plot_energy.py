@@ -2,6 +2,7 @@
 import sys
 import argparse
 from pathlib import Path
+import warnings
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -11,8 +12,20 @@ def main(
     per_node: bool,
     output_dir: Path,
     basename: str | None,
+    network_sizes: list[int] | None,
 ) -> None:
     df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
+    if network_sizes and "nodes" in df.columns:
+        available = sorted(df["nodes"].dropna().unique())
+        requested = sorted({int(size) for size in network_sizes})
+        missing = sorted(set(requested) - {int(value) for value in available})
+        if missing:
+            warnings.warn(
+                "Tailles de réseau demandées absentes: "
+                + ", ".join(str(size) for size in missing),
+                stacklevel=2,
+            )
+        df = df[df["nodes"].isin(requested)]
     output_dir.mkdir(parents=True, exist_ok=True)
     if per_node:
         cols = [c for c in df.columns if c.startswith("energy_by_node.")]
@@ -78,9 +91,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=None,
         help="Base filename without extension. Defaults to 'energy_total' or 'energy_per_node' depending on --per-node",
     )
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filter network sizes (e.g., --network-sizes 100 200 300).",
+    )
     return parser.parse_args(argv)
 
 if __name__ == "__main__":
     args = parse_args(sys.argv[1:])
-    main(args.files, args.per_node, args.output_dir, args.basename)
-
+    main(args.files, args.per_node, args.output_dir, args.basename, args.network_sizes)

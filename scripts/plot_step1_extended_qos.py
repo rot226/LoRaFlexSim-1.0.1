@@ -5,6 +5,7 @@ import argparse
 import csv
 import math
 import re
+import warnings
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
@@ -170,6 +171,34 @@ def _unique_sorted(values: Iterable[float]) -> List[float]:
     return sorted({value for value in values if value is not None and not math.isnan(value)})
 
 
+def _filter_network_sizes(
+    records: List[Dict[str, Any]],
+    network_sizes: Sequence[int] | None,
+) -> List[Dict[str, Any]]:
+    if not network_sizes:
+        return records
+    available = sorted(
+        {
+            int(record["num_nodes"])
+            for record in records
+            if record.get("num_nodes") is not None
+        }
+    )
+    requested = sorted({int(size) for size in network_sizes})
+    missing = sorted(set(requested) - set(available))
+    if missing:
+        warnings.warn(
+            "Tailles de réseau demandées absentes: "
+            + ", ".join(str(size) for size in missing),
+            stacklevel=2,
+        )
+    return [
+        record
+        for record in records
+        if int(record.get("num_nodes", -1)) in requested
+    ]
+
+
 def _plot_heatmaps(records: Sequence[Mapping[str, Any]], output_dir: Path) -> None:
     by_algorithm = _group_by_algorithm(records)
     for algorithm, items in by_algorithm.items():
@@ -212,11 +241,16 @@ def _plot_heatmaps(records: Sequence[Mapping[str, Any]], output_dir: Path) -> No
                 plt.close(fig)
 
 
-def generate_extended_qos_figures(results_dir: Path, output_dir: Path) -> None:
+def generate_extended_qos_figures(
+    results_dir: Path,
+    output_dir: Path,
+    network_sizes: Sequence[int] | None,
+) -> None:
     records = _load_records(results_dir)
     if not records:
         print(f"Aucune donnée trouvée dans {results_dir}.")
         return
+    records = _filter_network_sizes(records, network_sizes)
     _plot_histograms(records, output_dir)
     _plot_ecdf(records, output_dir)
     _plot_heatmaps(records, output_dir)
@@ -236,13 +270,23 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_FIGURES_DIR,
         help="Répertoire de sortie pour les figures (PNG/PDF).",
     )
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
     return parser
 
 
 def main(argv: List[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    generate_extended_qos_figures(args.results_dir, args.output_dir)
+    generate_extended_qos_figures(
+        args.results_dir,
+        args.output_dir,
+        args.network_sizes,
+    )
 
 
 if __name__ == "__main__":

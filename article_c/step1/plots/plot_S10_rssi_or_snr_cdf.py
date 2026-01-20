@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     ensure_network_size,
+    filter_rows_by_network_sizes,
     save_figure,
 )
 
@@ -204,6 +205,12 @@ def parse_args() -> argparse.Namespace:
         default=Path(__file__).resolve().parents[1] / "plots" / "output",
         help="Répertoire de sortie pour la figure.",
     )
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
     return parser.parse_args()
 
 
@@ -215,6 +222,7 @@ def main() -> None:
     for row in rows:
         if "network_size" not in row:
             row["network_size"] = row.get("density", "0")
+    rows, _ = filter_rows_by_network_sizes(rows, args.network_sizes)
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:

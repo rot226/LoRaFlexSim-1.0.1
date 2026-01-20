@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import warnings
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -20,8 +21,20 @@ def plot(
     output_dir: str = "figures",
     max_delay: float | None = None,
     max_energy: float | None = None,
+    network_sizes: list[int] | None = None,
 ) -> None:
     df = pd.read_csv(csv_path)
+    if network_sizes and "nodes" in df.columns:
+        available = sorted(df["nodes"].dropna().unique())
+        requested = sorted({int(size) for size in network_sizes})
+        missing = sorted(set(requested) - {int(value) for value in available})
+        if missing:
+            warnings.warn(
+                "Tailles de réseau demandées absentes: "
+                + ", ".join(str(size) for size in missing),
+                stacklevel=2,
+            )
+        df = df[df["nodes"].isin(requested)]
     if "nodes" in df.columns:
         df["scenario_label"] = (
             df["scenario"] + " (" + df["nodes"].astype(str) + " nodes)"
@@ -151,8 +164,20 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="Y-axis maximum for energy plots",
     )
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
     args = parser.parse_args(argv)
-    plot(args.csv, args.output_dir, args.max_delay, args.max_energy)
+    plot(
+        args.csv,
+        args.output_dir,
+        args.max_delay,
+        args.max_energy,
+        args.network_sizes,
+    )
 
 
 if __name__ == "__main__":

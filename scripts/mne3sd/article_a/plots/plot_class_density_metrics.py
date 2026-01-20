@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import warnings
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -59,6 +60,12 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Display the figures instead of running in batch mode",
     )
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filter network sizes (e.g., --network-sizes 100 200 300).",
+    )
     return parser.parse_args()
 
 
@@ -85,6 +92,24 @@ def load_metrics(path: Path) -> pd.DataFrame:
         df["energy_per_node_J"] = pd.to_numeric(df["energy_per_node_J"], errors="coerce")
 
     return df
+
+
+def _filter_network_sizes(
+    df: pd.DataFrame,
+    network_sizes: list[int] | None,
+) -> pd.DataFrame:
+    if not network_sizes:
+        return df
+    available = sorted(df["nodes"].dropna().unique())
+    requested = sorted({int(size) for size in network_sizes})
+    missing = sorted(set(requested) - {int(value) for value in available})
+    if missing:
+        warnings.warn(
+            "Tailles de réseau demandées absentes: "
+            + ", ".join(str(size) for size in missing),
+            stacklevel=2,
+        )
+    return df[df["nodes"].isin(requested)]
 
 
 def summarise_metric(df: pd.DataFrame, column: str) -> pd.DataFrame:
@@ -197,7 +222,7 @@ def main() -> None:
 
     apply_plot_style(args.style)
 
-    metrics = load_metrics(args.results)
+    metrics = _filter_network_sizes(load_metrics(args.results), args.network_sizes)
 
     plot_pdr_vs_nodes(metrics)
     energy_created = plot_energy_vs_nodes(metrics)

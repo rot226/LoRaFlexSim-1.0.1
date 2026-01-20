@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from typing import Iterable, Iterator, Sequence, Tuple
+import warnings
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -53,6 +54,12 @@ def parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--show",
         action="store_true",
         help="Display the figures instead of running in batch mode",
+    )
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filter network sizes (e.g., --network-sizes 100 200 300).",
     )
     return parser.parse_args(argv)
 
@@ -126,6 +133,24 @@ def _iterate_groups(
             yield group_key, group
     else:
         yield tuple(), df
+
+
+def _filter_network_sizes(
+    df: pd.DataFrame,
+    network_sizes: Sequence[int] | None,
+) -> pd.DataFrame:
+    if not network_sizes:
+        return df
+    available = sorted(df["nodes"].dropna().unique())
+    requested = sorted({int(size) for size in network_sizes})
+    missing = sorted(set(requested) - {int(value) for value in available})
+    if missing:
+        warnings.warn(
+            "Tailles de réseau demandées absentes: "
+            + ", ".join(str(size) for size in missing),
+            stacklevel=2,
+        )
+    return df[df["nodes"].isin(requested)]
 
 
 def plot_pdr(summary: pd.DataFrame, *, figures_dir: Path | None) -> None:
@@ -259,7 +284,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.style:
         plt.style.use(args.style)
 
-    summary = load_summary(args.results)
+    summary = _filter_network_sizes(load_summary(args.results), args.network_sizes)
 
     selected_metrics = list(dict.fromkeys(args.metrics)) or list(PLOT_METRICS)
 
