@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from pathlib import Path
 from statistics import mean
 from time import perf_counter
@@ -260,6 +261,7 @@ def main(argv: list[str] | None = None) -> None:
                         raw_rows.append(
                             {
                                 "density": density,
+                                "network_size": density,
                                 "algo": algo,
                                 "snir_mode": snir_mode,
                                 "cluster": cluster,
@@ -281,6 +283,7 @@ def main(argv: list[str] | None = None) -> None:
                         raw_rows.append(
                             {
                                 "density": density,
+                                "network_size": density,
                                 "algo": algo,
                                 "snir_mode": snir_mode,
                                 "cluster": cluster,
@@ -296,6 +299,7 @@ def main(argv: list[str] | None = None) -> None:
                     raw_rows.append(
                         {
                             "density": density,
+                            "network_size": density,
                             "algo": algo,
                             "snir_mode": snir_mode,
                             "cluster": "all",
@@ -344,6 +348,14 @@ def main(argv: list[str] | None = None) -> None:
 
     write_simulation_results(output_dir, raw_rows)
     print(f"Rows written: {len(raw_rows)}")
+    rows_per_size = Counter(
+        row.get("network_size") for row in raw_rows if row.get("network_size") is not None
+    )
+    if rows_per_size:
+        sizes_summary = ", ".join(
+            f"{size}={count}" for size, count in sorted(rows_per_size.items())
+        )
+        print(f"Rows per size: {sizes_summary}")
     (output_dir / "done.flag").write_text("done\n", encoding="utf-8")
     if simulated_network_sizes:
         sizes_label = ",".join(str(size) for size in simulated_network_sizes)
