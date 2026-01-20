@@ -18,6 +18,7 @@ import argparse
 import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Sequence
+import warnings
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -61,6 +62,12 @@ def parse_args() -> argparse.Namespace:
         help="Chemin du PNG à générer (répertoires créés si besoin).",
     )
     parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
+    parser.add_argument(
         "--time-window",
         action="append",
         default=[],
@@ -78,6 +85,21 @@ def parse_args() -> argparse.Namespace:
         help="Sélectionne un ou plusieurs indices de fenêtre (colonne window_index).",
     )
     return parser.parse_args()
+
+
+def _filter_network_sizes(df: pd.DataFrame, network_sizes: List[int] | None) -> pd.DataFrame:
+    if not network_sizes or "num_nodes" not in df.columns:
+        return df
+    available = sorted(df["num_nodes"].dropna().unique())
+    requested = sorted({int(size) for size in network_sizes})
+    missing = sorted(set(requested) - {int(value) for value in available})
+    if missing:
+        warnings.warn(
+            "Tailles de réseau demandées absentes: "
+            + ", ".join(str(size) for size in missing),
+            stacklevel=2,
+        )
+    return df[df["num_nodes"].isin(requested)]
 
 
 def _parse_bool(value: object | None) -> bool | None:
@@ -392,6 +414,7 @@ def main() -> None:
         ],
         ignore_index=True,
     )
+    combined = _filter_network_sizes(combined, args.network_sizes)
     combined = _filter_windows(combined, time_windows, args.window_index)
     if combined.empty:
         raise SystemExit("Aucune donnée exploitable pour tracer la figure.")

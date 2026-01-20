@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from typing import Iterable
+import warnings
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -37,7 +38,28 @@ def parse_args() -> argparse.Namespace:
         default=200,
         help="Taille de la fenêtre (en décisions) pour la fairness temporelle.",
     )
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
     return parser.parse_args()
+
+
+def _filter_network_sizes(df: pd.DataFrame, network_sizes: list[int] | None) -> pd.DataFrame:
+    if not network_sizes or "num_nodes" not in df.columns:
+        return df
+    available = sorted(df["num_nodes"].dropna().unique())
+    requested = sorted({int(size) for size in network_sizes})
+    missing = sorted(set(requested) - {int(value) for value in available})
+    if missing:
+        warnings.warn(
+            "Tailles de réseau demandées absentes: "
+            + ", ".join(str(size) for size in missing),
+            stacklevel=2,
+        )
+    return df[df["num_nodes"].isin(requested)]
 
 
 def _ensure_columns(df: pd.DataFrame, required: Iterable[str], path: Path) -> None:
@@ -78,6 +100,7 @@ def main() -> None:
         ["policy", "num_nodes", "pdr", "energy_j", "throughput", "cluster", "decision_idx"],
         args.decision_csv,
     )
+    df = _filter_network_sizes(df, args.network_sizes)
     time_col = _resolve_time_column(df)
 
     df = df.sort_values(time_col)

@@ -6,6 +6,7 @@ from collections import defaultdict
 import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
+import warnings
 
 import matplotlib.pyplot as plt
 
@@ -37,6 +38,34 @@ def _load_records(csv_path: Path) -> List[Mapping[str, str]]:
     with csv_path.open("r", encoding="utf8", newline="") as handle:
         reader = csv.DictReader(handle)
         return [row for row in reader]
+
+
+def _filter_network_sizes(
+    records: List[Mapping[str, str]],
+    network_sizes: Sequence[int] | None,
+) -> List[Mapping[str, str]]:
+    if not network_sizes:
+        return records
+    available = sorted(
+        {
+            int(float(row.get("num_nodes", "0") or 0))
+            for row in records
+            if row.get("num_nodes") is not None
+        }
+    )
+    requested = sorted({int(size) for size in network_sizes})
+    missing = sorted(set(requested) - set(available))
+    if missing:
+        warnings.warn(
+            "Tailles de réseau demandées absentes: "
+            + ", ".join(str(size) for size in missing),
+            stacklevel=2,
+        )
+    return [
+        row
+        for row in records
+        if int(float(row.get("num_nodes", "0") or 0)) in requested
+    ]
 
 
 def _cluster_sort_value(cluster_label: str) -> Tuple[int, str]:
@@ -127,6 +156,7 @@ def plot_der_density(
     formats: Sequence[str] = ("png", "pdf"),
     double_column: bool = False,
     ieee_style: bool = False,
+    network_sizes: Sequence[int] | None = None,
 ) -> List[Path]:
     formats = [ext.lower().lstrip(".") for ext in formats if ext]
     if not formats:
@@ -134,7 +164,7 @@ def plot_der_density(
 
     if ieee_style:
         apply_ieee_style(figsize=(7.2 if double_column else 3.6, 6.2))
-    records = _load_records(csv_path)
+    records = _filter_network_sizes(_load_records(csv_path), network_sizes)
     grouped = _group_by_cluster(records)
     if not grouped:
         raise ValueError("Aucune donnée à tracer.")
@@ -194,6 +224,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Appliquer le style rcParams compact pour publication IEEE.",
     )
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
     return parser.parse_args()
 
 
@@ -207,6 +243,7 @@ def main() -> None:
         formats=formats,
         double_column=args.double_column,
         ieee_style=args.ieee_style,
+        network_sizes=args.network_sizes,
     )
     print("Figures enregistrées dans :", ", ".join(str(path) for path in saved_paths))
 

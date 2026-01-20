@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import warnings
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -28,8 +29,20 @@ def plot(
     formats: tuple[str, ...] = ("png", "jpg", "svg", "eps"),
     allowed: set[tuple[int, int]] | None = None,
     scenarios: set[str] | None = None,
+    network_sizes: list[int] | None = None,
 ) -> None:
     df = pd.read_csv(csv_path)
+    if network_sizes and "nodes" in df.columns:
+        available = sorted(df["nodes"].dropna().unique())
+        requested = sorted({int(size) for size in network_sizes})
+        missing = sorted(set(requested) - {int(value) for value in available})
+        if missing:
+            warnings.warn(
+                "Tailles de réseau demandées absentes: "
+                + ", ".join(str(size) for size in missing),
+                stacklevel=2,
+            )
+        df = df[df["nodes"].isin(requested)]
     if hasattr(plt, "rcParams"):
         plt.rcParams.update({"font.size": 16})
 
@@ -162,6 +175,12 @@ def main(argv: list[str] | None = None) -> None:
             "show all if omitted"
         ),
     )
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
     args = parser.parse_args(argv)
     allowed = None
     if args.allowed is not None:
@@ -182,6 +201,7 @@ def main(argv: list[str] | None = None) -> None:
         tuple(args.formats),
         allowed,
         set(args.scenarios) if args.scenarios is not None else None,
+        args.network_sizes,
     )
 
 

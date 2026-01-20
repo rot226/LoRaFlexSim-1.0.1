@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 import warnings
 
@@ -11,6 +12,7 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     apply_plot_style,
     ensure_network_size,
+    filter_rows_by_network_sizes,
     load_step2_aggregated,
     load_step2_selection_probs,
     place_legend,
@@ -38,6 +40,14 @@ def _plot_selection(rows: list[dict[str, object]]) -> plt.Figure:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
+    args = parser.parse_args()
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "rl5_selection_prob.csv"
@@ -45,6 +55,7 @@ def main() -> None:
     aggregated_results_path = step_dir / "results" / "aggregated_results.csv"
     size_rows = load_step2_aggregated(aggregated_results_path)
     ensure_network_size(size_rows)
+    size_rows, _ = filter_rows_by_network_sizes(size_rows, args.network_sizes)
     df = pd.DataFrame(size_rows)
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:

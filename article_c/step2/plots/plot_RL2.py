@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 import warnings
 
@@ -12,6 +13,7 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     apply_plot_style,
     ensure_network_size,
+    filter_rows_by_network_sizes,
     filter_cluster,
     load_step2_aggregated,
     place_legend,
@@ -45,11 +47,20 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
+    args = parser.parse_args()
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "aggregated_results.csv"
     rows = filter_cluster(load_step2_aggregated(results_path), "all")
     rows = [row for row in rows if row["snir_mode"] == "snir_on"]
+    rows, _ = filter_rows_by_network_sizes(rows, args.network_sizes)
 
     fig = _plot_metric(rows, "success_rate_mean")
     output_dir = step_dir / "plots" / "output"

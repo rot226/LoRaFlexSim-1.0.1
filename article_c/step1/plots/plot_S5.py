@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 import math
 from pathlib import Path
@@ -20,6 +21,7 @@ from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     ensure_network_size,
+    filter_rows_by_network_sizes,
     save_figure,
 )
 
@@ -252,12 +254,23 @@ def _plot_pdr_distributions(
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
+    args = parser.parse_args()
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "raw_results.csv"
     raw_rows = _read_rows(results_path)
     if not raw_rows:
-        sample_rows = _filtered_sample_rows()
+        sample_rows, _ = filter_rows_by_network_sizes(
+            _filtered_sample_rows(),
+            args.network_sizes,
+        )
         df = pd.DataFrame(sample_rows)
         network_sizes = sorted(df["network_size"].unique())
         if len(network_sizes) < 2:
@@ -276,6 +289,7 @@ def main() -> None:
                 ).append(float(pdr_value))
     else:
         ensure_network_size(raw_rows)
+        raw_rows, _ = filter_rows_by_network_sizes(raw_rows, args.network_sizes)
         df = pd.DataFrame(raw_rows)
         network_sizes = sorted(df["network_size"].unique())
         if len(network_sizes) < 2:

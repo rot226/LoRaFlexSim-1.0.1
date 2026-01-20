@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import math
 from pathlib import Path
 import warnings
@@ -16,6 +17,7 @@ from article_c.common.plot_helpers import (
     SNIR_LINESTYLES,
     SNIR_MODES,
     apply_plot_style,
+    filter_rows_by_network_sizes,
     load_step1_aggregated,
     place_legend,
     save_figure,
@@ -120,11 +122,20 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
+    args = parser.parse_args()
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "aggregated_results.csv"
     rows = load_step1_aggregated(results_path)
     rows = [row for row in rows if row.get("cluster") != "all"]
+    rows, _ = filter_rows_by_network_sizes(rows, args.network_sizes)
     rows = _with_outage(rows)
 
     fig = _plot_metric(rows, "outage_prob")

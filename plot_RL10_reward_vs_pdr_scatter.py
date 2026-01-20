@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     filter_cluster,
+    filter_rows_by_network_sizes,
     load_step1_aggregated,
     load_step2_aggregated,
     place_legend,
@@ -108,9 +110,13 @@ def _sample_learning_curve() -> list[dict[str, object]]:
     return rows
 
 
-def _aggregate_pdr_from_step1(path: Path) -> dict[str, float]:
+def _aggregate_pdr_from_step1(
+    path: Path,
+    network_sizes: list[int] | None,
+) -> dict[str, float]:
     rows = filter_cluster(load_step1_aggregated(path), "all")
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
+    rows, _ = filter_rows_by_network_sizes(rows, network_sizes)
     totals: dict[str, float] = {}
     counts: dict[str, int] = {}
     for row in rows:
@@ -129,9 +135,13 @@ def _aggregate_pdr_from_step1(path: Path) -> dict[str, float]:
     }
 
 
-def _aggregate_pdr_from_step2(path: Path) -> dict[str, float]:
+def _aggregate_pdr_from_step2(
+    path: Path,
+    network_sizes: list[int] | None,
+) -> dict[str, float]:
     rows = filter_cluster(load_step2_aggregated(path), "all")
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
+    rows, _ = filter_rows_by_network_sizes(rows, network_sizes)
     totals: dict[str, float] = {}
     counts: dict[str, int] = {}
     for row in rows:
@@ -154,12 +164,13 @@ def _collect_points(
     learning_curve_path: Path,
     step1_results_path: Path,
     step2_results_path: Path,
+    network_sizes: list[int] | None,
 ) -> list[dict[str, float | str]]:
     reward_means = _load_learning_curve_means(learning_curve_path)
-    pdr_means = _aggregate_pdr_from_step1(step1_results_path)
+    pdr_means = _aggregate_pdr_from_step1(step1_results_path, network_sizes)
     missing = [algo for algo in reward_means if algo not in pdr_means]
     if missing:
-        step2_pdr = _aggregate_pdr_from_step2(step2_results_path)
+        step2_pdr = _aggregate_pdr_from_step2(step2_results_path, network_sizes)
         for algo in missing:
             if algo in step2_pdr:
                 pdr_means[algo] = step2_pdr[algo]
@@ -193,13 +204,26 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
+    args = parser.parse_args()
     apply_plot_style()
     root_dir = Path(__file__).resolve().parent
     step_dir = root_dir / "article_c" / "step2"
     learning_curve_path = step_dir / "results" / "learning_curve.csv"
     step1_results_path = root_dir / "article_c" / "step1" / "results" / "aggregated_results.csv"
     step2_results_path = step_dir / "results" / "aggregated_results.csv"
-    points = _collect_points(learning_curve_path, step1_results_path, step2_results_path)
+    points = _collect_points(
+        learning_curve_path,
+        step1_results_path,
+        step2_results_path,
+        args.network_sizes,
+    )
 
     fig = _plot_scatter(points)
     output_dir = step_dir / "plots" / "output"
