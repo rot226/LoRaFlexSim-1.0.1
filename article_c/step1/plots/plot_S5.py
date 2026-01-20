@@ -111,6 +111,29 @@ def _filtered_sample_rows() -> list[dict[str, object]]:
     return rows
 
 
+def _available_network_sizes(rows: Iterable[dict[str, object]]) -> list[int]:
+    sizes: set[int] = set()
+    for row in rows:
+        size_value = _as_float(row.get("network_size") or row.get("density"))
+        if size_value is None:
+            continue
+        sizes.add(int(size_value))
+    return sorted(sizes)
+
+
+def _select_target_size(available_sizes: list[int], target_size: int) -> int:
+    if not available_sizes:
+        return target_size
+    if target_size in available_sizes:
+        return target_size
+    closest = min(
+        available_sizes,
+        key=lambda size: (abs(size - target_size), -size),
+    )
+    warnings.warn(f"Target size not found, using size={closest}", stacklevel=2)
+    return closest
+
+
 def _extract_pdr_groups(
     rows: list[dict[str, str]],
 ) -> dict[int, dict[tuple[str, bool, str], list[float]]]:
@@ -267,12 +290,21 @@ def main() -> None:
     results_path = step_dir / "results" / "raw_results.csv"
     raw_rows = _read_rows(results_path)
     if not raw_rows:
-        sample_rows, _ = filter_rows_by_network_sizes(
-            _filtered_sample_rows(),
-            args.network_sizes,
-        )
-        df = pd.DataFrame(sample_rows)
-        network_sizes = sorted(df["network_size"].unique())
+        sample_rows = _filtered_sample_rows()
+        if args.network_sizes:
+            sample_rows, _ = filter_rows_by_network_sizes(
+                sample_rows,
+                args.network_sizes,
+            )
+            df = pd.DataFrame(sample_rows)
+            network_sizes = sorted(df["network_size"].unique())
+        else:
+            network_sizes = [
+                _select_target_size(
+                    _available_network_sizes(sample_rows),
+                    TARGET_NETWORK_SIZE,
+                )
+            ]
         if len(network_sizes) < 2:
             warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
         values_by_size: dict[int, dict[tuple[str, str], list[float]]] = {}
@@ -289,9 +321,17 @@ def main() -> None:
                 ).append(float(pdr_value))
     else:
         ensure_network_size(raw_rows)
-        raw_rows, _ = filter_rows_by_network_sizes(raw_rows, args.network_sizes)
-        df = pd.DataFrame(raw_rows)
-        network_sizes = sorted(df["network_size"].unique())
+        if args.network_sizes:
+            raw_rows, _ = filter_rows_by_network_sizes(raw_rows, args.network_sizes)
+            df = pd.DataFrame(raw_rows)
+            network_sizes = sorted(df["network_size"].unique())
+        else:
+            network_sizes = [
+                _select_target_size(
+                    _available_network_sizes(raw_rows),
+                    TARGET_NETWORK_SIZE,
+                )
+            ]
         if len(network_sizes) < 2:
             warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
         values_by_size = _extract_pdr_groups(raw_rows)
