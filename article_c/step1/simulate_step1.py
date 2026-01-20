@@ -81,6 +81,15 @@ class Step1Result:
         }
 
 
+@dataclass(frozen=True)
+class NodeQoSCache:
+    snr_margins_by_node: list[tuple[float, ...]]
+    rssi_margins_by_node: list[tuple[float, ...]]
+    qos_margins_by_node: list[float]
+    qos_penalties_by_node: list[tuple[float, ...]]
+    qos_candidates_by_node: list[tuple[int, ...]]
+
+
 def _qos_ok(node: NodeLink, sf: int) -> bool:
     index = SF_INDEX[sf]
     return node.snr_margins[index] >= node.qos_margin and node.rssi_margins[index] >= 0.0
@@ -148,26 +157,9 @@ def _mixra_opt_assign(
     nodes_list = list(nodes)
     assignments = _mixra_h_assign(nodes_list)
     local_rng = random.Random(subset_seed)
-    snr_margins_by_node = [node.snr_margins for node in nodes_list]
-    rssi_margins_by_node = [node.rssi_margins for node in nodes_list]
-    qos_margins_by_node = [node.qos_margin for node in nodes_list]
-    qos_penalties_by_node: list[tuple[float, ...]] = []
-    qos_candidates_by_node: list[tuple[int, ...]] = []
-    for snr_margins, rssi_margins, qos_margin in zip(
-        snr_margins_by_node, rssi_margins_by_node, qos_margins_by_node
-    ):
-        penalties: list[float] = []
-        candidates: list[int] = []
-        for sf in SF_VALUES:
-            index = SF_INDEX[sf]
-            snr_margin = snr_margins[index] - qos_margin
-            rssi_margin = rssi_margins[index]
-            min_margin = min(snr_margin, rssi_margin)
-            penalties.append(max(0.0, 2.0 - min_margin))
-            if snr_margin >= 0.0 and rssi_margin >= 0.0:
-                candidates.append(sf)
-        qos_penalties_by_node.append(tuple(penalties))
-        qos_candidates_by_node.append(tuple(candidates))
+    qos_cache = _precompute_node_qos_cache(nodes_list)
+    qos_penalties_by_node = qos_cache.qos_penalties_by_node
+    qos_candidates_by_node = qos_cache.qos_candidates_by_node
 
     def collision_cost(loads: dict[int, int]) -> float:
         return sum(load * load for load in loads.values())
@@ -209,7 +201,8 @@ def _mixra_opt_assign(
     ]
     qos_penalty_total = sum(current_qos_penalty_by_node)
     collision_cost_total = collision_cost(loads)
-    current_obj = collision_cost_total + 2.5 * qos_penalty_total
+    qos_weight = 2.5
+    current_obj = collision_cost_total + qos_weight * qos_penalty_total
 
     start_time = perf_counter()
     small_improvement_streak = 0
@@ -263,11 +256,7 @@ def _mixra_opt_assign(
                 delta_collision = 2.0 * (candidate_load - current_load + 1.0)
                 candidate_qos_penalty = qos_penalties_by_node[idx][SF_INDEX[sf]]
                 delta_qos = candidate_qos_penalty - current_qos_penalty
-                candidate_obj = (
-                    collision_cost_total
-                    + delta_collision
-                    + 2.5 * (qos_penalty_total + delta_qos)
-                )
+                candidate_obj = current_obj + delta_collision + qos_weight * delta_qos
                 if candidate_obj < best_obj:
                     best_obj = candidate_obj
                     best_sf = sf
@@ -282,7 +271,7 @@ def _mixra_opt_assign(
                 collision_cost_total += delta_collision
                 qos_penalty_total += qos_penalty_delta
                 current_qos_penalty_by_node[idx] = new_qos_penalty
-                current_obj = collision_cost_total + 2.5 * qos_penalty_total
+                current_obj = collision_cost_total + qos_weight * qos_penalty_total
                 improved = True
         end_obj = current_obj
         improvement = start_obj - end_obj
@@ -391,19 +380,51 @@ def _generate_nodes(
         if variation_db != 0.0:
             snr -= variation_db
             rssi -= variation_db
-        qos_margin = _snr_margin_requirement(snr, rssi)
-        snr_margins = tuple(snr - SNR_THRESHOLDS[sf] for sf in SF_VALUES)
-        rssi_margins = tuple(rssi - RSSI_THRESHOLDS[sf] for sf in SF_VALUES)
-        nodes.append(
-            NodeLink(
-                snr=snr,
-                rssi=rssi,
-                qos_margin=qos_margin,
-                snr_margins=snr_margins,
-                rssi_margins=rssi_margins,
-            )
-        )
+        nodes.append(_build_node_link(snr, rssi))
     return nodes
+
+
+def _build_node_link(snr: float, rssi: float) -> NodeLink:
+    qos_margin = _snr_margin_requirement(snr, rssi)
+    snr_margins = tuple(snr - SNR_THRESHOLDS[sf] for sf in SF_VALUES)
+    rssi_margins = tuple(rssi - RSSI_THRESHOLDS[sf] for sf in SF_VALUES)
+    return NodeLink(
+        snr=snr,
+        rssi=rssi,
+        qos_margin=qos_margin,
+        snr_margins=snr_margins,
+        rssi_margins=rssi_margins,
+    )
+
+
+def _precompute_node_qos_cache(nodes_list: list[NodeLink]) -> NodeQoSCache:
+    snr_margins_by_node = [node.snr_margins for node in nodes_list]
+    rssi_margins_by_node = [node.rssi_margins for node in nodes_list]
+    qos_margins_by_node = [node.qos_margin for node in nodes_list]
+    qos_penalties_by_node: list[tuple[float, ...]] = []
+    qos_candidates_by_node: list[tuple[int, ...]] = []
+    for snr_margins, rssi_margins, qos_margin in zip(
+        snr_margins_by_node, rssi_margins_by_node, qos_margins_by_node
+    ):
+        penalties: list[float] = []
+        candidates: list[int] = []
+        for sf in SF_VALUES:
+            index = SF_INDEX[sf]
+            snr_margin = snr_margins[index] - qos_margin
+            rssi_margin = rssi_margins[index]
+            min_margin = min(snr_margin, rssi_margin)
+            penalties.append(max(0.0, 2.0 - min_margin))
+            if snr_margin >= 0.0 and rssi_margin >= 0.0:
+                candidates.append(sf)
+        qos_penalties_by_node.append(tuple(penalties))
+        qos_candidates_by_node.append(tuple(candidates))
+    return NodeQoSCache(
+        snr_margins_by_node=snr_margins_by_node,
+        rssi_margins_by_node=rssi_margins_by_node,
+        qos_margins_by_node=qos_margins_by_node,
+        qos_penalties_by_node=qos_penalties_by_node,
+        qos_candidates_by_node=qos_candidates_by_node,
+    )
 
 
 def run_simulation(
