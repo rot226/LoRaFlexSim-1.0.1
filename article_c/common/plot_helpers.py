@@ -84,6 +84,14 @@ def _to_bool(value: object) -> bool:
     return text in {"1", "true", "yes", "y", "vrai"}
 
 
+def _normalize_algo(value: object) -> str:
+    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _is_mixra_opt(row: dict[str, object]) -> bool:
+    return _normalize_algo(row.get("algo")) == "mixra_opt"
+
+
 def _mixra_opt_fallback(row: dict[str, object]) -> bool:
     for key in MIXRA_FALLBACK_COLUMNS:
         if key in row:
@@ -92,14 +100,9 @@ def _mixra_opt_fallback(row: dict[str, object]) -> bool:
 
 
 def filter_mixra_opt_fallback(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    mixra_rows = [row for row in rows if str(row.get("algo", "")) == "mixra_opt"]
-    filtered = [
-        row
-        for row in rows
-        if str(row.get("algo", "")) != "mixra_opt" or not _mixra_opt_fallback(row)
-    ]
-    if not any(str(row.get("algo", "")) == "mixra_opt" for row in filtered):
-        warnings.warn("MixRA-Opt absent (fallback).", stacklevel=2)
+    filtered = [row for row in rows if _is_mixra_opt(row) and not _mixra_opt_fallback(row)]
+    if not filtered:
+        warnings.warn("MixRA-Opt absent (fallback)", stacklevel=2)
     return filtered
 
 
@@ -173,9 +176,8 @@ def algo_labels(algorithms: Iterable[object]) -> list[str]:
 
 
 def algo_label(algo: str, fallback: bool = False) -> str:
-    if algo == "mixra_opt" and fallback:
-        return "MixRA-Opt (fallback)"
-    return ALGO_LABELS.get(algo, algo)
+    canonical = _normalize_algo(algo)
+    return ALGO_LABELS.get(canonical, algo)
 
 
 def filter_cluster(rows: list[dict[str, object]], cluster: str) -> list[dict[str, object]]:
@@ -225,7 +227,7 @@ def plot_metric_by_snir(
 
     def _algo_key(row: dict[str, object]) -> tuple[str, bool]:
         algo_value = str(row.get("algo", ""))
-        fallback = bool(row.get("mixra_opt_fallback")) if algo_value == "mixra_opt" else False
+        fallback = bool(row.get("mixra_opt_fallback")) if _is_mixra_opt(row) else False
         return algo_value, fallback
 
     algorithms = sorted({_algo_key(row) for row in rows})
