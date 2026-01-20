@@ -38,6 +38,30 @@ def _aggregate_selection_probs(
     return aggregated
 
 
+def _aggregate_learning_curve(
+    learning_curve_rows: list[dict[str, object]]
+) -> list[dict[str, object]]:
+    grouped: dict[tuple[int, int, str], list[float]] = defaultdict(list)
+    for row in learning_curve_rows:
+        network_size = int(row["network_size"])
+        round_id = int(row["round"])
+        algo = str(row["algo"])
+        avg_reward = float(row["avg_reward"])
+        grouped[(network_size, round_id, algo)].append(avg_reward)
+    aggregated: list[dict[str, object]] = []
+    for (network_size, round_id, algo), values in sorted(grouped.items()):
+        avg = sum(values) / len(values) if values else 0.0
+        aggregated.append(
+            {
+                "network_size": network_size,
+                "round": round_id,
+                "algo": algo,
+                "avg_reward": round(avg, 6),
+            }
+        )
+    return aggregated
+
+
 def _log_results_written(output_dir: Path, row_count: int) -> None:
     raw_path = output_dir / "raw_results.csv"
     aggregated_path = output_dir / "aggregated_results.csv"
@@ -79,6 +103,7 @@ def _simulate_density(
     density, density_idx, replications, config, base_results_dir, timestamp_dir = task
     raw_rows: list[dict[str, object]] = []
     selection_rows: list[dict[str, object]] = []
+    learning_curve_rows: list[dict[str, object]] = []
     algorithms = ("adr", "mixra_h", "mixra_opt", "ucb1_sf")
     jitter_range_s = float(config.get("jitter_range_s", 30.0))
     print(f"Jitter range utilisé (s): {jitter_range_s}")
@@ -104,6 +129,7 @@ def _simulate_density(
             raw_rows.extend(result.raw_rows)
             if algorithm == "ucb1_sf":
                 selection_rows.extend(result.selection_prob_rows)
+            learning_curve_rows.extend(result.learning_curve_rows)
 
     write_simulation_results(base_results_dir, raw_rows)
     _log_results_written(base_results_dir, len(raw_rows))
@@ -112,7 +138,12 @@ def _simulate_density(
         write_simulation_results(timestamp_dir, raw_rows)
         _log_results_written(timestamp_dir, len(raw_rows))
         _log_unique_network_sizes(timestamp_dir)
-    return {"density": density, "row_count": len(raw_rows), "selection_rows": selection_rows}
+    return {
+        "density": density,
+        "row_count": len(raw_rows),
+        "selection_rows": selection_rows,
+        "learning_curve_rows": learning_curve_rows,
+    }
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -130,6 +161,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         ensure_dir(timestamp_dir)
 
     selection_rows: list[dict[str, object]] = []
+    learning_curve_rows: list[dict[str, object]] = []
     total_rows = 0
 
     config: dict[str, object] = {
@@ -157,6 +189,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             simulated_sizes.append(int(result["density"]))
             total_rows += int(result["row_count"])
             selection_rows.extend(result["selection_rows"])
+            learning_curve_rows.extend(result["learning_curve_rows"])
     else:
         ctx = get_context("spawn")
         with ctx.Pool(processes=worker_count) as pool:
@@ -164,6 +197,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 simulated_sizes.append(int(result["density"]))
                 total_rows += int(result["row_count"])
                 selection_rows.extend(result["selection_rows"])
+                learning_curve_rows.extend(result["learning_curve_rows"])
 
     print(f"Rows written: {total_rows}")
 
@@ -176,6 +210,28 @@ def main(argv: Sequence[str] | None = None) -> None:
         if timestamp_dir is not None:
             rl5_timestamp_path = timestamp_dir / "rl5_selection_prob.csv"
             write_rows(rl5_timestamp_path, rl5_header, rl5_values)
+
+    if learning_curve_rows:
+        learning_curve = _aggregate_learning_curve(learning_curve_rows)
+        learning_curve_header = ["network_size", "round", "algo", "avg_reward"]
+        learning_curve_values = [
+            [
+                row["network_size"],
+                row["round"],
+                row["algo"],
+                row["avg_reward"],
+            ]
+            for row in learning_curve
+        ]
+        learning_curve_path = base_results_dir / "learning_curve.csv"
+        write_rows(learning_curve_path, learning_curve_header, learning_curve_values)
+        if timestamp_dir is not None:
+            learning_curve_timestamp_path = timestamp_dir / "learning_curve.csv"
+            write_rows(
+                learning_curve_timestamp_path,
+                learning_curve_header,
+                learning_curve_values,
+            )
 
     (base_results_dir / "done.flag").write_text("done\n", encoding="utf-8")
     if simulated_sizes:
