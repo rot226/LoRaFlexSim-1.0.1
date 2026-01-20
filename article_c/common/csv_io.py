@@ -87,16 +87,24 @@ def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, objec
     return aggregated
 
 
-def write_simulation_results(output_dir: Path, raw_rows: list[dict[str, object]]) -> None:
+def write_simulation_results(
+    output_dir: Path,
+    raw_rows: list[dict[str, object]],
+    network_size: object | None = None,
+) -> None:
     """Écrit les fichiers raw_results.csv et aggregated_results.csv."""
     output_dir.mkdir(parents=True, exist_ok=True)
     raw_path = output_dir / "raw_results.csv"
     aggregated_path = output_dir / "aggregated_results.csv"
 
+    expected_network_size = network_size
     for row in raw_rows:
-        network_size = row.get("network_size")
-        if (network_size is None or network_size == "") and "density" in row:
-            row["network_size"] = row["density"]
+        row_network_size = row.get("network_size")
+        if row_network_size is None or row_network_size == "":
+            if expected_network_size is not None:
+                row["network_size"] = expected_network_size
+            elif "density" in row:
+                row["network_size"] = row["density"]
 
     if raw_rows:
         missing_network_size = [
@@ -105,7 +113,9 @@ def write_simulation_results(output_dir: Path, raw_rows: list[dict[str, object]]
         if missing_network_size:
             raise AssertionError("network_size manquant dans les lignes raw.")
         network_sizes = sorted({row.get("network_size") for row in raw_rows})
-        logger.info("network_size written: %s", ", ".join(map(str, network_sizes)))
+        network_sizes_label = ", ".join(map(str, network_sizes))
+        logger.info("network_size written: %s", network_sizes_label)
+        print(f"network_size written = {network_sizes_label}")
 
     raw_header: list[str] = []
     seen: set[str] = set()
