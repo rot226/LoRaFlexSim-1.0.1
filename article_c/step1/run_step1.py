@@ -35,22 +35,20 @@ def parse_snir_modes(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-def format_progress(
-    *,
-    size: int,
-    algo: str,
-    snir_mode: str,
-    replication_index: int,
-    replication_total: int,
-    percent: float,
-) -> str:
-    """Construit la ligne de progression pour l'étape 1."""
-    algo_label = ALGORITHM_LABELS.get(algo, algo)
-    snir_label = "on" if snir_mode.lower().endswith("on") else "off"
-    return (
-        f"Size {size} | Algo {algo_label} | SNIR {snir_label} | "
-        f"Rep {replication_index}/{replication_total} | {percent:.0f}%"
-    )
+def format_duration(seconds: float) -> str:
+    """Formate une durée en HH:MM:SS."""
+    seconds = max(0.0, seconds)
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    remaining = int(seconds % 60)
+    return f"{hours:02d}:{minutes:02d}:{remaining:02d}"
+
+
+def format_global_progress(*, percent: float, elapsed_s: float, eta_s: float) -> str:
+    """Construit la ligne de progression globale pour l'étape 1."""
+    elapsed_label = format_duration(elapsed_s)
+    eta_label = format_duration(eta_s)
+    return f"Progress global: {percent:.0f}% (elapsed {elapsed_label}, ETA {eta_label})"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -216,6 +214,7 @@ def main(argv: list[str] | None = None) -> None:
     run_index = 0
     total_runs = len(densities) * len(ALGORITHMS) * len(snir_modes) * len(replications)
     completed_runs = 0
+    progress_start = perf_counter()
     cluster_ids = list(DEFAULT_CONFIG.qos.clusters)
     for density in densities:
         simulated_sizes.append(density)
@@ -333,14 +332,15 @@ def main(argv: list[str] | None = None) -> None:
                     completed_runs += 1
                     if args.progress and total_runs > 0:
                         percent = (completed_runs / total_runs) * 100
+                        elapsed_s = perf_counter() - progress_start
+                        eta_s = (
+                            (elapsed_s / completed_runs) * (total_runs - completed_runs)
+                            if completed_runs > 0
+                            else 0.0
+                        )
                         print(
-                            format_progress(
-                                size=density,
-                                algo=algo,
-                                snir_mode=snir_mode,
-                                replication_index=rep_index,
-                                replication_total=len(replications),
-                                percent=percent,
+                            format_global_progress(
+                                percent=percent, elapsed_s=elapsed_s, eta_s=eta_s
                             )
                         )
         if args.profile_timing and timing_runs > 0:
