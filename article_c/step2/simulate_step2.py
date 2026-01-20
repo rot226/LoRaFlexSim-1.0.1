@@ -552,7 +552,7 @@ def run_simulation(
         raise ValueError("algorithm doit être adr, mixra_h, mixra_opt ou ucb1_sf.")
 
     if output_dir is not None:
-        write_simulation_results(output_dir, raw_rows)
+        write_simulation_results(output_dir, raw_rows, network_size=density_value)
         learning_curve_path = output_dir / "learning_curve.csv"
         learning_curve_header = ["round", "algo", "avg_reward"]
         write_rows(
