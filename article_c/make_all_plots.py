@@ -131,15 +131,48 @@ def _load_network_sizes_from_csvs(paths: list[Path]) -> list[int]:
     return sorted(sizes)
 
 
+def _suggest_regeneration_command(path: Path, expected_sizes: list[int]) -> str | None:
+    sizes = " ".join(str(size) for size in expected_sizes)
+    if "step1" in path.parts:
+        return (
+            "python article_c/step1/run_step1.py "
+            f"--network-sizes {sizes} --replications 5 --seeds_base 1000 "
+            "--snir_modes snir_on,snir_off"
+        )
+    if "step2" in path.parts:
+        return (
+            "python article_c/step2/run_step2.py "
+            f"--network-sizes {sizes} --replications 5 --seeds_base 1000"
+        )
+    return None
+
+
 def _validate_network_sizes(paths: list[Path], expected_sizes: list[int]) -> bool:
     expected_set = {int(size) for size in expected_sizes}
+    errors: list[str] = []
     for path in paths:
         found_sizes = _extract_network_sizes(path)
         missing = sorted(expected_set - found_sizes)
         if missing:
             missing_list = ", ".join(str(size) for size in missing)
-            print(f"Missing sizes: {missing_list}")
-            return False
+            message_lines = [
+                "ERREUR: tailles de réseau manquantes dans les résultats.",
+                f"CSV: {path}",
+                f"Tailles attendues manquantes: {missing_list}.",
+            ]
+            command = _suggest_regeneration_command(path, expected_sizes)
+            if command:
+                message_lines.append(
+                    "Commande PowerShell pour régénérer les résultats:"
+                )
+                message_lines.append(command)
+            errors.append("\n".join(message_lines))
+    if errors:
+        print(
+            "\n\n".join(errors)
+            + "\nAucun plot n'a été généré afin d'éviter des figures partielles."
+        )
+        return False
     return True
 
 
