@@ -27,13 +27,13 @@ from article_c.common.utils import assign_clusters, generate_traffic_times
 SF_VALUES = (7, 8, 9, 10, 11, 12)
 SF_INDEX = {sf: idx for idx, sf in enumerate(SF_VALUES)}
 MIXRA_OPT_BUDGET_BY_SIZE = {
-    80: 20000,
-    160: 40000,
-    320: 80000,
-    640: 150000,
-    1280: 250000,
+    80: 50000,
+    160: 100000,
+    320: 200000,
+    640: 400000,
+    1280: 800000,
 }
-MIXRA_OPT_BUDGET_PER_NODE = 20000 / 80
+MIXRA_OPT_BUDGET_PER_NODE = 50000 / 80
 MIXRA_OPT_EMERGENCY_TIMEOUT_S = 300.0
 
 # Seuils proxy pour SNR/RSSI (inspirés d'ordres de grandeur LoRaWAN).
@@ -214,8 +214,11 @@ def _mixra_opt_assign(
     start_time = perf_counter()
     small_improvement_streak = 0
     evaluations = 0
-    def _finalize(result: list[int], fallback: bool) -> tuple[list[int], bool]:
-        LOGGER.info("MixRA-Opt executed (evals=%s).", evaluations)
+    def _finalize(
+        result: list[int], fallback: bool, *, success: bool
+    ) -> tuple[list[int], bool]:
+        if success:
+            LOGGER.info("MixRA-Opt executed (evals=%s).", evaluations)
         return result, fallback
 
     for _ in range(max_iterations):
@@ -228,8 +231,8 @@ def _mixra_opt_assign(
                     "MixRA-Opt timeout atteint (%.2fs).", perf_counter() - start_time
                 )
                 if allow_fallback:
-                    return _finalize(_mixra_h_assign(nodes_list), True)
-                return _finalize(assignments, False)
+                    return _finalize(_mixra_h_assign(nodes_list), True, success=False)
+                return _finalize(assignments, False, success=False)
             evaluations += 1
             if evaluations > max_evaluations:
                 if allow_fallback:
@@ -238,13 +241,13 @@ def _mixra_opt_assign(
                         evaluations,
                         max_evaluations,
                     )
-                    return _finalize(_mixra_h_assign(nodes_list), True)
+                    return _finalize(_mixra_h_assign(nodes_list), True, success=False)
                 LOGGER.warning(
                     "MixRA-Opt dépasse le budget (%s > %s évaluations), arrêt sans fallback.",
                     evaluations,
                     max_evaluations,
                 )
-                return _finalize(assignments, False)
+                return _finalize(assignments, False, success=False)
             current_sf = assignments[idx]
             candidates = qos_candidates_by_node[idx]
             if not candidates:
@@ -289,7 +292,7 @@ def _mixra_opt_assign(
             small_improvement_streak = 0
         if not improved or small_improvement_streak >= 10:
             break
-    return _finalize(assignments, False)
+    return _finalize(assignments, False, success=True)
 
 
 def mixra_opt_budget_for_size(

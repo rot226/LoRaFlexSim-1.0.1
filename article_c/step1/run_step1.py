@@ -168,7 +168,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help=(
             "Budget cible d'évaluations pour MixRA-Opt (max d'évaluations). "
             "Si absent, un budget par taille est appliqué "
-            "(ex: N=80→20000, N=160→40000, N=320→80000, N=640→150000, N=1280→250000)."
+            "(ex: N=80→50000, N=160→100000, N=320→200000, N=640→400000, N=1280→800000)."
         ),
     )
     parser.add_argument(
