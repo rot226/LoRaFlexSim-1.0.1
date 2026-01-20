@@ -170,9 +170,14 @@ def plot_pdr(summary: pd.DataFrame, *, figures_dir: Path | None) -> None:
     ax.set_xlabel("Reporting interval (s)")
     ax.set_ylabel("Packet delivery ratio (%)")
     ax.set_ylim(0, 105)
-    ax.legend(title="Configuration")
+    ax.legend(
+        title="Configuration",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+    )
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
@@ -215,9 +220,14 @@ def plot_delay(summary: pd.DataFrame, *, figures_dir: Path | None) -> bool:
 
     ax.set_xlabel("Reporting interval (s)")
     ax.set_ylabel("Average delay (s)")
-    ax.legend(title="Configuration")
+    ax.legend(
+        title="Configuration",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+    )
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
@@ -261,9 +271,14 @@ def plot_energy(summary: pd.DataFrame, *, figures_dir: Path | None) -> bool:
 
     ax.set_xlabel("Reporting interval (s)")
     ax.set_ylabel("Energy per node (J)")
-    ax.legend(title="Configuration")
+    ax.legend(
+        title="Configuration",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+    )
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,

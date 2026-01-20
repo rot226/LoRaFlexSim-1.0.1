@@ -176,10 +176,17 @@ def plot_energy_by_interval(
     else:
         legend_labels.extend(labels_low)
 
-    ax_low.legend(legend_handles, legend_labels, title="Class")
+    ax_low.legend(
+        legend_handles,
+        legend_labels,
+        title="Class",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+    )
     ax_low.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
 
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
@@ -216,9 +223,14 @@ def plot_pdr_by_interval(df: pd.DataFrame) -> None:
     ax.set_xlabel("Reporting interval (s)")
     ax.set_ylabel("PDR (%)")
     ax.set_ylim(0, 105)
-    ax.legend(title="Class")
+    ax.legend(
+        title="Class",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+    )
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,

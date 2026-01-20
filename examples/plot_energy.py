@@ -58,7 +58,7 @@ def main(
         plt.grid(True)
         if basename is None:
             basename = "energy_total"
-    plt.tight_layout()
+    plt.subplots_adjust(top=0.80)
     for ext, params in {
         "png": {"dpi": 300},
         "jpg": {"dpi": 300},

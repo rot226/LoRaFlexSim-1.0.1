@@ -101,12 +101,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig.legend(
         handles,
         labels,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.08),
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
         ncol=3,
         frameon=False,
     )
-    fig.subplots_adjust(top=0.78)
+    fig.subplots_adjust(top=0.80)
     fig.suptitle("Step 1 - PDR by Cluster (network size)")
     return fig
 

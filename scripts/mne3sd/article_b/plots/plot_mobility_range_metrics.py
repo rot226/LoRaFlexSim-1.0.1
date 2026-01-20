@@ -135,8 +135,13 @@ def plot_pdr_vs_range(
     ax.set_ylabel("Aggregated PDR (%)")
     ax.set_ylim(0, 105)
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-    ax.legend(title="Mobility model")
-    fig.tight_layout()
+    ax.legend(
+        title="Mobility model",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+    )
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
@@ -163,8 +168,13 @@ def plot_delay_vs_range(df: pd.DataFrame) -> None:
     ax.set_xlabel("Communication range (km)")
     ax.set_ylabel("Average delay (s)")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-    ax.legend(title="Mobility model")
-    fig.tight_layout()
+    ax.legend(
+        title="Mobility model",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+    )
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,

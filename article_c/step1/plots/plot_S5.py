@@ -295,11 +295,11 @@ def _plot_pdr_distributions(
         handles=legend_items,
         loc="lower center",
         bbox_to_anchor=(0.5, 1.02),
-        ncol=2,
+        ncol=3,
         frameon=False,
     )
     fig.suptitle("Step 1 - Distribution du PDR par taille de réseau")
-    fig.subplots_adjust(top=0.86)
+    fig.subplots_adjust(top=0.80)
     return fig
 
 

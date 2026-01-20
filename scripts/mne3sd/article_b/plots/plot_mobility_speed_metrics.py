@@ -222,13 +222,13 @@ def plot_grouped_bars(
     ax.set_axisbelow(True)
     ax.legend(
         title="Mobility model",
-        loc="upper left",
-        bbox_to_anchor=(1.02, 1),
-        borderaxespad=0,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
         frameon=False,
     )
 
-    fig.tight_layout(rect=(0, 0, 0.82, 1))
+    plt.subplots_adjust(top=0.80)
     output_dir = prepare_figure_directory(
         article=ARTICLE,
         scenario=SCENARIO,
@@ -315,9 +315,15 @@ def plot_jitter_by_speed_profile(df: pd.DataFrame, dpi: int) -> None:
     ax.set_ylabel("Latency jitter (s)")
     ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
     ax.set_axisbelow(True)
-    ax.legend(title="Mobility model", loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
+    ax.legend(
+        title="Mobility model",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+        frameon=False,
+    )
 
-    fig.tight_layout(rect=(0, 0, 0.82, 1))
+    plt.subplots_adjust(top=0.80)
     output_dir = prepare_figure_directory(
         article=ARTICLE,
         scenario=SCENARIO,
@@ -413,9 +419,15 @@ def plot_energy_by_speed_profile(df: pd.DataFrame, dpi: int) -> None:
     ax.set_ylabel("Average energy per node (J)")
     ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
     ax.set_axisbelow(True)
-    ax.legend(title="Mobility model", loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
+    ax.legend(
+        title="Mobility model",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+        frameon=False,
+    )
 
-    fig.tight_layout(rect=(0, 0, 0.82, 1))
+    plt.subplots_adjust(top=0.80)
     output_dir = prepare_figure_directory(
         article=ARTICLE,
         scenario=SCENARIO,
@@ -460,9 +472,15 @@ def plot_energy_stack_by_speed_profile(df: pd.DataFrame, dpi: int) -> None:
     ax.set_ylabel("Average energy per node (J)")
     ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
     ax.set_axisbelow(True)
-    ax.legend(title="Mobility model", loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
+    ax.legend(
+        title="Mobility model",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+        frameon=False,
+    )
 
-    fig.tight_layout(rect=(0, 0, 0.82, 1))
+    plt.subplots_adjust(top=0.80)
     output_dir = prepare_figure_directory(
         article=ARTICLE,
         scenario=SCENARIO,
@@ -518,7 +536,7 @@ def plot_heatmap(df: pd.DataFrame, output_name: str, dpi: int) -> None:
     cbar = fig.colorbar(im, ax=ax)
     cbar.set_label("PDR (%)")
 
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
     output_dir = prepare_figure_directory(
         article=ARTICLE,
         scenario=SCENARIO,

@@ -49,7 +49,7 @@ def main() -> None:
     ax1.tick_params(axis="y", labelcolor="C0")
     ax2.tick_params(axis="y", labelcolor="C1")
 
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
     os.makedirs(FIGURES_DIR, exist_ok=True)
     base = os.path.join(FIGURES_DIR, "pdr_collisions_vs_channels")
     for ext in ("png", "jpg", "eps"):

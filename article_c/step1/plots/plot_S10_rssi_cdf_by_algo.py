@@ -191,7 +191,8 @@ def plot_cdf_by_algo(
     ax.set_ylabel("CDF")
     ax.set_title(f"CDF {metric_key.upper()} par algorithme (SNIR on/off)")
     ax.grid(True, linestyle=":", alpha=0.6)
-    ax.legend(loc="lower right", frameon=False)
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3, frameon=False)
+    plt.subplots_adjust(top=0.80)
 
     save_figure(fig, output_dir, "plot_S10")
     plt.close(fig)

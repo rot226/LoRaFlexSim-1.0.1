@@ -322,9 +322,16 @@ def _plot_pdr_der(
             _apply_network_ticks(ax, network_sizes)
 
     handles, labels = axes[0][0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=4, frameon=False)
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+        frameon=False,
+    )
     fig.suptitle("PDR and DER (probability) vs Nodes")
-    fig.tight_layout(rect=(0, 0, 1, 0.92))
+    plt.subplots_adjust(top=0.80)
     output_dir.mkdir(parents=True, exist_ok=True)
     for ext in ("png", "pdf"):
         fig.savefig(output_dir / f"step1_pdr_der_comparison.{ext}")
@@ -386,9 +393,16 @@ def _plot_single_metric(
         _apply_network_ticks(ax, network_sizes)
 
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=4, frameon=False)
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+        frameon=False,
+    )
     fig.suptitle(title)
-    fig.tight_layout(rect=(0, 0, 1, 0.9))
+    plt.subplots_adjust(top=0.80)
     output_dir.mkdir(parents=True, exist_ok=True)
     for ext in ("png", "pdf"):
         fig.savefig(output_dir / f"{filename}.{ext}")
@@ -466,9 +480,16 @@ def _plot_pdr_der_overlay(
         _apply_network_ticks(ax, network_sizes)
 
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=3, frameon=False)
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+        frameon=False,
+    )
     fig.suptitle("PDR and DER (probability) vs Nodes (SNIR ON/OFF overlay)")
-    fig.tight_layout(rect=(0, 0, 1, 0.9))
+    plt.subplots_adjust(top=0.80)
     output_dir.mkdir(parents=True, exist_ok=True)
     for ext in ("png", "pdf"):
         fig.savefig(output_dir / f"step1_pdr_der_overlay.{ext}")
@@ -524,8 +545,15 @@ def _plot_single_metric_overlay(
     _apply_network_ticks(ax, network_sizes)
 
     handles, labels = ax.get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=3, frameon=False)
-    fig.tight_layout(rect=(0, 0, 1, 0.9))
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+        frameon=False,
+    )
+    plt.subplots_adjust(top=0.80)
     output_dir.mkdir(parents=True, exist_ok=True)
     for ext in ("png", "pdf"):
         fig.savefig(output_dir / f"{filename}.{ext}")

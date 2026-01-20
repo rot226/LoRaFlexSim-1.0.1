@@ -38,7 +38,7 @@ def main() -> None:
     axes[1].set_ylabel("Collisions per interval (count)")
     axes[1].set_xlabel("Packet interval (s)")
 
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
     base = FIGURES_DIR / "pdr_collisions_vs_interval"
     for ext in ("png", "jpg", "eps"):
         dpi = 300 if ext in ("png", "jpg", "eps") else None

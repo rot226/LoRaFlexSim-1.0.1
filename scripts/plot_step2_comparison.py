@@ -175,7 +175,14 @@ def _add_state_legend(fig: plt.Figure) -> None:
             label=SNIR_TITLES["snir_on"],
         ),
     ]
-    fig.legend(handles=handles, loc="upper right", frameon=False, title="SNIR")
+    fig.legend(
+        handles=handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+        frameon=False,
+        title="SNIR",
+    )
 
 
 def _build_agg_from_raw(decisions: Sequence[Mapping[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
@@ -303,7 +310,7 @@ def _aggregate_metrics(
 def _save_plot(fig: plt.Figure, output_dir: Path, name: str) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / name
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
     fig.savefig(path, dpi=150)
     plt.close(fig)
     return path
@@ -359,7 +366,12 @@ def _plot_performance(
             ax.set_ylabel(ylabel)
             ax.grid(True, linestyle=":", alpha=0.4)
             if row_idx == 0 and ax.get_legend_handles_labels()[1]:
-                ax.legend(fontsize=8, ncol=2)
+                ax.legend(
+                    fontsize=8,
+                    loc="lower center",
+                    bbox_to_anchor=(0.5, 1.02),
+                    ncol=3,
+                )
     axes[-1][0].set_xlabel("Round")
     axes[-1][1].set_xlabel("Round")
     _add_state_legend(fig)
@@ -416,7 +428,12 @@ def _plot_convergence(
             ax.set_ylabel(ylabel)
             ax.grid(True, linestyle=":", alpha=0.4)
             if row_idx == 0 and ax.get_legend_handles_labels()[1]:
-                ax.legend(fontsize=8, ncol=2)
+                ax.legend(
+                    fontsize=8,
+                    loc="lower center",
+                    bbox_to_anchor=(0.5, 1.02),
+                    ncol=3,
+                )
     axes[-1][0].set_xlabel("Episode")
     axes[-1][1].set_xlabel("Episode")
     _add_state_legend(fig)
@@ -481,7 +498,12 @@ def _plot_distribution(
         axes[row_idx][0].grid(True, linestyle=":", alpha=0.4)
         axes[row_idx][1].grid(True, linestyle=":", alpha=0.4)
         if axes[row_idx][0].get_legend_handles_labels()[1]:
-            axes[row_idx][0].legend(fontsize=8, ncol=2)
+            axes[row_idx][0].legend(
+                fontsize=8,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 1.02),
+                ncol=3,
+            )
     axes[1][0].set_xlabel("SF")
     axes[1][1].set_xlabel("TX Power")
     _add_state_legend(fig)
@@ -542,7 +564,12 @@ def _plot_metrics(
             ax.set_ylabel(ylabel)
             ax.grid(True, linestyle=":", alpha=0.4)
             if row_idx == 0 and ax.get_legend_handles_labels()[1]:
-                ax.legend(fontsize=8, ncol=2)
+                ax.legend(
+                    fontsize=8,
+                    loc="lower center",
+                    bbox_to_anchor=(0.5, 1.02),
+                    ncol=3,
+                )
             if network_sizes:
                 _apply_network_ticks(ax, network_sizes)
     axes[-1][0].set_xlabel(x_label)

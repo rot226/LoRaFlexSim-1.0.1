@@ -130,7 +130,7 @@ def _plot_distribution(
     figures_dir.mkdir(parents=True, exist_ok=True)
     safe_algorithm = algorithm.replace(" ", "_")
     output = figures_dir / f"step1_distribution_{metric}_{safe_algorithm}.png"
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
     fig.savefig(output, dpi=300)
     plt.close(fig)
 

@@ -125,12 +125,12 @@ def plot(
 
         ax.bar_label(bars, fmt=fmt, label_type="center")
         ax.legend(
-            loc="upper center",
-            bbox_to_anchor=(0.5, 1.4),
-            ncol=1,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.02),
+            ncol=3,
             title="N: number of nodes, C: number of channels, speed: m/s",
         )
-        fig.tight_layout(rect=[0, 0, 1, 0.85])
+        plt.subplots_adjust(top=0.80)
         stem = Path(filename).stem
         for ext in ("png", "jpg", "eps", "svg"):
             dpi = 300 if ext in ("png", "jpg", "eps") else None

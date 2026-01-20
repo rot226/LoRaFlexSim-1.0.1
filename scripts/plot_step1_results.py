@@ -624,10 +624,10 @@ def _plot_global_metric(
             _apply_network_ticks(ax, network_sizes)
             _format_axes(ax, integer_x=True)
             if ax.get_legend_handles_labels()[0]:
-                ax.legend()
+                ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
             figures_dir.mkdir(parents=True, exist_ok=True)
             output = figures_dir / f"step1_{filename_prefix}{suffix}_tx_{title_period}.png"
-            fig.tight_layout()
+            plt.subplots_adjust(top=0.80)
             fig.savefig(output, dpi=150)
             plt.close(fig)
 
@@ -755,11 +755,11 @@ def _plot_summary_bars(
             ax.set_title(f"{ylabel} – period {period_label} s")
             _format_axes(ax, integer_x=False)
             if ax.get_legend_handles_labels()[0]:
-                ax.legend()
+                ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
             figures_dir.mkdir(parents=True, exist_ok=True)
             output = figures_dir / f"summary_{metric.lower()}_tx_{period_label}.png"
-            fig.tight_layout()
+            plt.subplots_adjust(top=0.80)
             fig.savefig(output, dpi=150)
             plt.close(fig)
 
@@ -809,10 +809,10 @@ def _plot_cdf(
         ax.set_title(f"CDF DER (probability) – {algorithm}")
         _format_axes(ax, integer_x=False)
         if ax.get_legend_handles_labels()[0]:
-            ax.legend()
+            ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
         figures_dir.mkdir(parents=True, exist_ok=True)
         output = figures_dir / f"cdf_der_{algorithm}.png"
-        fig.tight_layout()
+        plt.subplots_adjust(top=0.80)
         fig.savefig(output, dpi=150)
         plt.close(fig)
 
@@ -887,12 +887,18 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
                 _format_axes(ax, integer_x=True)
             handles, labels = axes[0].get_legend_handles_labels()
             if handles:
-                fig.legend(handles, labels, loc="upper center", ncol=min(len(labels), 4))
+                fig.legend(
+                    handles,
+                    labels,
+                    loc="lower center",
+                    bbox_to_anchor=(0.5, 1.02),
+                    ncol=3,
+                )
             title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
             fig.suptitle(f"{title} – period {title_period} s")
             figures_dir.mkdir(parents=True, exist_ok=True)
             output = figures_dir / f"step1_cluster_pdr{suffix}_tx_{title_period}.png"
-            fig.tight_layout(rect=(0, 0, 1, 0.92))
+            plt.subplots_adjust(top=0.80)
             fig.savefig(output, dpi=150)
             plt.close(fig)
 
@@ -964,14 +970,20 @@ def _plot_cluster_der(records: List[Dict[str, Any]], figures_dir: Path) -> None:
             _format_axes(ax, integer_x=True)
         handles, labels = axes[0].get_legend_handles_labels()
         if handles:
-            fig.legend(handles, labels, loc="upper center", ncol=min(len(labels), 4))
+            fig.legend(
+                handles,
+                labels,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 1.02),
+                ncol=3,
+            )
         title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
         fig.suptitle(
             f"DER (probability) par cluster – SNIR ON/OFF superposés (period {title_period} s)"
         )
         figures_dir.mkdir(parents=True, exist_ok=True)
         output = figures_dir / f"step1_cluster_der_overlay_tx_{title_period}.png"
-        fig.tight_layout(rect=(0, 0, 1, 0.92))
+        plt.subplots_adjust(top=0.80)
         fig.savefig(output, dpi=150)
         plt.close(fig)
 
@@ -1070,13 +1082,13 @@ def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None
                 _apply_network_ticks(ax, network_sizes)
             _format_axes(ax, integer_x=integer_x)
             if ax.get_legend_handles_labels()[0]:
-                ax.legend(ncol=2)
+                ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
             figures_dir.mkdir(parents=True, exist_ok=True)
             output = figures_dir / (
                 f"step1_trajectories_{metric.lower()}_{filename_tag}_{algorithm}_{fixed_label}.png"
             )
-            fig.tight_layout()
+            plt.subplots_adjust(top=0.80)
             fig.savefig(output, dpi=180)
             plt.close(fig)
 
@@ -1183,11 +1195,11 @@ def plot_histogram_by_algo_and_snir(
     ax.set_title("Histogramme SNIR – comparaison algorithmes")
     _format_axes(ax, integer_x=False)
     if ax.get_legend_handles_labels()[0]:
-        ax.legend()
+        ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
     figures_dir.mkdir(parents=True, exist_ok=True)
     output = figures_dir / "step1_histogram_by_algo_snir.png"
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
     fig.savefig(output, dpi=200)
     plt.close(fig)
 
@@ -1306,13 +1318,13 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
                     _apply_network_ticks(ax, network_sizes)
                     _format_axes(ax, integer_x=True)
                     if ax.get_legend_handles_labels()[0]:
-                        ax.legend()
+                        ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
                     figures_dir.mkdir(parents=True, exist_ok=True)
                     output = figures_dir / (
                         f"algo_{algorithm}_{metric.lower()}_snir-compare{suffix}_tx_{period_label}.png"
                     )
-                    fig.tight_layout()
+                    plt.subplots_adjust(top=0.80)
                     fig.savefig(output, dpi=200)
                     plt.close(fig)
 
@@ -1386,7 +1398,7 @@ def plot_distribution_by_state(
         _format_axes(ax, integer_x=False)
         figures_dir.mkdir(parents=True, exist_ok=True)
         output = figures_dir / f"step1_distribution_{metric}.png"
-        fig.tight_layout()
+        plt.subplots_adjust(top=0.80)
         fig.savefig(output, dpi=200)
         plt.close(fig)
 
