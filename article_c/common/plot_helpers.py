@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import csv
+import logging
+import warnings
 from pathlib import Path
 from typing import Iterable
-import warnings
-import csv
 
 import matplotlib.pyplot as plt
 
@@ -33,6 +34,7 @@ SNIR_LINESTYLES = {
     "snir_off": "dashed",
 }
 MIXRA_FALLBACK_COLUMNS = ("mixra_opt_fallback", "mixra_fallback", "fallback")
+LOGGER = logging.getLogger(__name__)
 
 
 def place_legend(ax: plt.Axes) -> None:
@@ -206,10 +208,17 @@ def filter_rows_by_network_sizes(
     network_sizes: Iterable[int] | None,
 ) -> tuple[list[dict[str, object]], list[int]]:
     ensure_network_size(rows)
+    for row in rows:
+        if "network_size" in row:
+            row["network_size"] = int(_to_float(row.get("network_size")))
+    unique_network_sizes = sorted(
+        {row["network_size"] for row in rows if "network_size" in row}
+    )
+    LOGGER.info("network_size uniques après conversion: %s", unique_network_sizes)
     available = sorted({_network_size_value(row) for row in rows})
     if not network_sizes:
         return rows, available
-    requested = sorted({int(size) for size in network_sizes})
+    requested = sorted({int(_to_float(size)) for size in network_sizes})
     missing = sorted(set(requested) - set(available))
     if missing:
         warnings.warn(
