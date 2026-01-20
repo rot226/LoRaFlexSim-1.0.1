@@ -163,7 +163,13 @@ def plot_energy_per_node_vs_duty_cycle(
     ax.set_xlabel("Duty cycle (%)")
     ax.set_ylabel("Energy consumption (J)")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
-    ax.legend(title="Class", loc="center left", bbox_to_anchor=(1.02, 0.5))
+    ax.legend(
+        title="Class",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+    )
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
@@ -196,8 +202,13 @@ def plot_pdr_vs_duty_cycle(df: pd.DataFrame, figures_base: Path) -> None:
     ax.set_ylabel("Packet delivery ratio (%)")
     ax.set_ylim(0, 105)
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
-    ax.legend(title="Class")
-    fig.tight_layout()
+    ax.legend(
+        title="Class",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+    )
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
@@ -232,9 +243,14 @@ def plot_energy_breakdown(df: pd.DataFrame, figures_base: Path) -> None:
     ax.set_xticklabels(labels, rotation=45, ha="right")
     ax.set_ylabel("Energy per node (J)")
     ax.set_xlabel("LoRaWAN class and duty cycle")
-    ax.legend(title="Component")
+    ax.legend(
+        title="Component",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+    )
     ax.grid(True, axis="y", linestyle="--", linewidth=0.5, alpha=0.6)
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,

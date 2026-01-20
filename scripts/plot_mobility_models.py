@@ -71,8 +71,8 @@ def plot(
             ax.set_ylim(0, cap)
 
         ax.bar_label(bars, fmt=fmt, label_type="center")
-        ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.4), ncol=1)
-        fig.tight_layout(rect=[0, 0, 1, 0.85])
+        ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+        plt.subplots_adjust(top=0.80)
         for ext in ("png", "jpg", "eps"):
             dpi = 300 if ext in ("png", "jpg", "eps") else None
             fig.savefig(

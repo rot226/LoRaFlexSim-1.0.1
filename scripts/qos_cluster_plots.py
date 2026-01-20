@@ -150,10 +150,10 @@ def _plot_metric_vs_nodes(
         title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
         ax.set_title(f"{ylabel} – période {title_period} s")
         ax.grid(True, linestyle=":", alpha=0.5)
-        ax.legend()
+        ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
         figures_dir.mkdir(parents=True, exist_ok=True)
         output = figures_dir / f"{filename_prefix}_tx_{title_period}.png"
-        fig.tight_layout()
+        plt.subplots_adjust(top=0.80)
         fig.savefig(output, dpi=150)
         plt.close(fig)
 
@@ -203,12 +203,18 @@ def _plot_pdr_clusters(records: List[Dict[str, Any]], figures_dir: Path) -> None
             ax.grid(True, linestyle=":", alpha=0.4)
         handles, labels = axes[0].get_legend_handles_labels()
         if handles:
-            fig.legend(handles, labels, loc="upper center", ncol=min(len(labels), 4))
+            fig.legend(
+                handles,
+                labels,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 1.02),
+                ncol=3,
+            )
         title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
         fig.suptitle(f"PDR par cluster – période {title_period} s")
         figures_dir.mkdir(parents=True, exist_ok=True)
         output = figures_dir / f"pdr_clusters_tx_{title_period}.png"
-        fig.tight_layout(rect=(0, 0, 1, 0.92))
+        plt.subplots_adjust(top=0.80)
         fig.savefig(output, dpi=150)
         plt.close(fig)
 
@@ -257,9 +263,9 @@ def _plot_snr_cdf(records: List[Dict[str, Any]], figures_dir: Path) -> None:
     ax.set_ylabel("CDF")
     ax.set_title("CDF du SNIR – charge maximale")
     ax.grid(True, linestyle=":", alpha=0.5)
-    ax.legend()
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
     figures_dir.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
     fig.savefig(figures_dir / "snr_cdf_max_load.png", dpi=150)
     plt.close(fig)
 
@@ -285,7 +291,7 @@ def _plot_sf_histogram(records: List[Dict[str, Any]], figures_dir: Path) -> None
         ax.grid(True, axis="y", linestyle=":", alpha=0.3)
     axes[-1].set_xlabel("Spreading Factor")
     figures_dir.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
     fig.savefig(figures_dir / "sf_histogram_max_load.png", dpi=150)
     plt.close(fig)
 
@@ -328,7 +334,7 @@ def _plot_heatmap_matrix(
     cbar = fig.colorbar(im, ax=ax)
     cbar.set_label(cbar_label)
     figures_dir.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
     fig.savefig(figures_dir / filename, dpi=150)
     plt.close(fig)
 

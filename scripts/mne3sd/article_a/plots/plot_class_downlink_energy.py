@@ -120,8 +120,8 @@ def plot_energy_breakdown(
     ax.set_xlabel("LoRaWAN class")
     ax.set_ylabel("Average energy per node (J)")
     ax.grid(True, axis="y", linestyle="--", linewidth=0.5, alpha=0.6)
-    ax.legend()
-    fig.tight_layout()
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
@@ -157,8 +157,8 @@ def plot_pdr_comparison(
     ax.set_ylabel("Packet Delivery ratio (%)")
     ax.set_ylim(0, 105)
     ax.grid(True, axis="y", linestyle="--", linewidth=0.5, alpha=0.6)
-    ax.legend()
-    fig.tight_layout()
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,

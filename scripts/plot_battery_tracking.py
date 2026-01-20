@@ -318,9 +318,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
 
     ax.grid(True)
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.4), ncol=1)
-    fig.tight_layout(rect=[0, 0, 1, 0.85])
-    fig.subplots_adjust(left=0.12)
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+    fig.subplots_adjust(left=0.12, top=0.80)
 
     os.makedirs(FIGURES_DIR, exist_ok=True)
     base = os.path.join(FIGURES_DIR, "battery_tracking")

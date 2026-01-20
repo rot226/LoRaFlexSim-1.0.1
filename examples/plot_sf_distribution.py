@@ -25,7 +25,7 @@ def main(files: list[str], output_dir: Path, basename: str) -> None:
     plt.xlabel("Spreading Factor")
     plt.ylabel("Packets")
     plt.grid(True)
-    plt.tight_layout()
+    plt.subplots_adjust(top=0.80)
     output_dir.mkdir(parents=True, exist_ok=True)
     for ext, params in {
         "png": {"dpi": 300},
@@ -60,4 +60,3 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args(sys.argv[1:])
     main(args.files, args.output_dir, args.basename)
-

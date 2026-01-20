@@ -209,7 +209,7 @@ def plot_comparison(rows: list[dict], path: str) -> None:
     axes[1].set_ylabel("95th percentile latency (s)")
     axes[1].set_xlabel("Scenario")
 
-    fig.tight_layout()
+    plt.subplots_adjust(top=0.80)
     fig.savefig(path, dpi=150)
     plt.close(fig)
 

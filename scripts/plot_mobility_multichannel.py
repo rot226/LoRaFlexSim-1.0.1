@@ -114,13 +114,14 @@ def plot(
 
         ax.bar_label(bars, fmt=fmt, label_type="center")
         ax.legend(
-            loc="upper center",
-            bbox_to_anchor=(0.5, 1.3),
-            ncol=1,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.02),
+            ncol=3,
             title="N: number of nodes, C: number of channels, speed: m/s",
             framealpha=1.0,
             facecolor="white",
         )
+        plt.subplots_adjust(top=0.80)
         for ext in formats:
             fig.savefig(
                 out_dir / f"{metric}_vs_scenario.{ext}",

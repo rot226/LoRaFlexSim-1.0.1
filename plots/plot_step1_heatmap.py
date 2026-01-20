@@ -175,12 +175,18 @@ def _plot_heatmaps(
         edgecolor="#666666",
         label="Données manquantes",
     )
-    fig.legend(handles=[missing_patch], loc="lower center", ncol=1, frameon=False)
+    fig.legend(
+        handles=[missing_patch],
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+        frameon=False,
+    )
     fig.suptitle(f"Heatmap {metric_label} – {algorithm}", y=1.02, fontsize=11)
 
     figures_dir.mkdir(parents=True, exist_ok=True)
     output_name = f"heatmap_{metric_key.lower()}_{algorithm.replace(' ', '_')}_snir_on_off.png"
-    fig.tight_layout(rect=(0, 0.03, 1, 0.95))
+    plt.subplots_adjust(top=0.80)
     fig.savefig(figures_dir / output_name, dpi=300)
     plt.close(fig)
 

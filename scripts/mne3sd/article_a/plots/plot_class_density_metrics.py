@@ -151,11 +151,12 @@ def plot_pdr_vs_nodes(df: pd.DataFrame) -> None:
         handles,
         labels,
         title="Class",
-        loc="center left",
-        bbox_to_anchor=(1.02, 0.5),
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
     )
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
-    fig.tight_layout(rect=[0, 0, 0.82, 1])
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
@@ -202,11 +203,12 @@ def plot_energy_vs_nodes(df: pd.DataFrame) -> bool:
         handles,
         labels,
         title="Class",
-        loc="center left",
-        bbox_to_anchor=(1.02, 0.5),
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
     )
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
-    fig.tight_layout(rect=[0, 0, 0.82, 1])
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,

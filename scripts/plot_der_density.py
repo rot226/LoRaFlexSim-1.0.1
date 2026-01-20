@@ -179,9 +179,15 @@ def plot_der_density(
 
     handles, labels = axes[0][0].get_legend_handles_labels()
     if handles:
-        fig.legend(handles, labels, loc="upper center", ncol=len(handles))
+        fig.legend(
+            handles,
+            labels,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.02),
+            ncol=3,
+        )
     fig.suptitle("PDR/DER en fonction de la densité – comparaison baseline vs baseline+SNIR")
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.92))
+    plt.subplots_adjust(top=0.80)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     saved_paths: List[Path] = []

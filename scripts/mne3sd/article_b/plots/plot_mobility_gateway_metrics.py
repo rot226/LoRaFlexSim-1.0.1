@@ -164,8 +164,13 @@ def plot_pdr_distribution_by_gateway(df: pd.DataFrame) -> None:
     ax.set_ylabel("PDR share (%)")
     ax.set_ylim(0, 100)
     ax.grid(True, axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
-    ax.legend(title="Gateway (share of deliveries)")
-    fig.tight_layout()
+    ax.legend(
+        title="Gateway (share of deliveries)",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+    )
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
@@ -194,8 +199,13 @@ def plot_downlink_delay_vs_gateways(df: pd.DataFrame) -> None:
     ax.set_xlabel("Number of gateways")
     ax.set_ylabel("Average downlink delay (s)")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-    ax.legend(title="Mobility model")
-    fig.tight_layout()
+    ax.legend(
+        title="Mobility model",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+    )
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
@@ -232,8 +242,13 @@ def plot_model_comparison(df: pd.DataFrame) -> None:
     ax.set_xlabel("Aggregated PDR (%)")
     ax.set_ylabel("Average downlink delay (s)")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-    ax.legend(title="Mobility model")
-    fig.tight_layout()
+    ax.legend(
+        title="Mobility model",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=3,
+    )
+    plt.subplots_adjust(top=0.80)
 
     output_dir = prepare_figure_directory(
         article=ARTICLE,
