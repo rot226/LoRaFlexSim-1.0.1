@@ -28,6 +28,8 @@ from article_c.common.plot_helpers import (
 TARGET_NETWORK_SIZE = 1280
 NETWORK_SIZE_COLUMNS = ("network_size", "density", "nodes", "num_nodes")
 PDR_COLUMNS = ("pdr", "pdr_mean")
+RX_COLUMNS = ("rx_success", "rx", "rx_ok")
+TX_COLUMNS = ("tx_total", "tx", "tx_attempts")
 ALGO_COLUMNS = ("algo", "algorithm", "method")
 SNIR_COLUMNS = ("snir_mode", "snir_state", "snir", "with_snir")
 CLUSTER_COLUMNS = ("cluster",)
@@ -144,9 +146,11 @@ def _extract_pdr_groups(
     algo_col = _pick_column(columns, ALGO_COLUMNS)
     snir_col = _pick_column(columns, SNIR_COLUMNS)
     pdr_col = _pick_column(columns, PDR_COLUMNS)
+    rx_col = _pick_column(columns, RX_COLUMNS)
+    tx_col = _pick_column(columns, TX_COLUMNS)
     cluster_col = _pick_column(columns, CLUSTER_COLUMNS)
     fallback_col = _pick_column(columns, MIXRA_FALLBACK_COLUMNS)
-    if not size_col or not algo_col or not snir_col or not pdr_col:
+    if not size_col or not algo_col or not snir_col or (not pdr_col and not (rx_col and tx_col)):
         return {}
 
     values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]] = {}
@@ -160,7 +164,12 @@ def _extract_pdr_groups(
         fallback = _as_bool(row.get(fallback_col)) if fallback_col else False
         if algo != "mixra_opt":
             fallback = False
-        pdr = _as_float(row.get(pdr_col))
+        pdr = _as_float(row.get(pdr_col)) if pdr_col else None
+        if pdr is None and rx_col and tx_col:
+            rx_value = _as_float(row.get(rx_col))
+            tx_value = _as_float(row.get(tx_col))
+            if rx_value is not None and tx_value and tx_value > 0:
+                pdr = rx_value / tx_value
         if pdr is None:
             continue
         size_value = _as_float(row.get(size_col))
@@ -303,6 +312,11 @@ def main() -> None:
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "raw_results.csv"
+    if not results_path.exists():
+        warnings.warn(
+            f"Fichier attendu introuvable: {results_path}. Utilisation des données d'exemple.",
+            stacklevel=2,
+        )
     raw_rows = _read_rows(results_path)
     if not raw_rows:
         sample_rows = _filtered_sample_rows()
