@@ -145,16 +145,17 @@ def _check_mixra_opt_fallback(rows: list[dict[str, str]]) -> CheckResult:
     fallback_col = _pick_column(
         columns, ["mixra_opt_fallback", "mixra_fallback", "fallback"]
     )
+    size_col = _pick_column(columns, ["network_size", "density", "num_nodes", "n_nodes"])
 
-    if not rows or not algo_col or not fallback_col:
+    if not rows or not algo_col or not fallback_col or not size_col:
         return CheckResult(
-            "MixRA-Opt pas 100% fallback",
+            "MixRA-Opt fallback False sur au moins une taille",
             "WARN",
             "Colonnes ou données manquantes.",
         )
 
     total = 0
-    fallback_total = 0
+    false_sizes: set[int] = set()
     for row in rows:
         algo = row.get(algo_col)
         if algo is None:
@@ -163,22 +164,30 @@ def _check_mixra_opt_fallback(rows: list[dict[str, str]]) -> CheckResult:
         if algo_key not in {"mixra_opt", "mixra-opt", "mixra opt"}:
             continue
         fallback = _to_bool(row.get(fallback_col))
-        if fallback is None:
+        size = _to_float(row.get(size_col))
+        if fallback is None or size is None:
             continue
         total += 1
-        if fallback:
-            fallback_total += 1
+        if not fallback:
+            false_sizes.add(int(size))
 
     if total == 0:
         return CheckResult(
-            "MixRA-Opt pas 100% fallback",
+            "MixRA-Opt fallback False sur au moins une taille",
             "WARN",
             "Aucune ligne MixRA-Opt exploitable.",
         )
 
-    status = "OK" if fallback_total < total else "WARN"
-    detail = f"Lignes MixRA-Opt: {total}, fallback: {fallback_total}."
-    return CheckResult("MixRA-Opt pas 100% fallback", status, detail)
+    status = "OK" if false_sizes else "WARN"
+    detail = (
+        f"Lignes MixRA-Opt: {total}, "
+        f"tailles avec fallback False: {sorted(false_sizes) or 'aucune'}."
+    )
+    return CheckResult(
+        "MixRA-Opt fallback False sur au moins une taille",
+        status,
+        detail,
+    )
 
 
 def _check_snir_pdr(rows: list[dict[str, str]]) -> CheckResult:
