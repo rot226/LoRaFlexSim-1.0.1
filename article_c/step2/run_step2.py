@@ -63,6 +63,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     algorithms = ("adr", "mixra_h", "mixra_opt", "ucb1_sf")
 
     for density_idx, density in enumerate(densities):
+        simulated_sizes.append(density)
         for replication in replications:
             seed = base_seed + density_idx * 1000 + replication
             for algorithm in algorithms:
@@ -84,8 +85,6 @@ def main(argv: Sequence[str] | None = None) -> None:
                 raw_rows.extend(result.raw_rows)
                 if algorithm == "ucb1_sf":
                     selection_rows.extend(result.selection_prob_rows)
-        simulated_sizes.append(density)
-
     write_simulation_results(base_results_dir, raw_rows)
     _log_results_written(base_results_dir, len(raw_rows))
     if timestamp_dir is not None:
