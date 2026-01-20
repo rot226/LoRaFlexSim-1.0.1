@@ -174,7 +174,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="balanced",
         help=(
             "Mode MixRA-Opt (balanced par défaut, fast pour un budget strict, "
-            "full pour une optimisation plus longue)."
+            "full pour une optimisation plus longue sans fallback)."
+        ),
+    )
+    parser.add_argument(
+        "--mixra-opt-timeout",
+        type=float,
+        default=None,
+        help=(
+            "Timeout (secondes) pour MixRA-Opt afin d'éviter les blocages "
+            "(None pour désactiver)."
         ),
     )
     parser.add_argument(
@@ -247,6 +256,7 @@ def main(argv: list[str] | None = None) -> None:
                         mixra_opt_budget=mixra_opt_budget,
                         mixra_opt_enabled=args.mixra_opt_enabled,
                         mixra_opt_mode=args.mixra_opt_mode,
+                        mixra_opt_timeout_s=args.mixra_opt_timeout,
                         profile_timing=args.profile_timing,
                     )
                     metrics_start = perf_counter() if args.profile_timing else 0.0

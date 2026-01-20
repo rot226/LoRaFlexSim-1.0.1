@@ -130,6 +130,8 @@ def _mixra_opt_assign(
     convergence_epsilon: float = 1e-3,
     max_evaluations: int = 200,
     subset_seed: int = 0,
+    timeout_s: float | None = None,
+    allow_fallback: bool = True,
 ) -> tuple[list[int], bool]:
     """MixRA-Opt proxy: glouton + recherche locale (collisions + QoS)."""
     nodes_list = list(nodes)
@@ -198,6 +200,7 @@ def _mixra_opt_assign(
     collision_cost_total = collision_cost(loads)
     current_obj = collision_cost_total + 2.5 * qos_penalty_total
 
+    start_time = perf_counter()
     small_improvement_streak = 0
     evaluations = 0
     for _ in range(max_iterations):
@@ -205,14 +208,30 @@ def _mixra_opt_assign(
         candidate_indices = _select_candidate_indices()
         start_obj = current_obj
         for idx in candidate_indices:
+            if timeout_s is not None and (perf_counter() - start_time) >= timeout_s:
+                LOGGER.warning(
+                    "MixRA-Opt timeout atteint (%.2fs).", perf_counter() - start_time
+                )
+                return (
+                    (_mixra_h_assign(nodes_list), True)
+                    if allow_fallback
+                    else (assignments, False)
+                )
             evaluations += 1
             if evaluations > max_evaluations:
+                if allow_fallback:
+                    LOGGER.warning(
+                        "MixRA-Opt dépasse le budget (%s > %s évaluations), fallback MixRA-H.",
+                        evaluations,
+                        max_evaluations,
+                    )
+                    return _mixra_h_assign(nodes_list), True
                 LOGGER.warning(
-                    "MixRA-Opt dépasse le budget (%s > %s évaluations), fallback MixRA-H.",
+                    "MixRA-Opt dépasse le budget (%s > %s évaluations), arrêt sans fallback.",
                     evaluations,
                     max_evaluations,
                 )
-                return _mixra_h_assign(nodes_list), True
+                return assignments, False
             current_sf = assignments[idx]
             candidates = qos_candidates_by_node[idx]
             if not candidates:
@@ -380,6 +399,7 @@ def run_simulation(
     mixra_opt_budget: int | None = None,
     mixra_opt_enabled: bool = True,
     mixra_opt_mode: str = "balanced",
+    mixra_opt_timeout_s: float | None = None,
     shadowing_sigma_db: float = 7.0,
     shadowing_mean_db: float = 0.0,
     fading_type: str | None = "lognormal",
@@ -429,13 +449,14 @@ def run_simulation(
             raise ValueError(
                 "mixra_opt_mode doit être 'fast_opt', 'fast', 'balanced' ou 'full' pour l'algorithme mixra_opt."
             )
+        allow_fallback = mixra_opt_mode != "full"
         if mixra_opt_mode in {"fast", "fast_opt"}:
             mixra_opt_max_iterations = min(mixra_opt_max_iterations, 60)
             mixra_opt_candidate_subset_size = min(mixra_opt_candidate_subset_size, 80)
         if mixra_opt_budget is None:
             computed_budget = mixra_opt_budget_for_size(actual_sent)
             if mixra_opt_mode == "full":
-                computed_budget = int(computed_budget * 1.5)
+                computed_budget = int(computed_budget * 2.0)
             elif mixra_opt_mode in {"fast", "fast_opt"}:
                 computed_budget = max(200, int(computed_budget * 0.4))
             mixra_opt_max_evaluations = max(mixra_opt_max_evaluations, computed_budget)
@@ -448,6 +469,8 @@ def run_simulation(
             convergence_epsilon=mixra_opt_epsilon,
             max_evaluations=mixra_opt_max_evaluations,
             subset_seed=seed,
+            timeout_s=mixra_opt_timeout_s,
+            allow_fallback=allow_fallback,
         )
     elif algorithm == "mixra_opt":
         assignments = _mixra_h_assign(nodes)
