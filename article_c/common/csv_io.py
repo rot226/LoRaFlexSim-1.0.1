@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import logging
+import os
+from contextlib import contextmanager
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
@@ -13,16 +15,41 @@ EXTRA_MEAN_KEYS = {"mean_toa_s", "mean_latency_s"}
 
 logger = logging.getLogger(__name__)
 
+if os.name == "nt":
+    import msvcrt
+
+    @contextmanager
+    def _locked_handle(handle) -> object:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        try:
+            yield handle
+        finally:
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+else:
+    import fcntl
+
+    @contextmanager
+    def _locked_handle(handle) -> object:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield handle
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
 
 def write_rows(path: Path, header: list[str], rows: list[list[object]]) -> None:
-    """Écrit un fichier CSV simple."""
+    """Écrit un fichier CSV simple avec verrouillage."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_header = not path.exists()
-    with path.open("a", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
-        if write_header:
-            writer.writerow(header)
-        writer.writerows(rows)
+    with path.open("a+", newline="", encoding="utf-8") as handle:
+        with _locked_handle(handle):
+            handle.seek(0, os.SEEK_END)
+            write_header = handle.tell() == 0
+            writer = csv.writer(handle)
+            if write_header:
+                writer.writerow(header)
+            writer.writerows(rows)
 
 
 def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, object]]:

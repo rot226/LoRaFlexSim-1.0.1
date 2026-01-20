@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from multiprocessing import get_context
 from pathlib import Path
 from typing import Sequence
 
@@ -43,12 +44,49 @@ def _log_results_written(output_dir: Path, row_count: int) -> None:
     print(f"Append rows: {row_count} -> {aggregated_path}")
 
 
+def _simulate_density(
+    task: tuple[int, int, list[int], dict[str, object], Path, Path | None]
+) -> dict[str, object]:
+    density, density_idx, replications, config, base_results_dir, timestamp_dir = task
+    raw_rows: list[dict[str, object]] = []
+    selection_rows: list[dict[str, object]] = []
+    algorithms = ("adr", "mixra_h", "mixra_opt", "ucb1_sf")
+
+    for replication in replications:
+        seed = int(config["base_seed"]) + density_idx * 1000 + replication
+        for algorithm in algorithms:
+            result = run_simulation(
+                algorithm=algorithm,
+                density=density,
+                snir_mode="snir_on",
+                seed=seed,
+                traffic_mode=str(config["traffic_mode"]),
+                jitter_range_s=float(config["jitter_range_s"]),
+                window_duration_s=float(config["window_duration_s"]),
+                window_size=int(config["window_size"]),
+                traffic_coeff_min=float(config["traffic_coeff_min"]),
+                traffic_coeff_max=float(config["traffic_coeff_max"]),
+                traffic_coeff_enabled=bool(config["traffic_coeff_enabled"]),
+                window_delay_enabled=bool(config["window_delay_enabled"]),
+                window_delay_range_s=float(config["window_delay_range_s"]),
+            )
+            raw_rows.extend(result.raw_rows)
+            if algorithm == "ucb1_sf":
+                selection_rows.extend(result.selection_prob_rows)
+
+    write_simulation_results(base_results_dir, raw_rows)
+    _log_results_written(base_results_dir, len(raw_rows))
+    if timestamp_dir is not None:
+        write_simulation_results(timestamp_dir, raw_rows)
+        _log_results_written(timestamp_dir, len(raw_rows))
+    return {"density": density, "row_count": len(raw_rows), "selection_rows": selection_rows}
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_cli_args(argv)
     base_seed = set_deterministic_seed(args.seeds_base)
     densities = parse_network_size_list(args.network_sizes)
     replications = replication_ids(args.replications)
-    snir_mode = "snir_on"
     simulated_sizes: list[int] = []
 
     base_results_dir = Path(__file__).resolve().parent / "results"
@@ -58,39 +96,43 @@ def main(argv: Sequence[str] | None = None) -> None:
         timestamp_dir = base_results_dir / timestamp_tag()
         ensure_dir(timestamp_dir)
 
-    raw_rows: list[dict[str, object]] = []
     selection_rows: list[dict[str, object]] = []
-    algorithms = ("adr", "mixra_h", "mixra_opt", "ucb1_sf")
+    total_rows = 0
 
-    for density_idx, density in enumerate(densities):
-        simulated_sizes.append(density)
-        for replication in replications:
-            seed = base_seed + density_idx * 1000 + replication
-            for algorithm in algorithms:
-                result = run_simulation(
-                    algorithm=algorithm,
-                    density=density,
-                    snir_mode=snir_mode,
-                    seed=seed,
-                    traffic_mode=args.traffic_mode,
-                    jitter_range_s=args.jitter_range,
-                    window_duration_s=args.window_duration_s,
-                    window_size=args.window_size,
-                    traffic_coeff_min=args.traffic_coeff_min,
-                    traffic_coeff_max=args.traffic_coeff_max,
-                    traffic_coeff_enabled=args.traffic_coeff_enabled,
-                    window_delay_enabled=args.window_delay_enabled,
-                    window_delay_range_s=args.window_delay_range_s,
-                )
-                raw_rows.extend(result.raw_rows)
-                if algorithm == "ucb1_sf":
-                    selection_rows.extend(result.selection_prob_rows)
-    write_simulation_results(base_results_dir, raw_rows)
-    _log_results_written(base_results_dir, len(raw_rows))
-    if timestamp_dir is not None:
-        write_simulation_results(timestamp_dir, raw_rows)
-        _log_results_written(timestamp_dir, len(raw_rows))
-    print(f"Rows written: {len(raw_rows)}")
+    config: dict[str, object] = {
+        "base_seed": base_seed,
+        "traffic_mode": args.traffic_mode,
+        "jitter_range_s": args.jitter_range,
+        "window_duration_s": args.window_duration_s,
+        "window_size": args.window_size,
+        "traffic_coeff_min": args.traffic_coeff_min,
+        "traffic_coeff_max": args.traffic_coeff_max,
+        "traffic_coeff_enabled": args.traffic_coeff_enabled,
+        "window_delay_enabled": args.window_delay_enabled,
+        "window_delay_range_s": args.window_delay_range_s,
+    }
+
+    tasks = [
+        (density, density_idx, replications, config, base_results_dir, timestamp_dir)
+        for density_idx, density in enumerate(densities)
+    ]
+
+    worker_count = max(1, int(args.workers))
+    if worker_count == 1:
+        results = map(_simulate_density, tasks)
+        for result in results:
+            simulated_sizes.append(int(result["density"]))
+            total_rows += int(result["row_count"])
+            selection_rows.extend(result["selection_rows"])
+    else:
+        ctx = get_context("spawn")
+        with ctx.Pool(processes=worker_count) as pool:
+            for result in pool.imap_unordered(_simulate_density, tasks):
+                simulated_sizes.append(int(result["density"]))
+                total_rows += int(result["row_count"])
+                selection_rows.extend(result["selection_rows"])
+
+    print(f"Rows written: {total_rows}")
 
     if selection_rows:
         rl5_rows = _aggregate_selection_probs(selection_rows)

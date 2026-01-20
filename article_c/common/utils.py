@@ -130,6 +130,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=step2_defaults.window_delay_range_s,
         help="Amplitude du délai aléatoire entre fenêtres (secondes).",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Nombre de processus worker pour paralléliser les tailles.",
+    )
     return parser
 
 
