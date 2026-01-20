@@ -51,6 +51,8 @@ def _simulate_density(
     raw_rows: list[dict[str, object]] = []
     selection_rows: list[dict[str, object]] = []
     algorithms = ("adr", "mixra_h", "mixra_opt", "ucb1_sf")
+    jitter_range_s = float(config.get("jitter_range_s", 30.0))
+    print(f"Jitter range utilisé (s): {jitter_range_s}")
 
     for replication in replications:
         seed = int(config["base_seed"]) + density_idx * 1000 + replication
@@ -61,7 +63,7 @@ def _simulate_density(
                 snir_mode="snir_on",
                 seed=seed,
                 traffic_mode=str(config["traffic_mode"]),
-                jitter_range_s=float(config["jitter_range_s"]),
+                jitter_range_s=jitter_range_s,
                 window_duration_s=float(config["window_duration_s"]),
                 window_size=int(config["window_size"]),
                 traffic_coeff_min=float(config["traffic_coeff_min"]),
