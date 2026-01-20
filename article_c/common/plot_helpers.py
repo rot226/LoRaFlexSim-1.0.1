@@ -29,6 +29,7 @@ SNIR_LINESTYLES = {
     "snir_on": "solid",
     "snir_off": "dashed",
 }
+MIXRA_FALLBACK_COLUMNS = ("mixra_opt_fallback", "mixra_fallback", "fallback")
 
 
 def apply_plot_style() -> None:
@@ -81,6 +82,25 @@ def _to_bool(value: object) -> bool:
         return False
     text = str(value).strip().lower()
     return text in {"1", "true", "yes", "y", "vrai"}
+
+
+def _mixra_opt_fallback(row: dict[str, object]) -> bool:
+    for key in MIXRA_FALLBACK_COLUMNS:
+        if key in row:
+            return _to_bool(row.get(key))
+    return False
+
+
+def filter_mixra_opt_fallback(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    mixra_rows = [row for row in rows if str(row.get("algo", "")) == "mixra_opt"]
+    filtered = [
+        row
+        for row in rows
+        if str(row.get("algo", "")) != "mixra_opt" or not _mixra_opt_fallback(row)
+    ]
+    if not any(str(row.get("algo", "")) == "mixra_opt" for row in filtered):
+        warnings.warn("MixRA-Opt absent (fallback).", stacklevel=2)
+    return filtered
 
 
 def load_step1_aggregated(path: Path) -> list[dict[str, object]]:

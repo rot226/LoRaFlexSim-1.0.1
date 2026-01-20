@@ -14,6 +14,7 @@ from article_c.common.plot_helpers import (
     ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
+    filter_mixra_opt_fallback,
     load_step1_aggregated,
     place_legend,
     plot_metric_by_snir,
@@ -51,6 +52,7 @@ def main() -> None:
     results_path = step_dir / "results" / "aggregated_results.csv"
     rows = filter_cluster(load_step1_aggregated(results_path), "all")
     rows, _ = filter_rows_by_network_sizes(rows, args.network_sizes)
+    rows = filter_mixra_opt_fallback(rows)
 
     fig = _plot_metric(rows, "received_mean")
     output_dir = step_dir / "plots" / "output"

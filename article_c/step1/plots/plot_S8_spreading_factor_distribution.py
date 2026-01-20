@@ -18,6 +18,7 @@ from article_c.common.plot_helpers import (
     algo_labels,
     apply_plot_style,
     ensure_network_size,
+    filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     filter_cluster,
     load_step1_aggregated,
@@ -298,6 +299,7 @@ def main() -> None:
         }
         for row in rows
     ]
+    rows = filter_mixra_opt_fallback(rows)
     size_rows = load_step1_aggregated(aggregated_results_path)
     ensure_network_size(size_rows)
     size_rows, _ = filter_rows_by_network_sizes(size_rows, args.network_sizes)

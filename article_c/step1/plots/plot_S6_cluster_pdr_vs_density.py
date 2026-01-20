@@ -18,6 +18,7 @@ from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     ensure_network_size,
+    filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     load_step1_aggregated,
     place_legend,
@@ -30,14 +31,6 @@ def _cluster_labels(clusters: list[str]) -> dict[str, str]:
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
-    rows = [
-        row
-        for row in rows
-        if not (
-            str(row.get("algo", "")) == "mixra_opt"
-            and bool(row.get("mixra_opt_fallback"))
-        )
-    ]
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
@@ -128,6 +121,7 @@ def main() -> None:
     rows = load_step1_aggregated(results_path)
     rows = [row for row in rows if row.get("cluster") != "all"]
     rows, _ = filter_rows_by_network_sizes(rows, args.network_sizes)
+    rows = filter_mixra_opt_fallback(rows)
 
     fig = _plot_metric(rows, "pdr_mean")
     output_dir = step_dir / "plots" / "output"

@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     SNIR_LINESTYLES,
     SNIR_MODES,
     apply_plot_style,
+    filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     load_step1_aggregated,
     place_legend,
@@ -136,6 +137,7 @@ def main() -> None:
     rows = load_step1_aggregated(results_path)
     rows = [row for row in rows if row.get("cluster") != "all"]
     rows, _ = filter_rows_by_network_sizes(rows, args.network_sizes)
+    rows = filter_mixra_opt_fallback(rows)
     rows = _with_outage(rows)
 
     fig = _plot_metric(rows, "outage_prob")

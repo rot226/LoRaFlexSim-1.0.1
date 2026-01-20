@@ -14,6 +14,7 @@ from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
     apply_plot_style,
     ensure_network_size,
+    filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     load_step1_aggregated,
     place_legend,
@@ -65,6 +66,7 @@ def main() -> None:
     rows = load_step1_aggregated(results_path)
     rows = [row for row in rows if row.get("cluster") != "all"]
     rows, _ = filter_rows_by_network_sizes(rows, args.network_sizes)
+    rows = filter_mixra_opt_fallback(rows)
 
     fig = _plot_metric(rows, "pdr_mean")
     output_dir = step_dir / "plots" / "output"
