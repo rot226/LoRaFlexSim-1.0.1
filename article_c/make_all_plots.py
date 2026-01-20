@@ -74,6 +74,8 @@ SNIR_ALIASES = {
     "no": "snir_off",
 }
 
+EXPECTED_NETWORK_SIZES = [80, 160, 320, 640, 1280]
+
 def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour générer les figures."""
     parser = argparse.ArgumentParser(
@@ -336,6 +338,8 @@ def main(argv: list[str] | None = None) -> None:
                 "avant de lancer les plots Step2."
             )
             steps = [step for step in steps if step != "step2"]
+    if not _validate_network_sizes(csv_paths, EXPECTED_NETWORK_SIZES):
+        return
     if args.network_sizes:
         network_sizes = args.network_sizes
         if not _validate_network_sizes(csv_paths, network_sizes):
