@@ -339,7 +339,7 @@ def _sample_step1_rows() -> list[dict[str, object]]:
                         base_toa += 5.0
                     mean_toa_s = (base_toa + 0.2 * density) / 1000.0
                     row = {
-                        "density": density,
+                        "density": density,  # Alias legacy de network_size.
                         "network_size": density,
                         "algo": algo,
                         "snir_mode": snir_mode,
@@ -370,7 +370,7 @@ def _sample_step2_rows() -> list[dict[str, object]]:
                     cluster_bonus = 0.03 if cluster == "gold" else 0.0
                     rows.append(
                         {
-                            "density": density,
+                            "density": density,  # Alias legacy de network_size.
                             "network_size": density,
                             "algo": algo,
                             "snir_mode": snir_mode,
