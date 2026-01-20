@@ -13,11 +13,11 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
-    ensure_network_size,
     filter_cluster,
     filter_rows_by_network_sizes,
     load_step1_aggregated,
     load_step2_aggregated,
+    normalize_network_size_rows,
     place_legend,
     save_figure,
 )
@@ -135,6 +135,7 @@ def _aggregate_pdr_from_step1(
 ) -> dict[str, float]:
     rows = filter_cluster(load_step1_aggregated(path), "all")
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
+    normalize_network_size_rows(rows)
     rows, _ = filter_rows_by_network_sizes(rows, network_sizes)
     totals: dict[str, float] = {}
     counts: dict[str, int] = {}
@@ -160,6 +161,7 @@ def _aggregate_pdr_from_step2(
 ) -> dict[str, float]:
     rows = filter_cluster(load_step2_aggregated(path), "all")
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
+    normalize_network_size_rows(rows)
     rows, _ = filter_rows_by_network_sizes(rows, network_sizes)
     totals: dict[str, float] = {}
     counts: dict[str, int] = {}
@@ -241,7 +243,7 @@ def main(network_sizes: list[int] | None = None, argv: list[str] | None = None) 
     step1_results_path = step_dir.parents[1] / "step1" / "results" / "aggregated_results.csv"
     step2_results_path = step_dir / "results" / "aggregated_results.csv"
     size_rows = load_step2_aggregated(step2_results_path)
-    ensure_network_size(size_rows)
+    normalize_network_size_rows(size_rows)
     network_sizes_filter = _normalized_network_sizes(network_sizes)
     size_rows, _ = filter_rows_by_network_sizes(size_rows, network_sizes_filter)
     if network_sizes_filter is None:

@@ -12,10 +12,10 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
-    ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
     load_step2_aggregated,
+    normalize_network_size_rows,
     save_figure,
 )
 
@@ -79,9 +79,9 @@ def main(network_sizes: list[int] | None = None, argv: list[str] | None = None) 
     results_path = step_dir / "results" / "aggregated_results.csv"
     rows = filter_cluster(load_step2_aggregated(results_path), "all")
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
+    normalize_network_size_rows(rows)
     network_sizes_filter = _normalized_network_sizes(network_sizes)
     rows, _ = filter_rows_by_network_sizes(rows, network_sizes_filter)
-    ensure_network_size(rows)
     if network_sizes_filter is None:
         df = pd.DataFrame(rows)
         network_sizes = sorted(df["network_size"].unique())

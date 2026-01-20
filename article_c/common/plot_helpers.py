@@ -198,6 +198,31 @@ def ensure_network_size(rows: list[dict[str, object]]) -> None:
             row["network_size"] = row["density"]
 
 
+def normalize_network_size_rows(rows: list[dict[str, object]]) -> None:
+    ensure_network_size(rows)
+    for row in rows:
+        row["network_size"] = int(_to_float(row.get("network_size")))
+
+
+def warn_if_missing_network_sizes(
+    requested: Iterable[int] | None,
+    available: Iterable[int],
+) -> None:
+    if not requested:
+        return
+    requested_sizes = sorted({int(_to_float(size)) for size in requested})
+    available_sizes = sorted({int(_to_float(size)) for size in available})
+    missing = sorted(set(requested_sizes) - set(available_sizes))
+    if missing:
+        warnings.warn(
+            "Tailles de réseau absentes: "
+            + ", ".join(str(size) for size in missing)
+            + ". Tailles disponibles: "
+            + ", ".join(str(size) for size in available_sizes),
+            stacklevel=2,
+        )
+
+
 def _network_size_value(row: dict[str, object]) -> int:
     if "network_size" in row:
         return int(_to_float(row.get("network_size")))
@@ -208,9 +233,7 @@ def filter_rows_by_network_sizes(
     rows: list[dict[str, object]],
     network_sizes: Iterable[int] | None,
 ) -> tuple[list[dict[str, object]], list[int]]:
-    ensure_network_size(rows)
-    for row in rows:
-        row["network_size"] = int(_to_float(row.get("network_size")))
+    normalize_network_size_rows(rows)
     unique_network_sizes = sorted(
         {row["network_size"] for row in rows if "network_size" in row}
     )
@@ -219,13 +242,7 @@ def filter_rows_by_network_sizes(
     if not network_sizes:
         return rows, available
     requested = sorted({int(_to_float(size)) for size in network_sizes})
-    missing = sorted(set(requested) - set(available))
-    if missing:
-        warnings.warn(
-            "Tailles de réseau demandées absentes: "
-            + ", ".join(str(size) for size in missing),
-            stacklevel=2,
-        )
+    warn_if_missing_network_sizes(requested, available)
     filtered = [row for row in rows if row["network_size"] in requested]
     if not filtered:
         warnings.warn(
