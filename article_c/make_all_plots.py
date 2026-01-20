@@ -74,8 +74,6 @@ SNIR_ALIASES = {
     "no": "snir_off",
 }
 
-EXPECTED_NETWORK_SIZES = [80, 160, 320, 640, 1280]
-
 def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour générer les figures."""
     parser = argparse.ArgumentParser(
@@ -341,14 +339,29 @@ def main(argv: list[str] | None = None) -> None:
                 "avant de lancer les plots Step2."
             )
             steps = [step for step in steps if step != "step2"]
-    if not _validate_network_sizes(csv_paths, EXPECTED_NETWORK_SIZES):
-        return
+    step_network_sizes: dict[str, list[int]] = {}
+    if "step1" in steps:
+        step_network_sizes["step1"] = _load_network_sizes_from_csvs([step1_csv])
+    if "step2" in steps:
+        step_network_sizes["step2"] = _load_network_sizes_from_csvs([step2_csv])
     if args.network_sizes:
         network_sizes = args.network_sizes
         if not _validate_network_sizes(csv_paths, network_sizes):
             return
     else:
-        network_sizes = _load_network_sizes_from_csvs(csv_paths)
+        network_sizes = sorted(
+            {
+                size
+                for sizes in step_network_sizes.values()
+                for size in sizes
+            }
+        )
+        if not network_sizes:
+            print(
+                "Aucune taille de réseau détectée dans les CSV, "
+                "aucun plot n'a été généré."
+            )
+            return
     csv_cache: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
     for step in steps:
         for module_path in PLOT_MODULES[step]:
@@ -362,16 +375,25 @@ def main(argv: list[str] | None = None) -> None:
                 continue
             if step == "step2":
                 figure = module_path.split(".")[-1]
-                detected_sizes = sorted(_extract_network_sizes(csv_path))
+                step2_sizes = (
+                    network_sizes
+                    if args.network_sizes
+                    else step_network_sizes.get("step2") or network_sizes
+                )
                 sizes_label = (
-                    ", ".join(str(size) for size in detected_sizes)
-                    if detected_sizes
+                    ", ".join(str(size) for size in step2_sizes)
+                    if step2_sizes
                     else "none"
                 )
                 print(f"Detected sizes: {sizes_label}")
                 print(f"Plotting Step2: {figure}")
             if step == "step2":
-                _run_plot_module(module_path, network_sizes=network_sizes)
+                step2_network_sizes = (
+                    network_sizes
+                    if args.network_sizes
+                    else step_network_sizes.get("step2") or network_sizes
+                )
+                _run_plot_module(module_path, network_sizes=step2_network_sizes)
             else:
                 _run_plot_module(module_path)
 

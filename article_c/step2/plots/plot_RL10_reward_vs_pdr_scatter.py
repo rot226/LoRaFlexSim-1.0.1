@@ -36,7 +36,7 @@ TARGET_ALGOS = ("ucb1_sf", "adr", "mixra_h", "mixra_opt")
 
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
-    if not network_sizes or len(network_sizes) < 2:
+    if not network_sizes:
         return None
     return network_sizes
 
