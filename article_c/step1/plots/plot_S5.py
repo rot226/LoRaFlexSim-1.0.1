@@ -168,8 +168,23 @@ def _plot_pdr_distribution(
     colors = {"snir_on": "#4c78a8", "snir_off": "#f58518"}
 
     for snir_mode in SNIR_MODES:
-        data = [values_by_group.get((algo, fallback, snir_mode), []) for algo, fallback in algorithms]
-        positions = [pos + offsets[snir_mode] for pos in base_positions]
+        data_with_positions: list[tuple[float, list[float]]] = []
+        for (algo, fallback), pos in zip(algorithms, base_positions, strict=False):
+            values = values_by_group.get((algo, fallback, snir_mode), [])
+            if not values:
+                algo_name = f"{algo}{'_fallback' if fallback else ''}"
+                warnings.warn(
+                    f"No data for size={target_size}, algo={algo_name}, snir={snir_mode}.",
+                    stacklevel=2,
+                )
+                continue
+            data_with_positions.append((pos + offsets[snir_mode], values))
+
+        if not data_with_positions:
+            continue
+
+        data = [values for _, values in data_with_positions]
+        positions = [pos for pos, _ in data_with_positions]
         violins = ax.violinplot(
             data,
             positions=positions,
