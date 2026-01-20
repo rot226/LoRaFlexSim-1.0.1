@@ -113,6 +113,12 @@ def _plot_metric(
     ]
     if not clusters:
         clusters = sorted(available_clusters)
+    if not clusters:
+        warnings.warn(
+            "Aucun cluster disponible après filtrage; aucune figure ne sera tracée.",
+            stacklevel=2,
+        )
+        return None
     cluster_labels = _cluster_labels(clusters)
 
     fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 4), sharey=True)
