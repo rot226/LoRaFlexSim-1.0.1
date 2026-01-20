@@ -40,6 +40,39 @@ PLOT_MODULES = {
     ],
 }
 
+REQUIRED_ALGOS = {
+    "step1": ("adr", "mixra_h", "mixra_opt"),
+    "step2": ("adr", "mixra_h", "mixra_opt", "ucb1_sf"),
+}
+
+REQUIRED_SNIR_MODES = {
+    "step1": ("snir_on", "snir_off"),
+    "step2": ("snir_on",),
+}
+
+ALGO_ALIASES = {
+    "adr": "adr",
+    "mixra_h": "mixra_h",
+    "mixra_hybrid": "mixra_h",
+    "mixra_opt": "mixra_opt",
+    "mixra_optimal": "mixra_opt",
+    "mixraopt": "mixra_opt",
+    "ucb1_sf": "ucb1_sf",
+    "ucb1sf": "ucb1_sf",
+}
+
+SNIR_ALIASES = {
+    "snir_on": "snir_on",
+    "on": "snir_on",
+    "true": "snir_on",
+    "1": "snir_on",
+    "yes": "snir_on",
+    "snir_off": "snir_off",
+    "off": "snir_off",
+    "false": "snir_off",
+    "0": "snir_off",
+    "no": "snir_off",
+}
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour générer les figures."""
@@ -78,17 +111,29 @@ def _run_plot_module(module_path: str) -> None:
     module.main()
 
 
-def _validate_snir_mode_column(paths: list[Path]) -> None:
-    for path in paths:
-        if not path.exists():
-            continue
-        with path.open("r", encoding="utf-8", newline="") as handle:
-            reader = csv.DictReader(handle)
-            fieldnames = reader.fieldnames or []
-        if "snir_mode" not in fieldnames:
-            raise ValueError(
-                f"Le CSV {path} doit contenir une colonne 'snir_mode'."
-            )
+def _pick_column(fieldnames: list[str], candidates: tuple[str, ...]) -> str | None:
+    for candidate in candidates:
+        if candidate in fieldnames:
+            return candidate
+    return None
+
+
+def _normalize_algo(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip().lower().replace(" ", "_").replace("-", "_")
+    if not cleaned:
+        return None
+    return ALGO_ALIASES.get(cleaned)
+
+
+def _normalize_snir(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip().lower()
+    if not cleaned:
+        return None
+    return SNIR_ALIASES.get(cleaned)
 
 
 def _extract_network_sizes(path: Path) -> set[int]:
@@ -113,6 +158,16 @@ def _extract_network_sizes(path: Path) -> set[int]:
             except ValueError:
                 continue
     return sizes
+
+
+def _load_csv_data(path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    if not path.exists():
+        return ([], [])
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = reader.fieldnames or []
+        rows = [row for row in reader]
+    return (fieldnames, rows)
 
 
 def _load_network_sizes_from_csvs(paths: list[Path]) -> list[int]:
@@ -176,6 +231,78 @@ def _validate_network_sizes(paths: list[Path], expected_sizes: list[int]) -> boo
     return True
 
 
+def _validate_plot_data(
+    *,
+    step: str,
+    module_path: str,
+    csv_path: Path,
+    cached_data: dict[str, tuple[list[str], list[dict[str, str]]]],
+) -> bool:
+    if not csv_path.exists():
+        print(
+            "AVERTISSEMENT: "
+            f"CSV manquant pour {module_path}, figure ignorée."
+        )
+        return False
+    if step not in cached_data:
+        cached_data[step] = _load_csv_data(csv_path)
+    fieldnames, rows = cached_data[step]
+    if not fieldnames:
+        print(
+            "AVERTISSEMENT: "
+            f"CSV vide pour {module_path}, figure ignorée."
+        )
+        return False
+    sizes = _extract_network_sizes(csv_path)
+    if len(sizes) < 2:
+        print(
+            "AVERTISSEMENT: "
+            f"{module_path} nécessite au moins 2 tailles "
+            "disponibles, figure ignorée."
+        )
+        return False
+    algo_col = _pick_column(fieldnames, ("algo", "algorithm", "method"))
+    snir_col = _pick_column(
+        fieldnames, ("snir_mode", "snir_state", "snir", "with_snir")
+    )
+    if not algo_col or not snir_col:
+        print(
+            "AVERTISSEMENT: "
+            f"{module_path} nécessite les colonnes algo/snir_mode, "
+            "figure ignorée."
+        )
+        return False
+    available_algos = {
+        normalized
+        for row in rows
+        if (normalized := _normalize_algo(row.get(algo_col))) is not None
+    }
+    available_snir = {
+        normalized
+        for row in rows
+        if (normalized := _normalize_snir(row.get(snir_col))) is not None
+    }
+    missing_algos = [
+        algo for algo in REQUIRED_ALGOS[step] if algo not in available_algos
+    ]
+    missing_snir = [
+        mode for mode in REQUIRED_SNIR_MODES[step] if mode not in available_snir
+    ]
+    if missing_algos or missing_snir:
+        details = []
+        if missing_algos:
+            details.append(f"algos manquants: {', '.join(missing_algos)}")
+        if missing_snir:
+            details.append(f"SNIR manquants: {', '.join(missing_snir)}")
+        print(
+            "AVERTISSEMENT: "
+            f"{module_path} incomplet ({' ; '.join(details)}), "
+            "figure ignorée."
+        )
+        return False
+    return True
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
@@ -208,15 +335,23 @@ def main(argv: list[str] | None = None) -> None:
                 "avant de lancer les plots Step2."
             )
             steps = [step for step in steps if step != "step2"]
-    _validate_snir_mode_column(csv_paths)
     if args.network_sizes:
         network_sizes = args.network_sizes
         if not _validate_network_sizes(csv_paths, network_sizes):
             return
     else:
         network_sizes = _load_network_sizes_from_csvs(csv_paths)
+    csv_cache: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
     for step in steps:
         for module_path in PLOT_MODULES[step]:
+            csv_path = step1_csv if step == "step1" else step2_csv
+            if not _validate_plot_data(
+                step=step,
+                module_path=module_path,
+                csv_path=csv_path,
+                cached_data=csv_cache,
+            ):
+                continue
             if step == "step2":
                 figure = module_path.split(".")[-1]
                 print(f"Plotting Step2: {figure}")
