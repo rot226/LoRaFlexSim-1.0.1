@@ -81,6 +81,8 @@ def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, objec
                 raise AssertionError(
                     "network_size ne doit pas être remplacé par une valeur par défaut 0.0."
                 )
+        if row.get("network_size") not in (None, ""):
+            row["network_size"] = _coerce_positive_network_size(row["network_size"])
         group_key = tuple(row.get(key) for key in GROUP_KEYS)
         groups[group_key].append(row)
         for key, value in row.items():

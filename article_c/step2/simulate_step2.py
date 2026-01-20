@@ -178,10 +178,9 @@ def run_simulation(
     )
     epsilon_greedy = _clip(epsilon_greedy, 0.0, 1.0)
     density_value = density if density is not None else n_nodes
-    if density_value == 0:
-        logger.error("network_size == 0 avant écriture des résultats.")
-        assert density_value != 0, "network_size ne doit pas être égal à 0."
-    if density_value < 0:
+    if density_value <= 0:
+        if density_value == 0:
+            logger.error("network_size == 0 avant écriture des résultats.")
         raise ValueError("network_size doit être strictement positif.")
     algo_label = _algo_label(algorithm)
     raw_rows: list[dict[str, object]] = []
@@ -381,6 +380,7 @@ def run_simulation(
             )
             learning_curve_rows.append(
                 {
+                    "network_size": density_value,
                     "round": round_id,
                     "algo": algo_label,
                     "avg_reward": avg_reward,
@@ -391,6 +391,7 @@ def run_simulation(
             for sf_index, sf_value in enumerate(sf_values):
                 selection_prob_rows.append(
                     {
+                        "network_size": density_value,
                         "round": round_id,
                         "sf": sf_value,
                         "selection_prob": bandit.counts[sf_index] / total,
@@ -548,6 +549,7 @@ def run_simulation(
             )
             learning_curve_rows.append(
                 {
+                    "network_size": density_value,
                     "round": round_id,
                     "algo": algo_label,
                     "avg_reward": avg_reward,
@@ -559,7 +561,7 @@ def run_simulation(
     if output_dir is not None:
         write_simulation_results(output_dir, raw_rows, network_size=density_value)
         learning_curve_path = output_dir / "learning_curve.csv"
-        learning_curve_header = ["round", "algo", "avg_reward"]
+        learning_curve_header = ["network_size", "round", "algo", "avg_reward"]
         write_rows(
             learning_curve_path,
             learning_curve_header,
