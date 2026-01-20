@@ -225,6 +225,8 @@ def _simulate_density(
     run_index = 0
     timing_totals = {"sf_assignment_s": 0.0, "interference_s": 0.0, "metrics_s": 0.0}
     timing_runs = 0
+    jitter_range_s = float(config.get("jitter_range_s", 30.0))
+    print(f"Jitter range utilisé (s): {jitter_range_s}")
     runs_per_density = len(ALGORITHMS) * len(snir_modes) * len(replications)
     mixra_opt_budget = (
         config["mixra_opt_budget"]
@@ -244,7 +246,7 @@ def _simulate_density(
                     seed=seed,
                     duration_s=float(config["duration_s"]),
                     traffic_mode=str(config["traffic_mode"]),
-                    jitter_range_s=float(config["jitter_range_s"]),
+                    jitter_range_s=jitter_range_s,
                     mixra_opt_max_iterations=int(config["mixra_opt_max_iterations"]),
                     mixra_opt_candidate_subset_size=int(
                         config["mixra_opt_candidate_subset_size"]
