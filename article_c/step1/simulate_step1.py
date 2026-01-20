@@ -403,9 +403,15 @@ def run_simulation(
             mixra_opt_candidate_subset_size = min(mixra_opt_candidate_subset_size, 80)
         if mixra_opt_budget is None:
             if actual_sent <= 320:
-                computed_budget = 1500
+                base_budget = 1500
             else:
-                computed_budget = int(500 + 0.5 * actual_sent)
+                base_budget = int(500 + 0.5 * actual_sent)
+            if mixra_opt_mode == "full":
+                computed_budget = int(base_budget * 1.5)
+            elif mixra_opt_mode in {"fast", "fast_opt"}:
+                computed_budget = max(200, int(base_budget * 0.4))
+            else:
+                computed_budget = base_budget
             mixra_opt_max_evaluations = max(mixra_opt_max_evaluations, computed_budget)
         else:
             mixra_opt_max_evaluations = mixra_opt_budget
