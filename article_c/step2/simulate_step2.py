@@ -176,9 +176,9 @@ def run_simulation(
         else window_delay_range_s
     )
     epsilon_greedy = _clip(epsilon_greedy, 0.0, 1.0)
-    density_value = density if density is not None else n_nodes
-    if density_value <= 0:
-        if density_value == 0:
+    network_size_value = density if density is not None else n_nodes
+    if network_size_value <= 0:
+        if network_size_value == 0:
             logger.error("network_size == 0 avant écriture des résultats.")
         raise ValueError("network_size doit être strictement positif.")
     algo_label = _algo_label(algorithm)
@@ -326,8 +326,7 @@ def run_simulation(
                 window_rewards.append(reward)
                 raw_rows.append(
                     {
-                        "network_size": density_value,
-                        "density": density_value,
+                        "network_size": network_size_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
                         "cluster": node_clusters[node_id],
@@ -350,8 +349,7 @@ def run_simulation(
                 )
                 raw_rows.append(
                     {
-                        "network_size": density_value,
-                        "density": density_value,
+                        "network_size": network_size_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
                         "cluster": "all",
@@ -381,7 +379,7 @@ def run_simulation(
             )
             learning_curve_rows.append(
                 {
-                    "network_size": density_value,
+                    "network_size": network_size_value,
                     "round": round_id,
                     "algo": algo_label,
                     "avg_reward": avg_reward,
@@ -392,7 +390,7 @@ def run_simulation(
             for sf_index, sf_value in enumerate(sf_values):
                 selection_prob_rows.append(
                     {
-                        "network_size": density_value,
+                        "network_size": network_size_value,
                         "round": round_id,
                         "sf": sf_value,
                         "selection_prob": bandit.counts[sf_index] / total,
@@ -495,8 +493,7 @@ def run_simulation(
                 window_rewards.append(reward)
                 raw_rows.append(
                     {
-                        "network_size": density_value,
-                        "density": density_value,
+                        "network_size": network_size_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
                         "cluster": node_clusters[node_id],
@@ -519,8 +516,7 @@ def run_simulation(
                 )
                 raw_rows.append(
                     {
-                        "network_size": density_value,
-                        "density": density_value,
+                        "network_size": network_size_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
                         "cluster": "all",
@@ -550,7 +546,7 @@ def run_simulation(
             )
             learning_curve_rows.append(
                 {
-                    "network_size": density_value,
+                    "network_size": network_size_value,
                     "round": round_id,
                     "algo": algo_label,
                     "avg_reward": avg_reward,
@@ -560,7 +556,7 @@ def run_simulation(
         raise ValueError("algorithm doit être adr, mixra_h, mixra_opt ou ucb1_sf.")
 
     if output_dir is not None:
-        write_simulation_results(output_dir, raw_rows, network_size=density_value)
+        write_simulation_results(output_dir, raw_rows, network_size=network_size_value)
         learning_curve_path = output_dir / "learning_curve.csv"
         learning_curve_header = ["network_size", "round", "algo", "avg_reward"]
         write_rows(

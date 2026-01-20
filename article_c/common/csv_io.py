@@ -74,13 +74,10 @@ def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, objec
     groups: dict[tuple[object, ...], list[dict[str, object]]] = defaultdict(list)
     numeric_keys: set[str] = set()
     for row in raw_rows:
-        network_size = row.get("network_size")
-        if (network_size is None or network_size == "") and "density" in row:
-            row["network_size"] = row["density"]
-            if row["network_size"] == 0.0:
-                raise AssertionError(
-                    "network_size ne doit pas être remplacé par une valeur par défaut 0.0."
-                )
+        if "density" in row:
+            raise AssertionError(
+                "La colonne 'density' est interdite. Utilisez 'network_size' uniquement."
+            )
         if row.get("network_size") not in (None, ""):
             row["network_size"] = _coerce_positive_network_size(row["network_size"])
         group_key = tuple(row.get(key) for key in GROUP_KEYS)
@@ -124,6 +121,10 @@ def write_simulation_results(
     if expected_network_size is not None:
         _coerce_positive_network_size(expected_network_size)
     for row in raw_rows:
+        if "density" in row:
+            raise AssertionError(
+                "La colonne 'density' est interdite. Utilisez 'network_size' uniquement."
+            )
         row_network_size = row.get("network_size")
         if row_network_size is None or row_network_size == "":
             if expected_network_size == 0.0:
@@ -132,12 +133,6 @@ def write_simulation_results(
                 )
             if expected_network_size is not None:
                 row["network_size"] = expected_network_size
-            elif "density" in row:
-                row["network_size"] = row["density"]
-                if row["network_size"] == 0.0:
-                    raise AssertionError(
-                        "network_size ne doit pas être remplacé par une valeur par défaut 0.0."
-                    )
         row_network_size = row.get("network_size")
         _coerce_positive_network_size(row_network_size)
 
