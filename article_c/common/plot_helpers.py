@@ -118,8 +118,9 @@ def load_step1_aggregated(path: Path) -> list[dict[str, object]]:
         return _sample_step1_rows()
     parsed: list[dict[str, object]] = []
     for row in rows:
-        network_size_value = row.get("network_size")
-        if network_size_value is None:
+        if "network_size" in row and row.get("network_size") not in (None, ""):
+            network_size_value = row.get("network_size")
+        else:
             network_size_value = row.get("density")
         parsed_row: dict[str, object] = {
             "network_size": _to_float(network_size_value),
@@ -151,8 +152,9 @@ def load_step2_aggregated(path: Path) -> list[dict[str, object]]:
         return _sample_step2_rows()
     parsed: list[dict[str, object]] = []
     for row in rows:
-        network_size_value = row.get("network_size")
-        if network_size_value is None:
+        if "network_size" in row and row.get("network_size") not in (None, ""):
+            network_size_value = row.get("network_size")
+        else:
             network_size_value = row.get("density")
         parsed_row = {
             "network_size": _to_float(network_size_value),
@@ -210,7 +212,7 @@ def filter_cluster(rows: list[dict[str, object]], cluster: str) -> list[dict[str
 
 def ensure_network_size(rows: list[dict[str, object]]) -> None:
     for row in rows:
-        if "network_size" not in row and "density" in row:
+        if row.get("network_size") in (None, "") and "density" in row:
             row["network_size"] = row["density"]
 
 
