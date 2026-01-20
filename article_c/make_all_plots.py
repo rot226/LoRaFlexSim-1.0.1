@@ -260,6 +260,7 @@ def _validate_plot_data(
             f"{module_path} nécessite au moins 2 tailles "
             "disponibles, figure ignorée."
         )
+        print(f"CSV path: {csv_path}")
         return False
     algo_col = _pick_column(fieldnames, ("algo", "algorithm", "method"))
     snir_col = _pick_column(
@@ -354,6 +355,13 @@ def main(argv: list[str] | None = None) -> None:
                 continue
             if step == "step2":
                 figure = module_path.split(".")[-1]
+                detected_sizes = sorted(_extract_network_sizes(csv_path))
+                sizes_label = (
+                    ", ".join(str(size) for size in detected_sizes)
+                    if detected_sizes
+                    else "none"
+                )
+                print(f"Detected sizes: {sizes_label}")
                 print(f"Plotting Step2: {figure}")
             _run_plot_module(module_path)
 
