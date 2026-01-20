@@ -138,15 +138,14 @@ def run_simulation(
     traffic_coeff_enabled: bool | None = None,
     window_delay_enabled: bool | None = None,
     window_delay_range_s: float | None = None,
+    shadowing_sigma_db: float | None = None,
     output_dir: Path | None = None,
 ) -> Step2Result:
     """Exécute une simulation proxy de l'étape 2."""
     rng = random.Random(seed)
     step2_defaults = DEFAULT_CONFIG.step2
-    traffic_mode_value = step2_defaults.traffic_mode if traffic_mode is None else traffic_mode
-    jitter_range_value = (
-        step2_defaults.jitter_range_s if jitter_range_s is None else jitter_range_s
-    )
+    traffic_mode_value = "poisson" if traffic_mode is None else traffic_mode
+    jitter_range_value = jitter_range_s
     window_duration_value = (
         step2_defaults.window_duration_s if window_duration_s is None else window_duration_s
     )
@@ -223,7 +222,9 @@ def run_simulation(
         for sf, airtime in airtime_by_sf.items()
     }
     shadowing_mean_db = DEFAULT_CONFIG.scenario.shadowing_mean_db
-    shadowing_sigma_db = DEFAULT_CONFIG.scenario.shadowing_sigma_db
+    shadowing_sigma_db_value = (
+        rng.uniform(6.0, 8.0) if shadowing_sigma_db is None else shadowing_sigma_db
+    )
 
     if algorithm == "ucb1_sf":
         bandit = BanditUCB1(
@@ -267,7 +268,7 @@ def run_simulation(
                 shadowing_db, shadowing_linear = _sample_log_normal_shadowing(
                     rng,
                     mean_db=shadowing_mean_db,
-                    sigma_db=shadowing_sigma_db,
+                    sigma_db=shadowing_sigma_db_value,
                 )
                 link_quality = _clip(shadowing_linear, 0.0, 1.0)
                 node_offset_s = (
@@ -287,7 +288,7 @@ def run_simulation(
                         "traffic_sent": len(traffic_times),
                         "tx_starts": tx_starts,
                         "shadowing_db": shadowing_db,
-                        "shadowing_sigma_db": shadowing_sigma_db,
+                        "shadowing_sigma_db": shadowing_sigma_db_value,
                         "link_quality": link_quality,
                     }
                 )
@@ -436,7 +437,7 @@ def run_simulation(
                 shadowing_db, shadowing_linear = _sample_log_normal_shadowing(
                     rng,
                     mean_db=shadowing_mean_db,
-                    sigma_db=shadowing_sigma_db,
+                    sigma_db=shadowing_sigma_db_value,
                 )
                 link_quality = _clip(shadowing_linear, 0.0, 1.0)
                 node_offset_s = (
@@ -456,7 +457,7 @@ def run_simulation(
                         "traffic_sent": len(traffic_times),
                         "tx_starts": tx_starts,
                         "shadowing_db": shadowing_db,
-                        "shadowing_sigma_db": shadowing_sigma_db,
+                        "shadowing_sigma_db": shadowing_sigma_db_value,
                         "link_quality": link_quality,
                     }
                 )
