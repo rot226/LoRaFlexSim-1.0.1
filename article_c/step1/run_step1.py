@@ -244,7 +244,7 @@ def _simulate_density(
                     seed=seed,
                     duration_s=float(config["duration_s"]),
                     traffic_mode=str(config["traffic_mode"]),
-                    jitter_range_s=float(config["jitter_range"]),
+                    jitter_range_s=float(config["jitter_range_s"]),
                     mixra_opt_max_iterations=int(config["mixra_opt_max_iterations"]),
                     mixra_opt_candidate_subset_size=int(
                         config["mixra_opt_candidate_subset_size"]
@@ -383,7 +383,7 @@ def main(argv: list[str] | None = None) -> None:
         "seeds_base": args.seeds_base,
         "duration_s": args.duration_s,
         "traffic_mode": args.traffic_mode,
-        "jitter_range": args.jitter_range,
+        "jitter_range_s": args.jitter_range,
         "mixra_opt_max_iterations": args.mixra_opt_max_iterations,
         "mixra_opt_candidate_subset_size": args.mixra_opt_candidate_subset_size,
         "mixra_opt_epsilon": args.mixra_opt_epsilon,
