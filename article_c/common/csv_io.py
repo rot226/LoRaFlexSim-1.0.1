@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import csv
+import logging
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
 
 GROUP_KEYS = ("network_size", "algo", "snir_mode", "seed", "cluster", "mixra_opt_fallback")
 EXTRA_MEAN_KEYS = {"mean_toa_s", "mean_latency_s"}
+
+logger = logging.getLogger(__name__)
 
 
 def write_rows(path: Path, header: list[str], rows: list[list[object]]) -> None:
@@ -41,6 +44,8 @@ def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, objec
     aggregated: list[dict[str, object]] = []
     for group_key, rows in groups.items():
         aggregated_row: dict[str, object] = dict(zip(GROUP_KEYS, group_key))
+        if aggregated_row.get("network_size") in (None, ""):
+            raise AssertionError("network_size manquant dans les résultats agrégés.")
         for key in sorted(numeric_keys):
             values = [row[key] for row in rows if isinstance(row.get(key), (int, float))]
             if values:
@@ -65,6 +70,15 @@ def write_simulation_results(output_dir: Path, raw_rows: list[dict[str, object]]
         network_size = row.get("network_size")
         if (network_size is None or network_size == "") and "density" in row:
             row["network_size"] = row["density"]
+
+    if raw_rows:
+        missing_network_size = [
+            row for row in raw_rows if row.get("network_size") in (None, "")
+        ]
+        if missing_network_size:
+            raise AssertionError("network_size manquant dans les lignes raw.")
+        network_sizes = sorted({row.get("network_size") for row in raw_rows})
+        logger.info("network_size written: %s", ", ".join(map(str, network_sizes)))
 
     raw_header: list[str] = []
     seen: set[str] = set()
