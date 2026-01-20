@@ -200,6 +200,7 @@ def main(argv: list[str] | None = None) -> None:
     snir_modes = parse_snir_modes(args.snir_modes)
     replications = replication_ids(args.replications)
     output_dir = Path(args.outdir)
+    simulated_network_sizes: list[int] = []
 
     raw_rows: list[dict[str, object]] = []
     run_index = 0
@@ -207,6 +208,8 @@ def main(argv: list[str] | None = None) -> None:
     completed_runs = 0
     cluster_ids = list(DEFAULT_CONFIG.qos.clusters)
     for density in densities:
+        if density not in simulated_network_sizes:
+            simulated_network_sizes.append(density)
         timing_totals = {"sf_assignment_s": 0.0, "interference_s": 0.0, "metrics_s": 0.0}
         timing_runs = 0
         for algo in ALGORITHMS:
@@ -342,6 +345,9 @@ def main(argv: list[str] | None = None) -> None:
     write_simulation_results(output_dir, raw_rows)
     print(f"Rows written: {len(raw_rows)}")
     (output_dir / "done.flag").write_text("done\n", encoding="utf-8")
+    if simulated_network_sizes:
+        sizes_label = ",".join(str(size) for size in simulated_network_sizes)
+        print(f"Tailles simulées: {sizes_label}")
 
 
 if __name__ == "__main__":
