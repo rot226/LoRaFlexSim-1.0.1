@@ -20,6 +20,8 @@ from article_c.common.plot_helpers import (
     save_figure,
 )
 
+NETWORK_SIZES_OVERRIDE: list[int] | None = None
+
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
     if not network_sizes or len(network_sizes) < 2:
@@ -27,11 +29,15 @@ def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | No
     return network_sizes
 
 
-def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
+def _plot_metric(
+    rows: list[dict[str, object]],
+    metric_key: str,
+    network_sizes: list[int] | None,
+) -> plt.Figure:
     fig, ax = plt.subplots()
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
-    network_sizes = sorted(df["network_size"].unique())
+    network_sizes = network_sizes or sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
         warnings.warn(
             f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
@@ -65,14 +71,15 @@ def main() -> None:
     )
     args = parser.parse_args()
     apply_plot_style()
+    network_sizes_input = args.network_sizes or NETWORK_SIZES_OVERRIDE
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "aggregated_results.csv"
     rows = filter_cluster(load_step2_aggregated(results_path), "all")
     rows = [row for row in rows if row["snir_mode"] == "snir_on"]
-    network_sizes_filter = _normalized_network_sizes(args.network_sizes)
+    network_sizes_filter = _normalized_network_sizes(network_sizes_input)
     rows, _ = filter_rows_by_network_sizes(rows, network_sizes_filter)
 
-    fig = _plot_metric(rows, "success_rate_mean")
+    fig = _plot_metric(rows, "success_rate_mean", network_sizes_filter)
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_RL2", use_tight=False)
     plt.close(fig)

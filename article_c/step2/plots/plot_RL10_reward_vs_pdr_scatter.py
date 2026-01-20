@@ -34,6 +34,8 @@ ALGO_ALIASES = {
 }
 TARGET_ALGOS = ("ucb1_sf", "adr", "mixra_h", "mixra_opt")
 
+NETWORK_SIZES_OVERRIDE: list[int] | None = None
+
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
     if not network_sizes or len(network_sizes) < 2:
@@ -222,16 +224,20 @@ def main() -> None:
     )
     args = parser.parse_args()
     apply_plot_style()
+    network_sizes_input = args.network_sizes or NETWORK_SIZES_OVERRIDE
     step_dir = Path(__file__).resolve().parents[1]
     learning_curve_path = step_dir / "results" / "learning_curve.csv"
     step1_results_path = step_dir.parents[1] / "step1" / "results" / "aggregated_results.csv"
     step2_results_path = step_dir / "results" / "aggregated_results.csv"
     size_rows = load_step2_aggregated(step2_results_path)
     ensure_network_size(size_rows)
-    network_sizes_filter = _normalized_network_sizes(args.network_sizes)
+    network_sizes_filter = _normalized_network_sizes(network_sizes_input)
     size_rows, _ = filter_rows_by_network_sizes(size_rows, network_sizes_filter)
-    df = pd.DataFrame(size_rows)
-    network_sizes = sorted(df["network_size"].unique())
+    if network_sizes_filter is None:
+        df = pd.DataFrame(size_rows)
+        network_sizes = sorted(df["network_size"].unique())
+    else:
+        network_sizes = network_sizes_filter
     if len(network_sizes) < 2:
         warnings.warn(
             f"Moins de deux tailles de réseau disponibles: {network_sizes}.",

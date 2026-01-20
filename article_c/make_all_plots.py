@@ -106,10 +106,15 @@ def _parse_steps(value: str) -> list[str]:
     return steps
 
 
-def _run_plot_module(module_path: str) -> None:
+def _run_plot_module(
+    module_path: str,
+    network_sizes: list[int] | None,
+) -> None:
     module = importlib.import_module(module_path)
     if not hasattr(module, "main"):
         raise AttributeError(f"Module {module_path} sans fonction main().")
+    if network_sizes is not None:
+        setattr(module, "NETWORK_SIZES_OVERRIDE", list(network_sizes))
     module.main()
 
 
@@ -367,7 +372,7 @@ def main(argv: list[str] | None = None) -> None:
                 )
                 print(f"Detected sizes: {sizes_label}")
                 print(f"Plotting Step2: {figure}")
-            _run_plot_module(module_path)
+            _run_plot_module(module_path, network_sizes)
 
 
 if __name__ == "__main__":
