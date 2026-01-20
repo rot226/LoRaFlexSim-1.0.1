@@ -59,7 +59,8 @@ def write_simulation_results(output_dir: Path, raw_rows: list[dict[str, object]]
     aggregated_path = output_dir / "aggregated_results.csv"
 
     for row in raw_rows:
-        if "network_size" not in row and "density" in row:
+        network_size = row.get("network_size")
+        if (network_size is None or network_size == "") and "density" in row:
             row["network_size"] = row["density"]
 
     raw_header: list[str] = []
