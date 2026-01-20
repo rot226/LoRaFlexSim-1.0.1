@@ -26,6 +26,17 @@ def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | No
     return network_sizes
 
 
+def _has_invalid_network_sizes(network_sizes: list[float]) -> bool:
+    if any(float(size) == 0.0 for size in network_sizes):
+        warnings.warn(
+            "Erreur: taille de réseau invalide détectée (0.0). "
+            "Aucune figure ne sera tracée.",
+            stacklevel=2,
+        )
+        return True
+    return False
+
+
 def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
     fig, ax = plt.subplots()
     algorithms = sorted({row["algo"] for row in rows})
@@ -70,6 +81,8 @@ def main() -> None:
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
+    if _has_invalid_network_sizes(network_sizes):
+        return
     if len(network_sizes) < 2:
         warnings.warn(
             f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
