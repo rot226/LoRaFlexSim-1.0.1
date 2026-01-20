@@ -127,38 +127,67 @@ def _mixra_opt_assign(
     nodes_list = list(nodes)
     assignments = _mixra_h_assign(nodes_list)
     local_rng = random.Random(subset_seed)
-
-    def collision_cost(loads: dict[int, int]) -> float:
-        return sum(load * load for load in loads.values())
-
-    def qos_penalty(assignments_list: list[int]) -> float:
-        penalty = 0.0
-        for node, sf in zip(nodes_list, assignments_list):
+    qos_penalties_by_node: list[tuple[float, ...]] = []
+    qos_candidates_by_node: list[tuple[int, ...]] = []
+    for node in nodes_list:
+        penalties: list[float] = []
+        candidates: list[int] = []
+        for sf in SF_VALUES:
             index = SF_INDEX[sf]
             snr_margin = node.snr_margins[index] - node.qos_margin
             rssi_margin = node.rssi_margins[index]
             min_margin = min(snr_margin, rssi_margin)
-            penalty += max(0.0, 2.0 - min_margin)
-        return penalty
+            penalties.append(max(0.0, 2.0 - min_margin))
+            if _qos_ok(node, sf):
+                candidates.append(sf)
+        qos_penalties_by_node.append(tuple(penalties))
+        qos_candidates_by_node.append(tuple(candidates))
 
-    def objective(loads: dict[int, int], assignments_list: list[int]) -> float:
-        return collision_cost(loads) + 2.5 * qos_penalty(assignments_list)
+    def collision_cost(loads: dict[int, int]) -> float:
+        return sum(load * load for load in loads.values())
+
+    def _select_candidate_indices() -> list[int]:
+        total_nodes = len(nodes_list)
+        if total_nodes <= candidate_subset_size:
+            return list(range(total_nodes))
+        by_sf = {sf: [] for sf in SF_VALUES}
+        for idx, sf in enumerate(assignments):
+            by_sf[sf].append(idx)
+        selected: set[int] = set()
+        for sf in SF_VALUES:
+            if len(selected) >= candidate_subset_size:
+                break
+            pool = by_sf[sf]
+            if pool:
+                selected.add(local_rng.choice(pool))
+        remaining = candidate_subset_size - len(selected)
+        if remaining <= 0:
+            selected_list = list(selected)
+            local_rng.shuffle(selected_list)
+            return selected_list
+        remaining_pool = [idx for idx in range(total_nodes) if idx not in selected]
+        if remaining >= len(remaining_pool):
+            selected.update(remaining_pool)
+        else:
+            selected.update(local_rng.sample(remaining_pool, k=remaining))
+        selected_list = list(selected)
+        local_rng.shuffle(selected_list)
+        return selected_list
 
     loads = {sf: 0 for sf in SF_VALUES}
     for sf in assignments:
         loads[sf] += 1
+    qos_penalty_total = 0.0
+    for idx, sf in enumerate(assignments):
+        qos_penalty_total += qos_penalties_by_node[idx][SF_INDEX[sf]]
+    current_obj = collision_cost(loads) + 2.5 * qos_penalty_total
 
     small_improvement_streak = 0
     evaluations = 0
     for _ in range(max_iterations):
         improved = False
-        if len(nodes_list) > candidate_subset_size:
-            candidate_indices = local_rng.sample(
-                range(len(nodes_list)), k=candidate_subset_size
-            )
-        else:
-            candidate_indices = list(range(len(nodes_list)))
-        start_obj = objective(loads, assignments)
+        candidate_indices = _select_candidate_indices()
+        start_obj = current_obj
         for idx in candidate_indices:
             evaluations += 1
             if evaluations > max_evaluations:
@@ -168,32 +197,38 @@ def _mixra_opt_assign(
                     max_evaluations,
                 )
                 return _mixra_h_assign(nodes_list), True
-            node = nodes_list[idx]
             current_sf = assignments[idx]
-            candidates = [sf for sf in SF_VALUES if _qos_ok(node, sf)]
+            candidates = qos_candidates_by_node[idx]
             if not candidates:
                 continue
             best_sf = current_sf
-            best_obj = objective(loads, assignments)
+            best_obj = current_obj
+            current_load = loads[current_sf]
+            current_qos_penalty = qos_penalties_by_node[idx][SF_INDEX[current_sf]]
             for sf in candidates:
                 if sf == current_sf:
                     continue
-                loads[current_sf] -= 1
-                loads[sf] += 1
-                assignments[idx] = sf
-                candidate_obj = objective(loads, assignments)
-                loads[sf] -= 1
-                loads[current_sf] += 1
-                assignments[idx] = current_sf
+                candidate_load = loads[sf]
+                delta_collision = 2.0 * (candidate_load - current_load + 1.0)
+                candidate_qos_penalty = qos_penalties_by_node[idx][SF_INDEX[sf]]
+                delta_qos = candidate_qos_penalty - current_qos_penalty
+                candidate_obj = current_obj + delta_collision + 2.5 * delta_qos
                 if candidate_obj < best_obj:
                     best_obj = candidate_obj
                     best_sf = sf
             if best_sf != current_sf:
+                best_load = loads[best_sf]
                 loads[current_sf] -= 1
                 loads[best_sf] += 1
                 assignments[idx] = best_sf
+                delta_collision = 2.0 * (best_load - current_load + 1.0)
+                new_qos_penalty = qos_penalties_by_node[idx][SF_INDEX[best_sf]]
+                qos_penalty_total += new_qos_penalty - current_qos_penalty
+                current_obj += delta_collision + 2.5 * (
+                    new_qos_penalty - current_qos_penalty
+                )
                 improved = True
-        end_obj = objective(loads, assignments)
+        end_obj = current_obj
         improvement = start_obj - end_obj
         if improvement < convergence_epsilon:
             small_improvement_streak += 1
