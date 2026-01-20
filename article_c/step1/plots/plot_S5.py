@@ -189,13 +189,31 @@ def _plot_pdr_distribution(
     *,
     target_size: int,
 ) -> None:
+    if not any(values for values in values_by_group.values()):
+        warnings.warn(
+            f"Aucune donnée disponible pour size={target_size}, plot ignoré.",
+            stacklevel=2,
+        )
+        return
+
     algorithms: list[tuple[str, bool]] = []
     for algo in ("adr", "mixra_h", "mixra_opt", "ucb1_sf"):
         for fallback in (False, True):
-            if any(key[0] == algo and key[1] == fallback for key in values_by_group):
+            if any(
+                key[0] == algo
+                and key[1] == fallback
+                and values_by_group.get(key)
+                for key in values_by_group
+            ):
                 algorithms.append((algo, fallback))
     if not algorithms:
-        algorithms = sorted({(algo, fallback) for algo, fallback, _ in values_by_group})
+        algorithms = sorted(
+            {
+                (algo, fallback)
+                for (algo, fallback, _), values in values_by_group.items()
+                if values
+            }
+        )
 
     rng = Random(42)
     base_positions = list(range(len(algorithms)))
@@ -216,6 +234,10 @@ def _plot_pdr_distribution(
             data_with_positions.append((pos + offsets[snir_mode], values))
 
         if not data_with_positions:
+            warnings.warn(
+                f"Aucune donnée pour size={target_size} et snir={snir_mode}, trace ignorée.",
+                stacklevel=2,
+            )
             continue
 
         data = [values for _, values in data_with_positions]
