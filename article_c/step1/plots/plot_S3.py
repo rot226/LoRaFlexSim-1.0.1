@@ -7,6 +7,7 @@ from pathlib import Path
 import warnings
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import pandas as pd
 
 from article_c.common.plot_helpers import (
@@ -31,6 +32,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xticks(network_sizes)
+    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Received Frames (mean)")
     ax.set_title("Step 1 - Received Frames vs Network size (number of nodes) (SNIR on/off)")
