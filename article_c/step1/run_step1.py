@@ -168,7 +168,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help=(
             "Budget cible d'évaluations pour MixRA-Opt (max d'évaluations). "
             "Si absent, un budget par taille est appliqué "
-            "(ex: N=80→5000, N=160→10000, N=320→20000, N=640→40000, N=1280→80000)."
+            "(ex: N=80→20000, N=160→40000, N=320→80000, N=640→150000, N=1280→250000)."
+        ),
+    )
+    parser.add_argument(
+        "--mixra-opt-budget-base",
+        type=int,
+        default=0,
+        help=(
+            "Offset additif appliqué au budget MixRA-Opt calculé "
+            "(utile pour ajuster facilement le budget adaptatif)."
+        ),
+    )
+    parser.add_argument(
+        "--mixra-opt-budget-scale",
+        type=float,
+        default=1.0,
+        help=(
+            "Facteur multiplicatif appliqué au budget MixRA-Opt calculé "
+            "(utile pour ajuster facilement le budget adaptatif)."
         ),
     )
     parser.add_argument(
@@ -239,7 +257,11 @@ def _simulate_density(
     mixra_opt_budget = (
         config["mixra_opt_budget"]
         if config["mixra_opt_budget"] is not None
-        else mixra_opt_budget_for_size(density)
+        else mixra_opt_budget_for_size(
+            density,
+            base=int(config["mixra_opt_budget_base"]),
+            scale=float(config["mixra_opt_budget_scale"]),
+        )
     )
     for algo in ALGORITHMS:
         for snir_mode in snir_modes:
@@ -262,6 +284,8 @@ def _simulate_density(
                     mixra_opt_epsilon=float(config["mixra_opt_epsilon"]),
                     mixra_opt_max_evaluations=int(config["mixra_opt_max_evals"]),
                     mixra_opt_budget=mixra_opt_budget,
+                    mixra_opt_budget_base=int(config["mixra_opt_budget_base"]),
+                    mixra_opt_budget_scale=float(config["mixra_opt_budget_scale"]),
                     mixra_opt_enabled=bool(config["mixra_opt_enabled"]),
                     mixra_opt_mode=str(config["mixra_opt_mode"]),
                     mixra_opt_timeout_s=config["mixra_opt_timeout"],
@@ -399,6 +423,8 @@ def main(argv: list[str] | None = None) -> None:
         "mixra_opt_epsilon": args.mixra_opt_epsilon,
         "mixra_opt_max_evals": args.mixra_opt_max_evals,
         "mixra_opt_budget": args.mixra_opt_budget,
+        "mixra_opt_budget_base": args.mixra_opt_budget_base,
+        "mixra_opt_budget_scale": args.mixra_opt_budget_scale,
         "mixra_opt_enabled": args.mixra_opt_enabled,
         "mixra_opt_mode": args.mixra_opt_mode,
         "mixra_opt_timeout": args.mixra_opt_timeout,
