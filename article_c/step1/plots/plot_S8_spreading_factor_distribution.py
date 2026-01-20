@@ -138,6 +138,8 @@ def _aggregate_sf_selected(
         fallback = _fallback_from_row(row)
         if algo != "mixra_opt":
             fallback = False
+        if algo == "mixra_opt" and fallback:
+            continue
         key = (algo, fallback, snir_mode)
         if key not in counts:
             counts[key] = {sf: 0 for sf in sf_values}
@@ -163,6 +165,8 @@ def _aggregate_distributions(
             continue
         algo = str(row.get("algo", ""))
         fallback = _fallback_from_row(row) if algo == "mixra_opt" else False
+        if algo == "mixra_opt" and fallback:
+            continue
         key = (algo, fallback, str(row.get("snir_mode", "")))
         if key not in grouped:
             grouped[key] = {
@@ -185,6 +189,14 @@ def _aggregate_distributions(
 
 
 def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
+    rows = [
+        row
+        for row in rows
+        if not (
+            str(row.get("algo", "")) == "mixra_opt"
+            and _fallback_from_row(row)
+        )
+    ]
     sf_values = list(DEFAULT_CONFIG.radio.spreading_factors)
     snir_modes = [mode for mode in SNIR_MODES if any(row.get("snir_mode") == mode for row in rows)]
     extra_snir_modes = [

@@ -30,6 +30,14 @@ def _cluster_labels(clusters: list[str]) -> dict[str, str]:
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
+    rows = [
+        row
+        for row in rows
+        if not (
+            str(row.get("algo", "")) == "mixra_opt"
+            and bool(row.get("mixra_opt_fallback"))
+        )
+    ]
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())

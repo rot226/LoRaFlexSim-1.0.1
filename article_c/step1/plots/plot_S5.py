@@ -164,6 +164,8 @@ def _extract_pdr_groups(
         fallback = _as_bool(row.get(fallback_col)) if fallback_col else False
         if algo != "mixra_opt":
             fallback = False
+        if algo == "mixra_opt" and fallback:
+            continue
         pdr = _as_float(row.get(pdr_col)) if pdr_col else None
         if pdr is None and rx_col and tx_col:
             rx_value = _as_float(row.get(rx_col))
