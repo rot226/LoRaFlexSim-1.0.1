@@ -67,7 +67,7 @@ class Step2Config:
     """Paramètres spécifiques à l'étape 2."""
 
     traffic_mode: str = "poisson"
-    jitter_range_s: float | None = None
+    jitter_range_s: float = 30.0
     window_duration_s: float = 60.0
     traffic_coeff_min: float = 0.7
     traffic_coeff_max: float = 1.3
