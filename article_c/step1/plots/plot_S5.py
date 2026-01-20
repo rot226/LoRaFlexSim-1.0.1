@@ -21,6 +21,7 @@ from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     ensure_network_size,
+    filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     save_figure,
 )
@@ -321,7 +322,7 @@ def main() -> None:
         )
     raw_rows = _read_rows(results_path)
     if not raw_rows:
-        sample_rows = _filtered_sample_rows()
+        sample_rows = filter_mixra_opt_fallback(_filtered_sample_rows())
         if args.network_sizes:
             sample_rows, _ = filter_rows_by_network_sizes(
                 sample_rows,
@@ -352,6 +353,7 @@ def main() -> None:
                 ).append(float(pdr_value))
     else:
         ensure_network_size(raw_rows)
+        raw_rows = filter_mixra_opt_fallback(raw_rows)
         if args.network_sizes:
             raw_rows, _ = filter_rows_by_network_sizes(raw_rows, args.network_sizes)
             df = pd.DataFrame(raw_rows)
