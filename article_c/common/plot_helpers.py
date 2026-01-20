@@ -118,15 +118,27 @@ def load_step1_aggregated(path: Path) -> list[dict[str, object]]:
         return _sample_step1_rows()
     parsed: list[dict[str, object]] = []
     for row in rows:
+        network_size_value = row.get("network_size")
+        if network_size_value is None:
+            network_size_value = row.get("density")
         parsed_row: dict[str, object] = {
-            "density": _to_float(row.get("density")),
+            "network_size": _to_float(network_size_value),
             "algo": row.get("algo", ""),
             "snir_mode": row.get("snir_mode", ""),
             "cluster": row.get("cluster", "all"),
             "mixra_opt_fallback": _to_bool(row.get("mixra_opt_fallback")),
         }
+        if "density" in row:
+            parsed_row["density"] = _to_float(row.get("density"))
         for key, value in row.items():
-            if key in {"density", "algo", "snir_mode", "cluster", "mixra_opt_fallback"}:
+            if key in {
+                "density",
+                "network_size",
+                "algo",
+                "snir_mode",
+                "cluster",
+                "mixra_opt_fallback",
+            }:
                 continue
             parsed_row[key] = _to_float(value)
         parsed.append(parsed_row)
@@ -139,18 +151,22 @@ def load_step2_aggregated(path: Path) -> list[dict[str, object]]:
         return _sample_step2_rows()
     parsed: list[dict[str, object]] = []
     for row in rows:
-        parsed.append(
-            {
-                "density": _to_float(row.get("density")),
-                "algo": row.get("algo", ""),
-                "snir_mode": row.get("snir_mode", ""),
-                "cluster": row.get("cluster", "all"),
-                "success_rate_mean": _to_float(row.get("success_rate_mean")),
-                "bitrate_norm_mean": _to_float(row.get("bitrate_norm_mean")),
-                "energy_norm_mean": _to_float(row.get("energy_norm_mean")),
-                "reward_mean": _to_float(row.get("reward_mean")),
-            }
-        )
+        network_size_value = row.get("network_size")
+        if network_size_value is None:
+            network_size_value = row.get("density")
+        parsed_row = {
+            "network_size": _to_float(network_size_value),
+            "algo": row.get("algo", ""),
+            "snir_mode": row.get("snir_mode", ""),
+            "cluster": row.get("cluster", "all"),
+            "success_rate_mean": _to_float(row.get("success_rate_mean")),
+            "bitrate_norm_mean": _to_float(row.get("bitrate_norm_mean")),
+            "energy_norm_mean": _to_float(row.get("energy_norm_mean")),
+            "reward_mean": _to_float(row.get("reward_mean")),
+        }
+        if "density" in row:
+            parsed_row["density"] = _to_float(row.get("density"))
+        parsed.append(parsed_row)
     return parsed
 
 
@@ -322,6 +338,7 @@ def _sample_step1_rows() -> list[dict[str, object]]:
                     mean_toa_s = (base_toa + 0.2 * density) / 1000.0
                     row = {
                         "density": density,
+                        "network_size": density,
                         "algo": algo,
                         "snir_mode": snir_mode,
                         "cluster": cluster,
@@ -352,6 +369,7 @@ def _sample_step2_rows() -> list[dict[str, object]]:
                     rows.append(
                         {
                             "density": density,
+                            "network_size": density,
                             "algo": algo,
                             "snir_mode": snir_mode,
                             "cluster": cluster,
