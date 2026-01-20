@@ -20,6 +20,12 @@ from article_c.common.plot_helpers import (
 )
 
 
+def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
+    if not network_sizes or len(network_sizes) < 2:
+        return None
+    return network_sizes
+
+
 def _to_float(value: object, default: float = 0.0) -> float:
     try:
         return float(value)
@@ -103,11 +109,15 @@ def main() -> None:
     aggregated_results_path = step_dir / "results" / "aggregated_results.csv"
     size_rows = load_step2_aggregated(aggregated_results_path)
     ensure_network_size(size_rows)
-    size_rows, _ = filter_rows_by_network_sizes(size_rows, args.network_sizes)
+    network_sizes_filter = _normalized_network_sizes(args.network_sizes)
+    size_rows, _ = filter_rows_by_network_sizes(size_rows, network_sizes_filter)
     df = pd.DataFrame(size_rows)
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
-        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+        warnings.warn(
+            f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
+            stacklevel=2,
+        )
 
     fig = _plot_learning_curve(rows)
     output_dir = step_dir / "plots" / "output"
