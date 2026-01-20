@@ -174,7 +174,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=("fast", "balanced", "full"),
         default="balanced",
         help=(
-            "Mode MixRA-Opt (balanced par défaut, fast pour accélérer, "
+            "Mode MixRA-Opt (balanced par défaut, fast pour un budget strict, "
             "full pour une optimisation plus longue)."
         ),
     )
