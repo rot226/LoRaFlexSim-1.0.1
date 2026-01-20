@@ -32,6 +32,16 @@ ALGO_ALIASES = {
 TARGET_ALGOS = ("ucb1_sf", "adr", "mixra_h", "mixra_opt")
 
 
+def _has_invalid_network_sizes(network_sizes: list[float]) -> bool:
+    if any(float(size) == 0.0 for size in network_sizes):
+        print(
+            "ERREUR: taille de réseau invalide détectée (0.0). "
+            "Aucune figure ne sera tracée."
+        )
+        return True
+    return False
+
+
 def _canonical_algo(algo: str) -> str | None:
     return ALGO_ALIASES.get(algo)
 
@@ -212,6 +222,9 @@ def main() -> None:
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
     )
     args = parser.parse_args()
+    network_sizes = args.network_sizes
+    if network_sizes is not None and _has_invalid_network_sizes(network_sizes):
+        return
     apply_plot_style()
     root_dir = Path(__file__).resolve().parent
     step_dir = root_dir / "article_c" / "step2"
@@ -222,7 +235,7 @@ def main() -> None:
         learning_curve_path,
         step1_results_path,
         step2_results_path,
-        args.network_sizes,
+        network_sizes,
     )
 
     fig = _plot_scatter(points)

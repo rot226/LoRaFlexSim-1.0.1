@@ -29,20 +29,24 @@ def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | No
 
 def _has_invalid_network_sizes(network_sizes: list[float]) -> bool:
     if any(float(size) == 0.0 for size in network_sizes):
-        warnings.warn(
-            "Erreur: taille de réseau invalide détectée (0.0). "
-            "Aucune figure ne sera tracée.",
-            stacklevel=2,
+        print(
+            "ERREUR: taille de réseau invalide détectée (0.0). "
+            "Aucune figure ne sera tracée."
         )
         return True
     return False
 
 
-def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure | None:
+def _plot_metric(
+    rows: list[dict[str, object]],
+    metric_key: str,
+    network_sizes: list[int] | None,
+) -> plt.Figure | None:
     fig, ax = plt.subplots()
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
-    network_sizes = sorted(df["network_size"].unique())
+    if network_sizes is None:
+        network_sizes = sorted(df["network_size"].unique())
     if _has_invalid_network_sizes(network_sizes):
         return None
     if len(network_sizes) < 2:
@@ -68,7 +72,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure |
     return fig
 
 
-def main() -> None:
+def main(network_sizes: list[int] | None = None, argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -76,16 +80,20 @@ def main() -> None:
         nargs="+",
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if network_sizes is None:
+        network_sizes = args.network_sizes
+    if network_sizes is not None and _has_invalid_network_sizes(network_sizes):
+        return
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "aggregated_results.csv"
     rows = filter_cluster(load_step2_aggregated(results_path), "all")
     rows = [row for row in rows if row["snir_mode"] == "snir_on"]
-    network_sizes_filter = _normalized_network_sizes(args.network_sizes)
+    network_sizes_filter = _normalized_network_sizes(network_sizes)
     rows, _ = filter_rows_by_network_sizes(rows, network_sizes_filter)
 
-    fig = _plot_metric(rows, "success_rate_mean")
+    fig = _plot_metric(rows, "success_rate_mean", network_sizes_filter)
     if fig is None:
         return
     output_dir = step_dir / "plots" / "output"

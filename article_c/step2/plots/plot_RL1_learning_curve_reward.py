@@ -28,10 +28,9 @@ def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | No
 
 def _has_invalid_network_sizes(network_sizes: list[float]) -> bool:
     if any(float(size) == 0.0 for size in network_sizes):
-        warnings.warn(
-            "Erreur: taille de réseau invalide détectée (0.0). "
-            "Aucune figure ne sera tracée.",
-            stacklevel=2,
+        print(
+            "ERREUR: taille de réseau invalide détectée (0.0). "
+            "Aucune figure ne sera tracée."
         )
         return True
     return False
@@ -104,7 +103,7 @@ def _plot_learning_curve(rows: list[dict[str, object]]) -> plt.Figure:
     return fig
 
 
-def main() -> None:
+def main(network_sizes: list[int] | None = None, argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -112,7 +111,11 @@ def main() -> None:
         nargs="+",
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if network_sizes is None:
+        network_sizes = args.network_sizes
+    if network_sizes is not None and _has_invalid_network_sizes(network_sizes):
+        return
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "learning_curve.csv"
@@ -120,10 +123,13 @@ def main() -> None:
     aggregated_results_path = step_dir / "results" / "aggregated_results.csv"
     size_rows = load_step2_aggregated(aggregated_results_path)
     ensure_network_size(size_rows)
-    network_sizes_filter = _normalized_network_sizes(args.network_sizes)
+    network_sizes_filter = _normalized_network_sizes(network_sizes)
     size_rows, _ = filter_rows_by_network_sizes(size_rows, network_sizes_filter)
-    df = pd.DataFrame(size_rows)
-    network_sizes = sorted(df["network_size"].unique())
+    if network_sizes_filter is None:
+        df = pd.DataFrame(size_rows)
+        network_sizes = sorted(df["network_size"].unique())
+    else:
+        network_sizes = network_sizes_filter
     if _has_invalid_network_sizes(network_sizes):
         return
     if len(network_sizes) < 2:
