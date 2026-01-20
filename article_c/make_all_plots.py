@@ -7,7 +7,7 @@ import csv
 import importlib
 from pathlib import Path
 
-from article_c.common.config import DEFAULT_CONFIG
+import pandas as pd
 
 
 PLOT_MODULES = {
@@ -57,7 +57,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         dest="network_sizes",
         type=int,
         nargs="+",
-        default=list(DEFAULT_CONFIG.scenario.network_sizes),
+        default=None,
         help="Tailles de réseau attendues (ex: 50 100 150).",
     )
     return parser
@@ -115,6 +115,22 @@ def _extract_network_sizes(path: Path) -> set[int]:
     return sizes
 
 
+def _load_network_sizes_from_csvs(paths: list[Path]) -> list[int]:
+    sizes: set[int] = set()
+    for path in paths:
+        if not path.exists():
+            continue
+        df = pd.read_csv(path)
+        if "network_size" not in df.columns:
+            raise ValueError(
+                f"Le CSV {path} doit contenir une colonne 'network_size'."
+            )
+        sizes.update(
+            int(value) for value in df["network_size"].dropna().unique().tolist()
+        )
+    return sorted(sizes)
+
+
 def _validate_network_sizes(paths: list[Path], expected_sizes: list[int]) -> bool:
     expected_set = {int(size) for size in expected_sizes}
     for path in paths:
@@ -160,8 +176,12 @@ def main(argv: list[str] | None = None) -> None:
             )
             steps = [step for step in steps if step != "step2"]
     _validate_snir_mode_column(csv_paths)
-    if not _validate_network_sizes(csv_paths, args.network_sizes):
-        return
+    if args.network_sizes:
+        network_sizes = args.network_sizes
+        if not _validate_network_sizes(csv_paths, network_sizes):
+            return
+    else:
+        network_sizes = _load_network_sizes_from_csvs(csv_paths)
     for step in steps:
         for module_path in PLOT_MODULES[step]:
             if step == "step2":
