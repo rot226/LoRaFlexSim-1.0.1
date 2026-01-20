@@ -52,6 +52,21 @@ def write_rows(path: Path, header: list[str], rows: list[list[object]]) -> None:
             writer.writerows(rows)
 
 
+def _coerce_positive_network_size(value: object) -> float:
+    if value is None or value == "":
+        raise AssertionError("network_size manquant dans les lignes raw.")
+    try:
+        size = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("network_size doit être numérique.") from exc
+    if size == 0:
+        logger.error("network_size == 0 avant écriture des résultats.")
+        assert size != 0, "network_size ne doit pas être égal à 0."
+    if size < 0:
+        raise ValueError("network_size doit être strictement positif.")
+    return size
+
+
 def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, object]]:
     """Agrège les résultats avec moyenne et écart-type par clés de simulation."""
     if "network_size" not in GROUP_KEYS:
@@ -104,6 +119,8 @@ def write_simulation_results(
     aggregated_path = output_dir / "aggregated_results.csv"
 
     expected_network_size = network_size
+    if expected_network_size is not None:
+        _coerce_positive_network_size(expected_network_size)
     for row in raw_rows:
         row_network_size = row.get("network_size")
         if row_network_size is None or row_network_size == "":
@@ -119,6 +136,8 @@ def write_simulation_results(
                     raise AssertionError(
                         "network_size ne doit pas être remplacé par une valeur par défaut 0.0."
                     )
+        row_network_size = row.get("network_size")
+        _coerce_positive_network_size(row_network_size)
 
     if raw_rows:
         missing_network_size = [

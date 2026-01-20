@@ -178,6 +178,11 @@ def run_simulation(
     )
     epsilon_greedy = _clip(epsilon_greedy, 0.0, 1.0)
     density_value = density if density is not None else n_nodes
+    if density_value == 0:
+        logger.error("network_size == 0 avant écriture des résultats.")
+        assert density_value != 0, "network_size ne doit pas être égal à 0."
+    if density_value < 0:
+        raise ValueError("network_size doit être strictement positif.")
     algo_label = _algo_label(algorithm)
     raw_rows: list[dict[str, object]] = []
     selection_prob_rows: list[dict[str, object]] = []
