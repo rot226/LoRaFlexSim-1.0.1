@@ -148,6 +148,8 @@ def plot_cdf_by_algo(
         fallback = _as_bool(row.get(fallback_col)) if fallback_col else False
         if algo != "mixra_opt":
             fallback = False
+        if algo == "mixra_opt" and fallback:
+            continue
         value = _as_float(row.get(metric_col))
         if value is None:
             continue
