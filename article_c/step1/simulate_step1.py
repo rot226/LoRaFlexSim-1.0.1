@@ -445,7 +445,7 @@ def run_simulation(
     mixra_opt_mode: str = "balanced",
     mixra_opt_timeout_s: float | None = None,
     mixra_opt_no_fallback: bool = False,
-    shadowing_sigma_db: float = 7.0,
+    shadowing_sigma_db: float | None = None,
     shadowing_mean_db: float = 0.0,
     fading_type: str | None = "lognormal",
     fading_sigma_db: float = 1.2,
@@ -466,6 +466,8 @@ def run_simulation(
         mixra_opt_timeout_s = MIXRA_OPT_EMERGENCY_TIMEOUT_S
     elif mixra_opt_timeout_s <= 0:
         mixra_opt_timeout_s = None
+    if shadowing_sigma_db is None:
+        shadowing_sigma_db = rng.uniform(6.0, 8.0)
     jitter_range_value = jitter_range_s
     if jitter_range_value is None:
         base_period = duration_s / max(1, sent)

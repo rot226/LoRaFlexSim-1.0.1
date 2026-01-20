@@ -31,6 +31,9 @@ def sample_fading_db(
     raise ValueError(f"Type de fading inconnu: {fading_type}")
 
 
+SHADOWING_SIGMA_RANGE_DB = (6.0, 8.0)
+
+
 def log_distance_path_loss(
     distance_m: float,
     freq_mhz: float,
@@ -66,7 +69,7 @@ def log_distance_path_loss(
     path_loss_db = fspl_db + 10 * path_loss_exponent * math.log10(distance_m / reference_distance_m)
     generator = rng or random
     if shadowing_sigma_db is None:
-        shadowing_sigma_db = generator.uniform(6.0, 8.0)
+        shadowing_sigma_db = generator.uniform(*SHADOWING_SIGMA_RANGE_DB)
     if shadowing_sigma_db > 0:
         path_loss_db += generator.gauss(shadowing_mean_db, shadowing_sigma_db)
     elif shadowing_mean_db != 0.0:
