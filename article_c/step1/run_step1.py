@@ -218,6 +218,7 @@ def main(argv: list[str] | None = None) -> None:
     completed_runs = 0
     cluster_ids = list(DEFAULT_CONFIG.qos.clusters)
     for density in densities:
+        simulated_sizes.append(density)
         timing_totals = {"sf_assignment_s": 0.0, "interference_s": 0.0, "metrics_s": 0.0}
         timing_runs = 0
         for algo in ALGORITHMS:
@@ -353,8 +354,6 @@ def main(argv: list[str] | None = None) -> None:
                 f"agrégation métriques {mean_metrics:.6f}s "
                 f"(moyenne sur {timing_runs} runs)."
             )
-        simulated_sizes.append(density)
-
     write_simulation_results(output_dir, raw_rows)
     print(f"Rows written: {len(raw_rows)}")
     rows_per_size = Counter(
