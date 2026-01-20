@@ -106,11 +106,14 @@ def _parse_steps(value: str) -> list[str]:
     return steps
 
 
-def _run_plot_module(module_path: str) -> None:
+def _run_plot_module(module_path: str, *, network_sizes: list[int] | None = None) -> None:
     module = importlib.import_module(module_path)
     if not hasattr(module, "main"):
         raise AttributeError(f"Module {module_path} sans fonction main().")
-    module.main()
+    if network_sizes is None:
+        module.main()
+        return
+    module.main(network_sizes=network_sizes)
 
 
 def _pick_column(fieldnames: list[str], candidates: tuple[str, ...]) -> str | None:
@@ -367,7 +370,10 @@ def main(argv: list[str] | None = None) -> None:
                 )
                 print(f"Detected sizes: {sizes_label}")
                 print(f"Plotting Step2: {figure}")
-            _run_plot_module(module_path)
+            if step == "step2":
+                _run_plot_module(module_path, network_sizes=network_sizes)
+            else:
+                _run_plot_module(module_path)
 
 
 if __name__ == "__main__":
