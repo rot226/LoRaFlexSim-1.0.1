@@ -81,10 +81,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Modèle de trafic pour l'étape 2 (periodic ou poisson).",
     )
     parser.add_argument(
-        "--jitter-range",
+        "--jitter-range-s",
+        dest="jitter_range_s",
         type=float,
-        default=None,
+        default=30.0,
         help="Amplitude du jitter pour l'étape 2 (secondes).",
+    )
+    parser.add_argument(
+        "--jitter-range",
+        dest="jitter_range_s",
+        type=float,
+        default=argparse.SUPPRESS,
+        help="Alias de --jitter-range-s (déprécié).",
     )
     parser.add_argument(
         "--window-duration-s",
@@ -186,8 +194,8 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         step2_args.extend(["--noise-floor-dbm", str(args.noise_floor_dbm)])
     if args.traffic_mode is not None:
         step2_args.extend(["--traffic-mode", args.traffic_mode])
-    if args.jitter_range is not None:
-        step2_args.extend(["--jitter-range", str(args.jitter_range)])
+    if args.jitter_range_s is not None:
+        step2_args.extend(["--jitter-range-s", str(args.jitter_range_s)])
     if args.window_duration_s is not None:
         step2_args.extend(["--window-duration-s", str(args.window_duration_s)])
     if args.traffic_coeff_min is not None:

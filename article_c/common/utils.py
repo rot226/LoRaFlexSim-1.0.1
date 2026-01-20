@@ -83,10 +83,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Modèle de trafic pour l'étape 2 (periodic ou poisson).",
     )
     parser.add_argument(
-        "--jitter-range",
+        "--jitter-range-s",
+        dest="jitter_range_s",
         type=float,
-        default=step2_defaults.jitter_range_s,
+        default=30.0,
         help="Amplitude du jitter pour l'étape 2 (secondes).",
+    )
+    parser.add_argument(
+        "--jitter-range",
+        dest="jitter_range_s",
+        type=float,
+        default=argparse.SUPPRESS,
+        help="Alias de --jitter-range-s (déprécié).",
     )
     parser.add_argument(
         "--window-duration-s",

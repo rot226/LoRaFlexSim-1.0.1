@@ -106,10 +106,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Modèle de trafic (periodic ou poisson).",
     )
     parser.add_argument(
-        "--jitter-range",
+        "--jitter-range-s",
+        dest="jitter_range_s",
         type=float,
-        default=scenario_defaults.jitter_range,
+        default=30.0,
         help="Amplitude du jitter (secondes).",
+    )
+    parser.add_argument(
+        "--jitter-range",
+        dest="jitter_range_s",
+        type=float,
+        default=argparse.SUPPRESS,
+        help="Alias de --jitter-range-s (déprécié).",
     )
     parser.add_argument(
         "--duration-s",
@@ -385,7 +393,7 @@ def main(argv: list[str] | None = None) -> None:
         "seeds_base": args.seeds_base,
         "duration_s": args.duration_s,
         "traffic_mode": args.traffic_mode,
-        "jitter_range_s": args.jitter_range,
+        "jitter_range_s": args.jitter_range_s,
         "mixra_opt_max_iterations": args.mixra_opt_max_iterations,
         "mixra_opt_candidate_subset_size": args.mixra_opt_candidate_subset_size,
         "mixra_opt_epsilon": args.mixra_opt_epsilon,

@@ -104,7 +104,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     config: dict[str, object] = {
         "base_seed": base_seed,
         "traffic_mode": args.traffic_mode,
-        "jitter_range_s": args.jitter_range,
+        "jitter_range_s": args.jitter_range_s,
         "window_duration_s": args.window_duration_s,
         "window_size": args.window_size,
         "traffic_coeff_min": args.traffic_coeff_min,
