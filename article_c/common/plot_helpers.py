@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 
 from article_c.common.plotting_style import (
     LEGEND_STYLE,
+    SAVEFIG_STYLE,
     apply_plot_style,
     set_network_size_ticks,
 )
@@ -56,7 +57,7 @@ def save_figure(
     if use_tight:
         fig.tight_layout()
     for ext in ("png", "pdf"):
-        fig.savefig(output_dir / f"{stem}.{ext}", dpi=300, bbox_inches=None)
+        fig.savefig(output_dir / f"{stem}.{ext}", dpi=300, **SAVEFIG_STYLE)
 
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:

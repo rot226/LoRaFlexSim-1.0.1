@@ -22,6 +22,10 @@ LEGEND_STYLE = {
     "frameon": False,
 }
 
+SAVEFIG_STYLE = {
+    "bbox_inches": None,
+}
+
 
 def apply_plot_style() -> None:
     """Applique la taille de figure et la marge supérieure demandées."""
