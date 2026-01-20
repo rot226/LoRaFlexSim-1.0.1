@@ -46,7 +46,13 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     if not clusters:
         clusters = sorted(available_clusters)
     cluster_labels = _cluster_labels(clusters)
-    algorithms = sorted({row["algo"] for row in rows})
+
+    def _algo_key(row: dict[str, object]) -> tuple[str, bool]:
+        algo_value = str(row.get("algo", ""))
+        fallback = bool(row.get("mixra_opt_fallback")) if algo_value == "mixra_opt" else False
+        return algo_value, fallback
+
+    algorithms = sorted({_algo_key(row) for row in rows})
 
     fig, axes = plt.subplots(
         len(algorithms),
@@ -62,8 +68,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     elif len(clusters) == 1:
         axes = [[ax] for ax in axes]
 
-    for algo_idx, algo in enumerate(algorithms):
-        algo_rows = [row for row in rows if row["algo"] == algo]
+    for algo_idx, (algo, fallback) in enumerate(algorithms):
+        algo_rows = [row for row in rows if _algo_key(row) == (algo, fallback)]
         for cluster_idx, cluster in enumerate(clusters):
             ax = axes[algo_idx][cluster_idx]
             cluster_rows = [
@@ -88,7 +94,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             if algo_idx == 0:
                 ax.set_title(f"Cluster {cluster_labels.get(cluster, cluster)}")
             if cluster_idx == 0:
-                ax.set_ylabel(f"{algo_label(algo)}\nPacket Delivery Ratio")
+                ax.set_ylabel(f"{algo_label(algo, fallback)}\nPacket Delivery Ratio")
             if algo_idx == len(algorithms) - 1:
                 ax.set_xlabel("Network size (number of nodes)")
             ax.set_xticks(network_sizes)
