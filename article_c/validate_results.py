@@ -89,9 +89,13 @@ def _to_bool(value: object) -> bool | None:
 
 def _collect_network_sizes(
     rows: Iterable[dict[str, str]],
+    *,
+    candidates: Iterable[str] | None = None,
 ) -> tuple[list[float], str | None]:
     columns = _normalize_columns(rows)
-    size_col = _pick_column(columns, ["network_size", "density", "num_nodes", "n_nodes"])
+    size_col = _pick_column(
+        columns, candidates or ["network_size", "density", "num_nodes", "n_nodes"]
+    )
     if not size_col:
         return [], None
     sizes = []
@@ -126,7 +130,7 @@ def _check_expected_network_sizes(
 
 
 def _check_step2_no_zero_network_size(rows: list[dict[str, str]]) -> CheckResult:
-    sizes, size_col = _collect_network_sizes(rows)
+    sizes, size_col = _collect_network_sizes(rows, candidates=["network_size"])
     if not rows or not size_col:
         return CheckResult(
             "Step2 sans network_size à 0.0",
