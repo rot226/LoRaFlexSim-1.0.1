@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import importlib
+import traceback
 from pathlib import Path
 
 import pandas as pd
@@ -393,9 +394,21 @@ def main(argv: list[str] | None = None) -> None:
                     if args.network_sizes
                     else step_network_sizes.get("step2") or network_sizes
                 )
-                _run_plot_module(module_path, network_sizes=step2_network_sizes)
+                try:
+                    _run_plot_module(module_path, network_sizes=step2_network_sizes)
+                except Exception as exc:
+                    print(
+                        f"ERREUR: échec du plot {module_path}: {exc}"
+                    )
+                    traceback.print_exc()
             else:
-                _run_plot_module(module_path)
+                try:
+                    _run_plot_module(module_path)
+                except Exception as exc:
+                    print(
+                        f"ERREUR: échec du plot {module_path}: {exc}"
+                    )
+                    traceback.print_exc()
 
 
 if __name__ == "__main__":
