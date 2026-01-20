@@ -27,13 +27,13 @@ from article_c.common.utils import assign_clusters, generate_traffic_times
 SF_VALUES = (7, 8, 9, 10, 11, 12)
 SF_INDEX = {sf: idx for idx, sf in enumerate(SF_VALUES)}
 MIXRA_OPT_BUDGET_BY_SIZE = {
-    80: 5000,
-    160: 10000,
-    320: 20000,
-    640: 40000,
-    1280: 80000,
+    80: 20000,
+    160: 40000,
+    320: 80000,
+    640: 150000,
+    1280: 250000,
 }
-MIXRA_OPT_BUDGET_PER_NODE = 5000 / 80
+MIXRA_OPT_BUDGET_PER_NODE = 20000 / 80
 
 # Seuils proxy pour SNR/RSSI (inspirés d'ordres de grandeur LoRaWAN).
 SNR_THRESHOLDS = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
@@ -213,6 +213,10 @@ def _mixra_opt_assign(
     start_time = perf_counter()
     small_improvement_streak = 0
     evaluations = 0
+    def _finalize(result: list[int], fallback: bool) -> tuple[list[int], bool]:
+        LOGGER.info("MixRA-Opt executed (evals=%s).", evaluations)
+        return result, fallback
+
     for _ in range(max_iterations):
         improved = False
         candidate_indices = _select_candidate_indices()
@@ -222,11 +226,9 @@ def _mixra_opt_assign(
                 LOGGER.warning(
                     "MixRA-Opt timeout atteint (%.2fs).", perf_counter() - start_time
                 )
-                return (
-                    (_mixra_h_assign(nodes_list), True)
-                    if allow_fallback
-                    else (assignments, False)
-                )
+                if allow_fallback:
+                    return _finalize(_mixra_h_assign(nodes_list), True)
+                return _finalize(assignments, False)
             evaluations += 1
             if evaluations > max_evaluations:
                 if allow_fallback:
@@ -235,13 +237,13 @@ def _mixra_opt_assign(
                         evaluations,
                         max_evaluations,
                     )
-                    return _mixra_h_assign(nodes_list), True
+                    return _finalize(_mixra_h_assign(nodes_list), True)
                 LOGGER.warning(
                     "MixRA-Opt dépasse le budget (%s > %s évaluations), arrêt sans fallback.",
                     evaluations,
                     max_evaluations,
                 )
-                return assignments, False
+                return _finalize(assignments, False)
             current_sf = assignments[idx]
             candidates = qos_candidates_by_node[idx]
             if not candidates:
@@ -286,17 +288,23 @@ def _mixra_opt_assign(
             small_improvement_streak = 0
         if not improved or small_improvement_streak >= 10:
             break
-    LOGGER.info("MixRA-Opt executed (evals=%s).", evaluations)
-    return assignments, False
+    return _finalize(assignments, False)
 
 
-def mixra_opt_budget_for_size(network_size: int) -> int:
+def mixra_opt_budget_for_size(
+    network_size: int,
+    *,
+    base: int = 0,
+    scale: float = 1.0,
+) -> int:
     """Retourne un budget d'évaluations MixRA-Opt en fonction de la taille réseau."""
     if network_size <= 0:
         return 0
     if network_size in MIXRA_OPT_BUDGET_BY_SIZE:
-        return MIXRA_OPT_BUDGET_BY_SIZE[network_size]
-    return int(round(network_size * MIXRA_OPT_BUDGET_PER_NODE))
+        base_budget = MIXRA_OPT_BUDGET_BY_SIZE[network_size]
+    else:
+        base_budget = int(round(network_size * MIXRA_OPT_BUDGET_PER_NODE))
+    return max(0, int(round(base + scale * base_budget)))
 
 
 def _estimate_received(
@@ -407,6 +415,8 @@ def run_simulation(
     mixra_opt_epsilon: float = 1e-3,
     mixra_opt_max_evaluations: int = 200,
     mixra_opt_budget: int | None = None,
+    mixra_opt_budget_base: int = 0,
+    mixra_opt_budget_scale: float = 1.0,
     mixra_opt_enabled: bool = True,
     mixra_opt_mode: str = "balanced",
     mixra_opt_timeout_s: float | None = None,
@@ -464,7 +474,11 @@ def run_simulation(
             mixra_opt_max_iterations = min(mixra_opt_max_iterations, 60)
             mixra_opt_candidate_subset_size = min(mixra_opt_candidate_subset_size, 80)
         if mixra_opt_budget is None:
-            computed_budget = mixra_opt_budget_for_size(actual_sent)
+            computed_budget = mixra_opt_budget_for_size(
+                actual_sent,
+                base=mixra_opt_budget_base,
+                scale=mixra_opt_budget_scale,
+            )
             if mixra_opt_mode == "full":
                 computed_budget = int(computed_budget * 2.0)
             elif mixra_opt_mode in {"fast", "fast_opt"}:
