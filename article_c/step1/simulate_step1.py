@@ -35,6 +35,7 @@ MIXRA_OPT_BUDGET_BY_SIZE = {
 }
 MIXRA_OPT_BUDGET_PER_NODE = 20000 / 80
 MIXRA_OPT_EMERGENCY_TIMEOUT_S = 300.0
+MIXRA_OPT_SAFETY_TIMEOUT_S = 600.0
 
 # Seuils proxy pour SNR/RSSI (inspirés d'ordres de grandeur LoRaWAN).
 SNR_THRESHOLDS = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
@@ -142,6 +143,7 @@ def _mixra_opt_assign(
     max_evaluations: int = 200,
     subset_seed: int = 0,
     timeout_s: float | None = None,
+    safety_timeout_s: float | None = MIXRA_OPT_SAFETY_TIMEOUT_S,
     allow_fallback: bool = True,
 ) -> tuple[list[int], bool]:
     """MixRA-Opt proxy: glouton + recherche locale (collisions + QoS)."""
@@ -223,13 +225,15 @@ def _mixra_opt_assign(
         candidate_indices = _select_candidate_indices()
         start_obj = current_obj
         for idx in candidate_indices:
-            if timeout_s is not None and (perf_counter() - start_time) >= timeout_s:
+            elapsed_s = perf_counter() - start_time
+            if safety_timeout_s is not None and elapsed_s >= safety_timeout_s:
                 LOGGER.warning(
-                    "MixRA-Opt timeout atteint (%.2fs).", perf_counter() - start_time
+                    "MixRA-Opt timeout de sécurité atteint (%.2fs).", elapsed_s
                 )
-                if allow_fallback:
-                    return _finalize(_mixra_h_assign(nodes_list), True)
                 return _finalize(assignments, False)
+            if allow_fallback and timeout_s is not None and elapsed_s >= timeout_s:
+                LOGGER.warning("MixRA-Opt timeout atteint (%.2fs).", elapsed_s)
+                return _finalize(_mixra_h_assign(nodes_list), True)
             evaluations += 1
             if evaluations > max_evaluations:
                 if allow_fallback:
@@ -500,6 +504,7 @@ def run_simulation(
             max_evaluations=mixra_opt_max_evaluations,
             subset_seed=seed,
             timeout_s=mixra_opt_timeout_s,
+            safety_timeout_s=MIXRA_OPT_SAFETY_TIMEOUT_S,
             allow_fallback=allow_fallback,
         )
     elif algorithm == "mixra_opt":
