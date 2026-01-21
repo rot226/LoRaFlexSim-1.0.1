@@ -99,7 +99,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--replications",
         type=int,
         default=5,
-        help="Nombre de réplications par configuration.",
+        help="Nombre de réplications par configuration (recommandé >= 5).",
     )
     parser.add_argument(
         "--seeds_base",

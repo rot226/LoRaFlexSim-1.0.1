@@ -317,6 +317,15 @@ def plot_metric_by_snir(
     metric_key: str,
 ) -> None:
     network_sizes = sorted({_network_size_value(row) for row in rows})
+    error_key = None
+    if metric_key.endswith("_mean"):
+        base_key = metric_key[: -len("_mean")]
+        candidate_ci = f"{base_key}_ci95"
+        candidate_std = f"{base_key}_std"
+        if any(candidate_ci in row for row in rows):
+            error_key = candidate_ci
+        elif any(candidate_std in row for row in rows):
+            error_key = candidate_std
 
     def _algo_key(row: dict[str, object]) -> tuple[str, bool]:
         algo_value = str(row.get("algo", ""))
@@ -333,15 +342,25 @@ def plot_metric_by_snir(
                 for row in algo_rows
                 if row["snir_mode"] == snir_mode
             }
+            errors = {
+                _network_size_value(row): row.get(error_key, 0.0)
+                for row in algo_rows
+                if error_key and row["snir_mode"] == snir_mode
+            }
             if not points:
                 continue
             values = [points.get(density, float("nan")) for density in densities]
+            yerr = (
+                [errors.get(density, 0.0) for density in densities] if error_key else None
+            )
             label = f"{algo_label(algo, fallback)} ({SNIR_LABELS[snir_mode]})"
-            ax.plot(
+            ax.errorbar(
                 densities,
                 values,
+                yerr=yerr,
                 marker="o",
                 linestyle=SNIR_LINESTYLES[snir_mode],
+                capsize=3 if error_key else 0,
                 label=label,
             )
     set_network_size_ticks(ax, network_sizes)
@@ -364,6 +383,8 @@ def _sample_step1_rows() -> list[dict[str, object]]:
                     pdr = max(
                         0.0, min(1.0, base - penalty + modifier + cluster_bonus)
                     )
+                    pdr_std = 0.01 + 0.005 * idx + 0.002 * algos.index(algo)
+                    pdr_ci95 = 1.96 * pdr_std / 5**0.5
                     algo_idx = algos.index(algo)
                     weights = []
                     for sf in sf_values:
@@ -386,6 +407,8 @@ def _sample_step1_rows() -> list[dict[str, object]]:
                         "cluster": cluster,
                         "mixra_opt_fallback": False,
                         "pdr_mean": pdr,
+                        "pdr_std": pdr_std,
+                        "pdr_ci95": pdr_ci95,
                         "sent_mean": 120 * density,
                         "received_mean": 120 * density * pdr,
                         "mean_toa_s": mean_toa_s,
