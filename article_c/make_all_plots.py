@@ -171,7 +171,7 @@ def _extract_network_sizes(path: Path) -> set[int]:
 
 def _load_csv_data(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     if not path.exists():
-        return ([], [])
+        raise FileNotFoundError(f"CSV introuvable: {path}")
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         fieldnames = reader.fieldnames or []
@@ -183,7 +183,7 @@ def _load_network_sizes_from_csvs(paths: list[Path]) -> list[int]:
     sizes: set[int] = set()
     for path in paths:
         if not path.exists():
-            continue
+            raise FileNotFoundError(f"CSV introuvable: {path}")
         df = pd.read_csv(path)
         if "network_size" not in df.columns:
             raise ValueError(
@@ -247,12 +247,6 @@ def _validate_plot_data(
     csv_path: Path,
     cached_data: dict[str, tuple[list[str], list[dict[str, str]]]],
 ) -> bool:
-    if not csv_path.exists():
-        print(
-            "AVERTISSEMENT: "
-            f"CSV manquant pour {module_path}, figure ignorée."
-        )
-        return False
     if step not in cached_data:
         cached_data[step] = _load_csv_data(csv_path)
     fieldnames, rows = cached_data[step]
@@ -333,18 +327,23 @@ def main(argv: list[str] | None = None) -> None:
     step2_csv = article_dir / "step2" / "results" / "aggregated_results.csv"
     csv_paths: list[Path] = []
     if "step1" in steps:
+        if not step1_csv.exists():
+            raise FileNotFoundError(
+                "CSV Step1 absent : "
+                f"{step1_csv} introuvable. "
+                "Exécutez l'étape 1 pour générer aggregated_results.csv "
+                "avant de lancer les plots Step1."
+            )
         csv_paths.append(step1_csv)
     if "step2" in steps:
-        if step2_csv.exists():
-            csv_paths.append(step2_csv)
-        else:
-            print(
+        if not step2_csv.exists():
+            raise FileNotFoundError(
                 "CSV Step2 absent : "
                 f"{step2_csv} introuvable. "
                 "Exécutez l'étape 2 pour générer aggregated_results.csv "
                 "avant de lancer les plots Step2."
             )
-            steps = [step for step in steps if step != "step2"]
+        csv_paths.append(step2_csv)
     step_network_sizes: dict[str, list[int]] = {}
     if "step1" in steps:
         step_network_sizes["step1"] = _load_network_sizes_from_csvs([step1_csv])

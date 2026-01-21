@@ -62,7 +62,7 @@ def save_figure(
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
     if not path.exists():
-        return []
+        raise FileNotFoundError(f"CSV introuvable: {path}")
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         return list(reader)
@@ -115,27 +115,11 @@ def filter_mixra_opt_fallback(rows: list[dict[str, object]]) -> list[dict[str, o
 def load_step1_aggregated(
     path: Path,
     *,
-    allow_sample: bool = True,
+    allow_sample: bool = False,
 ) -> list[dict[str, object]]:
     rows = _read_csv_rows(path)
     if not rows:
-        if allow_sample:
-            if not path.exists():
-                warnings.warn(
-                    f"CSV introuvable ({path}). Fallback échantillon utilisé.",
-                    stacklevel=2,
-                )
-            else:
-                warnings.warn(
-                    f"CSV vide ({path}). Fallback échantillon utilisé.",
-                    stacklevel=2,
-                )
-            return _sample_step1_rows()
-        warnings.warn(
-            f"CSV introuvable ou vide ({path}). Fallback échantillon désactivé.",
-            stacklevel=2,
-        )
-        return []
+        raise ValueError(f"CSV vide pour Step1: {path}")
     parsed: list[dict[str, object]] = []
     for row in rows:
         network_size_value = row.get("density")
@@ -169,27 +153,11 @@ def load_step1_aggregated(
 def load_step2_aggregated(
     path: Path,
     *,
-    allow_sample: bool = True,
+    allow_sample: bool = False,
 ) -> list[dict[str, object]]:
     rows = _read_csv_rows(path)
     if not rows:
-        if allow_sample:
-            if not path.exists():
-                warnings.warn(
-                    f"CSV introuvable ({path}). Fallback échantillon utilisé.",
-                    stacklevel=2,
-                )
-            else:
-                warnings.warn(
-                    f"CSV vide ({path}). Fallback échantillon utilisé.",
-                    stacklevel=2,
-                )
-            return _sample_step2_rows()
-        warnings.warn(
-            f"CSV introuvable ou vide ({path}). Fallback échantillon désactivé.",
-            stacklevel=2,
-        )
-        return []
+        raise ValueError(f"CSV vide pour Step2: {path}")
     parsed: list[dict[str, object]] = []
     for row in rows:
         network_size_value = row.get("density")
@@ -215,7 +183,7 @@ def load_step2_aggregated(
 def load_step2_selection_probs(path: Path) -> list[dict[str, object]]:
     rows = _read_csv_rows(path)
     if not rows:
-        return _sample_selection_probs()
+        raise ValueError(f"CSV vide pour Step2 (sélections): {path}")
     parsed: list[dict[str, object]] = []
     for row in rows:
         parsed.append(
