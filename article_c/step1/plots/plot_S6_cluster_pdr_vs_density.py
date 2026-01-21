@@ -21,13 +21,17 @@ from article_c.common.plot_helpers import (
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     load_step1_aggregated,
-    place_legend,
     save_figure,
 )
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
-    return {cluster: f"C{idx + 1}" for idx, cluster in enumerate(clusters)}
+    cluster_label_map = {
+        "gold": "C1",
+        "silver": "C2",
+        "bronze": "C3",
+    }
+    return {cluster: cluster_label_map.get(cluster, cluster) for cluster in clusters}
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
@@ -101,7 +105,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             ax.set_xticks(network_sizes)
             ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
-    place_legend(axes[-1][-1])
+    axes[-1][-1].legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.12),
+        ncol=3,
+        frameon=False,
+    )
     fig.suptitle("Step 1 - PDR by Cluster (SNIR on/off, per algorithm)")
     return fig
 
