@@ -34,6 +34,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Mean Time on Air (s)")
     ax.yaxis.set_label_coords(-0.08, 0.5)
+    ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_title("Step 1 - Mean Time on Air vs Network Size (SNIR on/off)")
@@ -41,6 +42,15 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     legend = ax.get_legend()
     if legend is not None:
         legend.set_title("Mean Time on Air (s)")
+    metric_values = pd.to_numeric(df[metric_key], errors="coerce").dropna()
+    if not metric_values.empty:
+        y_min = metric_values.min()
+        y_max = metric_values.max()
+        padding = max((y_max - y_min) * 0.05, 0.01)
+        y_min = 0.0 if y_min >= 0 else y_min - padding
+        y_max = y_max + padding
+        ax.set_ylim(y_min, y_max)
+    fig.subplots_adjust(left=0.16)
     return fig
 
 
