@@ -97,6 +97,27 @@ def _log_unique_network_sizes(output_dir: Path) -> None:
     print(f"Tailles détectées dans raw_results: {sizes_label}")
 
 
+def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
+    if not aggregated_path.exists():
+        print(f"Aucun aggregated_results.csv détecté: {aggregated_path}")
+        return set()
+    with aggregated_path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames or "network_size" not in reader.fieldnames:
+            print(f"Colonne network_size absente dans {aggregated_path}")
+            return set()
+        sizes: set[int] = set()
+        for row in reader:
+            value = row.get("network_size")
+            if value in (None, ""):
+                continue
+            try:
+                sizes.add(int(float(value)))
+            except ValueError:
+                print(f"Valeur network_size invalide détectée: {value}")
+        return sizes
+
+
 def _simulate_density(
     task: tuple[int, int, list[int], dict[str, object], Path, Path | None]
 ) -> dict[str, object]:
@@ -233,7 +254,17 @@ def main(argv: Sequence[str] | None = None) -> None:
                 learning_curve_values,
             )
 
-    (base_results_dir / "done.flag").write_text("done\n", encoding="utf-8")
+    aggregated_sizes = _read_aggregated_sizes(base_results_dir / "aggregated_results.csv")
+    missing_sizes = sorted(set(densities) - aggregated_sizes)
+    if missing_sizes:
+        missing_label = ", ".join(map(str, missing_sizes))
+        print(
+            "ATTENTION: tailles manquantes dans aggregated_results.csv, "
+            f"done.flag non écrit. Manquantes: {missing_label}"
+        )
+    else:
+        (base_results_dir / "done.flag").write_text("done\n", encoding="utf-8")
+        print("done.flag écrit (agrégation complète).")
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         print(f"Tailles simulées: {sizes_label}")
