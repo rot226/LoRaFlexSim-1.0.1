@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from statistics import mean
 import warnings
 
 import matplotlib.pyplot as plt
@@ -22,6 +23,71 @@ from article_c.common.plot_helpers import (
     save_figure,
 )
 
+_ALGO_SPECIFIC_TOL = 1e-6
+
+
+def _ensure_algo_specific_metric(
+    rows: list[dict[str, object]],
+    metric_key: str,
+) -> str:
+    if metric_key != "received_mean":
+        return metric_key
+    derived_key = "received_algo_mean"
+    differences: list[float] = []
+    for row in rows:
+        sent = row.get("sent_mean")
+        pdr = row.get("pdr_mean")
+        if isinstance(sent, (int, float)) and isinstance(pdr, (int, float)):
+            derived_value = sent * pdr
+            row[derived_key] = derived_value
+            received = row.get(metric_key)
+            if isinstance(received, (int, float)):
+                differences.append(abs(received - derived_value))
+        else:
+            row[derived_key] = row.get(metric_key, 0.0)
+    if differences and max(differences) > _ALGO_SPECIFIC_TOL:
+        warnings.warn(
+            "received_mean ne correspond pas partout à sent_mean*pdr_mean; "
+            "utilisation de received_algo_mean spécifique par algo.",
+            stacklevel=2,
+        )
+        return derived_key
+    return metric_key
+
+
+def _warn_if_low_algo_variance(
+    rows: list[dict[str, object]],
+    metric_key: str,
+    tolerance: float = _ALGO_SPECIFIC_TOL,
+) -> None:
+    grouped: dict[tuple[float, str], list[float]] = {}
+    for row in rows:
+        if metric_key not in row:
+            continue
+        network_size = float(row.get("network_size", 0.0))
+        snir_mode = str(row.get("snir_mode", ""))
+        value = row.get(metric_key)
+        if not isinstance(value, (int, float)):
+            continue
+        grouped.setdefault((network_size, snir_mode), []).append(float(value))
+    low_variance_groups = []
+    for (network_size, snir_mode), values in grouped.items():
+        if len(values) < 2:
+            continue
+        value_range = max(values) - min(values)
+        scale = max(1.0, abs(mean(values)))
+        if value_range <= tolerance * scale:
+            low_variance_groups.append((network_size, snir_mode))
+    if low_variance_groups:
+        details = ", ".join(
+            f"N={size:g} ({mode})" for size, mode in low_variance_groups
+        )
+        warnings.warn(
+            "Variance inter-algo ≈ 0 pour received_mean. "
+            f"Groupes concernés: {details}.",
+            stacklevel=2,
+        )
+
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, ax = plt.subplots()
@@ -30,6 +96,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+    metric_key = _ensure_algo_specific_metric(rows, metric_key)
+    _warn_if_low_algo_variance(rows, metric_key)
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
