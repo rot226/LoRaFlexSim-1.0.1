@@ -131,11 +131,11 @@ def _simulate_density(
                 selection_rows.extend(result.selection_prob_rows)
             learning_curve_rows.extend(result.learning_curve_rows)
 
-    write_simulation_results(base_results_dir, raw_rows)
+    write_simulation_results(base_results_dir, raw_rows, network_size=density)
     _log_results_written(base_results_dir, len(raw_rows))
     _log_unique_network_sizes(base_results_dir)
     if timestamp_dir is not None:
-        write_simulation_results(timestamp_dir, raw_rows)
+        write_simulation_results(timestamp_dir, raw_rows, network_size=density)
         _log_results_written(timestamp_dir, len(raw_rows))
         _log_unique_network_sizes(timestamp_dir)
     return {

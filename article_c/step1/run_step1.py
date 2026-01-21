@@ -384,7 +384,7 @@ def _simulate_density(
                     )
                     timing_totals["metrics_s"] += perf_counter() - metrics_start
                     timing_runs += 1
-    write_simulation_results(output_dir, raw_rows)
+    write_simulation_results(output_dir, raw_rows, network_size=network_size)
     timing_summary = None
     if config["profile_timing"] and timing_runs > 0:
         mean_assignment = timing_totals["sf_assignment_s"] / timing_runs
