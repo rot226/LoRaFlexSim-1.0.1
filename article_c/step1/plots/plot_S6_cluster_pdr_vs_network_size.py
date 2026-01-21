@@ -9,6 +9,7 @@ import warnings
 
 import matplotlib.pyplot as plt
 from matplotlib import ticker as mticker
+from matplotlib.lines import Line2D
 import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
@@ -68,6 +69,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     if len(SNIR_MODES) == 1:
         axes = [axes]
 
+    cluster_handles: list[plt.Line2D] = []
+    cluster_labels: list[str] = []
     for ax, snir_mode in zip(axes, SNIR_MODES, strict=False):
         snir_rows = [row for row in rows if row["snir_mode"] == snir_mode]
         for cluster in clusters:
@@ -82,13 +85,17 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             target = cluster_targets.get(cluster)
             target_label = f" (target {target:.2f})" if target is not None else ""
             label = f"Cluster {cluster_labels.get(cluster, cluster)}{target_label}"
-            ax.plot(
+            show_label = snir_mode == SNIR_MODES[0]
+            (line,) = ax.plot(
                 network_sizes,
                 values,
                 marker="o",
                 linestyle=SNIR_LINESTYLES[snir_mode],
-                label=label,
+                label=label if show_label else "_nolegend_",
             )
+            if show_label:
+                cluster_handles.append(line)
+                cluster_labels.append(label)
         ax.set_title(SNIR_LABELS[snir_mode])
         ax.set_xlabel("Network size (number of nodes)")
         ax.set_ylabel("Packet Delivery Ratio")
@@ -97,11 +104,23 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
-    handles, labels = axes[0].get_legend_handles_labels()
+    snir_handles = [
+        Line2D(
+            [0],
+            [0],
+            color="black",
+            linestyle=SNIR_LINESTYLES[snir_mode],
+            marker="o",
+            label=SNIR_LABELS[snir_mode],
+        )
+        for snir_mode in SNIR_MODES
+    ]
+    handles = [*cluster_handles, *snir_handles]
+    labels = [*cluster_labels, *[handle.get_label() for handle in snir_handles]]
     fig.legend(
         handles,
         labels,
-        loc="lower center",
+        loc="upper center",
         bbox_to_anchor=(0.5, 1.02),
         ncol=3,
         frameon=False,
