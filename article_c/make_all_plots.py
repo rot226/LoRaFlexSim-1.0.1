@@ -372,6 +372,7 @@ def main(argv: list[str] | None = None) -> None:
     for step in steps:
         for module_path in PLOT_MODULES[step]:
             csv_path = step1_csv if step == "step1" else step2_csv
+            rl10_network_sizes: list[int] | None = None
             if (
                 step == "step2"
                 and module_path.endswith("plot_RL10_reward_vs_pdr_scatter")
@@ -387,10 +388,7 @@ def main(argv: list[str] | None = None) -> None:
                     )
                     print(f"Tailles Step1: {step1_sizes or 'aucune'}")
                     print(f"Tailles Step2: {step2_sizes or 'aucune'}")
-                    print(
-                        "Intersection: "
-                        f"{intersection or 'aucune'}"
-                    )
+                    print(f"Intersection: {intersection or 'aucune'}")
                     regen_sizes = step2_sizes or step1_sizes
                     command = (
                         _suggest_regeneration_command(
@@ -407,6 +405,7 @@ def main(argv: list[str] | None = None) -> None:
                         )
                         print(command)
                     continue
+                rl10_network_sizes = intersection
             if not _validate_plot_data(
                 step=step,
                 module_path=module_path,
@@ -417,9 +416,12 @@ def main(argv: list[str] | None = None) -> None:
             if step == "step2":
                 figure = module_path.split(".")[-1]
                 step2_sizes = (
-                    network_sizes
-                    if args.network_sizes
-                    else step_network_sizes.get("step2") or network_sizes
+                    rl10_network_sizes
+                    or (
+                        network_sizes
+                        if args.network_sizes
+                        else step_network_sizes.get("step2") or network_sizes
+                    )
                 )
                 sizes_label = (
                     ", ".join(str(size) for size in step2_sizes)
@@ -430,9 +432,12 @@ def main(argv: list[str] | None = None) -> None:
                 print(f"Plotting Step2: {figure}")
             if step == "step2":
                 step2_network_sizes = (
-                    network_sizes
-                    if args.network_sizes
-                    else step_network_sizes.get("step2") or network_sizes
+                    rl10_network_sizes
+                    or (
+                        network_sizes
+                        if args.network_sizes
+                        else step_network_sizes.get("step2") or network_sizes
+                    )
                 )
                 try:
                     _run_plot_module(
