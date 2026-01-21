@@ -122,12 +122,12 @@ def load_step1_aggregated(
         if allow_sample:
             if not path.exists():
                 warnings.warn(
-                    f"CSV introuvable ({path}). Utilisation des données d'échantillon.",
+                    f"CSV introuvable ({path}). Fallback échantillon utilisé.",
                     stacklevel=2,
                 )
             else:
                 warnings.warn(
-                    f"CSV vide ({path}). Utilisation des données d'échantillon.",
+                    f"CSV vide ({path}). Fallback échantillon utilisé.",
                     stacklevel=2,
                 )
             return _sample_step1_rows()
@@ -176,12 +176,12 @@ def load_step2_aggregated(
         if allow_sample:
             if not path.exists():
                 warnings.warn(
-                    f"CSV introuvable ({path}). Utilisation des données d'échantillon.",
+                    f"CSV introuvable ({path}). Fallback échantillon utilisé.",
                     stacklevel=2,
                 )
             else:
                 warnings.warn(
-                    f"CSV vide ({path}). Utilisation des données d'échantillon.",
+                    f"CSV vide ({path}). Fallback échantillon utilisé.",
                     stacklevel=2,
                 )
             return _sample_step2_rows()
