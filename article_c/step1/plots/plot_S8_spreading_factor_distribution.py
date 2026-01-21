@@ -250,7 +250,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
     return fig
 
 
-def main() -> None:
+def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -258,7 +258,7 @@ def main() -> None:
         nargs="+",
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     apply_plot_style()
     logger = logging.getLogger(__name__)
     step_dir = Path(__file__).resolve().parents[1]
@@ -289,7 +289,14 @@ def main() -> None:
             for (algo, fallback, snir_mode), values in distribution_by_group.items()
         ]
     else:
-        rows = filter_cluster(load_step1_aggregated(aggregated_results_path), "all")
+        rows = load_step1_aggregated(
+            aggregated_results_path,
+            allow_sample=allow_sample,
+        )
+        if not rows:
+            warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)
+            return
+        rows = filter_cluster(rows, "all")
     rows = [
         {
             **row,
@@ -300,7 +307,13 @@ def main() -> None:
         for row in rows
     ]
     rows = filter_mixra_opt_fallback(rows)
-    size_rows = load_step1_aggregated(aggregated_results_path)
+    size_rows = load_step1_aggregated(
+        aggregated_results_path,
+        allow_sample=allow_sample,
+    )
+    if not size_rows:
+        warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)
+        return
     ensure_network_size(size_rows)
     size_rows, _ = filter_rows_by_network_sizes(size_rows, args.network_sizes)
     df = pd.DataFrame(size_rows)

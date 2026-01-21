@@ -105,14 +105,19 @@ def _parse_steps(value: str) -> list[str]:
     return steps
 
 
-def _run_plot_module(module_path: str, *, network_sizes: list[int] | None = None) -> None:
+def _run_plot_module(
+    module_path: str,
+    *,
+    network_sizes: list[int] | None = None,
+    allow_sample: bool = True,
+) -> None:
     module = importlib.import_module(module_path)
     if not hasattr(module, "main"):
         raise AttributeError(f"Module {module_path} sans fonction main().")
     if network_sizes is None:
-        module.main()
+        module.main(allow_sample=allow_sample)
         return
-    module.main(network_sizes=network_sizes)
+    module.main(network_sizes=network_sizes, allow_sample=allow_sample)
 
 
 def _pick_column(fieldnames: list[str], candidates: tuple[str, ...]) -> str | None:
@@ -395,7 +400,11 @@ def main(argv: list[str] | None = None) -> None:
                     else step_network_sizes.get("step2") or network_sizes
                 )
                 try:
-                    _run_plot_module(module_path, network_sizes=step2_network_sizes)
+                    _run_plot_module(
+                        module_path,
+                        network_sizes=step2_network_sizes,
+                        allow_sample=False,
+                    )
                 except Exception as exc:
                     print(
                         f"ERREUR: échec du plot {module_path}: {exc}"
@@ -403,7 +412,7 @@ def main(argv: list[str] | None = None) -> None:
                     traceback.print_exc()
             else:
                 try:
-                    _run_plot_module(module_path)
+                    _run_plot_module(module_path, allow_sample=False)
                 except Exception as exc:
                     print(
                         f"ERREUR: échec du plot {module_path}: {exc}"

@@ -104,7 +104,11 @@ def _plot_metric(
     return fig
 
 
-def main(network_sizes: list[int] | None = None, argv: list[str] | None = None) -> None:
+def main(
+    network_sizes: list[int] | None = None,
+    argv: list[str] | None = None,
+    allow_sample: bool = True,
+) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -120,7 +124,11 @@ def main(network_sizes: list[int] | None = None, argv: list[str] | None = None) 
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "aggregated_results.csv"
-    rows = filter_cluster(load_step2_aggregated(results_path), "all")
+    rows = load_step2_aggregated(results_path, allow_sample=allow_sample)
+    if not rows:
+        warnings.warn("CSV Step2 manquant ou vide, figure ignorée.", stacklevel=2)
+        return
+    rows = filter_cluster(rows, "all")
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
     normalize_network_size_rows(rows)
     network_sizes_filter = _normalized_network_sizes(network_sizes)

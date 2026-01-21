@@ -61,8 +61,14 @@ def _to_float(value: object, default: float = 0.0) -> float:
         return default
 
 
-def _load_learning_curve_means(path: Path) -> dict[str, float]:
-    rows = _load_learning_curve(path)
+def _load_learning_curve_means(
+    path: Path,
+    *,
+    allow_sample: bool = True,
+) -> dict[str, float]:
+    rows = _load_learning_curve(path, allow_sample=allow_sample)
+    if not rows:
+        return {}
     totals: dict[str, float] = {}
     counts: dict[str, int] = {}
     for row in rows:
@@ -78,14 +84,22 @@ def _load_learning_curve_means(path: Path) -> dict[str, float]:
     }
 
 
-def _load_learning_curve(path: Path) -> list[dict[str, object]]:
+def _load_learning_curve(
+    path: Path,
+    *,
+    allow_sample: bool = True,
+) -> list[dict[str, object]]:
     if not path.exists():
-        return _sample_learning_curve()
+        if allow_sample:
+            return _sample_learning_curve()
+        return []
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         rows = list(reader)
     if not rows:
-        return _sample_learning_curve()
+        if allow_sample:
+            return _sample_learning_curve()
+        return []
     parsed: list[dict[str, object]] = []
     for row in rows:
         parsed.append(
@@ -131,8 +145,13 @@ def _sample_learning_curve() -> list[dict[str, object]]:
 def _aggregate_pdr_from_step1(
     path: Path,
     network_sizes: list[int] | None,
+    *,
+    allow_sample: bool = True,
 ) -> dict[str, float]:
-    rows = filter_cluster(load_step1_aggregated(path), "all")
+    rows = filter_cluster(
+        load_step1_aggregated(path, allow_sample=allow_sample),
+        "all",
+    )
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
     normalize_network_size_rows(rows)
     rows, _ = filter_rows_by_network_sizes(rows, network_sizes)
@@ -157,8 +176,13 @@ def _aggregate_pdr_from_step1(
 def _aggregate_pdr_from_step2(
     path: Path,
     network_sizes: list[int] | None,
+    *,
+    allow_sample: bool = True,
 ) -> dict[str, float]:
-    rows = filter_cluster(load_step2_aggregated(path), "all")
+    rows = filter_cluster(
+        load_step2_aggregated(path, allow_sample=allow_sample),
+        "all",
+    )
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
     normalize_network_size_rows(rows)
     rows, _ = filter_rows_by_network_sizes(rows, network_sizes)
@@ -185,12 +209,25 @@ def _collect_points(
     step1_results_path: Path,
     step2_results_path: Path,
     network_sizes: list[int] | None,
+    *,
+    allow_sample: bool = True,
 ) -> list[dict[str, float | str]]:
-    reward_means = _load_learning_curve_means(learning_curve_path)
-    pdr_means = _aggregate_pdr_from_step1(step1_results_path, network_sizes)
+    reward_means = _load_learning_curve_means(
+        learning_curve_path,
+        allow_sample=allow_sample,
+    )
+    pdr_means = _aggregate_pdr_from_step1(
+        step1_results_path,
+        network_sizes,
+        allow_sample=allow_sample,
+    )
     missing = [algo for algo in reward_means if algo not in pdr_means]
     if missing:
-        step2_pdr = _aggregate_pdr_from_step2(step2_results_path, network_sizes)
+        step2_pdr = _aggregate_pdr_from_step2(
+            step2_results_path,
+            network_sizes,
+            allow_sample=allow_sample,
+        )
         for algo in missing:
             if algo in step2_pdr:
                 pdr_means[algo] = step2_pdr[algo]
@@ -223,7 +260,11 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
     return fig
 
 
-def main(network_sizes: list[int] | None = None, argv: list[str] | None = None) -> None:
+def main(
+    network_sizes: list[int] | None = None,
+    argv: list[str] | None = None,
+    allow_sample: bool = True,
+) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -241,8 +282,17 @@ def main(network_sizes: list[int] | None = None, argv: list[str] | None = None) 
     learning_curve_path = step_dir / "results" / "learning_curve.csv"
     step1_results_path = step_dir.parents[1] / "step1" / "results" / "aggregated_results.csv"
     step2_results_path = step_dir / "results" / "aggregated_results.csv"
-    step1_rows = load_step1_aggregated(step1_results_path)
-    step2_rows = load_step2_aggregated(step2_results_path)
+    step1_rows = load_step1_aggregated(
+        step1_results_path,
+        allow_sample=allow_sample,
+    )
+    step2_rows = load_step2_aggregated(
+        step2_results_path,
+        allow_sample=allow_sample,
+    )
+    if not step1_rows or not step2_rows:
+        print("INFO: CSV Step1/Step2 manquant ou vide, plot RL10 ignoré.")
+        return
     normalize_network_size_rows(step1_rows)
     normalize_network_size_rows(step2_rows)
     network_sizes_filter = _normalized_network_sizes(network_sizes)
@@ -274,7 +324,11 @@ def main(network_sizes: list[int] | None = None, argv: list[str] | None = None) 
         step1_results_path,
         step2_results_path,
         network_sizes,
+        allow_sample=allow_sample,
     )
+    if not points:
+        print("INFO: données insuffisantes, plot RL10 ignoré.")
+        return
 
     fig = _plot_scatter(points)
     output_dir = step_dir / "plots" / "output"
