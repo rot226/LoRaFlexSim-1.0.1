@@ -112,10 +112,30 @@ def filter_mixra_opt_fallback(rows: list[dict[str, object]]) -> list[dict[str, o
     return filtered
 
 
-def load_step1_aggregated(path: Path) -> list[dict[str, object]]:
+def load_step1_aggregated(
+    path: Path,
+    *,
+    allow_sample: bool = True,
+) -> list[dict[str, object]]:
     rows = _read_csv_rows(path)
     if not rows:
-        return _sample_step1_rows()
+        if allow_sample:
+            if not path.exists():
+                warnings.warn(
+                    f"CSV introuvable ({path}). Utilisation des données d'échantillon.",
+                    stacklevel=2,
+                )
+            else:
+                warnings.warn(
+                    f"CSV vide ({path}). Utilisation des données d'échantillon.",
+                    stacklevel=2,
+                )
+            return _sample_step1_rows()
+        warnings.warn(
+            f"CSV introuvable ou vide ({path}). Fallback échantillon désactivé.",
+            stacklevel=2,
+        )
+        return []
     parsed: list[dict[str, object]] = []
     for row in rows:
         network_size_value = row.get("density")
@@ -146,10 +166,30 @@ def load_step1_aggregated(path: Path) -> list[dict[str, object]]:
     return parsed
 
 
-def load_step2_aggregated(path: Path) -> list[dict[str, object]]:
+def load_step2_aggregated(
+    path: Path,
+    *,
+    allow_sample: bool = True,
+) -> list[dict[str, object]]:
     rows = _read_csv_rows(path)
     if not rows:
-        return _sample_step2_rows()
+        if allow_sample:
+            if not path.exists():
+                warnings.warn(
+                    f"CSV introuvable ({path}). Utilisation des données d'échantillon.",
+                    stacklevel=2,
+                )
+            else:
+                warnings.warn(
+                    f"CSV vide ({path}). Utilisation des données d'échantillon.",
+                    stacklevel=2,
+                )
+            return _sample_step2_rows()
+        warnings.warn(
+            f"CSV introuvable ou vide ({path}). Fallback échantillon désactivé.",
+            stacklevel=2,
+        )
+        return []
     parsed: list[dict[str, object]] = []
     for row in rows:
         network_size_value = row.get("density")

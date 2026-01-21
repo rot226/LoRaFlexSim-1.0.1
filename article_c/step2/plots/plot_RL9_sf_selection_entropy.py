@@ -58,7 +58,11 @@ def _plot_entropy(rows: list[dict[str, object]]) -> plt.Figure:
     return fig
 
 
-def main(network_sizes: list[int] | None = None, argv: list[str] | None = None) -> None:
+def main(
+    network_sizes: list[int] | None = None,
+    argv: list[str] | None = None,
+    allow_sample: bool = True,
+) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -74,9 +78,18 @@ def main(network_sizes: list[int] | None = None, argv: list[str] | None = None) 
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "rl5_selection_prob.csv"
+    if not allow_sample and not results_path.exists():
+        warnings.warn("CSV Step2 manquant ou vide, figure ignorée.", stacklevel=2)
+        return
     rows = load_step2_selection_probs(results_path)
     aggregated_results_path = step_dir / "results" / "aggregated_results.csv"
-    size_rows = load_step2_aggregated(aggregated_results_path)
+    size_rows = load_step2_aggregated(
+        aggregated_results_path,
+        allow_sample=allow_sample,
+    )
+    if not size_rows:
+        warnings.warn("CSV Step2 manquant ou vide, figure ignorée.", stacklevel=2)
+        return
     normalize_network_size_rows(size_rows)
     network_sizes_filter = _normalized_network_sizes(network_sizes)
     size_rows, _ = filter_rows_by_network_sizes(size_rows, network_sizes_filter)

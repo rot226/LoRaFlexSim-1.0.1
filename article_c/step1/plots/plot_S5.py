@@ -325,7 +325,7 @@ def _plot_pdr_distributions(
     return fig
 
 
-def main() -> None:
+def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -333,17 +333,23 @@ def main() -> None:
         nargs="+",
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "raw_results.csv"
-    if not results_path.exists():
+    if not results_path.exists() and allow_sample:
         warnings.warn(
             f"Fichier attendu introuvable: {results_path}. Utilisation des données d'exemple.",
             stacklevel=2,
         )
     raw_rows = _read_rows(results_path)
     if not raw_rows:
+        if not allow_sample:
+            warnings.warn(
+                "CSV Step1 manquant ou vide, figure ignorée.",
+                stacklevel=2,
+            )
+            return
         sample_rows = filter_mixra_opt_fallback(_filtered_sample_rows())
         if args.network_sizes:
             sample_rows, _ = filter_rows_by_network_sizes(
