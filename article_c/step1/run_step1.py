@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import argparse
-from multiprocessing import get_context
+import csv
 from collections import Counter
+from multiprocessing import get_context
 from pathlib import Path
 from statistics import mean
 from time import perf_counter
@@ -50,6 +51,27 @@ def format_global_progress(*, percent: float, elapsed_s: float, eta_s: float) ->
     elapsed_label = format_duration(elapsed_s)
     eta_label = format_duration(eta_s)
     return f"Progress global: {percent:.0f}% (elapsed {elapsed_label}, ETA {eta_label})"
+
+
+def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
+    if not aggregated_path.exists():
+        print(f"Aucun aggregated_results.csv détecté: {aggregated_path}")
+        return set()
+    with aggregated_path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames or "network_size" not in reader.fieldnames:
+            print(f"Colonne network_size absente dans {aggregated_path}")
+            return set()
+        sizes: set[int] = set()
+        for row in reader:
+            value = row.get("network_size")
+            if value in (None, ""):
+                continue
+            try:
+                sizes.add(int(float(value)))
+            except ValueError:
+                print(f"Valeur network_size invalide détectée: {value}")
+        return sizes
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -513,7 +535,17 @@ def main(argv: list[str] | None = None) -> None:
             f"{size}={count}" for size, count in sorted(rows_per_size.items())
         )
         print(f"Rows per size: {sizes_summary}")
-    (output_dir / "done.flag").write_text("done\n", encoding="utf-8")
+    aggregated_sizes = _read_aggregated_sizes(output_dir / "aggregated_results.csv")
+    missing_sizes = sorted(set(network_sizes) - aggregated_sizes)
+    if missing_sizes:
+        missing_label = ", ".join(map(str, missing_sizes))
+        print(
+            "ATTENTION: tailles manquantes dans aggregated_results.csv, "
+            f"done.flag non écrit. Manquantes: {missing_label}"
+        )
+    else:
+        (output_dir / "done.flag").write_text("done\n", encoding="utf-8")
+        print("done.flag écrit (agrégation complète).")
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         print(f"Tailles simulées: {sizes_label}")
