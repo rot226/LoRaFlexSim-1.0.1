@@ -20,7 +20,6 @@ from article_c.common.plot_helpers import (
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     load_step1_aggregated,
-    place_legend,
     save_figure,
 )
 
@@ -117,8 +116,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
-    place_legend(axes[-1])
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            ncol=min(len(labels), 4),
+        )
     fig.suptitle("Step 1 - Outage probability by Cluster (network size)")
+    fig.subplots_adjust(top=0.78)
     return fig
 
 
