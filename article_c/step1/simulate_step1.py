@@ -39,6 +39,7 @@ MIXRA_OPT_EMERGENCY_TIMEOUT_S = 300.0
 # Seuils proxy pour SNR/RSSI (inspirés d'ordres de grandeur LoRaWAN).
 SNR_THRESHOLDS = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
 RSSI_THRESHOLDS = {7: -123.0, 8: -126.0, 9: -129.0, 10: -132.0, 11: -134.5, 12: -137.0}
+ADR_MARGIN_BUFFER = 0.6
 
 LOGGER = logging.getLogger(__name__)
 
@@ -105,9 +106,18 @@ def _snr_margin_requirement(snr: float, rssi: float) -> float:
 
 def _adr_smallest_sf(node: NodeLink) -> int:
     """ADR proxy: choisit le plus petit SF satisfaisant les seuils SNR/RSSI."""
+    candidates: list[int] = []
     for sf in SF_VALUES:
         if _qos_ok(node, sf):
-            return sf
+            candidates.append(sf)
+            index = SF_INDEX[sf]
+            snr_margin = node.snr_margins[index] - node.qos_margin
+            rssi_margin = node.rssi_margins[index]
+            min_margin = min(snr_margin, rssi_margin)
+            if min_margin >= ADR_MARGIN_BUFFER:
+                return sf
+    if candidates:
+        return candidates[-1]
     return SF_VALUES[-1]
 
 
