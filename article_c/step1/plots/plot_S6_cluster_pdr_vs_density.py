@@ -105,12 +105,15 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             ax.set_xticks(network_sizes)
             ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
-    axes[-1][-1].legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.12),
-        ncol=3,
-        frameon=False,
-    )
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    if handles:
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            ncol=3,
+            frameon=False,
+        )
     fig.suptitle("Step 1 - PDR by Cluster (SNIR on/off, per algorithm)")
     return fig
 
