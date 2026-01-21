@@ -12,23 +12,24 @@ import warnings
 
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-import pandas as pd
-
 from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_MODES,
-    _sample_step1_rows,
     algo_label,
     apply_plot_style,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
+    load_step1_aggregated,
     save_figure,
 )
 
 TARGET_NETWORK_SIZE = 1280
 NETWORK_SIZE_COLUMNS = ("network_size", "density", "nodes", "num_nodes")
-PDR_COLUMNS = ("pdr", "pdr_mean")
+PDR_COLUMNS = ("pdr",)
+PDR_MEAN_COLUMNS = ("pdr_mean",)
+PDR_STD_COLUMNS = ("pdr_std",)
+PDR_COUNT_COLUMNS = ("pdr_count",)
 RX_COLUMNS = ("rx_success", "rx", "rx_ok")
 TX_COLUMNS = ("tx_total", "tx", "tx_attempts")
 ALGO_COLUMNS = ("algo", "algorithm", "method")
@@ -98,22 +99,6 @@ def _as_bool(value: str | None) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "vrai"}
 
 
-def _filtered_sample_rows() -> list[dict[str, object]]:
-    rows = []
-    for row in _sample_step1_rows():
-        rows.append(
-            {
-                "density": row.get("density"),
-                "network_size": row.get("network_size") or row.get("density"),
-                "algo": row.get("algo"),
-                "snir_mode": row.get("snir_mode"),
-                "cluster": row.get("cluster", "all"),
-                "pdr": row.get("pdr_mean"),
-            }
-        )
-    return rows
-
-
 def _available_network_sizes(rows: Iterable[dict[str, object]]) -> list[int]:
     sizes: set[int] = set()
     for row in rows:
@@ -137,7 +122,7 @@ def _select_target_size(available_sizes: list[int], target_size: int) -> int:
     return closest
 
 
-def _extract_pdr_groups(
+def _extract_raw_pdr_groups(
     rows: list[dict[str, str]],
 ) -> dict[int, dict[tuple[str, bool, str], list[float]]]:
     if not rows:
@@ -154,9 +139,15 @@ def _extract_pdr_groups(
     if not size_col or not algo_col or not snir_col or (not pdr_col and not (rx_col and tx_col)):
         return {}
 
+    has_cluster_values = False
+    if cluster_col:
+        has_cluster_values = any(
+            row.get(cluster_col) not in {"all", "", None} for row in rows
+        )
+
     values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]] = {}
     for row in rows:
-        if cluster_col and row.get(cluster_col) not in {"all", "", None}:
+        if cluster_col and has_cluster_values and row.get(cluster_col) in {"all", "", None}:
             continue
         algo = _normalize_algo(row.get(algo_col))
         snir_mode = _normalize_snir(row.get(snir_col))
@@ -180,6 +171,78 @@ def _extract_pdr_groups(
             continue
         size = int(size_value)
         values_by_size.setdefault(size, {}).setdefault((algo, fallback, snir_mode), []).append(pdr)
+    if values_by_size and not has_cluster_values:
+        warnings.warn(
+            "Aucune distribution par cluster détectée dans raw_results.csv; "
+            "utilisation des valeurs agrégées cluster='all'.",
+            stacklevel=2,
+        )
+    return values_by_size
+
+
+def _sample_distribution(
+    mean: float,
+    std: float,
+    count: int,
+    rng: Random,
+) -> list[float]:
+    if count <= 1 or std <= 0:
+        return [mean]
+    values = [rng.gauss(mean, std) for _ in range(count)]
+    return [min(1.0, max(0.0, value)) for value in values]
+
+
+def _extract_aggregated_pdr_groups(
+    rows: list[dict[str, object]],
+) -> dict[int, dict[tuple[str, bool, str], list[float]]]:
+    if not rows:
+        return {}
+    columns = rows[0].keys()
+    size_col = _pick_column(columns, NETWORK_SIZE_COLUMNS)
+    algo_col = _pick_column(columns, ALGO_COLUMNS)
+    snir_col = _pick_column(columns, SNIR_COLUMNS)
+    mean_col = _pick_column(columns, PDR_MEAN_COLUMNS)
+    std_col = _pick_column(columns, PDR_STD_COLUMNS)
+    count_col = _pick_column(columns, PDR_COUNT_COLUMNS)
+    cluster_col = _pick_column(columns, CLUSTER_COLUMNS)
+    fallback_col = _pick_column(columns, MIXRA_FALLBACK_COLUMNS)
+    if not size_col or not algo_col or not snir_col or not mean_col:
+        return {}
+
+    rng = Random(42)
+    has_cluster_values = False
+    if cluster_col:
+        has_cluster_values = any(
+            row.get(cluster_col) not in {"all", "", None} for row in rows
+        )
+
+    values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]] = {}
+    for row in rows:
+        if cluster_col and has_cluster_values and row.get(cluster_col) in {"all", "", None}:
+            continue
+        algo = _normalize_algo(row.get(algo_col))
+        snir_mode = _normalize_snir(row.get(snir_col))
+        if algo is None or snir_mode not in SNIR_LABELS:
+            continue
+        fallback = _as_bool(row.get(fallback_col)) if fallback_col else False
+        if algo != "mixra_opt":
+            fallback = False
+        if algo == "mixra_opt" and fallback:
+            continue
+        mean_value = _as_float(row.get(mean_col))
+        if mean_value is None:
+            continue
+        std_value = _as_float(row.get(std_col)) if std_col else 0.0
+        count_value = _as_float(row.get(count_col)) if count_col else None
+        count = int(count_value) if count_value and count_value > 0 else 1
+        pdr_values = _sample_distribution(mean_value, std_value or 0.0, count, rng)
+        size_value = _as_float(row.get(size_col))
+        if size_value is None:
+            continue
+        size = int(size_value)
+        values_by_size.setdefault(size, {}).setdefault((algo, fallback, snir_mode), []).extend(
+            pdr_values
+        )
     return values_by_size
 
 
@@ -288,7 +351,7 @@ def _plot_pdr_distribution(
 
 
 def _plot_pdr_distributions(
-    values_by_size: dict[int, dict[tuple[str, str], list[float]]],
+    values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]],
     network_sizes: list[int],
 ) -> plt.Figure:
     if not network_sizes:
@@ -336,56 +399,16 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     args = parser.parse_args(argv)
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "raw_results.csv"
-    if not results_path.exists() and allow_sample:
-        warnings.warn(
-            f"Fichier attendu introuvable: {results_path}. Utilisation des données d'exemple.",
-            stacklevel=2,
-        )
-    raw_rows = _read_rows(results_path)
-    if not raw_rows:
-        if not allow_sample:
-            warnings.warn(
-                "CSV Step1 manquant ou vide, figure ignorée.",
-                stacklevel=2,
-            )
-            return
-        sample_rows = filter_mixra_opt_fallback(_filtered_sample_rows())
-        if args.network_sizes:
-            sample_rows, _ = filter_rows_by_network_sizes(
-                sample_rows,
-                args.network_sizes,
-            )
-            df = pd.DataFrame(sample_rows)
-            network_sizes = sorted(df["network_size"].unique())
-        else:
-            network_sizes = [
-                _select_target_size(
-                    _available_network_sizes(sample_rows),
-                    TARGET_NETWORK_SIZE,
-                )
-            ]
-        if len(network_sizes) < 2:
-            warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
-        values_by_size: dict[int, dict[tuple[str, str], list[float]]] = {}
-        for row in sample_rows:
-            if row.get("cluster") != "all":
-                continue
-            algo = row.get("algo")
-            snir_mode = row.get("snir_mode")
-            pdr_value = row.get("pdr")
-            if isinstance(pdr_value, (int, float)) and algo and snir_mode in SNIR_LABELS:
-                size = int(row.get("network_size") or TARGET_NETWORK_SIZE)
-                values_by_size.setdefault(size, {}).setdefault(
-                    (str(algo), str(snir_mode)), []
-                ).append(float(pdr_value))
-    else:
+    raw_results_path = step_dir / "results" / "raw_results.csv"
+    raw_rows = _read_rows(raw_results_path)
+    values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]] = {}
+    network_sizes: list[int] = []
+    if raw_rows:
         ensure_network_size(raw_rows)
         raw_rows = filter_mixra_opt_fallback(raw_rows)
         if args.network_sizes:
             raw_rows, _ = filter_rows_by_network_sizes(raw_rows, args.network_sizes)
-            df = pd.DataFrame(raw_rows)
-            network_sizes = sorted(df["network_size"].unique())
+            network_sizes = sorted({int(row["network_size"]) for row in raw_rows})
         else:
             network_sizes = [
                 _select_target_size(
@@ -393,9 +416,35 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
                     TARGET_NETWORK_SIZE,
                 )
             ]
-        if len(network_sizes) < 2:
-            warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
-        values_by_size = _extract_pdr_groups(raw_rows)
+        values_by_size = _extract_raw_pdr_groups(raw_rows)
+
+    if not values_by_size:
+        aggregated_path = step_dir / "results" / "aggregated_results.csv"
+        aggregated_rows = load_step1_aggregated(aggregated_path, allow_sample=allow_sample)
+        if not aggregated_rows and not allow_sample:
+            warnings.warn(
+                "CSV Step1 manquant ou vide, figure ignorée.",
+                stacklevel=2,
+            )
+            return
+        aggregated_rows = filter_mixra_opt_fallback(aggregated_rows)
+        if args.network_sizes:
+            aggregated_rows, _ = filter_rows_by_network_sizes(
+                aggregated_rows,
+                args.network_sizes,
+            )
+            network_sizes = sorted({int(row["network_size"]) for row in aggregated_rows})
+        else:
+            network_sizes = [
+                _select_target_size(
+                    _available_network_sizes(aggregated_rows),
+                    TARGET_NETWORK_SIZE,
+                )
+            ]
+        values_by_size = _extract_aggregated_pdr_groups(aggregated_rows)
+
+    if len(network_sizes) < 2:
+        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
 
     fig = _plot_pdr_distributions(values_by_size, network_sizes)
     output_dir = step_dir / "plots" / "output"
