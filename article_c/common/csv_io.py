@@ -8,10 +8,12 @@ import os
 from contextlib import contextmanager
 from collections import defaultdict
 from pathlib import Path
+import math
 from statistics import mean, stdev
 
-GROUP_KEYS = ("network_size", "algo", "snir_mode", "seed", "cluster", "mixra_opt_fallback")
+GROUP_KEYS = ("network_size", "algo", "snir_mode", "cluster", "mixra_opt_fallback")
 EXTRA_MEAN_KEYS = {"mean_toa_s", "mean_latency_s"}
+EXCLUDED_NUMERIC_KEYS = {"seed", "replication", "node_id", "packet_id"}
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +70,7 @@ def _coerce_positive_network_size(value: object) -> float:
 
 
 def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    """Agrège les résultats avec moyenne et écart-type par clés de simulation."""
+    """Agrège les résultats avec moyenne, écart-type et IC 95% par clés."""
     if "network_size" not in GROUP_KEYS:
         raise AssertionError("network_size doit être inclus dans les clés de regroupement.")
     groups: dict[tuple[object, ...], list[dict[str, object]]] = defaultdict(list)
@@ -81,7 +83,7 @@ def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, objec
         group_key = tuple(row.get(key) for key in GROUP_KEYS)
         groups[group_key].append(row)
         for key, value in row.items():
-            if key in GROUP_KEYS or key == "density":
+            if key in GROUP_KEYS or key == "density" or key in EXCLUDED_NUMERIC_KEYS:
                 continue
             if isinstance(value, (int, float)):
                 numeric_keys.add(key)
@@ -93,12 +95,18 @@ def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, objec
             raise AssertionError("network_size manquant dans les résultats agrégés.")
         for key in sorted(numeric_keys):
             values = [row[key] for row in rows if isinstance(row.get(key), (int, float))]
+            count = len(values)
             if values:
-                aggregated_row[f"{key}_mean"] = mean(values)
-                aggregated_row[f"{key}_std"] = stdev(values) if len(values) > 1 else 0.0
+                mean_value = mean(values)
+                std_value = stdev(values) if count > 1 else 0.0
             else:
-                aggregated_row[f"{key}_mean"] = 0.0
-                aggregated_row[f"{key}_std"] = 0.0
+                mean_value = 0.0
+                std_value = 0.0
+            ci95_value = 1.96 * std_value / math.sqrt(count) if count > 1 else 0.0
+            aggregated_row[f"{key}_mean"] = mean_value
+            aggregated_row[f"{key}_std"] = std_value
+            aggregated_row[f"{key}_count"] = count
+            aggregated_row[f"{key}_ci95"] = ci95_value
             if key in EXTRA_MEAN_KEYS:
                 aggregated_row[key] = aggregated_row[f"{key}_mean"]
         aggregated.append(aggregated_row)
