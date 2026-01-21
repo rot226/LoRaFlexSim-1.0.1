@@ -22,7 +22,6 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     filter_cluster,
     load_step1_aggregated,
-    place_legend,
     save_figure,
 )
 
@@ -245,12 +244,20 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         ax.set_title(SNIR_LABELS.get(snir_mode, snir_mode))
         ax.set_ylim(0.0, 1.0)
     axes[0].set_ylabel("Share of nodes")
-    place_legend(axes[-1])
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.02),
+            ncol=len(sf_values),
+        )
     fig.suptitle("Step 1 - Spreading Factor Distribution (SNIR on/off)")
     return fig
 
 
-def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
+def main(argv: list[str] | None = None, allow_sample: bool = False) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -261,6 +268,11 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     args = parser.parse_args(argv)
     apply_plot_style()
     logger = logging.getLogger(__name__)
+    if allow_sample:
+        logger.warning(
+            "Fallback échantillon désactivé pour S8 afin d'utiliser des résultats réels."
+        )
+        allow_sample = False
     step_dir = Path(__file__).resolve().parents[1]
     raw_results_path = step_dir / "results" / "raw_results.csv"
     aggregated_results_path = step_dir / "results" / "aggregated_results.csv"
