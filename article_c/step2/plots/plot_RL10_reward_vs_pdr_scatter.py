@@ -283,6 +283,13 @@ def main(
     learning_curve_path = step_dir / "results" / "learning_curve.csv"
     step1_results_path = BASE_DIR / "step1" / "results" / "aggregated_results.csv"
     step2_results_path = step_dir / "results" / "aggregated_results.csv"
+    if not step1_results_path.exists():
+        step1_results_dir = BASE_DIR / "step1" / "results"
+        print("INFO: CSV Step1 manquant, plot RL10 ignoré.")
+        print(f"INFO: chemin attendu: {step1_results_path}")
+        print(f"INFO: chemin réel possible: {step1_results_dir}")
+        print("INFO: suggestion: python -m article_c.run_all --skip-step2 ...")
+        return
     step1_rows = load_step1_aggregated(
         step1_results_path,
         allow_sample=allow_sample,
