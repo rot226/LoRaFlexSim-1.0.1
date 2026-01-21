@@ -73,6 +73,18 @@ def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, objec
     """Agrège les résultats avec moyenne, écart-type et IC 95% par clés."""
     if "network_size" not in GROUP_KEYS:
         raise AssertionError("network_size doit être inclus dans les clés de regroupement.")
+    algo_values = {
+        row.get("algo")
+        for row in raw_rows
+        if row.get("algo") not in (None, "")
+    }
+    if algo_values:
+        for row in raw_rows:
+            if row.get("algo") in (None, ""):
+                logger.warning(
+                    "Algo manquant détecté, séparation stricte appliquée dans l'agrégation."
+                )
+                row["algo"] = "unknown"
     groups: dict[tuple[object, ...], list[dict[str, object]]] = defaultdict(list)
     numeric_keys: set[str] = set()
     for row in raw_rows:
