@@ -172,6 +172,8 @@ def _build_step1_args(args: argparse.Namespace) -> list[str]:
         step1_args.extend(["--noise-floor-dbm", str(args.noise_floor_dbm)])
     if args.step1_outdir:
         step1_args.extend(["--outdir", args.step1_outdir])
+    else:
+        step1_args.extend(["--outdir", "article_c/step1/results"])
     if args.progress is not None:
         step1_args.append("--progress" if args.progress else "--no-progress")
     return step1_args
