@@ -9,6 +9,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from article_c.common.config import BASE_DIR
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
@@ -280,7 +281,7 @@ def main(
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     learning_curve_path = step_dir / "results" / "learning_curve.csv"
-    step1_results_path = step_dir.parents[1] / "step1" / "results" / "aggregated_results.csv"
+    step1_results_path = BASE_DIR / "step1" / "results" / "aggregated_results.csv"
     step2_results_path = step_dir / "results" / "aggregated_results.csv"
     step1_rows = load_step1_aggregated(
         step1_results_path,
