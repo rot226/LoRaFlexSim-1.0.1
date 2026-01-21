@@ -372,6 +372,41 @@ def main(argv: list[str] | None = None) -> None:
     for step in steps:
         for module_path in PLOT_MODULES[step]:
             csv_path = step1_csv if step == "step1" else step2_csv
+            if (
+                step == "step2"
+                and module_path.endswith("plot_RL10_reward_vs_pdr_scatter")
+            ):
+                step1_sizes = _load_network_sizes_from_csvs([step1_csv])
+                step2_sizes = _load_network_sizes_from_csvs([step2_csv])
+                intersection = sorted(set(step1_sizes) & set(step2_sizes))
+                if len(intersection) < 2:
+                    print(
+                        "ERREUR: "
+                        "plot_RL10_reward_vs_pdr_scatter nécessite au moins "
+                        "2 tailles communes entre Step1 et Step2."
+                    )
+                    print(f"Tailles Step1: {step1_sizes or 'aucune'}")
+                    print(f"Tailles Step2: {step2_sizes or 'aucune'}")
+                    print(
+                        "Intersection: "
+                        f"{intersection or 'aucune'}"
+                    )
+                    regen_sizes = step2_sizes or step1_sizes
+                    command = (
+                        _suggest_regeneration_command(
+                            step1_csv,
+                            regen_sizes,
+                        )
+                        if regen_sizes
+                        else None
+                    )
+                    if command:
+                        print(
+                            "Exemple pour régénérer Step1 "
+                            "(PowerShell):"
+                        )
+                        print(command)
+                    continue
             if not _validate_plot_data(
                 step=step,
                 module_path=module_path,
