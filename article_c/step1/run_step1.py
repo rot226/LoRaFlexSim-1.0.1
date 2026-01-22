@@ -12,6 +12,15 @@ from time import perf_counter
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.csv_io import write_simulation_results
+from article_c.common.plot_helpers import (
+    apply_plot_style,
+    filter_cluster,
+    filter_mixra_opt_fallback,
+    load_step1_aggregated,
+    place_legend,
+    plot_metric_by_snir,
+    save_figure,
+)
 from article_c.common.utils import (
     parse_network_size_list,
     replication_ids,
@@ -98,7 +107,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--replications",
         type=int,
-        default=5,
+        default=10,
         help="Nombre de réplications par configuration (recommandé >= 5).",
     )
     parser.add_argument(
@@ -257,6 +266,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Affiche la progression des simulations.",
+    )
+    parser.add_argument(
+        "--plot-summary",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Génère un plot de synthèse avec barres d'erreur.",
     )
     parser.add_argument(
         "--profile-timing",
@@ -427,6 +442,32 @@ def _simulate_density(
     }
 
 
+def _plot_summary_pdr(output_dir: Path) -> None:
+    results_path = output_dir / "aggregated_results.csv"
+    if not results_path.exists():
+        print(f"Aucun aggregated_results.csv pour tracer le résumé: {results_path}")
+        return
+    rows = load_step1_aggregated(results_path, allow_sample=False)
+    if not rows:
+        print("Aucune ligne agrégée disponible pour le plot de synthèse.")
+        return
+    rows = filter_cluster(rows, "all")
+    rows = filter_mixra_opt_fallback(rows)
+    apply_plot_style()
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots()
+    plot_metric_by_snir(ax, rows, "pdr_mean")
+    ax.set_xlabel("Network size (number of nodes)")
+    ax.set_ylabel("Packet Delivery Ratio")
+    ax.set_ylim(0.0, 1.0)
+    ax.set_title("Step 1 - Packet Delivery Ratio (avec barres d'erreur)")
+    place_legend(ax)
+    output_plot_dir = output_dir / "plots"
+    save_figure(fig, output_plot_dir, "summary_pdr", use_tight=False)
+    plt.close(fig)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
@@ -549,6 +590,8 @@ def main(argv: list[str] | None = None) -> None:
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         print(f"Tailles simulées: {sizes_label}")
+    if args.plot_summary:
+        _plot_summary_pdr(output_dir)
 
 
 if __name__ == "__main__":
