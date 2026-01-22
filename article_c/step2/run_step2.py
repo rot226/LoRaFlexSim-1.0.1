@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Sequence
 
 from article_c.common.csv_io import write_rows, write_simulation_results
+from article_c.common.plot_helpers import apply_plot_style, place_legend, save_figure
 from article_c.common.utils import (
     ensure_dir,
     parse_cli_args,
@@ -122,6 +123,78 @@ def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
             except ValueError:
                 print(f"Valeur network_size invalide détectée: {value}")
         return sizes
+
+
+def _load_step2_aggregated_with_errors(
+    aggregated_path: Path,
+) -> list[dict[str, object]]:
+    if not aggregated_path.exists():
+        print(f"Aucun aggregated_results.csv détecté: {aggregated_path}")
+        return []
+    rows: list[dict[str, object]] = []
+    with aggregated_path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            network_size_value = row.get("network_size") or row.get("density")
+            if network_size_value in (None, ""):
+                continue
+            rows.append(
+                {
+                    "network_size": int(float(network_size_value)),
+                    "algo": str(row.get("algo", "")),
+                    "snir_mode": str(row.get("snir_mode", "")),
+                    "cluster": str(row.get("cluster", "all")),
+                    "reward_mean": float(row.get("reward_mean", 0.0) or 0.0),
+                    "reward_std": float(row.get("reward_std", 0.0) or 0.0),
+                    "reward_ci95": float(row.get("reward_ci95", 0.0) or 0.0),
+                }
+            )
+    return rows
+
+
+def _plot_summary_reward(output_dir: Path) -> None:
+    aggregated_path = output_dir / "aggregated_results.csv"
+    rows = _load_step2_aggregated_with_errors(aggregated_path)
+    if not rows:
+        print("Aucune ligne agrégée disponible pour le plot de synthèse.")
+        return
+    rows = [
+        row
+        for row in rows
+        if row.get("cluster") == "all" and row.get("snir_mode") == "snir_on"
+    ]
+    if not rows:
+        print("Aucune ligne agrégée filtrée pour le plot de synthèse.")
+        return
+    apply_plot_style()
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots()
+    network_sizes = sorted({row["network_size"] for row in rows})
+    algorithms = sorted({row["algo"] for row in rows})
+    error_key = "reward_ci95" if any(row.get("reward_ci95") for row in rows) else "reward_std"
+    for algo in algorithms:
+        algo_rows = [row for row in rows if row["algo"] == algo]
+        points = {row["network_size"]: row["reward_mean"] for row in algo_rows}
+        errors = {row["network_size"]: row.get(error_key, 0.0) for row in algo_rows}
+        values = [points.get(size, float("nan")) for size in network_sizes]
+        yerr = [errors.get(size, 0.0) for size in network_sizes]
+        ax.errorbar(
+            network_sizes,
+            values,
+            yerr=yerr,
+            marker="o",
+            capsize=3,
+            label=algo,
+        )
+    ax.set_xlabel("Network size (number of nodes)")
+    ax.set_ylabel("Mean Reward")
+    ax.set_title("Step 2 - Reward moyen (avec barres d'erreur)")
+    ax.set_xticks(network_sizes)
+    place_legend(ax)
+    output_plot_dir = output_dir / "plots"
+    save_figure(fig, output_plot_dir, "summary_reward", use_tight=False)
+    plt.close(fig)
 
 
 def _simulate_density(
@@ -294,6 +367,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         print(f"Tailles simulées: {sizes_label}")
+    if args.plot_summary:
+        _plot_summary_reward(base_results_dir)
 
 
 if __name__ == "__main__":

@@ -55,13 +55,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--replications",
         type=int,
-        default=5,
+        default=10,
         help="Nombre de réplications.",
     )
     parser.add_argument(
         "--timestamp",
         action="store_true",
         help="Ajoute un timestamp dans les sorties.",
+    )
+    parser.add_argument(
+        "--plot-summary",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Génère un plot de synthèse avec barres d'erreur.",
     )
     parser.add_argument(
         "--snir-threshold-db",
