@@ -126,31 +126,71 @@ def _compute_window_metrics(
 
 
 def _compute_collision_successes(
-    transmissions: dict[int, list[tuple[float, float, int]]]
-) -> dict[int, int]:
+    transmissions: dict[int, list[tuple[float, float, int]]],
+    *,
+    rng: random.Random | None = None,
+    approx_threshold: int = 5000,
+    approx_sample_size: int = 2500,
+) -> tuple[dict[int, int], int, bool]:
+    def _compute_collisions(
+        events: list[tuple[float, float, int]]
+    ) -> list[bool]:
+        collided = [False] * len(events)
+        indexed_events = sorted(enumerate(events), key=lambda item: item[1][0])
+        group_indices: list[int] = []
+        group_end: float | None = None
+        for event_index, (start, end, _node_id) in indexed_events:
+            if group_end is None or start >= group_end:
+                if len(group_indices) > 1:
+                    for index in group_indices:
+                        collided[index] = True
+                group_indices = [event_index]
+                group_end = end
+            else:
+                group_indices.append(event_index)
+                if end > group_end:
+                    group_end = end
+        if len(group_indices) > 1:
+            for index in group_indices:
+                collided[index] = True
+        return collided
+
+    total_transmissions = sum(len(events) for events in transmissions.values())
+    approx_mode = total_transmissions > approx_threshold
+    rng = rng or random.Random(0)
     successes_by_node: dict[int, int] = {}
     for events in transmissions.values():
         if not events:
             continue
-        collided = [False] * len(events)
-        indexed_events = list(enumerate(events))
-        indexed_events.sort(key=lambda item: item[1][0])
-        active: list[tuple[float, int]] = []
-        for event_index, (start, end, _node_id) in indexed_events:
-            active = [
-                (active_end, active_index)
-                for active_end, active_index in active
-                if active_end > start
+        per_node_total: dict[int, int] = {}
+        for _start, _end, node_id in events:
+            per_node_total[node_id] = per_node_total.get(node_id, 0) + 1
+        sample_probability = 1.0
+        sampled_events = events
+        if approx_mode and len(events) > approx_sample_size:
+            sample_probability = approx_sample_size / len(events)
+            sampled_events = [
+                event for event in events if rng.random() < sample_probability
             ]
-            if active:
-                collided[event_index] = True
-                for _active_end, active_index in active:
-                    collided[active_index] = True
-            active.append((end, event_index))
-        for event_index, (_start, _end, node_id) in enumerate(events):
+            if not sampled_events:
+                sampled_events = [rng.choice(events)]
+        collided = _compute_collisions(sampled_events)
+        sample_successes: dict[int, int] = {}
+        for event_index, (_start, _end, node_id) in enumerate(sampled_events):
             if not collided[event_index]:
-                successes_by_node[node_id] = successes_by_node.get(node_id, 0) + 1
-    return successes_by_node
+                sample_successes[node_id] = sample_successes.get(node_id, 0) + 1
+        if sample_probability < 1.0:
+            for node_id, successes in sample_successes.items():
+                estimated = int(round(successes / sample_probability))
+                successes_by_node[node_id] = successes_by_node.get(node_id, 0) + min(
+                    estimated, per_node_total[node_id]
+                )
+        else:
+            for node_id, successes in sample_successes.items():
+                successes_by_node[node_id] = (
+                    successes_by_node.get(node_id, 0) + successes
+                )
+    return successes_by_node, total_transmissions, approx_mode
 
 
 def _sample_log_normal_shadowing(
@@ -440,7 +480,16 @@ def run_simulation(
                     transmissions_by_sf.setdefault(sf_value, []).append(
                         (start_time, start_time + airtime, int(node_window["node_id"]))
                     )
-            successes_by_node = _compute_collision_successes(transmissions_by_sf)
+            (
+                successes_by_node,
+                transmission_count,
+                approx_collision_mode,
+            ) = _compute_collision_successes(transmissions_by_sf, rng=rng)
+            if approx_collision_mode:
+                logger.debug(
+                    "Mode approx collisions activé (%s transmissions).",
+                    transmission_count,
+                )
             for node_window in node_windows:
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
@@ -647,7 +696,16 @@ def run_simulation(
                     transmissions_by_sf.setdefault(sf_value, []).append(
                         (start_time, start_time + airtime, int(node_window["node_id"]))
                     )
-            successes_by_node = _compute_collision_successes(transmissions_by_sf)
+            (
+                successes_by_node,
+                transmission_count,
+                approx_collision_mode,
+            ) = _compute_collision_successes(transmissions_by_sf, rng=rng)
+            if approx_collision_mode:
+                logger.debug(
+                    "Mode approx collisions activé (%s transmissions).",
+                    transmission_count,
+                )
             for node_window in node_windows:
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
