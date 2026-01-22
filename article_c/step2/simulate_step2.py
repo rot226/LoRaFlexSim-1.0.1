@@ -27,6 +27,15 @@ class WindowMetrics:
 
 
 @dataclass(frozen=True)
+class AlgoRewardWeights:
+    sf_weight: float
+    latency_weight: float
+    energy_weight: float
+    collision_weight: float
+    exploration_floor: float = 0.0
+
+
+@dataclass(frozen=True)
 class Step2Result:
     raw_rows: list[dict[str, object]]
     selection_prob_rows: list[dict[str, object]]
@@ -42,16 +51,28 @@ def _clip(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float
 
 def _compute_reward(
     success_rate: float,
-    bitrate_norm: float,
+    sf_norm: float,
+    latency_norm: float,
     energy_norm: float,
     collision_norm: float,
+    weights: AlgoRewardWeights,
     lambda_energy: float,
     lambda_collision: float,
 ) -> float:
-    reward = (
-        success_rate * bitrate_norm
-        - lambda_energy * energy_norm
-        - lambda_collision * collision_norm
+    energy_weight = weights.energy_weight * (1.0 + lambda_energy)
+    total_weight = weights.sf_weight + weights.latency_weight + energy_weight
+    if total_weight <= 0:
+        total_weight = 1.0
+    sf_score = 1.0 - sf_norm
+    latency_score = 1.0 - latency_norm
+    energy_score = 1.0 - energy_norm
+    weighted_quality = (
+        weights.sf_weight * sf_score
+        + weights.latency_weight * latency_score
+        + energy_weight * energy_score
+    ) / total_weight
+    reward = success_rate * weighted_quality - (
+        lambda_collision * weights.collision_weight * collision_norm
     )
     return _clip(reward, 0.0, 1.0)
 
@@ -100,6 +121,14 @@ def _cluster_shadowing_sigma_factor(cluster: str, clusters: tuple[str, ...]) -> 
     max_factor = 1.2
     step = (max_factor - min_factor) / (len(clusters) - 1)
     return min_factor + step * index
+
+
+def _mixra_cluster_qos_factor(cluster: str, clusters: tuple[str, ...]) -> float:
+    if not clusters or cluster not in clusters or len(clusters) == 1:
+        return 1.0
+    index = clusters.index(cluster)
+    cluster_scale = (len(clusters) - 1 - index) / (len(clusters) - 1)
+    return 0.85 + 0.35 * (1.0 - cluster_scale)
 
 
 def _congestion_collision_probability(network_size: int, reference_size: int) -> float:
@@ -202,14 +231,45 @@ def _sample_log_normal_shadowing(
 
 def _weights_for_algo(algorithm: str, n_arms: int) -> list[float]:
     if algorithm == "mixra_h":
-        base = [0.3, 0.25, 0.2, 0.15, 0.07, 0.03]
+        base = [0.28, 0.24, 0.2, 0.15, 0.09, 0.04]
     elif algorithm == "mixra_opt":
-        base = [0.2, 0.2, 0.2, 0.15, 0.15, 0.1]
+        base = [0.18, 0.2, 0.2, 0.17, 0.15, 0.1]
     else:
         base = [1.0] + [0.0] * 5
     weights = base[:n_arms]
     total = sum(weights) or 1.0
     return [weight / total for weight in weights]
+
+
+def _reward_weights_for_algo(algorithm: str) -> AlgoRewardWeights:
+    if algorithm == "adr":
+        return AlgoRewardWeights(
+            sf_weight=0.5,
+            latency_weight=0.3,
+            energy_weight=0.2,
+            collision_weight=0.25,
+        )
+    if algorithm == "mixra_h":
+        return AlgoRewardWeights(
+            sf_weight=0.3,
+            latency_weight=0.25,
+            energy_weight=0.45,
+            collision_weight=0.3,
+        )
+    if algorithm == "mixra_opt":
+        return AlgoRewardWeights(
+            sf_weight=0.25,
+            latency_weight=0.2,
+            energy_weight=0.55,
+            collision_weight=0.35,
+        )
+    return AlgoRewardWeights(
+        sf_weight=0.4,
+        latency_weight=0.3,
+        energy_weight=0.3,
+        collision_weight=0.25,
+        exploration_floor=0.08,
+    )
 
 
 def _apply_cluster_bias(
@@ -388,6 +448,11 @@ def run_simulation(
         rng.uniform(6.0, 8.0) if shadowing_sigma_db is None else shadowing_sigma_db
     )
     lambda_collision = _clip(0.15 + 0.45 * lambda_energy, 0.08, 0.7)
+    reward_weights = _reward_weights_for_algo(algorithm)
+    sf_norm_by_sf = {
+        sf: _normalize(sf, min(sf_values), max(sf_values)) for sf in sf_values
+    }
+    latency_norm_by_sf = energy_norm_by_sf
 
     if algorithm == "ucb1_sf":
         bandit = BanditUCB1(
@@ -395,10 +460,11 @@ def run_simulation(
             warmup_rounds=DEFAULT_CONFIG.rl.warmup,
             epsilon_min=0.02,
         )
+        exploration_epsilon = max(epsilon_greedy, reward_weights.exploration_floor)
         window_start_s = 0.0
         for round_id in range(n_rounds):
             arm_index = bandit.select_arm()
-            if epsilon_greedy > 0.0 and rng.random() < epsilon_greedy:
+            if exploration_epsilon > 0.0 and rng.random() < exploration_epsilon:
                 arm_index = rng.randrange(n_arms)
             window_rewards: list[float] = []
             if round_id > 0:
@@ -521,9 +587,11 @@ def run_simulation(
                 )
                 reward = _compute_reward(
                     metrics.success_rate,
-                    metrics.bitrate_norm,
+                    sf_norm_by_sf[sf_value],
+                    latency_norm_by_sf[sf_value],
                     metrics.energy_norm,
                     metrics.collision_norm,
+                    reward_weights,
                     lambda_energy,
                     lambda_collision,
                 )
@@ -660,8 +728,14 @@ def run_simulation(
                         link_quality, sf_values, cluster, qos_clusters
                     )
                 else:
+                    cluster_qos_factor = _mixra_cluster_qos_factor(
+                        cluster, qos_clusters
+                    )
                     cluster_weights = _apply_cluster_bias(
-                        weights, cluster, qos_clusters, mixra_strength
+                        weights,
+                        cluster,
+                        qos_clusters,
+                        mixra_strength * cluster_qos_factor,
                     )
                     arm_index = rng.choices(range(n_arms), weights=cluster_weights, k=1)[0]
                 sf_value = sf_values[arm_index]
@@ -737,9 +811,11 @@ def run_simulation(
                 )
                 reward = _compute_reward(
                     metrics.success_rate,
-                    metrics.bitrate_norm,
+                    sf_norm_by_sf[sf_value],
+                    latency_norm_by_sf[sf_value],
                     metrics.energy_norm,
                     metrics.collision_norm,
+                    reward_weights,
                     lambda_energy,
                     lambda_collision,
                 )

@@ -40,6 +40,7 @@ MIXRA_OPT_EMERGENCY_TIMEOUT_S = 300.0
 SNR_THRESHOLDS = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
 RSSI_THRESHOLDS = {7: -123.0, 8: -126.0, 9: -129.0, 10: -132.0, 11: -134.5, 12: -137.0}
 ADR_MARGIN_BUFFER = 0.6
+MIXRA_CLUSTER_STRENGTH = 0.35
 
 LOGGER = logging.getLogger(__name__)
 
@@ -91,6 +92,69 @@ class NodeQoSCache:
     qos_candidates_by_node: list[tuple[int, ...]]
 
 
+@dataclass(frozen=True)
+class MixraPolicyWeights:
+    sf_weight: float
+    latency_weight: float
+    energy_weight: float
+    qos_weight: float
+
+
+def _normalize(value: float, min_value: float, max_value: float) -> float:
+    if max_value <= min_value:
+        return 0.0
+    return (value - min_value) / (max_value - min_value)
+
+
+def _mixra_policy_weights(algorithm: str) -> MixraPolicyWeights:
+    if algorithm == "mixra_opt":
+        return MixraPolicyWeights(
+            sf_weight=0.2,
+            latency_weight=0.25,
+            energy_weight=0.35,
+            qos_weight=0.55,
+        )
+    return MixraPolicyWeights(
+        sf_weight=0.25,
+        latency_weight=0.35,
+        energy_weight=0.25,
+        qos_weight=0.45,
+    )
+
+
+def _precompute_sf_metrics() -> dict[int, tuple[float, float, float]]:
+    payload_bytes = DEFAULT_CONFIG.scenario.payload_bytes
+    bw_khz = DEFAULT_CONFIG.radio.bandwidth_khz
+    cr = coding_rate_to_cr(DEFAULT_CONFIG.radio.coding_rate)
+    airtime_by_sf = {
+        sf: compute_airtime(payload_bytes=payload_bytes, sf=sf, bw_khz=bw_khz, cr=cr)
+        for sf in SF_VALUES
+    }
+    min_airtime = min(airtime_by_sf.values())
+    max_airtime = max(airtime_by_sf.values())
+    min_sf = min(SF_VALUES)
+    max_sf = max(SF_VALUES)
+    return {
+        sf: (
+            _normalize(sf, min_sf, max_sf),
+            _normalize(airtime, min_airtime, max_airtime),
+            _normalize(airtime, min_airtime, max_airtime),
+        )
+        for sf, airtime in airtime_by_sf.items()
+    }
+
+
+SF_METRICS_BY_SF = _precompute_sf_metrics()
+
+
+def _cluster_mixra_bias(cluster: str | None, clusters: tuple[str, ...]) -> float:
+    if not clusters or cluster not in clusters or len(clusters) == 1:
+        return 0.0
+    index = clusters.index(cluster)
+    cluster_scale = (len(clusters) - 1 - index) / (len(clusters) - 1)
+    return 2.0 * cluster_scale - 1.0
+
+
 def _qos_ok(node: NodeLink, sf: int) -> bool:
     index = SF_INDEX[sf]
     return node.snr_margins[index] >= node.qos_margin and node.rssi_margins[index] >= 0.0
@@ -121,11 +185,21 @@ def _adr_smallest_sf(node: NodeLink) -> int:
     return SF_VALUES[-1]
 
 
-def _mixra_h_assign(nodes: Iterable[NodeLink]) -> list[int]:
+def _mixra_h_assign(
+    nodes: Iterable[NodeLink],
+    *,
+    node_clusters: list[str] | None = None,
+    qos_clusters: tuple[str, ...] | None = None,
+    policy_weights: MixraPolicyWeights | None = None,
+) -> list[int]:
     """MixRA-H proxy: équilibre QoS et pénalise la densité par SF."""
+    if qos_clusters is None:
+        qos_clusters = tuple(DEFAULT_CONFIG.qos.clusters)
+    if policy_weights is None:
+        policy_weights = _mixra_policy_weights("mixra_h")
     assignments: list[int] = []
     loads = {sf: 0 for sf in SF_VALUES}
-    for node in nodes:
+    for node_index, node in enumerate(nodes):
         candidates = [sf for sf in SF_VALUES if _qos_ok(node, sf)]
         if not candidates:
             sf = SF_VALUES[-1]
@@ -135,6 +209,12 @@ def _mixra_h_assign(nodes: Iterable[NodeLink]) -> list[int]:
 
         best_sf = candidates[0]
         best_score = float("inf")
+        cluster = (
+            node_clusters[node_index]
+            if node_clusters is not None and node_index < len(node_clusters)
+            else None
+        )
+        cluster_bias = _cluster_mixra_bias(cluster, qos_clusters)
         for sf in candidates:
             index = SF_INDEX[sf]
             snr_margin = node.snr_margins[index]
@@ -143,7 +223,15 @@ def _mixra_h_assign(nodes: Iterable[NodeLink]) -> list[int]:
             total_nodes = max(1, len(assignments))
             density = loads[sf] / total_nodes
             load_penalty = loads[sf] + 8.0 * density
-            score = load_penalty - 0.35 * qos_margin
+            sf_norm, latency_norm, energy_norm = SF_METRICS_BY_SF[sf]
+            sf_norm *= 1.0 + MIXRA_CLUSTER_STRENGTH * cluster_bias
+            score = (
+                load_penalty
+                + policy_weights.sf_weight * sf_norm
+                + policy_weights.latency_weight * latency_norm
+                + policy_weights.energy_weight * energy_norm
+                - policy_weights.qos_weight * qos_margin
+            )
             if score < best_score:
                 best_score = score
                 best_sf = sf
@@ -155,6 +243,9 @@ def _mixra_h_assign(nodes: Iterable[NodeLink]) -> list[int]:
 def _mixra_opt_assign(
     nodes: Iterable[NodeLink],
     *,
+    node_clusters: list[str] | None = None,
+    qos_clusters: tuple[str, ...] | None = None,
+    policy_weights: MixraPolicyWeights | None = None,
     max_iterations: int = 30,
     candidate_subset_size: int = 100,
     convergence_epsilon: float = 1e-3,
@@ -165,11 +256,37 @@ def _mixra_opt_assign(
 ) -> tuple[list[int], bool]:
     """MixRA-Opt proxy: glouton + recherche locale (collisions + QoS)."""
     nodes_list = list(nodes)
-    assignments = _mixra_h_assign(nodes_list)
+    if qos_clusters is None:
+        qos_clusters = tuple(DEFAULT_CONFIG.qos.clusters)
+    if policy_weights is None:
+        policy_weights = _mixra_policy_weights("mixra_opt")
+    assignments = _mixra_h_assign(
+        nodes_list,
+        node_clusters=node_clusters,
+        qos_clusters=qos_clusters,
+        policy_weights=policy_weights,
+    )
     local_rng = random.Random(subset_seed)
     qos_cache = _precompute_node_qos_cache(nodes_list)
     qos_penalties_by_node = qos_cache.qos_penalties_by_node
     qos_candidates_by_node = qos_cache.qos_candidates_by_node
+    cluster_biases = [
+        _cluster_mixra_bias(cluster, qos_clusters)
+        for cluster in (node_clusters or [""] * len(nodes_list))
+    ]
+    policy_costs_by_node: list[tuple[float, ...]] = []
+    for cluster_bias in cluster_biases:
+        costs: list[float] = []
+        for sf in SF_VALUES:
+            sf_norm, latency_norm, energy_norm = SF_METRICS_BY_SF[sf]
+            sf_norm *= 1.0 + MIXRA_CLUSTER_STRENGTH * cluster_bias
+            cost = (
+                policy_weights.sf_weight * sf_norm
+                + policy_weights.latency_weight * latency_norm
+                + policy_weights.energy_weight * energy_norm
+            )
+            costs.append(cost)
+        policy_costs_by_node.append(tuple(costs))
 
     def collision_cost(loads: dict[int, int]) -> float:
         return sum(load * load for load in loads.values())
@@ -209,10 +326,19 @@ def _mixra_opt_assign(
         qos_penalties_by_node[idx][SF_INDEX[sf]]
         for idx, sf in enumerate(assignments)
     ]
+    current_policy_cost_by_node = [
+        policy_costs_by_node[idx][SF_INDEX[sf]]
+        for idx, sf in enumerate(assignments)
+    ]
     qos_penalty_total = sum(current_qos_penalty_by_node)
+    policy_cost_total = sum(current_policy_cost_by_node)
     collision_cost_total = collision_cost(loads)
     qos_weight = 2.5
-    current_obj = collision_cost_total + qos_weight * qos_penalty_total
+    current_obj = (
+        collision_cost_total
+        + qos_weight * qos_penalty_total
+        + policy_cost_total
+    )
 
     start_time = perf_counter()
     small_improvement_streak = 0
@@ -233,7 +359,16 @@ def _mixra_opt_assign(
                     "MixRA-Opt timeout atteint (%.2fs).", perf_counter() - start_time
                 )
                 if allow_fallback:
-                    return _finalize(_mixra_h_assign(nodes_list), True, success=False)
+                    return _finalize(
+                        _mixra_h_assign(
+                            nodes_list,
+                            node_clusters=node_clusters,
+                            qos_clusters=qos_clusters,
+                            policy_weights=policy_weights,
+                        ),
+                        True,
+                        success=False,
+                    )
                 return _finalize(assignments, False, success=False)
             evaluations += 1
             if evaluations > max_evaluations:
@@ -243,7 +378,16 @@ def _mixra_opt_assign(
                         evaluations,
                         max_evaluations,
                     )
-                    return _finalize(_mixra_h_assign(nodes_list), True, success=False)
+                    return _finalize(
+                        _mixra_h_assign(
+                            nodes_list,
+                            node_clusters=node_clusters,
+                            qos_clusters=qos_clusters,
+                            policy_weights=policy_weights,
+                        ),
+                        True,
+                        success=False,
+                    )
                 LOGGER.warning(
                     "MixRA-Opt dépasse le budget (%s > %s évaluations), arrêt sans fallback.",
                     evaluations,
@@ -258,6 +402,7 @@ def _mixra_opt_assign(
             best_obj = current_obj
             current_load = loads[current_sf]
             current_qos_penalty = current_qos_penalty_by_node[idx]
+            current_policy_cost = current_policy_cost_by_node[idx]
             for sf in candidates:
                 if sf == current_sf:
                     continue
@@ -265,7 +410,14 @@ def _mixra_opt_assign(
                 delta_collision = 2.0 * (candidate_load - current_load + 1.0)
                 candidate_qos_penalty = qos_penalties_by_node[idx][SF_INDEX[sf]]
                 delta_qos = candidate_qos_penalty - current_qos_penalty
-                candidate_obj = current_obj + delta_collision + qos_weight * delta_qos
+                candidate_policy_cost = policy_costs_by_node[idx][SF_INDEX[sf]]
+                delta_policy = candidate_policy_cost - current_policy_cost
+                candidate_obj = (
+                    current_obj
+                    + delta_collision
+                    + qos_weight * delta_qos
+                    + delta_policy
+                )
                 if candidate_obj < best_obj:
                     best_obj = candidate_obj
                     best_sf = sf
@@ -277,10 +429,18 @@ def _mixra_opt_assign(
                 delta_collision = 2.0 * (best_load - current_load + 1.0)
                 new_qos_penalty = qos_penalties_by_node[idx][SF_INDEX[best_sf]]
                 qos_penalty_delta = new_qos_penalty - current_qos_penalty
+                new_policy_cost = policy_costs_by_node[idx][SF_INDEX[best_sf]]
+                policy_cost_delta = new_policy_cost - current_policy_cost
                 collision_cost_total += delta_collision
                 qos_penalty_total += qos_penalty_delta
+                policy_cost_total += policy_cost_delta
                 current_qos_penalty_by_node[idx] = new_qos_penalty
-                current_obj = collision_cost_total + qos_weight * qos_penalty_total
+                current_policy_cost_by_node[idx] = new_policy_cost
+                current_obj = (
+                    collision_cost_total
+                    + qos_weight * qos_penalty_total
+                    + policy_cost_total
+                )
                 improved = True
         end_obj = current_obj
         improvement = start_obj - end_obj
@@ -499,13 +659,15 @@ def run_simulation(
         fading_sigma_db=fading_sigma_db,
         fading_mean_db=fading_mean_db,
     )
+    cluster_rng = random.Random(seed + 971)
+    node_clusters = assign_clusters(actual_sent, rng=cluster_rng)
     timings: dict[str, float] | None = {} if profile_timing else None
     start_assignment = perf_counter() if profile_timing else 0.0
     mixra_opt_fallback = False
     if algorithm == "adr":
         assignments = [_adr_smallest_sf(node) for node in nodes]
     elif algorithm == "mixra_h":
-        assignments = _mixra_h_assign(nodes)
+        assignments = _mixra_h_assign(nodes, node_clusters=node_clusters)
     elif algorithm == "mixra_opt" and mixra_opt_enabled:
         if mixra_opt_mode not in {"fast", "fast_opt", "full", "balanced"}:
             raise ValueError(
@@ -530,6 +692,7 @@ def run_simulation(
             mixra_opt_max_evaluations = mixra_opt_budget
         assignments, mixra_opt_fallback = _mixra_opt_assign(
             nodes,
+            node_clusters=node_clusters,
             max_iterations=mixra_opt_max_iterations,
             candidate_subset_size=mixra_opt_candidate_subset_size,
             convergence_epsilon=mixra_opt_epsilon,
@@ -539,7 +702,7 @@ def run_simulation(
             allow_fallback=allow_fallback,
         )
     elif algorithm == "mixra_opt":
-        assignments = _mixra_h_assign(nodes)
+        assignments = _mixra_h_assign(nodes, node_clusters=node_clusters)
         mixra_opt_fallback = True
     else:
         raise ValueError(f"Algorithme inconnu: {algorithm}")
@@ -566,7 +729,6 @@ def run_simulation(
     )
     if profile_timing and timings is not None:
         timings["interference_s"] = perf_counter() - start_interference
-    node_clusters = assign_clusters(actual_sent, rng=rng)
     received = sum(1 for value in node_received if value)
     mean_toa = mean_toa_s(airtimes_ms_by_packet)
     payload_bits_success = payload_bytes * 8 * received
