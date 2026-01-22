@@ -1,4 +1,4 @@
-"""Trace la figure RL7 (récompense moyenne fenêtre vs densité)."""
+"""Trace la figure RL7 (récompense moyenne globale vs densité)."""
 
 from __future__ import annotations
 
@@ -98,8 +98,10 @@ def _plot_metric(
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (number of nodes)")
-    ax.set_ylabel("Mean Window Reward")
-    ax.set_title("Step 2 - Mean Window Reward vs Network size (number of nodes)")
+    ax.set_ylabel("Mean Reward (global)")
+    ax.set_title(
+        "Step 2 - Global Mean Reward vs Network size (adaptive algorithms)"
+    )
     place_legend(ax)
     return fig
 

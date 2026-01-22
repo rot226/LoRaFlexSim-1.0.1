@@ -1,4 +1,4 @@
-"""Trace la figure RL1 (récompense moyenne vs densité)."""
+"""Trace la figure RL1 (récompense moyenne par cluster vs densité)."""
 
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ from article_c.common.plot_helpers import (
     save_figure,
 )
 
+TARGET_CLUSTER = "gold"
+
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
     if not network_sizes:
@@ -42,6 +44,7 @@ def _plot_metric(
     rows: list[dict[str, object]],
     metric_key: str,
     network_sizes: list[int] | None,
+    cluster_label: str,
 ) -> plt.Figure | None:
     fig, ax = plt.subplots()
     ensure_network_size(rows)
@@ -67,10 +70,25 @@ def _plot_metric(
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (number of nodes)")
-    ax.set_ylabel("Mean Reward")
-    ax.set_title("Step 2 - Mean Reward vs Network size (number of nodes)")
+    ax.set_ylabel(f"Mean Reward ({cluster_label} cluster)")
+    ax.set_title(
+        "Step 2 - Mean Reward by QoS Cluster "
+        f"({cluster_label} vs network size)"
+    )
     place_legend(ax)
     return fig
+
+
+def _select_cluster_rows(
+    rows: list[dict[str, object]],
+    cluster: str,
+) -> tuple[list[dict[str, object]], str]:
+    available_clusters = {row.get("cluster") for row in rows}
+    if cluster in available_clusters:
+        return filter_cluster(rows, cluster), cluster
+    if "all" in available_clusters:
+        return filter_cluster(rows, "all"), "all"
+    return rows, "all"
 
 
 def main(
@@ -97,13 +115,13 @@ def main(
     if not rows:
         warnings.warn("CSV Step2 manquant ou vide, figure ignorée.", stacklevel=2)
         return
-    rows = filter_cluster(rows, "all")
+    rows, cluster_label = _select_cluster_rows(rows, TARGET_CLUSTER)
     rows = [row for row in rows if row["snir_mode"] == "snir_on"]
     normalize_network_size_rows(rows)
     network_sizes_filter = _normalized_network_sizes(network_sizes)
     rows, _ = filter_rows_by_network_sizes(rows, network_sizes_filter)
 
-    fig = _plot_metric(rows, "reward_mean", network_sizes_filter)
+    fig = _plot_metric(rows, "reward_mean", network_sizes_filter, cluster_label)
     if fig is None:
         return
     output_dir = step_dir / "plots" / "output"
