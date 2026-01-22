@@ -178,6 +178,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parse_cli_args(argv)
     base_seed = set_deterministic_seed(args.seeds_base)
     densities = parse_network_size_list(args.network_sizes)
+    requested_sizes = list(densities)
     replications = replication_ids(args.replications)
     simulated_sizes: list[int] = []
 
@@ -204,6 +205,21 @@ def main(argv: Sequence[str] | None = None) -> None:
         "window_delay_enabled": args.window_delay_enabled,
         "window_delay_range_s": args.window_delay_range_s,
     }
+
+    aggregated_sizes = _read_aggregated_sizes(base_results_dir / "aggregated_results.csv")
+    requested_set = set(requested_sizes)
+    existing_sizes = sorted(requested_set & aggregated_sizes)
+    remaining_sizes = sorted(requested_set - aggregated_sizes)
+    existing_label = ", ".join(map(str, existing_sizes)) if existing_sizes else "aucune"
+    if args.resume:
+        densities = remaining_sizes
+        print("Mode reprise activé: exclusion des tailles déjà agrégées.")
+    simulated_targets = densities if args.resume else requested_sizes
+    simulated_label = (
+        ", ".join(map(str, simulated_targets)) if simulated_targets else "aucune"
+    )
+    print(f"Tailles déjà présentes dans aggregated_results.csv: {existing_label}")
+    print(f"Tailles à simuler: {simulated_label}")
 
     tasks = [
         (density, density_idx, replications, config, base_results_dir, timestamp_dir)
@@ -265,7 +281,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
 
     aggregated_sizes = _read_aggregated_sizes(base_results_dir / "aggregated_results.csv")
-    missing_sizes = sorted(set(densities) - aggregated_sizes)
+    missing_sizes = sorted(set(requested_sizes) - aggregated_sizes)
     if missing_sizes:
         missing_label = ", ".join(map(str, missing_sizes))
         print(

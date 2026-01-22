@@ -144,6 +144,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=1,
         help="Nombre de processus worker pour paralléliser les tailles.",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Ignore les tailles déjà présentes dans aggregated_results.csv.",
+    )
     return parser
 
 
