@@ -211,6 +211,14 @@ def _suggest_regeneration_command(path: Path, expected_sizes: list[int]) -> str 
     return None
 
 
+def _suggest_step2_resume_command(expected_sizes: list[int]) -> str:
+    sizes = " ".join(str(size) for size in expected_sizes)
+    return (
+        "python article_c/step2/run_step2.py --resume "
+        f"--network-sizes {sizes} --replications 5 --seeds_base 1000"
+    )
+
+
 def _validate_network_sizes(paths: list[Path], expected_sizes: list[int]) -> bool:
     expected_set = {int(size) for size in expected_sizes}
     errors: list[str] = []
@@ -367,8 +375,45 @@ def main(argv: list[str] | None = None) -> None:
                 "aucun plot n'a été généré."
             )
             return
+    skip_step2_plots = False
+    if "step2" in steps:
+        step2_sizes = step_network_sizes.get("step2", [])
+        if len(step2_sizes) < 2:
+            print(
+                "ERREUR: Step2 doit contenir au moins 2 tailles "
+                "pour générer les plots RL. Aucun plot RL ne sera généré."
+            )
+            print(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
+            expected_sizes = args.network_sizes or step_network_sizes.get(
+                "step1", step2_sizes
+            )
+            if expected_sizes:
+                print("Commande PowerShell pour terminer Step2 (mode reprise):")
+                print(_suggest_step2_resume_command(expected_sizes))
+            skip_step2_plots = True
+        else:
+            if args.network_sizes:
+                expected_sizes = args.network_sizes
+            elif step1_csv.exists():
+                expected_sizes = _load_network_sizes_from_csvs([step1_csv])
+            else:
+                expected_sizes = []
+            if expected_sizes:
+                missing_sizes = sorted(set(expected_sizes) - set(step2_sizes))
+                if missing_sizes:
+                    missing_label = ", ".join(str(size) for size in missing_sizes)
+                    print(
+                        "ERREUR: Step2 ne contient pas toutes les tailles attendues."
+                    )
+                    print(f"Tailles attendues manquantes: {missing_label}")
+                    print(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
+                    print("Commande PowerShell pour terminer Step2 (mode reprise):")
+                    print(_suggest_step2_resume_command(expected_sizes))
+                    skip_step2_plots = True
     csv_cache: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
     for step in steps:
+        if step == "step2" and skip_step2_plots:
+            continue
         for module_path in PLOT_MODULES[step]:
             csv_path = step1_csv if step == "step1" else step2_csv
             rl10_network_sizes: list[int] | None = None
