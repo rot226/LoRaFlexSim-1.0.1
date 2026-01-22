@@ -46,6 +46,40 @@ def _compute_reward(
     return _clip(reward, 0.0, 1.0)
 
 
+def _clamp_range(value: float, min_value: float, max_value: float) -> float:
+    return max(min_value, min(max_value, value))
+
+
+def _network_load_factor(network_size: int, reference_size: int) -> float:
+    if reference_size <= 0:
+        return 1.0
+    ratio = max(0.1, network_size / reference_size)
+    return max(0.6, ratio**0.6)
+
+
+def _traffic_coeff_size_factor(network_size: int, reference_size: int) -> float:
+    if reference_size <= 0:
+        return 1.0
+    ratio = max(0.1, network_size / reference_size)
+    return max(0.7, ratio**0.35)
+
+
+def _cluster_traffic_factor(cluster: str, clusters: tuple[str, ...]) -> float:
+    if not clusters:
+        return 1.0
+    if cluster not in clusters:
+        return 1.0
+    index = clusters.index(cluster)
+    return 1.15 - 0.1 * index
+
+
+def _congestion_collision_probability(network_size: int, reference_size: int) -> float:
+    if reference_size <= 0:
+        return 0.0
+    overload = max(0.0, (network_size / reference_size) - 1.0)
+    return _clip(0.12 * overload, 0.0, 0.45)
+
+
 def _compute_window_metrics(
     successes: int, traffic_sent: int, bitrate_norm: float, energy_norm: float
 ) -> WindowMetrics:
@@ -188,11 +222,30 @@ def run_simulation(
     selection_prob_rows: list[dict[str, object]] = []
     learning_curve_rows: list[dict[str, object]] = []
     node_clusters = assign_clusters(n_nodes, rng=rng)
+    reference_size = max(1, DEFAULT_CONFIG.rl.window_w)
+    load_factor = _network_load_factor(network_size_value, reference_size)
+    congestion_probability = _congestion_collision_probability(
+        network_size_value, reference_size
+    )
+    qos_clusters = tuple(DEFAULT_CONFIG.qos.clusters)
+    traffic_size_factor = _traffic_coeff_size_factor(network_size_value, reference_size)
     traffic_coeffs = [
-        rng.uniform(traffic_coeff_min_value, traffic_coeff_max_value)
-        if traffic_coeff_enabled_value
-        else 1.0
-        for _ in range(n_nodes)
+        _clamp_range(
+            (
+                rng.uniform(traffic_coeff_min_value, traffic_coeff_max_value)
+                if traffic_coeff_enabled_value
+                else 1.0
+            )
+            * (
+                traffic_size_factor
+                * _cluster_traffic_factor(node_clusters[node_id], qos_clusters)
+                if traffic_coeff_enabled_value
+                else 1.0
+            ),
+            0.4,
+            2.5,
+        )
+        for node_id in range(n_nodes)
     ]
     base_rate_multipliers = [rng.uniform(0.7, 1.3) for _ in range(n_nodes)]
 
@@ -252,7 +305,15 @@ def run_simulation(
                 sf_value = sf_values[arm_index]
                 rate_multiplier = base_rate_multipliers[node_id]
                 expected_sent = max(
-                    1, int(round(window_size * traffic_coeffs[node_id] * rate_multiplier))
+                    1,
+                    int(
+                        round(
+                            window_size
+                            * traffic_coeffs[node_id]
+                            * rate_multiplier
+                            * load_factor
+                        )
+                    ),
                 )
                 base_period_s = window_duration_value / expected_sent
                 jitter_range_node_s = (
@@ -308,6 +369,12 @@ def run_simulation(
                 sf_value = int(node_window["sf"])
                 traffic_sent = int(node_window["traffic_sent"])
                 successes = successes_by_node.get(node_id, 0)
+                if successes > 0 and congestion_probability > 0.0:
+                    successes = sum(
+                        1
+                        for _ in range(successes)
+                        if rng.random() > congestion_probability
+                    )
                 link_quality = float(node_window["link_quality"])
                 if link_quality < 1.0 and successes > 0:
                     successes = sum(
@@ -419,7 +486,15 @@ def run_simulation(
                 sf_value = sf_values[arm_index]
                 rate_multiplier = base_rate_multipliers[node_id]
                 expected_sent = max(
-                    1, int(round(window_size * traffic_coeffs[node_id] * rate_multiplier))
+                    1,
+                    int(
+                        round(
+                            window_size
+                            * traffic_coeffs[node_id]
+                            * rate_multiplier
+                            * load_factor
+                        )
+                    ),
                 )
                 base_period_s = window_duration_value / expected_sent
                 jitter_range_node_s = (
@@ -475,6 +550,12 @@ def run_simulation(
                 sf_value = int(node_window["sf"])
                 traffic_sent = int(node_window["traffic_sent"])
                 successes = successes_by_node.get(node_id, 0)
+                if successes > 0 and congestion_probability > 0.0:
+                    successes = sum(
+                        1
+                        for _ in range(successes)
+                        if rng.random() > congestion_probability
+                    )
                 link_quality = float(node_window["link_quality"])
                 if link_quality < 1.0 and successes > 0:
                     successes = sum(
