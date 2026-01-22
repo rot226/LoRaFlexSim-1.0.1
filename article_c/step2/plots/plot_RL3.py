@@ -38,6 +38,12 @@ def _has_invalid_network_sizes(network_sizes: list[float]) -> bool:
     return False
 
 
+def _title_suffix(network_sizes: list[int]) -> str:
+    if len(network_sizes) == 1:
+        return " (taille unique)"
+    return ""
+
+
 def _plot_metric(
     rows: list[dict[str, object]],
     metric_key: str,
@@ -55,6 +61,8 @@ def _plot_metric(
             f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
             stacklevel=2,
         )
+    single_size = len(network_sizes) == 1
+    only_size = network_sizes[0] if single_size else None
     algorithms = sorted({row["algo"] for row in rows})
     for algo in algorithms:
         points = {
@@ -62,13 +70,22 @@ def _plot_metric(
             for row in rows
             if row["algo"] == algo
         }
+        if single_size:
+            value = points.get(only_size)
+            if value is None or pd.isna(value):
+                continue
+            ax.scatter([only_size], [value], label=algo)
+            continue
         values = [points.get(size, float("nan")) for size in network_sizes]
         ax.plot(network_sizes, values, marker="o", label=algo)
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Mean Normalized Bitrate")
-    ax.set_title("Step 2 - Normalized Bitrate vs Network size (number of nodes)")
+    ax.set_title(
+        "Step 2 - Normalized Bitrate vs Network size (number of nodes)"
+        f"{_title_suffix(network_sizes)}"
+    )
     place_legend(ax)
     return fig
 
