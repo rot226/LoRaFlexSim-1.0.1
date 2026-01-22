@@ -405,6 +405,10 @@ def run_simulation(
     )
     epsilon_greedy = _clip(epsilon_greedy, 0.0, 1.0)
     if density is not None:
+        if int(density) != n_nodes:
+            raise ValueError(
+                "n_nodes doit correspondre à network_size (density) pour l'étape 2."
+            )
         n_nodes = int(density)
     network_size_value = n_nodes
     if n_nodes <= 0:
