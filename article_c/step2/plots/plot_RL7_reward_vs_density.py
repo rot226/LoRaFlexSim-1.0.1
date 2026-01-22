@@ -1,4 +1,4 @@
-"""Trace la figure RL7 (récompense moyenne globale vs densité)."""
+"""Trace la figure RL7 (récompense médiane globale vs densité)."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     normalize_network_size_rows,
     place_legend,
+    plot_metric_by_algo,
     save_figure,
 )
 
@@ -92,29 +93,19 @@ def _plot_metric(
             f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
             stacklevel=2,
         )
-    single_size = len(network_sizes) == 1
-    only_size = network_sizes[0] if single_size else None
-    algorithms = sorted({row["algo"] for row in rows})
-    for algo in algorithms:
-        points = {
-            int(row["network_size"]): row[metric_key]
-            for row in rows
-            if row.get("algo") == algo
-        }
-        if single_size:
-            value = points.get(only_size)
-            if value is None or pd.isna(value):
-                continue
-            ax.scatter([only_size], [value], label=_label_for_algo(str(algo)))
-            continue
-        values = [points.get(size, float("nan")) for size in network_sizes]
-        ax.plot(network_sizes, values, marker="o", label=_label_for_algo(str(algo)))
+    plot_metric_by_algo(
+        ax,
+        rows,
+        metric_key,
+        network_sizes,
+        label_fn=lambda algo: _label_for_algo(str(algo)),
+    )
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (number of nodes)")
-    ax.set_ylabel("Mean Reward (global)")
+    ax.set_ylabel("Median Reward (global, p10-p90)")
     ax.set_title(
-        "Step 2 - Global Mean Reward vs Network size (adaptive algorithms)"
+        "Step 2 - Global Median Reward vs Network size (adaptive algorithms)"
         f"{_title_suffix(network_sizes)}"
     )
     place_legend(ax)
