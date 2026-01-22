@@ -70,7 +70,26 @@ def _cluster_traffic_factor(cluster: str, clusters: tuple[str, ...]) -> float:
     if cluster not in clusters:
         return 1.0
     index = clusters.index(cluster)
-    return 1.15 - 0.1 * index
+    if len(clusters) == 1:
+        return 1.0
+    max_factor = 1.35
+    min_factor = 0.75
+    step = (max_factor - min_factor) / (len(clusters) - 1)
+    return max_factor - step * index
+
+
+def _cluster_shadowing_sigma_factor(cluster: str, clusters: tuple[str, ...]) -> float:
+    if not clusters:
+        return 1.0
+    if cluster not in clusters:
+        return 1.0
+    index = clusters.index(cluster)
+    if len(clusters) == 1:
+        return 1.0
+    min_factor = 0.85
+    max_factor = 1.2
+    step = (max_factor - min_factor) / (len(clusters) - 1)
+    return min_factor + step * index
 
 
 def _congestion_collision_probability(network_size: int, reference_size: int) -> float:
@@ -239,8 +258,6 @@ def run_simulation(
             * (
                 traffic_size_factor
                 * _cluster_traffic_factor(node_clusters[node_id], qos_clusters)
-                if traffic_coeff_enabled_value
-                else 1.0
             ),
             0.4,
             2.5,
@@ -277,7 +294,7 @@ def run_simulation(
         for sf, airtime in airtime_by_sf.items()
     }
     shadowing_mean_db = DEFAULT_CONFIG.scenario.shadowing_mean_db
-    shadowing_sigma_db_value = (
+    base_shadowing_sigma_db = (
         rng.uniform(6.0, 8.0) if shadowing_sigma_db is None else shadowing_sigma_db
     )
 
@@ -304,6 +321,7 @@ def run_simulation(
             for node_id in range(n_nodes):
                 sf_value = sf_values[arm_index]
                 rate_multiplier = base_rate_multipliers[node_id]
+                cluster = node_clusters[node_id]
                 expected_sent = max(
                     1,
                     int(
@@ -328,10 +346,16 @@ def run_simulation(
                     jitter_range_s=jitter_range_node_s,
                     rng=rng,
                 )
+                shadowing_sigma_db_node = _clamp_range(
+                    base_shadowing_sigma_db
+                    * _cluster_shadowing_sigma_factor(cluster, qos_clusters),
+                    2.5,
+                    12.0,
+                )
                 shadowing_db, shadowing_linear = _sample_log_normal_shadowing(
                     rng,
                     mean_db=shadowing_mean_db,
-                    sigma_db=shadowing_sigma_db_value,
+                    sigma_db=shadowing_sigma_db_node,
                 )
                 link_quality = _clip(shadowing_linear, 0.0, 1.0)
                 node_offset_s = (
@@ -351,7 +375,7 @@ def run_simulation(
                         "traffic_sent": len(traffic_times),
                         "tx_starts": tx_starts,
                         "shadowing_db": shadowing_db,
-                        "shadowing_sigma_db": shadowing_sigma_db_value,
+                        "shadowing_sigma_db": shadowing_sigma_db_node,
                         "link_quality": link_quality,
                     }
                 )
@@ -485,6 +509,7 @@ def run_simulation(
                     arm_index = rng.choices(range(n_arms), weights=weights, k=1)[0]
                 sf_value = sf_values[arm_index]
                 rate_multiplier = base_rate_multipliers[node_id]
+                cluster = node_clusters[node_id]
                 expected_sent = max(
                     1,
                     int(
@@ -509,10 +534,16 @@ def run_simulation(
                     jitter_range_s=jitter_range_node_s,
                     rng=rng,
                 )
+                shadowing_sigma_db_node = _clamp_range(
+                    base_shadowing_sigma_db
+                    * _cluster_shadowing_sigma_factor(cluster, qos_clusters),
+                    2.5,
+                    12.0,
+                )
                 shadowing_db, shadowing_linear = _sample_log_normal_shadowing(
                     rng,
                     mean_db=shadowing_mean_db,
-                    sigma_db=shadowing_sigma_db_value,
+                    sigma_db=shadowing_sigma_db_node,
                 )
                 link_quality = _clip(shadowing_linear, 0.0, 1.0)
                 node_offset_s = (
@@ -532,7 +563,7 @@ def run_simulation(
                         "traffic_sent": len(traffic_times),
                         "tx_starts": tx_starts,
                         "shadowing_db": shadowing_db,
-                        "shadowing_sigma_db": shadowing_sigma_db_value,
+                        "shadowing_sigma_db": shadowing_sigma_db_node,
                         "link_quality": link_quality,
                     }
                 )
