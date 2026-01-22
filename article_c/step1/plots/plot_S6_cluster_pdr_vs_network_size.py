@@ -70,7 +70,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         axes = [axes]
 
     cluster_handles: list[plt.Line2D] = []
-    cluster_labels: list[str] = []
+    legend_labels: list[str] = []
     for ax, snir_mode in zip(axes, SNIR_MODES, strict=False):
         snir_rows = [row for row in rows if row["snir_mode"] == snir_mode]
         for cluster in clusters:
@@ -95,7 +95,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             )
             if show_label:
                 cluster_handles.append(line)
-                cluster_labels.append(label)
+                legend_labels.append(label)
         ax.set_title(SNIR_LABELS[snir_mode])
         ax.set_xlabel("Network size (number of nodes)")
         ax.set_ylabel("Packet Delivery Ratio")
@@ -116,7 +116,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         for snir_mode in SNIR_MODES
     ]
     handles = [*cluster_handles, *snir_handles]
-    labels = [*cluster_labels, *[handle.get_label() for handle in snir_handles]]
+    labels = [*legend_labels, *[handle.get_label() for handle in snir_handles]]
     fig.legend(
         handles,
         labels,
