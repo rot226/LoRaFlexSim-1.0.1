@@ -23,6 +23,7 @@ class WindowMetrics:
     success_rate: float
     bitrate_norm: float
     energy_norm: float
+    collision_norm: float
 
 
 @dataclass(frozen=True)
@@ -40,9 +41,18 @@ def _clip(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float
 
 
 def _compute_reward(
-    success_rate: float, bitrate_norm: float, energy_norm: float, lambda_energy: float
+    success_rate: float,
+    bitrate_norm: float,
+    energy_norm: float,
+    collision_norm: float,
+    lambda_energy: float,
+    lambda_collision: float,
 ) -> float:
-    reward = success_rate * bitrate_norm - lambda_energy * energy_norm
+    reward = (
+        success_rate * bitrate_norm
+        - lambda_energy * energy_norm
+        - lambda_collision * collision_norm
+    )
     return _clip(reward, 0.0, 1.0)
 
 
@@ -100,13 +110,18 @@ def _congestion_collision_probability(network_size: int, reference_size: int) ->
 
 
 def _compute_window_metrics(
-    successes: int, traffic_sent: int, bitrate_norm: float, energy_norm: float
+    successes: int,
+    traffic_sent: int,
+    bitrate_norm: float,
+    energy_norm: float,
+    collision_norm: float,
 ) -> WindowMetrics:
     success_rate = successes / traffic_sent if traffic_sent > 0 else 0.0
     return WindowMetrics(
         success_rate=success_rate,
         bitrate_norm=bitrate_norm,
         energy_norm=energy_norm,
+        collision_norm=collision_norm,
     )
 
 
@@ -155,6 +170,43 @@ def _weights_for_algo(algorithm: str, n_arms: int) -> list[float]:
     weights = base[:n_arms]
     total = sum(weights) or 1.0
     return [weight / total for weight in weights]
+
+
+def _apply_cluster_bias(
+    weights: list[float], cluster: str, clusters: tuple[str, ...], strength: float
+) -> list[float]:
+    if not clusters or cluster not in clusters or len(weights) <= 1:
+        return weights
+    index = clusters.index(cluster)
+    if len(clusters) == 1:
+        return weights
+    cluster_scale = (len(clusters) - 1 - index) / (len(clusters) - 1)
+    cluster_bias = 2.0 * cluster_scale - 1.0
+    ramp = [
+        2.0 * (arm_index / (len(weights) - 1)) - 1.0 for arm_index in range(len(weights))
+    ]
+    adjusted = [
+        max(0.05, weight * (1.0 + strength * cluster_bias * ramp_value))
+        for weight, ramp_value in zip(weights, ramp)
+    ]
+    total = sum(adjusted) or 1.0
+    return [value / total for value in adjusted]
+
+
+def _select_adr_arm(
+    link_quality: float, sf_values: list[int], cluster: str, clusters: tuple[str, ...]
+) -> int:
+    if len(sf_values) <= 1:
+        return 0
+    cluster_scale = 0.5
+    if clusters and cluster in clusters and len(clusters) > 1:
+        cluster_scale = (len(clusters) - 1 - clusters.index(cluster)) / (
+            len(clusters) - 1
+        )
+    target_quality = 0.55 + 0.25 * cluster_scale
+    normalized_gap = max(0.0, target_quality - link_quality) / max(target_quality, 1e-6)
+    arm_index = int(round(normalized_gap * (len(sf_values) - 1)))
+    return max(0, min(len(sf_values) - 1, arm_index))
 
 
 def _algo_label(algorithm: str) -> str:
@@ -297,6 +349,7 @@ def run_simulation(
     base_shadowing_sigma_db = (
         rng.uniform(6.0, 8.0) if shadowing_sigma_db is None else shadowing_sigma_db
     )
+    lambda_collision = _clip(0.15 + 0.45 * lambda_energy, 0.08, 0.7)
 
     if algorithm == "ucb1_sf":
         bandit = BanditUCB1(
@@ -404,17 +457,28 @@ def run_simulation(
                     successes = sum(
                         1 for _ in range(successes) if rng.random() < link_quality
                     )
+                airtime_norm = energy_norm_by_sf[sf_value]
+                collision_norm = _clip(
+                    airtime_norm
+                    * (1.0 + congestion_probability)
+                    * (1.0 - (successes / traffic_sent if traffic_sent > 0 else 0.0)),
+                    0.0,
+                    1.0,
+                )
                 metrics = _compute_window_metrics(
                     successes,
                     traffic_sent,
                     bitrate_norm_by_sf[sf_value],
-                    energy_norm_by_sf[sf_value],
+                    airtime_norm,
+                    collision_norm,
                 )
                 reward = _compute_reward(
                     metrics.success_rate,
                     metrics.bitrate_norm,
                     metrics.energy_norm,
+                    metrics.collision_norm,
                     lambda_energy,
+                    lambda_collision,
                 )
                 window_rewards.append(reward)
                 raw_rows.append(
@@ -437,6 +501,7 @@ def run_simulation(
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
+                        "collision_norm": metrics.collision_norm,
                         "reward": reward,
                     }
                 )
@@ -460,6 +525,7 @@ def run_simulation(
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
+                        "collision_norm": metrics.collision_norm,
                         "reward": reward,
                     }
                 )
@@ -491,6 +557,7 @@ def run_simulation(
                 )
     elif algorithm in {"adr", "mixra_h", "mixra_opt"}:
         weights = _weights_for_algo(algorithm, n_arms)
+        mixra_strength = 0.45 if algorithm == "mixra_h" else 0.25
         window_start_s = 0.0
         for round_id in range(n_rounds):
             window_rewards: list[float] = []
@@ -503,11 +570,6 @@ def run_simulation(
                 window_start_s += window_duration_value + delay_s
             node_windows: list[dict[str, object]] = []
             for node_id in range(n_nodes):
-                if algorithm == "adr":
-                    arm_index = 0
-                else:
-                    arm_index = rng.choices(range(n_arms), weights=weights, k=1)[0]
-                sf_value = sf_values[arm_index]
                 rate_multiplier = base_rate_multipliers[node_id]
                 cluster = node_clusters[node_id]
                 expected_sent = max(
@@ -546,6 +608,16 @@ def run_simulation(
                     sigma_db=shadowing_sigma_db_node,
                 )
                 link_quality = _clip(shadowing_linear, 0.0, 1.0)
+                if algorithm == "adr":
+                    arm_index = _select_adr_arm(
+                        link_quality, sf_values, cluster, qos_clusters
+                    )
+                else:
+                    cluster_weights = _apply_cluster_bias(
+                        weights, cluster, qos_clusters, mixra_strength
+                    )
+                    arm_index = rng.choices(range(n_arms), weights=cluster_weights, k=1)[0]
+                sf_value = sf_values[arm_index]
                 node_offset_s = (
                     rng.uniform(0.0, window_delay_range_value)
                     if window_delay_enabled_value and window_delay_range_value > 0
@@ -592,17 +664,28 @@ def run_simulation(
                     successes = sum(
                         1 for _ in range(successes) if rng.random() < link_quality
                     )
+                airtime_norm = energy_norm_by_sf[sf_value]
+                collision_norm = _clip(
+                    airtime_norm
+                    * (1.0 + congestion_probability)
+                    * (1.0 - (successes / traffic_sent if traffic_sent > 0 else 0.0)),
+                    0.0,
+                    1.0,
+                )
                 metrics = _compute_window_metrics(
                     successes,
                     traffic_sent,
                     bitrate_norm_by_sf[sf_value],
-                    energy_norm_by_sf[sf_value],
+                    airtime_norm,
+                    collision_norm,
                 )
                 reward = _compute_reward(
                     metrics.success_rate,
                     metrics.bitrate_norm,
                     metrics.energy_norm,
+                    metrics.collision_norm,
                     lambda_energy,
+                    lambda_collision,
                 )
                 window_rewards.append(reward)
                 raw_rows.append(
@@ -625,6 +708,7 @@ def run_simulation(
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
+                        "collision_norm": metrics.collision_norm,
                         "reward": reward,
                     }
                 )
@@ -648,6 +732,7 @@ def run_simulation(
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
+                        "collision_norm": metrics.collision_norm,
                         "reward": reward,
                     }
                 )
