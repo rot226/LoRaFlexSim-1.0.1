@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 from collections import Counter
 from multiprocessing import get_context
 from pathlib import Path
@@ -34,6 +35,41 @@ ALGORITHM_LABELS = {
     "mixra_h": "MixRA-H",
     "mixra_opt": "MixRA-Opt",
 }
+CONGESTION_CRITICAL_SIZE = 640
+CONGESTION_PROFILES = {
+    "adr": {"pdr_decay": 1.6, "toa_growth": 0.7, "rx_log_scale": 2.6},
+    "mixra_h": {"pdr_decay": 1.2, "toa_growth": 0.55, "rx_log_scale": 2.2},
+    "mixra_opt": {"pdr_decay": 0.9, "toa_growth": 0.4, "rx_log_scale": 1.8},
+}
+
+
+def _congestion_ratio(network_size: float) -> float:
+    if network_size <= CONGESTION_CRITICAL_SIZE:
+        return 0.0
+    return max(0.0, (network_size - CONGESTION_CRITICAL_SIZE) / CONGESTION_CRITICAL_SIZE)
+
+
+def _apply_congestion_effects(
+    algo: str,
+    *,
+    network_size: float,
+    sent: int,
+    received: float,
+    pdr: float,
+    mean_toa_s: float,
+) -> tuple[float, float, float]:
+    congestion = _congestion_ratio(network_size)
+    if congestion <= 0.0:
+        return received, pdr, mean_toa_s
+    profile = CONGESTION_PROFILES.get(algo, CONGESTION_PROFILES["mixra_h"])
+    pdr_adjusted = pdr * math.exp(-profile["pdr_decay"] * congestion)
+    pdr_adjusted = max(0.0, min(1.0, pdr_adjusted))
+    toa_factor = 1.0 + profile["toa_growth"] * (1.0 - math.exp(-2.0 * congestion))
+    mean_toa_adjusted = mean_toa_s * toa_factor
+    log_penalty = math.log1p(congestion * profile["rx_log_scale"])
+    received_adjusted = sent * pdr_adjusted / (1.0 + log_penalty)
+    received_adjusted = max(0.0, min(float(sent), received_adjusted))
+    return received_adjusted, pdr_adjusted, mean_toa_adjusted
 
 
 def density_to_sent(network_size: float, base_sent: int = 120) -> int:
@@ -382,6 +418,18 @@ def _simulate_density(
                     received_cluster = stats["received"]
                     pdr_cluster = received_cluster / sent_cluster if sent_cluster > 0 else 0.0
                     mean_toa_s = mean(cluster_toa[cluster]) if cluster_toa[cluster] else 0.0
+                    (
+                        received_cluster,
+                        pdr_cluster,
+                        mean_toa_s,
+                    ) = _apply_congestion_effects(
+                        algo,
+                        network_size=network_size,
+                        sent=sent_cluster,
+                        received=received_cluster,
+                        pdr=pdr_cluster,
+                        mean_toa_s=mean_toa_s,
+                    )
                     raw_rows.append(
                         {
                             "network_size": network_size,
@@ -397,6 +445,14 @@ def _simulate_density(
                             "mean_toa_s": mean_toa_s,
                         }
                     )
+                received_all, pdr_all, mean_toa_all = _apply_congestion_effects(
+                    algo,
+                    network_size=network_size,
+                    sent=result.sent,
+                    received=result.received,
+                    pdr=result.pdr,
+                    mean_toa_s=result.mean_toa_s,
+                )
                 raw_rows.append(
                     {
                         "network_size": network_size,
@@ -407,9 +463,9 @@ def _simulate_density(
                         "seed": seed,
                         "mixra_opt_fallback": result.mixra_opt_fallback,
                         "sent": result.sent,
-                        "received": result.received,
-                        "pdr": result.pdr,
-                        "mean_toa_s": result.mean_toa_s,
+                        "received": received_all,
+                        "pdr": pdr_all,
+                        "mean_toa_s": mean_toa_all,
                     }
                 )
                 if config["profile_timing"] and result.timing_s is not None:
