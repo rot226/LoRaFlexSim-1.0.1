@@ -321,25 +321,23 @@ def run_simulation(
         else window_delay_range_s
     )
     epsilon_greedy = _clip(epsilon_greedy, 0.0, 1.0)
-    network_size_value = int(density) if density is not None else n_nodes
-    if network_size_value <= 0:
-        if network_size_value == 0:
+    if density is not None:
+        n_nodes = int(density)
+    network_size_value = n_nodes
+    if n_nodes <= 0:
+        if n_nodes == 0:
             logger.error("network_size == 0 avant écriture des résultats.")
         raise ValueError("network_size doit être strictement positif.")
-    if density is not None:
-        n_nodes = network_size_value
     algo_label = _algo_label(algorithm)
     raw_rows: list[dict[str, object]] = []
     selection_prob_rows: list[dict[str, object]] = []
     learning_curve_rows: list[dict[str, object]] = []
     node_clusters = assign_clusters(n_nodes, rng=rng)
     reference_size = max(1, DEFAULT_CONFIG.rl.window_w)
-    load_factor = _network_load_factor(network_size_value, reference_size)
-    congestion_probability = _congestion_collision_probability(
-        network_size_value, reference_size
-    )
+    load_factor = _network_load_factor(n_nodes, reference_size)
+    congestion_probability = _congestion_collision_probability(n_nodes, reference_size)
     qos_clusters = tuple(DEFAULT_CONFIG.qos.clusters)
-    traffic_size_factor = _traffic_coeff_size_factor(network_size_value, reference_size)
+    traffic_size_factor = _traffic_coeff_size_factor(n_nodes, reference_size)
     traffic_coeffs = [
         _clamp_range(
             (
