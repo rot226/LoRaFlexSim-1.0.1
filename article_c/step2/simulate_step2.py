@@ -176,11 +176,13 @@ def run_simulation(
         else window_delay_range_s
     )
     epsilon_greedy = _clip(epsilon_greedy, 0.0, 1.0)
-    network_size_value = density if density is not None else n_nodes
+    network_size_value = int(density) if density is not None else n_nodes
     if network_size_value <= 0:
         if network_size_value == 0:
             logger.error("network_size == 0 avant écriture des résultats.")
         raise ValueError("network_size doit être strictement positif.")
+    if density is not None:
+        n_nodes = network_size_value
     algo_label = _algo_label(algorithm)
     raw_rows: list[dict[str, object]] = []
     selection_prob_rows: list[dict[str, object]] = []

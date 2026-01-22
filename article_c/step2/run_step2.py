@@ -134,6 +134,7 @@ def _simulate_density(
         for algorithm in algorithms:
             result = run_simulation(
                 algorithm=algorithm,
+                n_nodes=int(density),
                 density=density,
                 snir_mode="snir_on",
                 seed=seed,
