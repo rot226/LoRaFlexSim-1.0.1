@@ -104,6 +104,57 @@ def _log_unique_network_sizes(output_dir: Path) -> None:
     print(f"Tailles détectées dans raw_results: {sizes_label}")
 
 
+def _summarize_success_collision(
+    raw_rows: list[dict[str, object]]
+) -> dict[str, float]:
+    success_rates: list[float] = []
+    collision_norms: list[float] = []
+    for row in raw_rows:
+        if "success_rate" in row:
+            success_rates.append(float(row["success_rate"]))
+        if "collision_norm" in row:
+            collision_norms.append(float(row["collision_norm"]))
+    if not success_rates:
+        success_rates = [0.0]
+    if not collision_norms:
+        collision_norms = [0.0]
+    return {
+        "success_min": min(success_rates),
+        "success_max": max(success_rates),
+        "success_mean": sum(success_rates) / len(success_rates),
+        "collision_min": min(collision_norms),
+        "collision_max": max(collision_norms),
+        "collision_mean": sum(collision_norms) / len(collision_norms),
+    }
+
+
+def _log_size_diagnostics(density: int, metrics: dict[str, float]) -> None:
+    print(
+        "Diagnostic taille "
+        f"{density}: succès min/max = {metrics['success_min']:.4f}/"
+        f"{metrics['success_max']:.4f}, "
+        f"collisions min/max = {metrics['collision_min']:.4f}/"
+        f"{metrics['collision_max']:.4f}"
+    )
+
+
+def _verify_metric_variation(size_metrics: dict[int, dict[str, float]]) -> None:
+    if len(size_metrics) < 2:
+        return
+    success_means = {round(metrics["success_mean"], 6) for metrics in size_metrics.values()}
+    collision_means = {
+        round(metrics["collision_mean"], 6) for metrics in size_metrics.values()
+    }
+    if len(success_means) == 1:
+        print(
+            "ERREUR: le success_rate moyen ne varie pas avec la taille du réseau."
+        )
+    if len(collision_means) == 1:
+        print(
+            "ERREUR: les collisions moyennes ne varient pas avec la taille du réseau."
+        )
+
+
 def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
     if not aggregated_path.exists():
         print(f"Aucun aggregated_results.csv détecté: {aggregated_path}")
@@ -232,6 +283,19 @@ def _simulate_density(
                 selection_rows.extend(result.selection_prob_rows)
             learning_curve_rows.extend(result.learning_curve_rows)
 
+    invalid_sizes = {
+        int(row.get("network_size", -1))
+        for row in raw_rows
+        if int(row.get("network_size", -1)) != int(density)
+    }
+    if invalid_sizes:
+        raise ValueError(
+            "network_size différent de n_nodes détecté pour la taille "
+            f"{density}: {sorted(invalid_sizes)}"
+        )
+    diagnostics = _summarize_success_collision(raw_rows)
+    _log_size_diagnostics(int(density), diagnostics)
+
     write_simulation_results(base_results_dir, raw_rows, network_size=density)
     _log_results_written(base_results_dir, len(raw_rows))
     _log_unique_network_sizes(base_results_dir)
@@ -244,6 +308,7 @@ def _simulate_density(
         "row_count": len(raw_rows),
         "selection_rows": selection_rows,
         "learning_curve_rows": learning_curve_rows,
+        "diagnostics": diagnostics,
     }
 
 
@@ -264,6 +329,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     selection_rows: list[dict[str, object]] = []
     learning_curve_rows: list[dict[str, object]] = []
+    size_diagnostics: dict[int, dict[str, float]] = {}
     total_rows = 0
 
     config: dict[str, object] = {
@@ -307,6 +373,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             total_rows += int(result["row_count"])
             selection_rows.extend(result["selection_rows"])
             learning_curve_rows.extend(result["learning_curve_rows"])
+            size_diagnostics[int(result["density"])] = dict(result["diagnostics"])
     else:
         ctx = get_context("spawn")
         with ctx.Pool(processes=worker_count) as pool:
@@ -315,8 +382,10 @@ def main(argv: Sequence[str] | None = None) -> None:
                 total_rows += int(result["row_count"])
                 selection_rows.extend(result["selection_rows"])
                 learning_curve_rows.extend(result["learning_curve_rows"])
+                size_diagnostics[int(result["density"])] = dict(result["diagnostics"])
 
     print(f"Rows written: {total_rows}")
+    _verify_metric_variation(size_diagnostics)
 
     if selection_rows:
         rl5_rows = _aggregate_selection_probs(selection_rows)
