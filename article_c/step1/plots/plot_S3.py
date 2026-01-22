@@ -1,4 +1,4 @@
-"""Trace la figure S3 (réceptions moyennes vs densité, SNIR on/off)."""
+"""Trace la figure S3 (réceptions médianes vs densité, SNIR on/off)."""
 
 from __future__ import annotations
 
@@ -102,7 +102,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (number of nodes)")
-    ax.set_ylabel("Received Frames (mean)")
+    ax.set_ylabel("Received Frames (median, p10-p90)")
     ax.set_title("Step 1 - Received Frames vs Network size (number of nodes) (SNIR on/off)")
     place_legend(ax)
     return fig

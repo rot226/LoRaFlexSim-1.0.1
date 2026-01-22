@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import csv
 import logging
+import math
 import warnings
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 import matplotlib.pyplot as plt
 
@@ -164,18 +165,24 @@ def load_step2_aggregated(
         if "network_size" in row and row.get("network_size") not in (None, ""):
             network_size_value = row.get("network_size")
         network_size = _to_float(network_size_value)
-        parsed_row = {
+        parsed_row: dict[str, object] = {
             "network_size": network_size,
             "algo": row.get("algo", ""),
             "snir_mode": row.get("snir_mode", ""),
             "cluster": row.get("cluster", "all"),
-            "success_rate_mean": _to_float(row.get("success_rate_mean")),
-            "bitrate_norm_mean": _to_float(row.get("bitrate_norm_mean")),
-            "energy_norm_mean": _to_float(row.get("energy_norm_mean")),
-            "reward_mean": _to_float(row.get("reward_mean")),
         }
         if "density" in row:
             parsed_row["density"] = _to_float(row.get("density"))
+        for key, value in row.items():
+            if key in {
+                "density",
+                "network_size",
+                "algo",
+                "snir_mode",
+                "cluster",
+            }:
+                continue
+            parsed_row[key] = _to_float(value)
         parsed.append(parsed_row)
     return parsed
 
@@ -286,15 +293,7 @@ def plot_metric_by_snir(
     metric_key: str,
 ) -> None:
     network_sizes = sorted({_network_size_value(row) for row in rows})
-    error_key = None
-    if metric_key.endswith("_mean"):
-        base_key = metric_key[: -len("_mean")]
-        candidate_ci = f"{base_key}_ci95"
-        candidate_std = f"{base_key}_std"
-        if any(candidate_ci in row for row in rows):
-            error_key = candidate_ci
-        elif any(candidate_std in row for row in rows):
-            error_key = candidate_std
+    median_key, lower_key, upper_key = resolve_percentile_keys(rows, metric_key)
 
     def _algo_key(row: dict[str, object]) -> tuple[str, bool]:
         algo_value = str(row.get("algo", ""))
@@ -307,32 +306,166 @@ def plot_metric_by_snir(
         densities = sorted({_network_size_value(row) for row in algo_rows})
         for snir_mode in SNIR_MODES:
             points = {
-                _network_size_value(row): row[metric_key]
+                _network_size_value(row): row.get(median_key)
                 for row in algo_rows
                 if row["snir_mode"] == snir_mode
             }
-            errors = {
-                _network_size_value(row): row.get(error_key, 0.0)
-                for row in algo_rows
-                if error_key and row["snir_mode"] == snir_mode
-            }
             if not points:
                 continue
-            values = [points.get(density, float("nan")) for density in densities]
-            yerr = (
-                [errors.get(density, 0.0) for density in densities] if error_key else None
-            )
+            values = [
+                _value_or_nan(points.get(density, float("nan"))) for density in densities
+            ]
             label = f"{algo_label(algo, fallback)} ({SNIR_LABELS[snir_mode]})"
-            ax.errorbar(
+            line = ax.plot(
                 densities,
                 values,
-                yerr=yerr,
                 marker="o",
                 linestyle=SNIR_LINESTYLES[snir_mode],
-                capsize=3 if error_key else 0,
                 label=label,
-            )
+            )[0]
+            if lower_key and upper_key:
+                lower_points = {
+                    _network_size_value(row): row.get(lower_key)
+                    for row in algo_rows
+                    if row["snir_mode"] == snir_mode
+                }
+                upper_points = {
+                    _network_size_value(row): row.get(upper_key)
+                    for row in algo_rows
+                    if row["snir_mode"] == snir_mode
+                }
+                lower_values = [
+                    _value_or_nan(lower_points.get(density, float("nan")))
+                    for density in densities
+                ]
+                upper_values = [
+                    _value_or_nan(upper_points.get(density, float("nan")))
+                    for density in densities
+                ]
+                color = line.get_color()
+                ax.plot(
+                    densities,
+                    lower_values,
+                    linestyle=":",
+                    color=color,
+                    alpha=0.6,
+                )
+                ax.plot(
+                    densities,
+                    upper_values,
+                    linestyle=":",
+                    color=color,
+                    alpha=0.6,
+                )
     set_network_size_ticks(ax, network_sizes)
+
+
+def resolve_percentile_keys(
+    rows: list[dict[str, object]],
+    metric_key: str,
+) -> tuple[str, str | None, str | None]:
+    median_key = metric_key
+    lower_key = None
+    upper_key = None
+    if metric_key.endswith("_mean"):
+        base_key = metric_key[: -len("_mean")]
+        p10_key = f"{base_key}_p10"
+        p50_key = f"{base_key}_p50"
+        p90_key = f"{base_key}_p90"
+        if any(p50_key in row for row in rows):
+            median_key = p50_key
+        if any(p10_key in row for row in rows) and any(p90_key in row for row in rows):
+            lower_key = p10_key
+            upper_key = p90_key
+    return median_key, lower_key, upper_key
+
+
+def plot_metric_by_algo(
+    ax: plt.Axes,
+    rows: list[dict[str, object]],
+    metric_key: str,
+    network_sizes: list[int],
+    *,
+    label_fn: Callable[[object], str] | None = None,
+) -> None:
+    median_key, lower_key, upper_key = resolve_percentile_keys(rows, metric_key)
+    algorithms = sorted({row.get("algo") for row in rows})
+    single_size = len(network_sizes) == 1
+    only_size = network_sizes[0] if single_size else None
+    label_fn = label_fn or (lambda algo: algo_label(str(algo)))
+    for algo in algorithms:
+        points = {
+            int(row["network_size"]): row.get(median_key)
+            for row in rows
+            if row.get("algo") == algo
+        }
+        if single_size:
+            value = points.get(only_size)
+            if _is_invalid_value(value):
+                continue
+            if lower_key and upper_key:
+                low = _value_or_nan(
+                    next(
+                        (
+                            row.get(lower_key)
+                            for row in rows
+                            if row.get("algo") == algo
+                            and int(row["network_size"]) == only_size
+                        ),
+                        float("nan"),
+                    )
+                )
+                high = _value_or_nan(
+                    next(
+                        (
+                            row.get(upper_key)
+                            for row in rows
+                            if row.get("algo") == algo
+                            and int(row["network_size"]) == only_size
+                        ),
+                        float("nan"),
+                    )
+                )
+                if not _is_invalid_value(low) and not _is_invalid_value(high):
+                    yerr = [[value - low], [high - value]]
+                    ax.errorbar([only_size], [value], yerr=yerr, fmt="o", label=label_fn(algo))
+                    continue
+            ax.scatter([only_size], [value], label=label_fn(algo))
+            continue
+        values = [_value_or_nan(points.get(size, float("nan"))) for size in network_sizes]
+        line = ax.plot(network_sizes, values, marker="o", label=label_fn(algo))[0]
+        if lower_key and upper_key:
+            lower_points = {
+                int(row["network_size"]): row.get(lower_key)
+                for row in rows
+                if row.get("algo") == algo
+            }
+            upper_points = {
+                int(row["network_size"]): row.get(upper_key)
+                for row in rows
+                if row.get("algo") == algo
+            }
+            lower_values = [
+                _value_or_nan(lower_points.get(size, float("nan")))
+                for size in network_sizes
+            ]
+            upper_values = [
+                _value_or_nan(upper_points.get(size, float("nan")))
+                for size in network_sizes
+            ]
+            color = line.get_color()
+            ax.plot(network_sizes, lower_values, linestyle=":", color=color, alpha=0.6)
+            ax.plot(network_sizes, upper_values, linestyle=":", color=color, alpha=0.6)
+
+
+def _is_invalid_value(value: object) -> bool:
+    return value is None or (isinstance(value, float) and math.isnan(value))
+
+
+def _value_or_nan(value: object) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return float("nan")
 
 
 def _sample_step1_rows() -> list[dict[str, object]]:

@@ -119,10 +119,28 @@ def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, objec
             aggregated_row[f"{key}_std"] = std_value
             aggregated_row[f"{key}_count"] = count
             aggregated_row[f"{key}_ci95"] = ci95_value
+            sorted_values = sorted(values)
+            aggregated_row[f"{key}_p10"] = _percentile(sorted_values, 10)
+            aggregated_row[f"{key}_p50"] = _percentile(sorted_values, 50)
+            aggregated_row[f"{key}_p90"] = _percentile(sorted_values, 90)
             if key in EXTRA_MEAN_KEYS:
                 aggregated_row[key] = aggregated_row[f"{key}_mean"]
         aggregated.append(aggregated_row)
     return aggregated
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    if len(values) == 1:
+        return float(values[0])
+    position = (len(values) - 1) * (percentile / 100.0)
+    lower = int(math.floor(position))
+    upper = int(math.ceil(position))
+    if lower == upper:
+        return float(values[lower])
+    weight = position - lower
+    return float(values[lower]) + (float(values[upper]) - float(values[lower])) * weight
 
 
 def write_simulation_results(
