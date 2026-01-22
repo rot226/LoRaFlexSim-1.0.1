@@ -23,17 +23,23 @@ from article_c.step2.simulate_step2 import run_simulation
 def _aggregate_selection_probs(
     selection_rows: list[dict[str, object]]
 ) -> list[dict[str, object]]:
-    grouped: dict[tuple[int, int], list[float]] = defaultdict(list)
+    grouped: dict[tuple[int, int, int], list[float]] = defaultdict(list)
     for row in selection_rows:
+        network_size = int(row["network_size"])
         round_id = int(row["round"])
         sf = int(row["sf"])
         selection_prob = float(row["selection_prob"])
-        grouped[(round_id, sf)].append(selection_prob)
+        grouped[(network_size, round_id, sf)].append(selection_prob)
     aggregated: list[dict[str, object]] = []
-    for (round_id, sf), values in sorted(grouped.items()):
+    for (network_size, round_id, sf), values in sorted(grouped.items()):
         avg = sum(values) / len(values) if values else 0.0
         aggregated.append(
-            {"round": round_id, "sf": sf, "selection_prob": round(avg, 6)}
+            {
+                "network_size": network_size,
+                "round": round_id,
+                "sf": sf,
+                "selection_prob": round(avg, 6),
+            }
         )
     return aggregated
 
@@ -226,8 +232,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     if selection_rows:
         rl5_rows = _aggregate_selection_probs(selection_rows)
         rl5_path = base_results_dir / "rl5_selection_prob.csv"
-        rl5_header = ["round", "sf", "selection_prob"]
-        rl5_values = [[row["round"], row["sf"], row["selection_prob"]] for row in rl5_rows]
+        rl5_header = ["network_size", "round", "sf", "selection_prob"]
+        rl5_values = [
+            [row["network_size"], row["round"], row["sf"], row["selection_prob"]]
+            for row in rl5_rows
+        ]
         write_rows(rl5_path, rl5_header, rl5_values)
         if timestamp_dir is not None:
             rl5_timestamp_path = timestamp_dir / "rl5_selection_prob.csv"

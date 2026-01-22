@@ -186,13 +186,14 @@ def load_step2_selection_probs(path: Path) -> list[dict[str, object]]:
         raise ValueError(f"CSV vide pour Step2 (sélections): {path}")
     parsed: list[dict[str, object]] = []
     for row in rows:
-        parsed.append(
-            {
-                "round": int(_to_float(row.get("round"))),
-                "sf": int(_to_float(row.get("sf"))),
-                "selection_prob": _to_float(row.get("selection_prob")),
-            }
-        )
+        parsed_row: dict[str, object] = {
+            "round": int(_to_float(row.get("round"))),
+            "sf": int(_to_float(row.get("sf"))),
+            "selection_prob": _to_float(row.get("selection_prob")),
+        }
+        if "network_size" in row and row.get("network_size") not in (None, ""):
+            parsed_row["network_size"] = _to_float(row.get("network_size"))
+        parsed.append(parsed_row)
     return parsed
 
 
