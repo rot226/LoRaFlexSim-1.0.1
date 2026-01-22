@@ -95,6 +95,29 @@ def _traffic_coeff_size_factor(network_size: int, reference_size: int) -> float:
     return max(0.7, ratio**0.35)
 
 
+def _traffic_coeff_variance_factor(network_size: int, reference_size: int) -> float:
+    if reference_size <= 0:
+        return 1.0
+    ratio = max(0.1, network_size / reference_size)
+    if ratio <= 1.0:
+        return 1.0
+    return _clamp_range(1.0 + 0.45 * (ratio - 1.0), 1.0, 2.2)
+
+
+def _shadowing_sigma_size_factor(network_size: int, reference_size: int) -> float:
+    if reference_size <= 0:
+        return 1.0
+    ratio = max(0.2, network_size / reference_size)
+    return _clamp_range(ratio**0.25, 0.85, 1.4)
+
+
+def _collision_size_factor(network_size: int, reference_size: int) -> float:
+    if reference_size <= 0:
+        return 1.0
+    ratio = max(0.1, network_size / reference_size)
+    return _clamp_range(ratio**1.2, 0.6, 3.0)
+
+
 def _cluster_traffic_factor(cluster: str, clusters: tuple[str, ...]) -> float:
     if not clusters:
         return 1.0
@@ -398,10 +421,24 @@ def run_simulation(
     congestion_probability = _congestion_collision_probability(n_nodes, reference_size)
     qos_clusters = tuple(DEFAULT_CONFIG.qos.clusters)
     traffic_size_factor = _traffic_coeff_size_factor(n_nodes, reference_size)
+    traffic_variance_factor = _traffic_coeff_variance_factor(n_nodes, reference_size)
+    traffic_coeff_midpoint = (traffic_coeff_min_value + traffic_coeff_max_value) / 2.0
+    traffic_coeff_half_range = (traffic_coeff_max_value - traffic_coeff_min_value) / 2.0
+    traffic_coeff_min_scaled = max(
+        0.1, traffic_coeff_midpoint - traffic_coeff_half_range * traffic_variance_factor
+    )
+    traffic_coeff_max_scaled = traffic_coeff_midpoint + (
+        traffic_coeff_half_range * traffic_variance_factor
+    )
+    if traffic_coeff_min_scaled > traffic_coeff_max_scaled:
+        traffic_coeff_min_scaled, traffic_coeff_max_scaled = (
+            traffic_coeff_max_scaled,
+            traffic_coeff_min_scaled,
+        )
     traffic_coeffs = [
         _clamp_range(
             (
-                rng.uniform(traffic_coeff_min_value, traffic_coeff_max_value)
+                rng.uniform(traffic_coeff_min_scaled, traffic_coeff_max_scaled)
                 if traffic_coeff_enabled_value
                 else 1.0
             )
@@ -444,9 +481,14 @@ def run_simulation(
         for sf, airtime in airtime_by_sf.items()
     }
     shadowing_mean_db = DEFAULT_CONFIG.scenario.shadowing_mean_db
-    base_shadowing_sigma_db = (
+    shadowing_sigma_base = (
         rng.uniform(6.0, 8.0) if shadowing_sigma_db is None else shadowing_sigma_db
     )
+    shadowing_sigma_factor = _shadowing_sigma_size_factor(n_nodes, reference_size)
+    base_shadowing_sigma_db = _clamp_range(
+        shadowing_sigma_base * shadowing_sigma_factor, 4.0, 12.0
+    )
+    collision_size_factor = _collision_size_factor(n_nodes, reference_size)
     lambda_collision = _clip(0.15 + 0.45 * lambda_energy, 0.08, 0.7)
     reward_weights = _reward_weights_for_algo(algorithm)
     sf_norm_by_sf = {
@@ -574,6 +616,7 @@ def run_simulation(
                 collision_norm = _clip(
                     airtime_norm
                     * (1.0 + congestion_probability)
+                    * collision_size_factor
                     * (1.0 - (successes / traffic_sent if traffic_sent > 0 else 0.0)),
                     0.0,
                     1.0,
@@ -798,6 +841,7 @@ def run_simulation(
                 collision_norm = _clip(
                     airtime_norm
                     * (1.0 + congestion_probability)
+                    * collision_size_factor
                     * (1.0 - (successes / traffic_sent if traffic_sent > 0 else 0.0)),
                     0.0,
                     1.0,
