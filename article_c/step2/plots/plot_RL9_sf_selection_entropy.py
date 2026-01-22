@@ -16,6 +16,7 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     load_step2_selection_probs,
     normalize_network_size_rows,
+    place_legend,
     save_figure,
 )
 
@@ -40,21 +41,33 @@ def _entropy(probabilities: list[float]) -> float:
     return -sum(p * log2(p) for p in probabilities if p > 0.0)
 
 
+def _normalized_probs(values: list[float]) -> list[float]:
+    total = sum(values)
+    if total <= 0.0:
+        return values
+    return [value / total for value in values]
+
+
 def _plot_entropy(rows: list[dict[str, object]]) -> plt.Figure:
     fig, ax = plt.subplots()
-    rounds = sorted({row["round"] for row in rows})
-    entropy_values: list[float] = []
-    for round_id in rounds:
-        probs = [
-            float(row["selection_prob"])
-            for row in rows
-            if row["round"] == round_id
-        ]
-        entropy_values.append(_entropy(probs))
-    ax.plot(rounds, entropy_values, marker="o")
+    network_sizes = sorted({row["network_size"] for row in rows})
+    for network_size in network_sizes:
+        size_rows = [row for row in rows if row["network_size"] == network_size]
+        rounds = sorted({row["round"] for row in size_rows})
+        entropy_values: list[float] = []
+        for round_id in rounds:
+            probs = [
+                float(row["selection_prob"])
+                for row in size_rows
+                if row["round"] == round_id
+            ]
+            entropy_values.append(_entropy(_normalized_probs(probs)))
+        ax.plot(rounds, entropy_values, marker="o", label=f"N={network_size}")
     ax.set_xlabel("Round")
     ax.set_ylabel("Selection Entropy (bits)")
     ax.set_title("Step 2 - SF Selection Entropy vs Round")
+    if network_sizes:
+        place_legend(ax)
     return fig
 
 
@@ -106,6 +119,7 @@ def main(
             stacklevel=2,
         )
 
+    rows, _ = filter_rows_by_network_sizes(rows, network_sizes)
     fig = _plot_entropy(rows)
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_RL9_sf_selection_entropy", use_tight=False)

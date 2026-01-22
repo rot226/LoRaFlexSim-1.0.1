@@ -38,16 +38,20 @@ def _has_invalid_network_sizes(network_sizes: list[float]) -> bool:
 
 def _plot_selection(rows: list[dict[str, object]]) -> plt.Figure:
     fig, ax = plt.subplots()
+    network_sizes = sorted({row["network_size"] for row in rows})
     sfs = sorted({row["sf"] for row in rows})
-    for sf in sfs:
-        points = {
-            row["round"]: row["selection_prob"]
-            for row in rows
-            if row["sf"] == sf
-        }
-        rounds = sorted(points)
-        values = [points[round_id] for round_id in rounds]
-        ax.plot(rounds, values, marker="o", label=f"SF {sf}")
+    for network_size in network_sizes:
+        size_rows = [row for row in rows if row["network_size"] == network_size]
+        for sf in sfs:
+            points = {
+                row["round"]: row["selection_prob"]
+                for row in size_rows
+                if row["sf"] == sf
+            }
+            rounds = sorted(points)
+            values = [points[round_id] for round_id in rounds]
+            label = f"SF {sf} (N={network_size})"
+            ax.plot(rounds, values, marker="o", label=label)
     ax.set_xlabel("Round")
     ax.set_ylabel("Selection Probability")
     ax.set_title("Step 2 - UCB1-SF Selection Probability")
@@ -103,6 +107,7 @@ def main(
             stacklevel=2,
         )
 
+    rows, _ = filter_rows_by_network_sizes(rows, network_sizes)
     fig = _plot_selection(rows)
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_RL5", use_tight=False)
