@@ -35,6 +35,12 @@ def _has_invalid_network_sizes(network_sizes: list[float]) -> bool:
     return False
 
 
+def _title_suffix(network_sizes: list[int]) -> str:
+    if len(network_sizes) == 1:
+        return " (taille unique)"
+    return ""
+
+
 def _load_step2_raw_results(
     results_path: Path,
     *,
@@ -68,7 +74,10 @@ def _load_step2_raw_results(
     return df.to_dict(orient="records")
 
 
-def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
+def _plot_distribution(
+    rows: list[dict[str, object]],
+    network_sizes: list[int],
+) -> plt.Figure:
     fig, ax = plt.subplots()
     algorithms = sorted({row["algo"] for row in rows})
     rewards_by_algo = [
@@ -89,7 +98,10 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
     ax.set_xticklabels([algo_label(str(algo)) for algo in algorithms])
     ax.set_xlabel("Algorithm")
     ax.set_ylabel("Reward")
-    ax.set_title("Step 2 - Reward Distribution by Algorithm")
+    ax.set_title(
+        "Step 2 - Reward Distribution by Algorithm"
+        f"{_title_suffix(network_sizes)}"
+    )
     return fig
 
 
@@ -135,7 +147,7 @@ def main(
             stacklevel=2,
         )
 
-    fig = _plot_distribution(rows)
+    fig = _plot_distribution(rows, network_sizes)
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_RL8_reward_distribution", use_tight=False)
     plt.close(fig)

@@ -37,6 +37,12 @@ def _has_invalid_network_sizes(network_sizes: list[float]) -> bool:
     return False
 
 
+def _title_suffix(network_sizes: list[int]) -> str:
+    if len(network_sizes) == 1:
+        return " (taille unique)"
+    return ""
+
+
 def _entropy(probabilities: list[float]) -> float:
     return -sum(p * log2(p) for p in probabilities if p > 0.0)
 
@@ -48,9 +54,12 @@ def _normalized_probs(values: list[float]) -> list[float]:
     return [value / total for value in values]
 
 
-def _plot_entropy(rows: list[dict[str, object]]) -> plt.Figure:
+def _plot_entropy(
+    rows: list[dict[str, object]],
+    network_sizes: list[int],
+) -> plt.Figure:
     fig, ax = plt.subplots()
-    network_sizes = sorted({row["network_size"] for row in rows})
+    network_sizes = sorted(network_sizes)
     for network_size in network_sizes:
         size_rows = [row for row in rows if row["network_size"] == network_size]
         rounds = sorted({row["round"] for row in size_rows})
@@ -65,7 +74,10 @@ def _plot_entropy(rows: list[dict[str, object]]) -> plt.Figure:
         ax.plot(rounds, entropy_values, marker="o", label=f"N={network_size}")
     ax.set_xlabel("Round")
     ax.set_ylabel("Selection Entropy (bits)")
-    ax.set_title("Step 2 - SF Selection Entropy vs Round")
+    ax.set_title(
+        "Step 2 - SF Selection Entropy vs Round"
+        f"{_title_suffix(network_sizes)}"
+    )
     if network_sizes:
         place_legend(ax)
     return fig
@@ -120,7 +132,7 @@ def main(
         )
 
     rows, _ = filter_rows_by_network_sizes(rows, network_sizes)
-    fig = _plot_entropy(rows)
+    fig = _plot_entropy(rows, network_sizes)
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_RL9_sf_selection_entropy", use_tight=False)
     plt.close(fig)

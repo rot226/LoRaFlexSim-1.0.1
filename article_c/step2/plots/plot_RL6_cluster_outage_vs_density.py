@@ -51,6 +51,12 @@ def _has_invalid_network_sizes(network_sizes: list[float]) -> bool:
     return False
 
 
+def _title_suffix(network_sizes: list[int]) -> str:
+    if len(network_sizes) == 1:
+        return " (taille unique)"
+    return ""
+
+
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
     return {cluster: f"C{idx + 1}" for idx, cluster in enumerate(clusters)}
 
@@ -104,6 +110,8 @@ def _plot_metric(
             f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
             stacklevel=2,
         )
+    single_size = len(network_sizes) == 1
+    only_size = network_sizes[0] if single_size else None
     available_clusters = {
         row["cluster"] for row in rows if row.get("cluster") not in (None, "all")
     }
@@ -137,6 +145,16 @@ def _plot_metric(
             }
             if not points:
                 continue
+            if single_size:
+                value = points.get(only_size)
+                if value is None or pd.isna(value):
+                    continue
+                ax.scatter(
+                    [only_size],
+                    [value],
+                    label=_label_for_algo(str(algo)),
+                )
+                continue
             values = [points.get(size, float("nan")) for size in network_sizes]
             ax.plot(network_sizes, values, marker="o", label=_label_for_algo(str(algo)))
         ax.set_xlabel("Network size (number of nodes)")
@@ -145,7 +163,10 @@ def _plot_metric(
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     axes[0].set_ylabel("Outage probability")
     place_legend(axes[-1])
-    fig.suptitle("Step 2 - Outage probability by Cluster (SNIR on)")
+    fig.suptitle(
+        "Step 2 - Outage probability by Cluster (SNIR on)"
+        f"{_title_suffix(network_sizes)}"
+    )
     return fig
 
 
