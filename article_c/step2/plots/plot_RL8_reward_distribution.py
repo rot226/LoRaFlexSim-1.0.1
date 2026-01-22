@@ -14,7 +14,6 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     filter_rows_by_network_sizes,
     filter_cluster,
-    load_step2_aggregated,
     normalize_network_size_rows,
     save_figure,
 )
@@ -36,11 +35,44 @@ def _has_invalid_network_sizes(network_sizes: list[float]) -> bool:
     return False
 
 
+def _load_step2_raw_results(
+    results_path: Path,
+    *,
+    allow_sample: bool = True,
+) -> list[dict[str, object]]:
+    if not results_path.exists():
+        if allow_sample:
+            return []
+        raise FileNotFoundError(f"CSV Step2 manquant: {results_path}")
+    df = pd.read_csv(results_path)
+    if df.empty:
+        return []
+    if "reward" not in df.columns:
+        warnings.warn(
+            "Colonne reward manquante dans raw_results.csv; figure ignorée.",
+            stacklevel=2,
+        )
+        return []
+    if "network_size" in df.columns:
+        network_size_series = df["network_size"]
+    elif "density" in df.columns:
+        network_size_series = df["density"]
+    else:
+        network_size_series = pd.Series([None] * len(df))
+    df["network_size"] = pd.to_numeric(network_size_series, errors="coerce")
+    df["reward"] = pd.to_numeric(df["reward"], errors="coerce")
+    df["algo"] = df.get("algo", "")
+    df["snir_mode"] = df.get("snir_mode", "")
+    df["cluster"] = df.get("cluster", "all").fillna("all")
+    df = df.dropna(subset=["network_size", "reward"])
+    return df.to_dict(orient="records")
+
+
 def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
     fig, ax = plt.subplots()
     algorithms = sorted({row["algo"] for row in rows})
     rewards_by_algo = [
-        [row["reward_mean"] for row in rows if row["algo"] == algo]
+        [row["reward"] for row in rows if row["algo"] == algo]
         for algo in algorithms
     ]
     positions = list(range(1, len(algorithms) + 1))
@@ -56,7 +88,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
     ax.set_xticks(positions)
     ax.set_xticklabels([algo_label(str(algo)) for algo in algorithms])
     ax.set_xlabel("Algorithm")
-    ax.set_ylabel("Mean Reward")
+    ax.set_ylabel("Reward")
     ax.set_title("Step 2 - Reward Distribution by Algorithm")
     return fig
 
@@ -80,8 +112,8 @@ def main(
         return
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "aggregated_results.csv"
-    rows = load_step2_aggregated(results_path, allow_sample=allow_sample)
+    results_path = step_dir / "results" / "raw_results.csv"
+    rows = _load_step2_raw_results(results_path, allow_sample=allow_sample)
     if not rows:
         warnings.warn("CSV Step2 manquant ou vide, figure ignorée.", stacklevel=2)
         return
