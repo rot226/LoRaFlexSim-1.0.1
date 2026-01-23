@@ -26,6 +26,18 @@ ALGO_LABELS = {
     "mixra_opt": "MixRA-Opt",
     "ucb1_sf": "UCB1-SF",
 }
+ALGO_COLORS = {
+    "adr": "#1f77b4",
+    "mixra_h": "#ff7f0e",
+    "mixra_opt": "#2ca02c",
+    "ucb1_sf": "#d62728",
+}
+ALGO_MARKERS = {
+    "adr": "o",
+    "mixra_h": "s",
+    "mixra_opt": "^",
+    "ucb1_sf": "D",
+}
 SNIR_MODES = ("snir_on", "snir_off")
 SNIR_LABELS = {
     "snir_on": "SNIR on",
@@ -372,6 +384,13 @@ def plot_metric_by_snir(
     ax: plt.Axes,
     rows: list[dict[str, object]],
     metric_key: str,
+    *,
+    use_algo_styles: bool = False,
+    algo_colors: dict[str, str] | None = None,
+    algo_markers: dict[str, str] | None = None,
+    line_width: float = 1.6,
+    marker_size: float = 5.5,
+    percentile_line_width: float = 1.1,
 ) -> None:
     network_sizes = sorted({_network_size_value(row) for row in rows})
     median_key, lower_key, upper_key = resolve_percentile_keys(rows, metric_key)
@@ -385,6 +404,12 @@ def plot_metric_by_snir(
     for algo, fallback in algorithms:
         algo_rows = [row for row in rows if _algo_key(row) == (algo, fallback)]
         densities = sorted({_network_size_value(row) for row in algo_rows})
+        normalized_algo = _normalize_algo(algo)
+        color = None
+        marker = "o"
+        if use_algo_styles:
+            color = (algo_colors or ALGO_COLORS).get(normalized_algo)
+            marker = (algo_markers or ALGO_MARKERS).get(normalized_algo, "o")
         for snir_mode in SNIR_MODES:
             points = {
                 _network_size_value(row): row.get(median_key)
@@ -400,9 +425,12 @@ def plot_metric_by_snir(
             line = ax.plot(
                 densities,
                 values,
-                marker="o",
+                color=color,
+                marker=marker,
                 linestyle=SNIR_LINESTYLES[snir_mode],
                 label=label,
+                linewidth=line_width,
+                markersize=marker_size,
             )[0]
             if lower_key and upper_key:
                 lower_points = {
@@ -430,6 +458,7 @@ def plot_metric_by_snir(
                     linestyle=":",
                     color=color,
                     alpha=0.6,
+                    linewidth=percentile_line_width,
                 )
                 ax.plot(
                     densities,
@@ -437,6 +466,7 @@ def plot_metric_by_snir(
                     linestyle=":",
                     color=color,
                     alpha=0.6,
+                    linewidth=percentile_line_width,
                 )
     set_network_size_ticks(ax, network_sizes)
 
