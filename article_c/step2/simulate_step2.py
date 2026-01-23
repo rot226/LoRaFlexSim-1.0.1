@@ -85,6 +85,21 @@ def _clamp_range(value: float, min_value: float, max_value: float) -> float:
     return max(min_value, min(max_value, value))
 
 
+def _effective_window_duration(
+    tx_starts: list[float],
+    airtime_s: float,
+    fallback_duration_s: float,
+) -> float:
+    if not tx_starts:
+        return fallback_duration_s
+    min_start = min(tx_starts)
+    max_end = max(tx_starts) + airtime_s
+    duration = max_end - min_start
+    if duration <= 0.0:
+        return fallback_duration_s
+    return duration
+
+
 def _default_reference_size() -> int:
     sizes = list(DEFAULT_CONFIG.scenario.network_sizes)
     if not sizes:
@@ -183,12 +198,12 @@ def _compute_window_metrics(
     collision_norm: float,
     *,
     payload_bytes: int,
-    window_duration_s: float,
+    effective_duration_s: float,
     airtime_s: float,
 ) -> WindowMetrics:
     success_rate = successes / traffic_sent if traffic_sent > 0 else 0.0
     throughput_success = (
-        successes * payload_bytes / window_duration_s if window_duration_s > 0 else 0.0
+        successes * payload_bytes / effective_duration_s if effective_duration_s > 0 else 0.0
     )
     energy_per_success = airtime_s * traffic_sent / max(successes, 1)
     return WindowMetrics(
@@ -596,6 +611,12 @@ def run_simulation(
                     else 0.0
                 )
                 tx_starts = [window_start_s + node_offset_s + t for t in traffic_times]
+                airtime_s = airtime_by_sf[sf_value]
+                effective_duration_s = _effective_window_duration(
+                    tx_starts,
+                    airtime_s,
+                    window_duration_value,
+                )
                 node_windows.append(
                     {
                         "node_id": node_id,
@@ -606,6 +627,7 @@ def run_simulation(
                         "rate_multiplier": rate_multiplier,
                         "traffic_sent": len(traffic_times),
                         "tx_starts": tx_starts,
+                        "effective_duration_s": effective_duration_s,
                         "shadowing_db": shadowing_db,
                         "shadowing_sigma_db": shadowing_sigma_db_node,
                         "link_quality": link_quality,
@@ -647,6 +669,9 @@ def run_simulation(
                     )
                 airtime_norm = energy_norm_by_sf[sf_value]
                 airtime_s = airtime_by_sf[sf_value]
+                effective_duration_s = float(
+                    node_window.get("effective_duration_s", window_duration_value)
+                )
                 collision_norm = _clip(
                     airtime_norm
                     * (1.0 + congestion_probability)
@@ -662,7 +687,7 @@ def run_simulation(
                     airtime_norm,
                     collision_norm,
                     payload_bytes=payload_bytes,
-                    window_duration_s=window_duration_value,
+                    effective_duration_s=effective_duration_s,
                     airtime_s=airtime_s,
                 )
                 reward = _compute_reward(
@@ -829,6 +854,12 @@ def run_simulation(
                     else 0.0
                 )
                 tx_starts = [window_start_s + node_offset_s + t for t in traffic_times]
+                airtime_s = airtime_by_sf[sf_value]
+                effective_duration_s = _effective_window_duration(
+                    tx_starts,
+                    airtime_s,
+                    window_duration_value,
+                )
                 node_windows.append(
                     {
                         "node_id": node_id,
@@ -839,6 +870,7 @@ def run_simulation(
                         "rate_multiplier": rate_multiplier,
                         "traffic_sent": len(traffic_times),
                         "tx_starts": tx_starts,
+                        "effective_duration_s": effective_duration_s,
                         "shadowing_db": shadowing_db,
                         "shadowing_sigma_db": shadowing_sigma_db_node,
                         "link_quality": link_quality,
@@ -880,6 +912,9 @@ def run_simulation(
                     )
                 airtime_norm = energy_norm_by_sf[sf_value]
                 airtime_s = airtime_by_sf[sf_value]
+                effective_duration_s = float(
+                    node_window.get("effective_duration_s", window_duration_value)
+                )
                 collision_norm = _clip(
                     airtime_norm
                     * (1.0 + congestion_probability)
@@ -895,7 +930,7 @@ def run_simulation(
                     airtime_norm,
                     collision_norm,
                     payload_bytes=payload_bytes,
-                    window_duration_s=window_duration_value,
+                    effective_duration_s=effective_duration_s,
                     airtime_s=airtime_s,
                 )
                 reward = _compute_reward(

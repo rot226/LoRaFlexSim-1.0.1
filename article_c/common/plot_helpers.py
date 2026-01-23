@@ -186,6 +186,8 @@ def load_step2_aggregated(
             "snir_mode": row.get("snir_mode", ""),
             "cluster": row.get("cluster", "all"),
         }
+        if "mixra_opt_fallback" in row:
+            parsed_row["mixra_opt_fallback"] = row.get("mixra_opt_fallback")
         if "density" in row:
             parsed_row["density"] = _to_float(row.get("density"))
         for key, value in row.items():
@@ -195,6 +197,7 @@ def load_step2_aggregated(
                 "algo",
                 "snir_mode",
                 "cluster",
+                "mixra_opt_fallback",
             }:
                 continue
             parsed_row[key] = _to_float(value)
@@ -217,11 +220,14 @@ def _resolve_intermediate_step2_path(path: Path) -> Path | None:
 def _aggregate_step2_intermediate(
     rows: list[dict[str, object]],
 ) -> list[dict[str, object]]:
-    group_keys = ("network_size", "algo", "snir_mode", "cluster")
+    group_keys = ["network_size", "algo", "snir_mode", "cluster"]
+    if any(row.get("mixra_opt_fallback") not in (None, "") for row in rows):
+        group_keys.append("mixra_opt_fallback")
+    group_keys_tuple = tuple(group_keys)
     numeric_keys: set[str] = set()
     for row in rows:
         for key, value in row.items():
-            if key in group_keys or key == "density":
+            if key in group_keys_tuple or key == "density":
                 continue
             if any(key.endswith(suffix) for suffix in DERIVED_SUFFIXES):
                 continue
@@ -229,11 +235,11 @@ def _aggregate_step2_intermediate(
                 numeric_keys.add(key)
     groups: dict[tuple[object, ...], list[dict[str, object]]] = {}
     for row in rows:
-        group_key = tuple(row.get(key) for key in group_keys)
+        group_key = tuple(row.get(key) for key in group_keys_tuple)
         groups.setdefault(group_key, []).append(row)
     aggregated: list[dict[str, object]] = []
     for group_key, grouped_rows in groups.items():
-        aggregated_row: dict[str, object] = dict(zip(group_keys, group_key))
+        aggregated_row: dict[str, object] = dict(zip(group_keys_tuple, group_key))
         for key in sorted(numeric_keys):
             values = [
                 row[key]
