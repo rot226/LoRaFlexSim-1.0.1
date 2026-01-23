@@ -81,12 +81,90 @@ def _coerce_positive_network_size(value: object) -> float:
     return size
 
 
+def _parse_bool(value: object) -> bool | None:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _normalize_snir_mode(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in {"snir_on", "on", "true", "1", "yes"}:
+        return "snir_on"
+    if text in {"snir_off", "off", "false", "0", "no"}:
+        return "snir_off"
+    if text in {"snir_unknown", "unknown", "n/a", "na"}:
+        return "snir_unknown"
+    return None
+
+
+def _normalize_group_keys(rows: list[dict[str, object]]) -> None:
+    for row in rows:
+        if row.get("algo") in (None, "") and row.get("algorithm") not in (None, ""):
+            row["algo"] = row.get("algorithm")
+        if row.get("snir_mode") in (None, ""):
+            snir_mode = _normalize_snir_mode(row.get("snir_state") or row.get("snir"))
+            if snir_mode is None:
+                snir_flag = _parse_bool(row.get("with_snir"))
+                if snir_flag is None:
+                    snir_flag = _parse_bool(row.get("use_snir"))
+                if snir_flag is True:
+                    snir_mode = "snir_on"
+                elif snir_flag is False:
+                    snir_mode = "snir_off"
+            if snir_mode is not None:
+                row["snir_mode"] = snir_mode
+
+
+def _log_control_table(rows: list[dict[str, object]], label: str) -> None:
+    if not rows:
+        return
+    counts: dict[tuple[str, str, str], int] = defaultdict(int)
+    for row in rows:
+        algo = str(row.get("algo") or row.get("algorithm") or "unknown")
+        snir_mode = (
+            _normalize_snir_mode(row.get("snir_mode"))
+            or _normalize_snir_mode(row.get("snir_state"))
+            or _normalize_snir_mode(row.get("snir"))
+        )
+        if snir_mode is None:
+            snir_flag = _parse_bool(row.get("with_snir"))
+            if snir_flag is None:
+                snir_flag = _parse_bool(row.get("use_snir"))
+            if snir_flag is True:
+                snir_mode = "snir_on"
+            elif snir_flag is False:
+                snir_mode = "snir_off"
+            else:
+                snir_mode = "snir_unknown"
+        size_value = row.get("network_size") or row.get("density")
+        size_label = "unknown"
+        if size_value not in (None, ""):
+            try:
+                size_label = str(int(round(float(size_value))))
+            except (TypeError, ValueError):
+                size_label = str(size_value)
+        counts[(algo, snir_mode, size_label)] += 1
+    print(f"Tableau de contrôle ({label}):")
+    print("algo\tsnir_mode\tnetwork_size\tcount")
+    for (algo, snir_mode, size_label), count in sorted(counts.items()):
+        print(f"{algo}\t{snir_mode}\t{size_label}\t{count}")
+
+
 def aggregate_results(
     raw_rows: list[dict[str, object]],
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     """Agrège les résultats avec moyenne, écart-type et IC 95% par clés."""
     if "network_size" not in GROUP_KEYS:
         raise AssertionError("network_size doit être inclus dans les clés de regroupement.")
+    _normalize_group_keys(raw_rows)
     algo_values = {
         row.get("algo")
         for row in raw_rows
@@ -229,6 +307,7 @@ def write_simulation_results(
         _coerce_positive_network_size(row_network_size)
 
     if raw_rows:
+        _normalize_group_keys(raw_rows)
         missing_network_size = [
             row for row in raw_rows if row.get("network_size") in (None, "")
         ]
@@ -255,7 +334,9 @@ def write_simulation_results(
         [[row.get(key, "") for key in raw_header] for row in raw_rows],
     )
 
+    _log_control_table(raw_rows, "raw_results.csv")
     aggregated_rows, intermediate_rows = aggregate_results(raw_rows)
+    _log_control_table(aggregated_rows, "aggregated_results.csv")
     aggregated_header = (
         list(aggregated_rows[0].keys()) if aggregated_rows else list(BASE_GROUP_KEYS)
     )
