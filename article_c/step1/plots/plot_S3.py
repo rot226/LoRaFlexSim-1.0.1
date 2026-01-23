@@ -20,41 +20,11 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     place_legend,
     plot_metric_by_snir,
+    select_received_metric_key,
     save_figure,
 )
 
 _ALGO_SPECIFIC_TOL = 1e-6
-
-
-def _ensure_algo_specific_metric(
-    rows: list[dict[str, object]],
-    metric_key: str,
-) -> str:
-    if metric_key != "received_mean":
-        return metric_key
-    derived_key = "received_algo_mean"
-    differences: list[float] = []
-    for row in rows:
-        sent = row.get("sent_mean")
-        pdr = row.get("pdr_mean")
-        # Source de vérité: received_mean doit être dérivé de sent_mean * pdr_mean.
-        # On calcule toujours received_algo_mean à partir de ces champs pour éviter
-        # les divergences futures entre métriques agrégées et dérivées par algo.
-        if isinstance(sent, (int, float)) and isinstance(pdr, (int, float)):
-            derived_value = sent * pdr
-            row[derived_key] = derived_value
-            received = row.get(metric_key)
-            if isinstance(received, (int, float)):
-                differences.append(abs(received - derived_value))
-        else:
-            row[derived_key] = row.get(metric_key, 0.0)
-    if differences and max(differences) > _ALGO_SPECIFIC_TOL:
-        warnings.warn(
-            "received_mean ne correspond pas partout à sent_mean*pdr_mean; "
-            "utilisation de received_algo_mean dérivé.",
-            stacklevel=2,
-        )
-    return derived_key
 
 
 def _warn_if_low_algo_variance(
@@ -98,7 +68,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
-    metric_key = _ensure_algo_specific_metric(rows, metric_key)
+    metric_key = select_received_metric_key(rows, metric_key)
     _warn_if_low_algo_variance(rows, metric_key)
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xticks(network_sizes)

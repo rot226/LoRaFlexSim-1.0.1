@@ -23,6 +23,7 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     place_legend,
     plot_metric_by_snir,
+    select_received_metric_key,
     resolve_percentile_keys,
     save_figure,
 )
@@ -89,6 +90,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+    metric_key = select_received_metric_key(rows, metric_key)
     plot_metric_by_snir(
         ax,
         rows,
