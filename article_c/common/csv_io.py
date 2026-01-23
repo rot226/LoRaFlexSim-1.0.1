@@ -11,9 +11,21 @@ from pathlib import Path
 import math
 from statistics import mean, stdev
 
-GROUP_KEYS = ("network_size", "algo", "snir_mode", "cluster", "mixra_opt_fallback")
+ROUND_REPLICATION_KEYS = ("round", "replication")
+GROUP_KEYS = (
+    "network_size",
+    "algo",
+    "snir_mode",
+    "cluster",
+    "mixra_opt_fallback",
+    *ROUND_REPLICATION_KEYS,
+)
+BASE_GROUP_KEYS = tuple(
+    key for key in GROUP_KEYS if key not in ROUND_REPLICATION_KEYS
+)
 EXTRA_MEAN_KEYS = {"mean_toa_s", "mean_latency_s"}
 EXCLUDED_NUMERIC_KEYS = {"seed", "replication", "node_id", "packet_id"}
+DERIVED_SUFFIXES = ("_mean", "_std", "_count", "_ci95", "_p10", "_p50", "_p90")
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +81,9 @@ def _coerce_positive_network_size(value: object) -> float:
     return size
 
 
-def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, object]]:
+def aggregate_results(
+    raw_rows: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     """Agrège les résultats avec moyenne, écart-type et IC 95% par clés."""
     if "network_size" not in GROUP_KEYS:
         raise AssertionError("network_size doit être inclus dans les clés de regroupement.")
@@ -85,28 +99,56 @@ def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, objec
                     "Algo manquant détecté, séparation stricte appliquée dans l'agrégation."
                 )
                 row["algo"] = "unknown"
+    has_round = any(row.get("round") not in (None, "") for row in raw_rows)
+    has_replication = any(row.get("replication") not in (None, "") for row in raw_rows)
+    has_intermediate = has_round or has_replication
+    if has_intermediate:
+        intermediate_rows = _aggregate_rows(
+            raw_rows,
+            GROUP_KEYS,
+            include_base_means=True,
+        )
+        aggregated_rows = _aggregate_rows(
+            intermediate_rows,
+            BASE_GROUP_KEYS,
+            include_base_means=False,
+        )
+        return aggregated_rows, intermediate_rows
+    aggregated_rows = _aggregate_rows(
+        raw_rows,
+        BASE_GROUP_KEYS,
+        include_base_means=False,
+    )
+    return aggregated_rows, []
+
+
+def _aggregate_rows(
+    rows: list[dict[str, object]],
+    group_keys: tuple[str, ...],
+    *,
+    include_base_means: bool,
+) -> list[dict[str, object]]:
     groups: dict[tuple[object, ...], list[dict[str, object]]] = defaultdict(list)
-    numeric_keys: set[str] = set()
-    for row in raw_rows:
+    numeric_keys = _collect_numeric_keys(rows, group_keys)
+    for row in rows:
         if row.get("network_size") in (None, "") and row.get("density") not in (None, ""):
             row["network_size"] = row["density"]
         if row.get("network_size") not in (None, ""):
             row["network_size"] = _coerce_positive_network_size(row["network_size"])
-        group_key = tuple(row.get(key) for key in GROUP_KEYS)
+        group_key = tuple(row.get(key) for key in group_keys)
         groups[group_key].append(row)
-        for key, value in row.items():
-            if key in GROUP_KEYS or key == "density" or key in EXCLUDED_NUMERIC_KEYS:
-                continue
-            if isinstance(value, (int, float)):
-                numeric_keys.add(key)
 
     aggregated: list[dict[str, object]] = []
-    for group_key, rows in groups.items():
-        aggregated_row: dict[str, object] = dict(zip(GROUP_KEYS, group_key))
+    for group_key, grouped_rows in groups.items():
+        aggregated_row: dict[str, object] = dict(zip(group_keys, group_key))
         if aggregated_row.get("network_size") in (None, ""):
             raise AssertionError("network_size manquant dans les résultats agrégés.")
         for key in sorted(numeric_keys):
-            values = [row[key] for row in rows if isinstance(row.get(key), (int, float))]
+            values = [
+                row[key]
+                for row in grouped_rows
+                if isinstance(row.get(key), (int, float))
+            ]
             count = len(values)
             if values:
                 mean_value = mean(values)
@@ -123,10 +165,26 @@ def aggregate_results(raw_rows: list[dict[str, object]]) -> list[dict[str, objec
             aggregated_row[f"{key}_p10"] = _percentile(sorted_values, 10)
             aggregated_row[f"{key}_p50"] = _percentile(sorted_values, 50)
             aggregated_row[f"{key}_p90"] = _percentile(sorted_values, 90)
-            if key in EXTRA_MEAN_KEYS:
-                aggregated_row[key] = aggregated_row[f"{key}_mean"]
+            if include_base_means or key in EXTRA_MEAN_KEYS:
+                aggregated_row[key] = mean_value
         aggregated.append(aggregated_row)
     return aggregated
+
+
+def _collect_numeric_keys(
+    rows: list[dict[str, object]],
+    group_keys: tuple[str, ...],
+) -> set[str]:
+    numeric_keys: set[str] = set()
+    for row in rows:
+        for key, value in row.items():
+            if key in group_keys or key == "density" or key in EXCLUDED_NUMERIC_KEYS:
+                continue
+            if any(key.endswith(suffix) for suffix in DERIVED_SUFFIXES):
+                continue
+            if isinstance(value, (int, float)):
+                numeric_keys.add(key)
+    return numeric_keys
 
 
 def _percentile(values: list[float], percentile: float) -> float:
@@ -197,10 +255,28 @@ def write_simulation_results(
         [[row.get(key, "") for key in raw_header] for row in raw_rows],
     )
 
-    aggregated_rows = aggregate_results(raw_rows)
-    aggregated_header = list(aggregated_rows[0].keys()) if aggregated_rows else list(GROUP_KEYS)
+    aggregated_rows, intermediate_rows = aggregate_results(raw_rows)
+    aggregated_header = (
+        list(aggregated_rows[0].keys()) if aggregated_rows else list(BASE_GROUP_KEYS)
+    )
     write_rows(
         aggregated_path,
         aggregated_header,
         [[row.get(key, "") for key in aggregated_header] for row in aggregated_rows],
     )
+    if intermediate_rows:
+        has_round = any(row.get("round") not in (None, "") for row in intermediate_rows)
+        if has_round:
+            intermediate_name = "aggregated_results_by_round.csv"
+        else:
+            intermediate_name = "aggregated_results_by_replication.csv"
+        intermediate_path = output_dir / intermediate_name
+        intermediate_header = list(intermediate_rows[0].keys())
+        write_rows(
+            intermediate_path,
+            intermediate_header,
+            [
+                [row.get(key, "") for key in intermediate_header]
+                for row in intermediate_rows
+            ],
+        )
