@@ -158,6 +158,65 @@ def _log_control_table(rows: list[dict[str, object]], label: str) -> None:
         print(f"{algo}\t{snir_mode}\t{size_label}\t{count}")
 
 
+def _log_reward_min_max(raw_rows: list[dict[str, object]]) -> None:
+    if not raw_rows:
+        return
+    has_reward_key = any("reward" in row for row in raw_rows)
+    if not has_reward_key:
+        logger.info("Colonne reward absente des lignes raw; skip diagnostic.")
+        return
+    groups: dict[tuple[str, str], list[float]] = defaultdict(list)
+    invalid_values: list[object] = []
+    missing_count = 0
+    for row in raw_rows:
+        if "reward" not in row:
+            continue
+        reward = row.get("reward")
+        if reward in (None, ""):
+            missing_count += 1
+            continue
+        try:
+            value = float(reward)
+        except (TypeError, ValueError):
+            invalid_values.append(reward)
+            continue
+        if not math.isfinite(value):
+            raise AssertionError(f"reward non fini détecté: {reward}")
+        algo = str(row.get("algo") or row.get("algorithm") or "unknown")
+        size_value = row.get("network_size") or row.get("density")
+        if size_value in (None, ""):
+            size_label = "unknown"
+        else:
+            try:
+                size_label = str(int(round(float(size_value))))
+            except (TypeError, ValueError):
+                size_label = str(size_value)
+        groups[(algo, size_label)].append(value)
+    if invalid_values:
+        logger.warning("Valeurs reward non numériques ignorées: %s", invalid_values[:5])
+    if missing_count:
+        logger.warning("Valeurs reward manquantes détectées: %s", missing_count)
+    if not groups:
+        raise AssertionError("Aucune valeur reward numérique disponible avant agrégation.")
+    for (algo, size_label), values in sorted(groups.items()):
+        if not values:
+            logger.warning("Valeurs reward vides pour %s/%s.", algo, size_label)
+            continue
+        min_value = min(values)
+        max_value = max(values)
+        logger.info(
+            "Reward min/max avant agrégation [%s - %s]: %.6f/%.6f",
+            algo,
+            size_label,
+            min_value,
+            max_value,
+        )
+        print(
+            "Reward min/max avant agrégation "
+            f"[{algo} - {size_label}]: {min_value:.6f}/{max_value:.6f}"
+        )
+
+
 def aggregate_results(
     raw_rows: list[dict[str, object]],
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
@@ -317,6 +376,7 @@ def write_simulation_results(
         network_sizes_label = ", ".join(map(str, network_sizes))
         logger.info("network_size written: %s", network_sizes_label)
         print(f"network_size written = {network_sizes_label}")
+        _log_reward_min_max(raw_rows)
 
     raw_header: list[str] = []
     seen: set[str] = set()
