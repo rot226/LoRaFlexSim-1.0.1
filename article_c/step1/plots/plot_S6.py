@@ -34,7 +34,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     )
     if not clusters:
         clusters = list(DEFAULT_CONFIG.qos.clusters)
-    fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 4), sharey=True)
+    fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 6), sharey=True)
     if len(clusters) == 1:
         axes = [axes]
     for ax, cluster in zip(axes, clusters, strict=False):
@@ -46,13 +46,20 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.set_xticks(network_sizes)
     axes[0].set_ylabel("Packet Delivery Ratio")
-    legend_style = {**LEGEND_STYLE, "bbox_to_anchor": (0.5, 1.22)}
-    axes[-1].legend(**legend_style)
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        legend_style = {
+            **LEGEND_STYLE,
+            "loc": "upper center",
+            "bbox_to_anchor": (0.5, 1.14),
+            "ncol": min(len(labels), LEGEND_STYLE.get("ncol", 3)),
+        }
+        fig.legend(handles, labels, **legend_style)
     fig.suptitle(
         "Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)",
         y=0.98,
     )
-    fig.subplots_adjust(top=0.76)
+    plt.tight_layout(rect=(0, 0, 1, 0.84))
     return fig
 
 

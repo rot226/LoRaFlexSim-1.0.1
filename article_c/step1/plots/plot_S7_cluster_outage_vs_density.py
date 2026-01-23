@@ -63,7 +63,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         clusters = sorted(available_clusters)
     cluster_labels = _cluster_labels(clusters)
 
-    fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 4), sharey=True)
+    fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 6), sharey=True)
     if len(clusters) == 1:
         axes = [axes]
 
@@ -82,10 +82,11 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             handles,
             labels,
             loc="upper center",
+            bbox_to_anchor=(0.5, 1.14),
             ncol=min(len(labels), 4),
         )
-    fig.suptitle("Step 1 - Outage probability by Cluster (SNIR on/off)")
-    fig.subplots_adjust(top=0.78)
+    fig.suptitle("Step 1 - Outage probability by Cluster (SNIR on/off)", y=0.98)
+    plt.tight_layout(rect=(0, 0, 1, 0.84))
     return fig
 
 
