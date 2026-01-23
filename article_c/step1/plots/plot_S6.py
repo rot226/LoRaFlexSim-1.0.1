@@ -46,12 +46,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.set_xticks(network_sizes)
     axes[0].set_ylabel("Packet Delivery Ratio")
-    axes[-1].legend(
-        bbox_to_anchor=(0.5, 1.22),
-        loc="lower center",
-        ncol=3,
-        **LEGEND_STYLE,
-    )
+    legend_style = {**LEGEND_STYLE, "bbox_to_anchor": (0.5, 1.22)}
+    axes[-1].legend(**legend_style)
     fig.suptitle(
         "Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)",
         y=0.98,
