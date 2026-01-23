@@ -24,6 +24,7 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     save_figure,
 )
+from article_c.step1.plots.plot_utils import configure_figure
 
 
 def _sf_key_candidates(sf: int) -> list[str]:
@@ -252,9 +253,14 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
             loc="upper center",
             bbox_to_anchor=(0.5, 1.14),
             ncol=len(sf_values),
+            frameon=False,
         )
-    fig.suptitle("Step 1 - Spreading Factor Distribution (SNIR on/off)", y=0.98)
-    plt.tight_layout(rect=(0, 0, 1, 0.84))
+    configure_figure(
+        fig,
+        axes,
+        "Step 1 - Spreading Factor Distribution (SNIR on/off)",
+        legend_loc="above",
+    )
     return fig
 
 

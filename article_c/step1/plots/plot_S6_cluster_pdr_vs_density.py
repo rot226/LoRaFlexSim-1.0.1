@@ -23,6 +23,7 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     save_figure,
 )
+from article_c.step1.plots.plot_utils import configure_figure
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
@@ -111,10 +112,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             handles,
             labels,
             loc="upper center",
+            bbox_to_anchor=(0.5, 1.02),
             ncol=3,
             frameon=False,
         )
-    fig.suptitle("Step 1 - PDR by Cluster (SNIR on/off, per algorithm)")
+    configure_figure(
+        fig,
+        axes,
+        "Step 1 - PDR by Cluster (SNIR on/off, per algorithm)",
+        legend_loc="above",
+    )
     return fig
 
 

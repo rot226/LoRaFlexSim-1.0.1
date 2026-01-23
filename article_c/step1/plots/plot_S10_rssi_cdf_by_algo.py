@@ -20,6 +20,7 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     save_figure,
 )
+from article_c.step1.plots.plot_utils import configure_figure
 
 DEFAULT_METRIC_COLUMNS = {
     "rssi": ("rssi_dbm", "rssi_dBm", "rssi", "rssi_db"),
@@ -189,10 +190,13 @@ def plot_cdf_by_algo(
 
     ax.set_xlabel(metric_label)
     ax.set_ylabel("CDF")
-    ax.set_title(f"CDF {metric_key.upper()} par algorithme (SNIR on/off)")
     ax.grid(True, linestyle=":", alpha=0.6)
-    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3, frameon=False)
-    plt.subplots_adjust(top=0.80)
+    configure_figure(
+        fig,
+        [ax],
+        f"CDF {metric_key.upper()} par algorithme (SNIR on/off)",
+        legend_loc="above",
+    )
 
     save_figure(fig, output_dir, "plot_S10")
     plt.close(fig)
