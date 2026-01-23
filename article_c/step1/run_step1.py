@@ -347,10 +347,13 @@ def _simulate_density(
             scale=float(config["mixra_opt_budget_scale"]),
         )
     )
-    for algo in ALGORITHMS:
+    for algo_index, algo in enumerate(ALGORITHMS):
+        algo_seed_offset = algo_index * 10000
+        print(f"Offset seed utilisé pour {ALGORITHM_LABELS.get(algo, algo)}: {algo_seed_offset}")
         for snir_mode in snir_modes:
             for replication in replications:
-                seed = int(config["seeds_base"]) + size_idx * runs_per_size + run_index
+                base_seed = int(config["seeds_base"]) + size_idx * runs_per_size + run_index
+                seed = base_seed + algo_seed_offset
                 run_index += 1
                 set_deterministic_seed(seed)
                 sent = density_to_sent(network_size)
