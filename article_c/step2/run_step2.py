@@ -177,6 +177,10 @@ def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
         return sizes
 
 
+def _is_non_empty_file(path: Path) -> bool:
+    return path.exists() and path.stat().st_size > 0
+
+
 def _load_step2_aggregated_with_errors(
     aggregated_path: Path,
 ) -> list[dict[str, object]]:
@@ -341,6 +345,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.timestamp:
         timestamp_dir = base_results_dir / timestamp_tag()
         ensure_dir(timestamp_dir)
+    aggregated_path = base_results_dir / "aggregated_results.csv"
+    if _is_non_empty_file(aggregated_path):
+        size_bytes = aggregated_path.stat().st_size
+        print(
+            "aggregated_results.csv existant détecté "
+            f"({size_bytes} octets) : aucune réinitialisation."
+        )
 
     selection_rows: list[dict[str, object]] = []
     learning_curve_rows: list[dict[str, object]] = []
