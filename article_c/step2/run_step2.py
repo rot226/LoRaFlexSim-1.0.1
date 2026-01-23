@@ -286,6 +286,8 @@ def _simulate_density(
                 window_delay_range_s=float(config["window_delay_range_s"]),
                 reference_network_size=int(config["reference_network_size"]),
             )
+            for row in result.raw_rows:
+                row["replication"] = replication
             raw_rows.extend(result.raw_rows)
             if algorithm == "ucb1_sf":
                 selection_rows.extend(result.selection_prob_rows)

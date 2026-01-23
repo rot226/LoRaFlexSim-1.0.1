@@ -72,8 +72,19 @@ def _label_for_algo(algo: str) -> str:
     return algo_label(canonical)
 
 
+def _extract_success_rate(row: dict[str, object]) -> float | None:
+    for key in ("success_rate_mean", "success_rate", "success_mean"):
+        value = row.get(key)
+        if value is None or pd.isna(value):
+            continue
+        return float(value)
+    return None
+
+
 def _outage_probability(row: dict[str, object]) -> float:
-    success_rate = float(row.get("success_rate_mean") or 0.0)
+    success_rate = _extract_success_rate(row)
+    if success_rate is None:
+        success_rate = 0.0
     outage = 1.0 - success_rate
     return max(0.0, min(1.0, outage))
 
@@ -170,6 +181,151 @@ def _plot_metric(
     return fig
 
 
+def _resolve_intermediate_path(results_path: Path) -> Path | None:
+    by_replication = results_path.with_name("aggregated_results_by_replication.csv")
+    if by_replication.exists():
+        return by_replication
+    by_round = results_path.with_name("aggregated_results_by_round.csv")
+    if by_round.exists():
+        return by_round
+    return None
+
+
+def _load_step2_intermediate(results_path: Path) -> list[dict[str, object]]:
+    intermediate_path = _resolve_intermediate_path(results_path)
+    if intermediate_path is None:
+        return []
+    df = pd.read_csv(intermediate_path)
+    rows = df.to_dict("records")
+    numeric_columns = {
+        "network_size",
+        "density",
+        "success_rate",
+        "success_rate_mean",
+        "success_mean",
+        "collision_norm",
+        "round",
+        "replication",
+    }
+    for row in rows:
+        for key in numeric_columns:
+            if key in row and row[key] not in (None, ""):
+                try:
+                    row[key] = float(row[key])
+                except (TypeError, ValueError):
+                    row[key] = None
+    return rows
+
+
+def _replication_key(rows: list[dict[str, object]]) -> str | None:
+    if any(row.get("replication") not in (None, "") for row in rows):
+        return "replication"
+    if any(row.get("round") not in (None, "") for row in rows):
+        return "round"
+    return None
+
+
+def _log_outage_diagnostics(rows: list[dict[str, object]]) -> None:
+    success_rates = [
+        rate for row in rows if (rate := _extract_success_rate(row)) is not None
+    ]
+    collision_norms = [
+        float(row["collision_norm"])
+        for row in rows
+        if row.get("collision_norm") not in (None, "")
+    ]
+    if success_rates:
+        print(
+            "Diagnostic outage (success_rate) - "
+            f"min={min(success_rates):.4f}, max={max(success_rates):.4f}"
+        )
+    if collision_norms:
+        print(
+            "Diagnostic outage (collision_norm) - "
+            f"min={min(collision_norms):.4f}, max={max(collision_norms):.4f}"
+        )
+
+
+def _plot_raw_metric(
+    rows: list[dict[str, object]],
+    metric_key: str,
+    network_sizes: list[int] | None,
+) -> plt.Figure | None:
+    ensure_network_size(rows)
+    df = pd.DataFrame(rows)
+    if network_sizes is None:
+        network_sizes = sorted(df["network_size"].unique())
+    if _has_invalid_network_sizes(network_sizes):
+        return None
+    replication_key = _replication_key(rows)
+    if replication_key is None:
+        warnings.warn(
+            "Aucune colonne replication/round disponible pour la métrique brute.",
+            stacklevel=2,
+        )
+        return None
+    available_clusters = {
+        row["cluster"] for row in rows if row.get("cluster") not in (None, "all")
+    }
+    clusters = [
+        cluster
+        for cluster in DEFAULT_CONFIG.qos.clusters
+        if cluster in available_clusters
+    ]
+    if not clusters:
+        clusters = sorted(available_clusters)
+    if not clusters:
+        warnings.warn(
+            "Aucun cluster disponible pour la métrique brute.",
+            stacklevel=2,
+        )
+        return None
+    cluster_labels = _cluster_labels(clusters)
+    fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 4), sharey=True)
+    if len(clusters) == 1:
+        axes = [axes]
+    algorithms = sorted({row["algo"] for row in rows})
+    for ax, cluster in zip(axes, clusters, strict=False):
+        cluster_rows = [row for row in rows if row.get("cluster") == cluster]
+        for algo in algorithms:
+            algo_rows = [row for row in cluster_rows if row.get("algo") == algo]
+            replications = sorted(
+                {
+                    row.get(replication_key)
+                    for row in algo_rows
+                    if row.get(replication_key) not in (None, "")
+                }
+            )
+            for rep_idx, replication in enumerate(replications):
+                points = {
+                    int(row["network_size"]): row[metric_key]
+                    for row in algo_rows
+                    if row.get(replication_key) == replication
+                }
+                if not points:
+                    continue
+                values = [points.get(size, float("nan")) for size in network_sizes]
+                label = _label_for_algo(str(algo)) if rep_idx == 0 else None
+                ax.plot(
+                    network_sizes,
+                    values,
+                    marker="o",
+                    alpha=0.35,
+                    label=label,
+                )
+        ax.set_xlabel("Network size (number of nodes)")
+        ax.set_title(f"Cluster {cluster_labels.get(cluster, cluster)}")
+        ax.set_xticks(network_sizes)
+        ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
+    axes[0].set_ylabel("Outage probability (raw)")
+    place_legend(axes[-1])
+    fig.suptitle(
+        "Step 2 - Outage probability brut par cluster et réplication (SNIR on)"
+        f"{_title_suffix(network_sizes)}"
+    )
+    return fig
+
+
 def main(
     network_sizes: list[int] | None = None,
     argv: list[str] | None = None,
@@ -181,6 +337,11 @@ def main(
         type=int,
         nargs="+",
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
+    )
+    parser.add_argument(
+        "--debug-raw",
+        action="store_true",
+        help="Trace en plus la métrique brute par cluster et réplication.",
     )
     args = parser.parse_args(argv)
     if network_sizes is None:
@@ -208,6 +369,32 @@ def main(
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_RL6_cluster_outage_vs_density", use_tight=False)
     plt.close(fig)
+
+    if args.debug_raw:
+        raw_rows = _load_step2_intermediate(results_path)
+        if not raw_rows:
+            warnings.warn(
+                "Fichier intermédiaire manquant pour la métrique brute.",
+                stacklevel=2,
+            )
+            return
+        raw_rows = [row for row in raw_rows if row.get("cluster") != "all"]
+        raw_rows = [row for row in raw_rows if row.get("snir_mode") == "snir_on"]
+        normalize_network_size_rows(raw_rows)
+        raw_rows, _ = filter_rows_by_network_sizes(raw_rows, network_sizes_filter)
+        raw_rows = _filter_algorithms(raw_rows)
+        raw_rows = _with_outage(raw_rows)
+        _log_outage_diagnostics(raw_rows)
+        raw_fig = _plot_raw_metric(raw_rows, "outage_prob", network_sizes_filter)
+        if raw_fig is None:
+            return
+        save_figure(
+            raw_fig,
+            output_dir,
+            "plot_RL6_cluster_outage_raw_by_replication",
+            use_tight=False,
+        )
+        plt.close(raw_fig)
 
 
 if __name__ == "__main__":
