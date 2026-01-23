@@ -168,6 +168,16 @@ def _snr_margin_requirement(snr: float, rssi: float) -> float:
     return 0.8 + 1.7 * distance_factor + 0.9 * variability_factor
 
 
+def _density_factor(network_size: int) -> float:
+    size_min = min(MIXRA_OPT_BUDGET_BY_SIZE)
+    size_max = max(MIXRA_OPT_BUDGET_BY_SIZE)
+    if network_size <= size_min:
+        return 0.0
+    if network_size >= size_max:
+        return 1.0
+    return (network_size - size_min) / float(size_max - size_min)
+
+
 def _adr_smallest_sf(node: NodeLink) -> int:
     """ADR proxy: choisit le plus petit SF satisfaisant les seuils SNR/RSSI."""
     candidates: list[int] = []
@@ -528,12 +538,14 @@ def _generate_nodes(
     fading_type: str | None,
     fading_sigma_db: float,
     fading_mean_db: float,
+    snr_range: tuple[float, float],
+    rssi_range: tuple[float, float],
 ) -> list[NodeLink]:
     rng = random.Random(seed)
     nodes: list[NodeLink] = []
     for _ in range(count):
-        snr = rng.uniform(-22.0, 5.0)
-        rssi = rng.uniform(-140.0, -110.0)
+        snr = rng.uniform(*snr_range)
+        rssi = rng.uniform(*rssi_range)
         shadowing_db = (
             rng.gauss(shadowing_mean_db, shadowing_sigma_db)
             if shadowing_sigma_db > 0
@@ -601,6 +613,7 @@ def run_simulation(
     algorithm: str = "adr",
     seed: int = 42,
     *,
+    network_size: int | None = None,
     duration_s: float = 3600.0,
     traffic_mode: str = "poisson",
     jitter_range_s: float | None = None,
@@ -636,8 +649,15 @@ def run_simulation(
         mixra_opt_timeout_s = MIXRA_OPT_EMERGENCY_TIMEOUT_S
     elif mixra_opt_timeout_s <= 0:
         mixra_opt_timeout_s = None
+    size_reference = network_size if network_size is not None else sent
+    density_factor = _density_factor(int(size_reference))
     if shadowing_sigma_db is None:
-        shadowing_sigma_db = rng.uniform(6.0, 8.0)
+        base_shadowing = rng.uniform(5.5, 7.0)
+        shadowing_sigma_db = base_shadowing + 2.8 * density_factor
+    snr_min = -22.0 - 4.5 * density_factor
+    snr_max = 5.0 - 1.8 * density_factor
+    rssi_min = -140.0 - 6.0 * density_factor
+    rssi_max = -110.0 - 3.0 * density_factor
     jitter_range_value = jitter_range_s
     if jitter_range_value is None:
         base_period = duration_s / max(1, sent)
@@ -658,6 +678,8 @@ def run_simulation(
         fading_type=fading_type,
         fading_sigma_db=fading_sigma_db,
         fading_mean_db=fading_mean_db,
+        snr_range=(snr_min, snr_max),
+        rssi_range=(rssi_min, rssi_max),
     )
     cluster_rng = random.Random(seed + 971)
     node_clusters = assign_clusters(actual_sent, rng=cluster_rng)
