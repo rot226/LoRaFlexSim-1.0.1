@@ -37,6 +37,9 @@ def _ensure_algo_specific_metric(
     for row in rows:
         sent = row.get("sent_mean")
         pdr = row.get("pdr_mean")
+        # Source de vérité: received_mean doit être dérivé de sent_mean * pdr_mean.
+        # On calcule toujours received_algo_mean à partir de ces champs pour éviter
+        # les divergences futures entre métriques agrégées et dérivées par algo.
         if isinstance(sent, (int, float)) and isinstance(pdr, (int, float)):
             derived_value = sent * pdr
             row[derived_key] = derived_value
@@ -48,11 +51,10 @@ def _ensure_algo_specific_metric(
     if differences and max(differences) > _ALGO_SPECIFIC_TOL:
         warnings.warn(
             "received_mean ne correspond pas partout à sent_mean*pdr_mean; "
-            "utilisation de received_algo_mean spécifique par algo.",
+            "utilisation de received_algo_mean dérivé.",
             stacklevel=2,
         )
-        return derived_key
-    return metric_key
+    return derived_key
 
 
 def _warn_if_low_algo_variance(
