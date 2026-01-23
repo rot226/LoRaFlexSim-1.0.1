@@ -61,6 +61,13 @@ python article_c/run_all.py --skip-step2
 ```
 
 > Si l'étape 1 bloque, tester `--skip-step1` pour lancer directement l'étape 2.
+> **Note** : `make_all_plots` nécessite les résultats de l'étape 1 ; utiliser `--skip-step1` empêchera donc la génération des figures.
+
+Désactiver le fallback d'optimisation MixRA (option CLI de `run_all`) :
+
+```powershell
+python article_c/run_all.py --mixra-opt-no-fallback
+```
 
 Exécuter uniquement l'étape 1 :
 
