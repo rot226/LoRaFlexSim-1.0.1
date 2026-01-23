@@ -26,6 +26,8 @@ class WindowMetrics:
     bitrate_norm: float
     energy_norm: float
     collision_norm: float
+    throughput_success: float
+    energy_per_success: float
 
 
 @dataclass(frozen=True)
@@ -179,13 +181,23 @@ def _compute_window_metrics(
     bitrate_norm: float,
     energy_norm: float,
     collision_norm: float,
+    *,
+    payload_bytes: int,
+    window_duration_s: float,
+    airtime_s: float,
 ) -> WindowMetrics:
     success_rate = successes / traffic_sent if traffic_sent > 0 else 0.0
+    throughput_success = (
+        successes * payload_bytes / window_duration_s if window_duration_s > 0 else 0.0
+    )
+    energy_per_success = airtime_s * traffic_sent / max(successes, 1)
     return WindowMetrics(
         success_rate=success_rate,
         bitrate_norm=bitrate_norm,
         energy_norm=energy_norm,
         collision_norm=collision_norm,
+        throughput_success=throughput_success,
+        energy_per_success=energy_per_success,
     )
 
 
@@ -634,6 +646,7 @@ def run_simulation(
                         1 for _ in range(successes) if rng.random() < link_quality
                     )
                 airtime_norm = energy_norm_by_sf[sf_value]
+                airtime_s = airtime_by_sf[sf_value]
                 collision_norm = _clip(
                     airtime_norm
                     * (1.0 + congestion_probability)
@@ -648,6 +661,9 @@ def run_simulation(
                     bitrate_norm_by_sf[sf_value],
                     airtime_norm,
                     collision_norm,
+                    payload_bytes=payload_bytes,
+                    window_duration_s=window_duration_value,
+                    airtime_s=airtime_s,
                 )
                 reward = _compute_reward(
                     metrics.success_rate,
@@ -681,6 +697,8 @@ def run_simulation(
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
                         "collision_norm": metrics.collision_norm,
+                        "throughput_success": metrics.throughput_success,
+                        "energy_per_success": metrics.energy_per_success,
                         "reward": reward,
                     }
                 )
@@ -705,6 +723,8 @@ def run_simulation(
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
                         "collision_norm": metrics.collision_norm,
+                        "throughput_success": metrics.throughput_success,
+                        "energy_per_success": metrics.energy_per_success,
                         "reward": reward,
                     }
                 )
@@ -859,6 +879,7 @@ def run_simulation(
                         1 for _ in range(successes) if rng.random() < link_quality
                     )
                 airtime_norm = energy_norm_by_sf[sf_value]
+                airtime_s = airtime_by_sf[sf_value]
                 collision_norm = _clip(
                     airtime_norm
                     * (1.0 + congestion_probability)
@@ -873,6 +894,9 @@ def run_simulation(
                     bitrate_norm_by_sf[sf_value],
                     airtime_norm,
                     collision_norm,
+                    payload_bytes=payload_bytes,
+                    window_duration_s=window_duration_value,
+                    airtime_s=airtime_s,
                 )
                 reward = _compute_reward(
                     metrics.success_rate,
@@ -906,6 +930,8 @@ def run_simulation(
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
                         "collision_norm": metrics.collision_norm,
+                        "throughput_success": metrics.throughput_success,
+                        "energy_per_success": metrics.energy_per_success,
                         "reward": reward,
                     }
                 )
@@ -930,6 +956,8 @@ def run_simulation(
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
                         "collision_norm": metrics.collision_norm,
+                        "throughput_success": metrics.throughput_success,
+                        "energy_per_success": metrics.energy_per_success,
                         "reward": reward,
                     }
                 )
