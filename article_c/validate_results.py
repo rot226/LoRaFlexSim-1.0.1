@@ -1,216 +1,280 @@
-"""Validation rapide des résultats agrégés de l'article C."""
+"""Valide les résultats générés pour l'article C."""
 
 from __future__ import annotations
 
 import argparse
 import csv
-from dataclasses import dataclass
+import math
 from pathlib import Path
-from typing import Iterable
 
 
-@dataclass
-class CheckResult:
-    name: str
-    status: str
-    details: str
+class AnomalyTracker:
+    def __init__(self, max_samples: int = 20) -> None:
+        self.count = 0
+        self.max_samples = max_samples
+        self.samples: list[str] = []
+
+    def add(self, message: str) -> None:
+        self.count += 1
+        if len(self.samples) < self.max_samples:
+            self.samples.append(message)
+
+    def has_anomalies(self) -> bool:
+        return self.count > 0
 
 
-def _read_rows(path: Path) -> list[dict[str, str]]:
-    if not path.exists():
-        return []
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        return list(reader)
-
-
-def _normalize_columns(rows: Iterable[dict[str, str]]) -> dict[str, str]:
-    columns: dict[str, str] = {}
-    for row in rows:
-        for key in row.keys():
-            lowered = key.strip().lower()
-            if lowered not in columns:
-                columns[lowered] = key
-    return columns
-
-
-def _pick_column(columns: dict[str, str], candidates: Iterable[str]) -> str | None:
-    for candidate in candidates:
-        lowered = candidate.lower()
-        if lowered in columns:
-            return columns[lowered]
-    return None
-
-
-def _to_float(value: object) -> float | None:
-    if value is None:
+def _parse_float(value: object) -> float | None:
+    if value in (None, ""):
         return None
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
-
-
-def _to_bool(value: object) -> bool | None:
-    if value is None:
+    if not math.isfinite(parsed):
         return None
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    lowered = str(value).strip().lower()
-    if lowered in {"1", "true", "yes", "y", "t"}:
-        return True
-    if lowered in {"0", "false", "no", "n", "f", ""}:
-        return False
-    return None
+    return parsed
 
 
-def _collect_network_sizes(
-    rows: Iterable[dict[str, str]],
-    *,
-    candidates: Iterable[str] | None = None,
-) -> tuple[list[float], str | None]:
-    columns = _normalize_columns(rows)
-    size_col = _pick_column(
-        columns, candidates or ["network_size", "density", "num_nodes", "n_nodes"]
-    )
-    if not size_col:
-        return [], None
-    sizes = []
-    for row in rows:
-        value = _to_float(row.get(size_col))
-        if value is None:
-            continue
-        sizes.append(value)
-    return sizes, size_col
+def _read_csv(path: Path) -> tuple[list[dict[str, object]], list[str]]:
+    if not path.exists():
+        return [], []
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = list(reader.fieldnames or [])
+        rows: list[dict[str, object]] = [row for row in reader]
+    return rows, fieldnames
 
 
-def _check_expected_network_sizes(
-    rows: list[dict[str, str]],
-    *,
-    expected_sizes: set[int],
+def _check_constant(
+    values: list[float],
     label: str,
-) -> CheckResult:
-    sizes, size_col = _collect_network_sizes(rows)
-    if not rows or not size_col:
-        return CheckResult(label, "WARN", "Colonnes ou données manquantes.")
-    found = {int(size) for size in sizes}
-    missing = sorted(expected_sizes - found)
-    extra = sorted(found - expected_sizes)
-    if not missing and not extra:
-        return CheckResult(label, "OK", f"Tailles trouvées: {sorted(found)}.")
-    detail = (
-        f"Tailles trouvées: {sorted(found)}; "
-        f"manquantes={missing or 'aucune'}, "
-        f"supplémentaires={extra or 'aucune'}."
-    )
-    return CheckResult(label, "WARN", detail)
+    tracker: AnomalyTracker,
+    const_tolerance: float,
+) -> None:
+    if len(values) < 2:
+        tracker.add(f"{label}: valeurs insuffisantes pour vérifier la variation.")
+        return
+    if max(values) - min(values) <= const_tolerance:
+        tracker.add(f"{label}: valeur quasi constante détectée.")
 
 
-def _check_step2_no_zero_network_size(rows: list[dict[str, str]]) -> CheckResult:
-    sizes, size_col = _collect_network_sizes(rows, candidates=["network_size"])
-    if not rows or not size_col:
-        return CheckResult(
-            "Step2 sans network_size à 0.0",
-            "WARN",
-            "Colonnes ou données manquantes.",
-        )
-    zero_count = sum(1 for size in sizes if float(size) == 0.0)
-    status = "OK" if zero_count == 0 else "WARN"
-    detail = f"Entrées à 0.0: {zero_count}."
-    return CheckResult("Step2 sans network_size à 0.0", status, detail)
+def _check_range(
+    values: list[float],
+    label: str,
+    tracker: AnomalyTracker,
+) -> None:
+    for idx, value in enumerate(values, start=1):
+        if value < 0.0 or value > 1.0:
+            tracker.add(
+                f"{label}: valeur hors [0,1] à la ligne {idx}: {value:.6f}."
+            )
 
 
-def _check_mixra_opt_fallback(rows: list[dict[str, str]]) -> CheckResult:
-    columns = _normalize_columns(rows)
-    algo_col = _pick_column(columns, ["algo", "algorithm"])
-    fallback_col = _pick_column(
-        columns, ["mixra_opt_fallback", "mixra_fallback", "fallback"]
-    )
-
-    if not rows or not algo_col or not fallback_col:
-        return CheckResult(
-            "MixRA-Opt fallback False",
-            "WARN",
-            "Colonnes ou données manquantes.",
-        )
-
-    total = 0
-    true_count = 0
-    for row in rows:
-        algo = row.get(algo_col)
-        if algo is None:
+def _check_received_formula(
+    rows: list[dict[str, object]],
+    sent_key: str,
+    received_key: str,
+    pdr_key: str,
+    tolerance: float,
+    label: str,
+    tracker: AnomalyTracker,
+) -> None:
+    for idx, row in enumerate(rows, start=1):
+        sent = _parse_float(row.get(sent_key))
+        received = _parse_float(row.get(received_key))
+        pdr = _parse_float(row.get(pdr_key))
+        if sent is None or received is None or pdr is None:
+            tracker.add(
+                f"{label}: valeurs manquantes à la ligne {idx} pour {sent_key}, "
+                f"{received_key} ou {pdr_key}."
+            )
             continue
-        algo_key = str(algo).strip().lower()
-        if algo_key not in {"mixra_opt", "mixra-opt", "mixra opt"}:
-            continue
-        fallback = _to_bool(row.get(fallback_col))
-        if fallback is None:
-            continue
-        total += 1
-        if fallback:
-            true_count += 1
+        expected = sent * pdr
+        diff = abs(received - expected)
+        limit = max(1.0, abs(expected)) * tolerance
+        if diff > limit:
+            tracker.add(
+                f"{label}: incohérence ligne {idx} (received={received:.6f}, "
+                f"sent*pdr={expected:.6f}, diff={diff:.6f})."
+            )
 
-    if total == 0:
-        return CheckResult(
-            "MixRA-Opt fallback False",
-            "WARN",
-            "Aucune ligne MixRA-Opt exploitable.",
+
+def _validate_pdr_file(
+    path: Path,
+    pdr_key: str,
+    sent_key: str,
+    received_key: str,
+    tolerance: float,
+    const_tolerance: float,
+    tracker: AnomalyTracker,
+) -> None:
+    rows, fieldnames = _read_csv(path)
+    label = f"{path}"
+    if not fieldnames:
+        tracker.add(f"{label}: fichier manquant ou vide.")
+        return
+    missing_columns = [key for key in (pdr_key, sent_key, received_key) if key not in fieldnames]
+    if missing_columns:
+        tracker.add(
+            f"{label}: colonnes manquantes {', '.join(missing_columns)}."
         )
-
-    status = "OK" if true_count == 0 else "WARN"
-    detail = f"Lignes MixRA-Opt: {total}, fallback True: {true_count}."
-    return CheckResult("MixRA-Opt fallback False", status, detail)
-
-
-def _report(results: list[CheckResult]) -> None:
-    print("Validation des résultats agrégés")
-    print("=" * 35)
-    for result in results:
-        print(f"- {result.name}: {result.status} ({result.details})")
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Valide les points clés dans aggregated_results.csv.",
-    )
-    base_dir = Path(__file__).resolve().parent
-    parser.add_argument(
-        "--step1",
-        type=Path,
-        default=base_dir / "step1" / "results" / "aggregated_results.csv",
-        help="Chemin vers aggregated_results.csv de l'étape 1.",
-    )
-    parser.add_argument(
-        "--step2",
-        type=Path,
-        default=base_dir / "step2" / "results" / "aggregated_results.csv",
-        help="Chemin vers aggregated_results.csv de l'étape 2.",
-    )
-    args = parser.parse_args()
-
-    step1_rows = _read_rows(args.step1)
-    step2_rows = _read_rows(args.step2)
-    expected_sizes = {80, 160, 320, 640, 1280}
-
-    results = [
-        _check_expected_network_sizes(
-            step1_rows,
-            expected_sizes=expected_sizes,
-            label="Tailles réseau attendues (step1)",
-        ),
-        _check_expected_network_sizes(
-            step2_rows,
-            expected_sizes=expected_sizes,
-            label="Tailles réseau attendues (step2)",
-        ),
-        _check_mixra_opt_fallback(step1_rows),
-        _check_step2_no_zero_network_size(step2_rows),
+        return
+    pdr_values = [
+        value
+        for value in (_parse_float(row.get(pdr_key)) for row in rows)
+        if value is not None
     ]
+    if not pdr_values:
+        tracker.add(f"{label}: aucune valeur de PDR exploitable.")
+        return
+    _check_range(pdr_values, f"{label} ({pdr_key})", tracker)
+    _check_constant(
+        pdr_values,
+        f"{label} ({pdr_key})",
+        tracker,
+        const_tolerance,
+    )
+    _check_received_formula(
+        rows,
+        sent_key,
+        received_key,
+        pdr_key,
+        tolerance,
+        label,
+        tracker,
+    )
 
-    _report(results)
+
+def _validate_reward_file(
+    path: Path,
+    reward_key: str,
+    const_tolerance: float,
+    tracker: AnomalyTracker,
+) -> None:
+    rows, fieldnames = _read_csv(path)
+    label = f"{path}"
+    if not fieldnames:
+        tracker.add(f"{label}: fichier manquant ou vide.")
+        return
+    if reward_key not in fieldnames:
+        tracker.add(f"{label}: colonne {reward_key} absente.")
+        return
+    reward_values = [
+        value
+        for value in (_parse_float(row.get(reward_key)) for row in rows)
+        if value is not None
+    ]
+    if not reward_values:
+        tracker.add(f"{label}: aucune valeur reward exploitable.")
+        return
+    _check_constant(
+        reward_values,
+        f"{label} ({reward_key})",
+        tracker,
+        const_tolerance,
+    )
+
+
+def validate_results(
+    step1_dir: Path,
+    step2_dir: Path,
+    tolerance: float,
+    const_tolerance: float,
+    max_samples: int,
+) -> AnomalyTracker:
+    tracker = AnomalyTracker(max_samples=max_samples)
+
+    _validate_pdr_file(
+        step1_dir / "raw_results.csv",
+        pdr_key="pdr",
+        sent_key="sent",
+        received_key="received",
+        tolerance=tolerance,
+        const_tolerance=const_tolerance,
+        tracker=tracker,
+    )
+    _validate_pdr_file(
+        step1_dir / "aggregated_results.csv",
+        pdr_key="pdr_mean",
+        sent_key="sent_mean",
+        received_key="received_mean",
+        tolerance=tolerance,
+        const_tolerance=const_tolerance,
+        tracker=tracker,
+    )
+    _validate_reward_file(
+        step2_dir / "raw_results.csv",
+        reward_key="reward",
+        const_tolerance=const_tolerance,
+        tracker=tracker,
+    )
+    _validate_reward_file(
+        step2_dir / "aggregated_results.csv",
+        reward_key="reward_mean",
+        const_tolerance=const_tolerance,
+        tracker=tracker,
+    )
+    return tracker
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Valide PDR, cohérence received/sent et variation des rewards."
+    )
+    parser.add_argument(
+        "--step1-dir",
+        type=Path,
+        default=Path("article_c/step1/results"),
+        help="Répertoire des résultats de l'étape 1.",
+    )
+    parser.add_argument(
+        "--step2-dir",
+        type=Path,
+        default=Path("article_c/step2/results"),
+        help="Répertoire des résultats de l'étape 2.",
+    )
+    parser.add_argument(
+        "--tolerance",
+        type=float,
+        default=1e-3,
+        help="Tolérance relative pour received ≈ sent*pdr.",
+    )
+    parser.add_argument(
+        "--const-tolerance",
+        type=float,
+        default=1e-4,
+        help="Tolérance pour juger une valeur quasi constante.",
+    )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=20,
+        help="Nombre maximal d'anomalies détaillées à afficher.",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    tracker = validate_results(
+        step1_dir=args.step1_dir,
+        step2_dir=args.step2_dir,
+        tolerance=args.tolerance,
+        const_tolerance=args.const_tolerance,
+        max_samples=args.max_samples,
+    )
+    if tracker.has_anomalies():
+        print(f"Anomalies détectées: {tracker.count}.")
+        for message in tracker.samples:
+            print(f"- {message}")
+        if tracker.count > len(tracker.samples):
+            remaining = tracker.count - len(tracker.samples)
+            print(f"- ... et {remaining} anomalies supplémentaires.")
+        return 1
+    print("Aucune anomalie détectée.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
