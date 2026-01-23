@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from collections import defaultdict
 from pathlib import Path
 import math
-from statistics import mean, stdev
+from statistics import mean, median, stdev
 
 ROUND_REPLICATION_KEYS = ("round", "replication")
 GROUP_KEYS = (
@@ -24,7 +24,7 @@ BASE_GROUP_KEYS = tuple(
     key for key in GROUP_KEYS if key not in ROUND_REPLICATION_KEYS
 )
 EXTRA_MEAN_KEYS = {"mean_toa_s", "mean_latency_s"}
-EXCLUDED_NUMERIC_KEYS = {"seed", "replication", "node_id", "packet_id"}
+EXCLUDED_NUMERIC_KEYS = {"seed", "replication", "round", "node_id", "packet_id"}
 DERIVED_SUFFIXES = ("_mean", "_std", "_count", "_ci95", "_p10", "_p50", "_p90")
 
 logger = logging.getLogger(__name__)
@@ -217,6 +217,53 @@ def _log_reward_min_max(raw_rows: list[dict[str, object]]) -> None:
         )
 
 
+def _log_metric_summary(
+    raw_rows: list[dict[str, object]],
+    metrics: tuple[str, ...],
+) -> None:
+    if not raw_rows:
+        return
+    groups: dict[tuple[str, str], dict[str, list[float]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    for row in raw_rows:
+        algo = str(row.get("algo") or row.get("algorithm") or "unknown")
+        size_value = row.get("network_size") or row.get("density")
+        size_label = "unknown"
+        if size_value not in (None, ""):
+            try:
+                size_label = str(int(round(float(size_value))))
+            except (TypeError, ValueError):
+                size_label = str(size_value)
+        for metric in metrics:
+            if metric not in row:
+                continue
+            value = row.get(metric)
+            if value in (None, ""):
+                continue
+            try:
+                numeric_value = float(value)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(numeric_value):
+                continue
+            groups[(algo, size_label)][metric].append(numeric_value)
+    if not groups:
+        return
+    print("Statistiques brutes (min/max/median) par algo et taille:")
+    print("algo\tnetwork_size\tmetric\tmin\tmax\tmedian\tcount")
+    for (algo, size_label), metric_map in sorted(groups.items()):
+        for metric in metrics:
+            values = metric_map.get(metric, [])
+            if not values:
+                continue
+            print(
+                f"{algo}\t{size_label}\t{metric}\t"
+                f"{min(values):.6f}\t{max(values):.6f}\t"
+                f"{median(values):.6f}\t{len(values)}"
+            )
+
+
 def aggregate_results(
     raw_rows: list[dict[str, object]],
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
@@ -377,6 +424,15 @@ def write_simulation_results(
         logger.info("network_size written: %s", network_sizes_label)
         print(f"network_size written = {network_sizes_label}")
         _log_reward_min_max(raw_rows)
+        _log_metric_summary(
+            raw_rows,
+            (
+                "reward",
+                "success_rate",
+                "throughput_success",
+                "energy_per_success",
+            ),
+        )
 
     raw_header: list[str] = []
     seen: set[str] = set()
