@@ -152,6 +152,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=True,
         help="Affiche la progression de l'étape 1.",
     )
+    parser.add_argument(
+        "--mixra-opt-no-fallback",
+        "--mixra-opt-hard",
+        dest="mixra_opt_no_fallback",
+        action="store_true",
+        default=False,
+        help=(
+            "Désactive explicitement le fallback MixRA-H pour MixRA-Opt, "
+            "même en mode balanced/fast."
+        ),
+    )
     return parser
 
 
@@ -176,6 +187,8 @@ def _build_step1_args(args: argparse.Namespace) -> list[str]:
         step1_args.extend(["--outdir", "article_c/step1/results"])
     if args.progress is not None:
         step1_args.append("--progress" if args.progress else "--no-progress")
+    if args.mixra_opt_no_fallback:
+        step1_args.append("--mixra-opt-no-fallback")
     return step1_args
 
 
