@@ -37,6 +37,7 @@ SNIR_LINESTYLES = {
 }
 MIXRA_FALLBACK_COLUMNS = ("mixra_opt_fallback", "mixra_fallback", "fallback")
 LOGGER = logging.getLogger(__name__)
+DERIVED_SUFFIXES = ("_mean", "_std", "_count", "_ci95", "_p10", "_p50", "_p90")
 
 
 def place_legend(ax: plt.Axes) -> None:
@@ -156,9 +157,11 @@ def load_step2_aggregated(
     *,
     allow_sample: bool = False,
 ) -> list[dict[str, object]]:
-    rows = _read_csv_rows(path)
+    intermediate_path = _resolve_intermediate_step2_path(path)
+    source_path = intermediate_path or path
+    rows = _read_csv_rows(source_path)
     if not rows:
-        raise ValueError(f"CSV vide pour Step2: {path}")
+        raise ValueError(f"CSV vide pour Step2: {source_path}")
     parsed: list[dict[str, object]] = []
     for row in rows:
         network_size_value = row.get("density")
@@ -184,7 +187,85 @@ def load_step2_aggregated(
                 continue
             parsed_row[key] = _to_float(value)
         parsed.append(parsed_row)
-    return parsed
+    if intermediate_path is None:
+        return parsed
+    return _aggregate_step2_intermediate(parsed)
+
+
+def _resolve_intermediate_step2_path(path: Path) -> Path | None:
+    by_round = path.with_name("aggregated_results_by_round.csv")
+    if by_round.exists():
+        return by_round
+    by_replication = path.with_name("aggregated_results_by_replication.csv")
+    if by_replication.exists():
+        return by_replication
+    return None
+
+
+def _aggregate_step2_intermediate(
+    rows: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    group_keys = ("network_size", "algo", "snir_mode", "cluster")
+    numeric_keys: set[str] = set()
+    for row in rows:
+        for key, value in row.items():
+            if key in group_keys or key == "density":
+                continue
+            if any(key.endswith(suffix) for suffix in DERIVED_SUFFIXES):
+                continue
+            if isinstance(value, (int, float)):
+                numeric_keys.add(key)
+    groups: dict[tuple[object, ...], list[dict[str, object]]] = {}
+    for row in rows:
+        group_key = tuple(row.get(key) for key in group_keys)
+        groups.setdefault(group_key, []).append(row)
+    aggregated: list[dict[str, object]] = []
+    for group_key, grouped_rows in groups.items():
+        aggregated_row: dict[str, object] = dict(zip(group_keys, group_key))
+        for key in sorted(numeric_keys):
+            values = [
+                row[key]
+                for row in grouped_rows
+                if isinstance(row.get(key), (int, float))
+            ]
+            count = len(values)
+            if values:
+                mean_value = sum(values) / count
+                if count > 1:
+                    variance = sum((value - mean_value) ** 2 for value in values) / (
+                        count - 1
+                    )
+                    std_value = math.sqrt(variance)
+                else:
+                    std_value = 0.0
+            else:
+                mean_value = 0.0
+                std_value = 0.0
+            ci95_value = 1.96 * std_value / math.sqrt(count) if count > 1 else 0.0
+            aggregated_row[f"{key}_mean"] = mean_value
+            aggregated_row[f"{key}_std"] = std_value
+            aggregated_row[f"{key}_count"] = count
+            aggregated_row[f"{key}_ci95"] = ci95_value
+            sorted_values = sorted(values)
+            aggregated_row[f"{key}_p10"] = _percentile(sorted_values, 10)
+            aggregated_row[f"{key}_p50"] = _percentile(sorted_values, 50)
+            aggregated_row[f"{key}_p90"] = _percentile(sorted_values, 90)
+        aggregated.append(aggregated_row)
+    return aggregated
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    if len(values) == 1:
+        return float(values[0])
+    position = (len(values) - 1) * (percentile / 100.0)
+    lower = int(math.floor(position))
+    upper = int(math.ceil(position))
+    if lower == upper:
+        return float(values[lower])
+    weight = position - lower
+    return float(values[lower]) + (float(values[upper]) - float(values[lower])) * weight
 
 
 def load_step2_selection_probs(path: Path) -> list[dict[str, object]]:
