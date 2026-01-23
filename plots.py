@@ -32,12 +32,38 @@ PALETTE = [
     "#17becf",
 ]
 THRESHOLDS_DB = [(-6.0, "Seuil décodage"), (6.0, "Capture")]
+SMALL_VALUE_UPPER = 0.3
 
 
 def _add_thresholds(ax):
     for value, label in THRESHOLDS_DB:
         ax.axvline(value, color="grey", linestyle="--", linewidth=1.0)
         ax.text(value, ax.get_ylim()[1], f" {label}", rotation=90, va="bottom", ha="left", fontsize=8)
+
+
+def _apply_small_value_ylim(ax, values: Sequence[float], upper: float = SMALL_VALUE_UPPER) -> None:
+    cleaned = [value for value in values if value == value]
+    if cleaned and max(cleaned) <= upper:
+        ax.set_ylim(0.0, upper)
+
+
+def _log_floor(values: Sequence[float]) -> float | None:
+    positives = [value for value in values if value == value and value > 0]
+    if not positives:
+        return None
+    return min(positives) / 10
+
+
+def _sanitize_log_values(values: Sequence[float], floor: float) -> List[float]:
+    sanitized: List[float] = []
+    for value in values:
+        if value != value:
+            sanitized.append(float("nan"))
+        elif value <= 0:
+            sanitized.append(floor)
+        else:
+            sanitized.append(value)
+    return sanitized
 
 
 def _index_results(results: Sequence[RunMetrics]) -> Dict[Tuple[str, str], RunMetrics]:
@@ -205,6 +231,7 @@ def _plot_der_global(
     styles = _style_mapping(algorithms)
     bar_width = 0.8 / max(len(algorithms), 1)
     x_positions = list(range(len(scenarios)))
+    all_heights: List[float] = []
     for index, algorithm in enumerate(algorithms):
         heights: List[float] = []
         errors: List[float] = []
@@ -212,6 +239,7 @@ def _plot_der_global(
             metrics = mapping.get((scenario, algorithm))
             heights.append(metrics.der_global if metrics else float("nan"))
             errors.append(metrics.der_ci95 if metrics else 0.0)
+        all_heights.extend(heights)
         offset = (index - (len(algorithms) - 1) / 2) * bar_width
         positions = [x + offset for x in x_positions]
         if any(value == value for value in heights):
@@ -232,13 +260,82 @@ def _plot_der_global(
     ax.set_xticklabels(scenarios)
     ax.set_ylabel("DER global")
     ax.set_xlabel("Scénario")
+    ax.set_title("DER global (échelle linéaire)")
     ax.set_ylim(0.0, 1.05)
+    _apply_small_value_ylim(ax, all_heights)
     ax.grid(True, which="both", axis="y", linestyle=":", alpha=0.5)
     fig.legend(loc="upper center", ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
     fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.9))
     output_path = output_dir / "der_global.png"
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
+
+
+def _plot_der_global_log(
+    mapping: Mapping[Tuple[str, str], RunMetrics],
+    output_dir: Path,
+    scenarios: Sequence[str],
+    algorithms: Sequence[str],
+    subtitle: str,
+) -> Path | None:
+    fig, ax = plt.subplots(figsize=(6.0, 4.2))
+    plotted = False
+    styles = _style_mapping(algorithms)
+    bar_width = 0.8 / max(len(algorithms), 1)
+    x_positions = list(range(len(scenarios)))
+    all_heights: List[float] = []
+    all_errors: List[float] = []
+    heights_by_algo: List[List[float]] = []
+    errors_by_algo: List[List[float]] = []
+    for algorithm in algorithms:
+        heights: List[float] = []
+        errors: List[float] = []
+        for scenario in scenarios:
+            metrics = mapping.get((scenario, algorithm))
+            heights.append(metrics.der_global if metrics else float("nan"))
+            errors.append(metrics.der_ci95 if metrics else 0.0)
+        heights_by_algo.append(heights)
+        errors_by_algo.append(errors)
+        all_heights.extend(heights)
+        all_errors.extend(errors)
+    floor = _log_floor(all_heights)
+    if floor is None:
+        plt.close(fig)
+        return None
+    for index, algorithm in enumerate(algorithms):
+        heights = _sanitize_log_values(heights_by_algo[index], floor)
+        errors = errors_by_algo[index]
+        offset = (index - (len(algorithms) - 1) / 2) * bar_width
+        positions = [x + offset for x in x_positions]
+        if any(value == value for value in heights):
+            ax.bar(
+                positions,
+                heights,
+                width=bar_width,
+                yerr=errors,
+                color=styles.get(algorithm),
+                label=algorithm,
+                capsize=4,
+            )
+            plotted = True
+    if not plotted:
+        plt.close(fig)
+        return None
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(scenarios)
+    ax.set_ylabel("DER global")
+    ax.set_xlabel("Scénario")
+    ax.set_title("DER global (échelle log)")
+    ax.set_yscale("log")
+    ax.grid(True, which="both", axis="y", linestyle=":", alpha=0.5)
+    fig.legend(loc="upper center", ncol=len(algorithms))
+    if subtitle:
+        fig.suptitle(subtitle)
+    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.9))
+    output_path = output_dir / "der_global_log.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
     return output_path
@@ -423,6 +520,7 @@ def _plot_collisions_vs_load(
     fig, ax = plt.subplots(figsize=(6.5, 4.5))
     styles = _style_mapping(algorithms)
     plotted = False
+    all_rates: List[float] = []
     for algorithm in algorithms:
         xs: List[float] = []
         ys: List[float] = []
@@ -439,18 +537,74 @@ def _plot_collisions_vs_load(
         if xs:
             ax.scatter(xs, ys, s=sizes, alpha=0.7, color=styles.get(algorithm), label=algorithm)
             plotted = True
+        all_rates.extend(ys)
     if not plotted:
         plt.close(fig)
         return None
     ax.set_xlabel("Charge (nœuds / période en s)")
     ax.set_ylabel("Taux de collisions")
     ax.grid(True, linestyle=":", alpha=0.5)
-    ax.set_title("Collisions en fonction de la charge")
+    ax.set_title("Collisions en fonction de la charge (échelle linéaire)")
+    _apply_small_value_ylim(ax, all_rates)
     fig.legend(loc="upper center", ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
     fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.9))
     output_path = output_dir / "collisions_vs_charge.png"
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
+
+
+def _plot_collisions_vs_load_log(
+    mapping: Mapping[Tuple[str, str], RunMetrics],
+    output_dir: Path,
+    scenarios: Sequence[str],
+    algorithms: Sequence[str],
+    subtitle: str,
+) -> Path | None:
+    fig, ax = plt.subplots(figsize=(6.5, 4.5))
+    styles = _style_mapping(algorithms)
+    plotted = False
+    all_rates: List[float] = []
+    data_by_algo: Dict[str, Tuple[List[float], List[float], List[float]]] = {}
+    for algorithm in algorithms:
+        xs: List[float] = []
+        ys: List[float] = []
+        sizes: List[float] = []
+        for scenario in scenarios:
+            metrics = mapping.get((scenario, algorithm))
+            if not metrics or metrics.attempted == 0:
+                continue
+            load = metrics.num_nodes / metrics.period_s if metrics.period_s > 0 else float("nan")
+            collision_rate = metrics.failures_collision / metrics.attempted
+            xs.append(load)
+            ys.append(collision_rate)
+            sizes.append(max(metrics.attempted / 50, 10))
+        if xs:
+            data_by_algo[algorithm] = (xs, ys, sizes)
+            all_rates.extend(ys)
+    floor = _log_floor(all_rates)
+    if floor is None:
+        plt.close(fig)
+        return None
+    for algorithm, (xs, ys, sizes) in data_by_algo.items():
+        ys_log = _sanitize_log_values(ys, floor)
+        ax.scatter(xs, ys_log, s=sizes, alpha=0.7, color=styles.get(algorithm), label=algorithm)
+        plotted = True
+    if not plotted:
+        plt.close(fig)
+        return None
+    ax.set_xlabel("Charge (nœuds / période en s)")
+    ax.set_ylabel("Taux de collisions")
+    ax.set_yscale("log")
+    ax.grid(True, linestyle=":", alpha=0.5)
+    ax.set_title("Collisions en fonction de la charge (échelle log)")
+    fig.legend(loc="upper center", ncol=len(algorithms))
+    if subtitle:
+        fig.suptitle(subtitle)
+    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.9))
+    output_path = output_dir / "collisions_vs_charge_log.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
     return output_path
@@ -556,6 +710,9 @@ def generate_plots(
     der_path = _plot_der_global(mapping, output_path, scenarios, algorithms, subtitle)
     if der_path is not None:
         generated.append(der_path)
+    der_log_path = _plot_der_global_log(mapping, output_path, scenarios, algorithms, subtitle)
+    if der_log_path is not None:
+        generated.append(der_log_path)
     breakdown_path = _plot_delivery_breakdown(mapping, output_path, scenarios, algorithms, subtitle)
     if breakdown_path is not None:
         generated.append(breakdown_path)
@@ -572,6 +729,9 @@ def generate_plots(
     collision_path = _plot_collisions_vs_load(mapping, output_path, scenarios, algorithms, subtitle)
     if collision_path is not None:
         generated.append(collision_path)
+    collision_log_path = _plot_collisions_vs_load_log(mapping, output_path, scenarios, algorithms, subtitle)
+    if collision_log_path is not None:
+        generated.append(collision_log_path)
     return generated
 
 
