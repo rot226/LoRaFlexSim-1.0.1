@@ -583,6 +583,176 @@ def _plot_summary_pdr(output_dir: Path) -> None:
     plt.close(fig)
 
 
+def _parse_float(value: object) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_flag(value: object) -> str:
+    if value in (None, ""):
+        return ""
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes"}:
+        return "true"
+    if text in {"false", "0", "no"}:
+        return "false"
+    return text
+
+
+def _load_csv_rows(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        return list(reader)
+
+
+def _check_pdr_formula_for_size(output_dir: Path, reference_size: int = 80) -> None:
+    raw_path = output_dir / "raw_results.csv"
+    aggregated_path = output_dir / "aggregated_results.csv"
+    raw_rows = _load_csv_rows(raw_path)
+    aggregated_rows = _load_csv_rows(aggregated_path)
+    if not raw_rows or not aggregated_rows:
+        print(
+            "Vérification PDR ignorée: raw_results.csv ou aggregated_results.csv manquant."
+        )
+        return
+
+    def matches_size(value: object) -> bool:
+        parsed = _parse_float(value)
+        return parsed is not None and int(round(parsed)) == reference_size
+
+    grouped_raw: dict[tuple[str, str, str, str], list[dict[str, float]]] = {}
+    for row in raw_rows:
+        if not matches_size(row.get("network_size")):
+            continue
+        pdr = _parse_float(row.get("pdr"))
+        sent = _parse_float(row.get("sent"))
+        received = _parse_float(row.get("received"))
+        if pdr is None or sent is None or received is None:
+            continue
+        key = (
+            str(row.get("algo") or ""),
+            str(row.get("snir_mode") or ""),
+            str(row.get("cluster") or ""),
+            _normalize_flag(row.get("mixra_opt_fallback")),
+        )
+        grouped_raw.setdefault(key, []).append(
+            {"pdr": pdr, "sent": sent, "received": received}
+        )
+
+    aggregated_lookup: dict[tuple[str, str, str, str], dict[str, float]] = {}
+    for row in aggregated_rows:
+        if not matches_size(row.get("network_size")):
+            continue
+        key = (
+            str(row.get("algo") or ""),
+            str(row.get("snir_mode") or ""),
+            str(row.get("cluster") or ""),
+            _normalize_flag(row.get("mixra_opt_fallback")),
+        )
+        aggregated_lookup[key] = {
+            "pdr_mean": _parse_float(row.get("pdr_mean")) or 0.0,
+            "sent_mean": _parse_float(row.get("sent_mean")) or 0.0,
+            "received_mean": _parse_float(row.get("received_mean")) or 0.0,
+        }
+
+    if not grouped_raw:
+        print(
+            f"Aucune ligne brute exploitable pour network_size={reference_size} "
+            "dans raw_results.csv."
+        )
+        return
+
+    print(
+        f"Comparaison PDR (network_size={reference_size}) entre raw_results.csv "
+        "et aggregated_results.csv:"
+    )
+    for key, values in grouped_raw.items():
+        raw_pdr_mean = mean(item["pdr"] for item in values)
+        raw_sent_mean = mean(item["sent"] for item in values)
+        raw_received_mean = mean(item["received"] for item in values)
+        pdr_from_means = raw_received_mean / raw_sent_mean if raw_sent_mean else 0.0
+        aggregated = aggregated_lookup.get(key)
+        label = f"algo={key[0]} snir={key[1]} cluster={key[2]} fallback={key[3]}"
+        if not aggregated:
+            print(f" - {label}: aucun agrégat trouvé.")
+            continue
+        print(
+            " - {label}: pdr_mean(raw)={raw_pdr:.4f}, "
+            "pdr_mean(agg)={agg_pdr:.4f}, "
+            "received_mean/sent_mean(raw)={ratio:.4f}".format(
+                label=label,
+                raw_pdr=raw_pdr_mean,
+                agg_pdr=aggregated["pdr_mean"],
+                ratio=pdr_from_means,
+            )
+        )
+
+
+def _check_pdr_consistency(output_dir: Path) -> None:
+    aggregated_path = output_dir / "aggregated_results.csv"
+    aggregated_rows = _load_csv_rows(aggregated_path)
+    if not aggregated_rows:
+        print("Contrôle de cohérence PDR ignoré: aggregated_results.csv manquant.")
+        return
+
+    grouped: dict[tuple[str, str, str, str], list[dict[str, float]]] = {}
+    for row in aggregated_rows:
+        key = (
+            str(row.get("algo") or ""),
+            str(row.get("snir_mode") or ""),
+            str(row.get("cluster") or ""),
+            _normalize_flag(row.get("mixra_opt_fallback")),
+        )
+        network_size = _parse_float(row.get("network_size"))
+        sent_mean = _parse_float(row.get("sent_mean"))
+        sent_p50 = _parse_float(row.get("sent_p50"))
+        received_mean = _parse_float(row.get("received_mean"))
+        if network_size is None or received_mean is None:
+            continue
+        grouped.setdefault(key, []).append(
+            {
+                "network_size": network_size,
+                "sent_mean": sent_mean,
+                "sent_p50": sent_p50,
+                "received_mean": received_mean,
+            }
+        )
+
+    def is_quasi_constant(values: list[float], tolerance: float = 0.05) -> bool:
+        if len(values) < 2:
+            return False
+        mean_value = mean(values)
+        if mean_value == 0:
+            return False
+        return (max(values) - min(values)) / mean_value <= tolerance
+
+    for key, rows in grouped.items():
+        sent_means = [row["sent_mean"] for row in rows if row["sent_mean"] is not None]
+        sent_p50s = [row["sent_p50"] for row in rows if row["sent_p50"] is not None]
+        received_means = [row["received_mean"] for row in rows]
+        if len(received_means) < 2:
+            continue
+        collapse_ratio = min(received_means) / max(received_means) if max(received_means) else 1.0
+        if collapse_ratio >= 0.5:
+            continue
+        constant_sent = is_quasi_constant(sent_means) or is_quasi_constant(sent_p50s)
+        if not constant_sent:
+            continue
+        label = f"algo={key[0]} snir={key[1]} cluster={key[2]} fallback={key[3]}"
+        sizes = ", ".join(str(int(row["network_size"])) for row in sorted(rows, key=lambda r: r["network_size"]))
+        print(
+            "Alerte cohérence PDR: sent quasi constant mais received_mean chute "
+            f"(ratio={collapse_ratio:.2f}). {label}. Tailles: {sizes}. "
+            "Vérifier collisions, pertes, ou une normalisation incorrecte."
+        )
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
@@ -705,6 +875,8 @@ def main(argv: list[str] | None = None) -> None:
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         print(f"Tailles simulées: {sizes_label}")
+    _check_pdr_consistency(output_dir)
+    _check_pdr_formula_for_size(output_dir, reference_size=80)
     if args.plot_summary:
         _plot_summary_pdr(output_dir)
 
