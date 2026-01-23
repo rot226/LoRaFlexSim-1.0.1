@@ -6,6 +6,7 @@ from collections import defaultdict
 import csv
 from multiprocessing import get_context
 from pathlib import Path
+from statistics import median
 from typing import Sequence
 
 from article_c.common.csv_io import write_rows, write_simulation_results
@@ -277,6 +278,7 @@ def _simulate_density(
                 traffic_coeff_enabled=bool(config["traffic_coeff_enabled"]),
                 window_delay_enabled=bool(config["window_delay_enabled"]),
                 window_delay_range_s=float(config["window_delay_range_s"]),
+                reference_network_size=int(config["reference_network_size"]),
             )
             raw_rows.extend(result.raw_rows)
             if algorithm == "ucb1_sf":
@@ -317,6 +319,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     base_seed = set_deterministic_seed(args.seeds_base)
     densities = parse_network_size_list(args.network_sizes)
     requested_sizes = list(densities)
+    reference_network_size = (
+        int(args.reference_network_size)
+        if getattr(args, "reference_network_size", None) is not None
+        else int(round(median(requested_sizes)))
+    )
     replications = replication_ids(args.replications)
     simulated_sizes: list[int] = []
 
@@ -343,6 +350,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "traffic_coeff_enabled": args.traffic_coeff_enabled,
         "window_delay_enabled": args.window_delay_enabled,
         "window_delay_range_s": args.window_delay_range_s,
+        "reference_network_size": max(1, reference_network_size),
     }
 
     aggregated_sizes = _read_aggregated_sizes(base_results_dir / "aggregated_results.csv")

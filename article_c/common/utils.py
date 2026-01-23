@@ -45,6 +45,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Tailles de réseau (nombre de nœuds entiers, ex: 50 100 150).",
     )
     parser.add_argument(
+        "--reference-network-size",
+        type=int,
+        default=None,
+        help=(
+            "Taille de référence utilisée pour les facteurs de charge "
+            "(par défaut: médiane des tailles demandées)."
+        ),
+    )
+    parser.add_argument(
         "--densities",
         dest="network_sizes",
         type=int,

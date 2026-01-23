@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import logging
 from pathlib import Path
 import random
+import math
+from statistics import median
 from typing import Literal
 
 from article_c.common.config import DEFAULT_CONFIG
@@ -81,11 +83,18 @@ def _clamp_range(value: float, min_value: float, max_value: float) -> float:
     return max(min_value, min(max_value, value))
 
 
+def _default_reference_size() -> int:
+    sizes = list(DEFAULT_CONFIG.scenario.network_sizes)
+    if not sizes:
+        return 1
+    return max(1, int(round(median(sizes))))
+
+
 def _network_load_factor(network_size: int, reference_size: int) -> float:
     if reference_size <= 0:
         return 1.0
     ratio = max(0.1, network_size / reference_size)
-    return max(0.6, ratio**0.6)
+    return _clamp_range(ratio**0.4, 0.6, 2.6)
 
 
 def _traffic_coeff_size_factor(network_size: int, reference_size: int) -> float:
@@ -115,7 +124,10 @@ def _collision_size_factor(network_size: int, reference_size: int) -> float:
     if reference_size <= 0:
         return 1.0
     ratio = max(0.1, network_size / reference_size)
-    return _clamp_range(ratio**1.2, 0.6, 3.0)
+    if ratio <= 1.0:
+        return _clamp_range(ratio**0.4, 0.6, 1.0)
+    overload = ratio - 1.0
+    return _clamp_range(1.0 + 0.6 * (1.0 + overload) ** 0.45, 1.0, 2.4)
 
 
 def _cluster_traffic_factor(cluster: str, clusters: tuple[str, ...]) -> float:
@@ -158,7 +170,7 @@ def _congestion_collision_probability(network_size: int, reference_size: int) ->
     if reference_size <= 0:
         return 0.0
     overload = max(0.0, (network_size / reference_size) - 1.0)
-    return _clip(0.12 * overload, 0.0, 0.45)
+    return _clip(0.32 * (1.0 - math.exp(-0.35 * overload)), 0.0, 0.35)
 
 
 def _compute_window_metrics(
@@ -367,6 +379,7 @@ def run_simulation(
     window_delay_enabled: bool | None = None,
     window_delay_range_s: float | None = None,
     shadowing_sigma_db: float | None = None,
+    reference_network_size: int | None = None,
     output_dir: Path | None = None,
 ) -> Step2Result:
     """Exécute une simulation proxy de l'étape 2."""
@@ -420,7 +433,11 @@ def run_simulation(
     selection_prob_rows: list[dict[str, object]] = []
     learning_curve_rows: list[dict[str, object]] = []
     node_clusters = assign_clusters(n_nodes, rng=rng)
-    reference_size = max(1, DEFAULT_CONFIG.rl.window_w)
+    reference_size = (
+        _default_reference_size()
+        if reference_network_size is None
+        else max(1, int(reference_network_size))
+    )
     load_factor = _network_load_factor(n_nodes, reference_size)
     congestion_probability = _congestion_collision_probability(n_nodes, reference_size)
     qos_clusters = tuple(DEFAULT_CONFIG.qos.clusters)
