@@ -102,9 +102,14 @@ def _apply_algorithm_variability(
     return received_adjusted, pdr_adjusted, mean_toa_adjusted
 
 
-def density_to_sent(network_size: float, base_sent: int = 120) -> int:
-    """Convertit une taille de réseau en nombre de trames simulées."""
-    return max(1, int(round(base_sent * network_size)))
+def density_to_sent(
+    network_size: float,
+    base_sent: int = 120,
+    saturation_nodes: int = 600,
+) -> int:
+    """Convertit une taille de réseau en nombre de trames simulées (saturation)."""
+    sent_budget = base_sent * network_size / (1.0 + network_size / saturation_nodes)
+    return max(1, int(round(sent_budget)))
 
 
 def parse_snir_modes(value: str) -> list[str]:

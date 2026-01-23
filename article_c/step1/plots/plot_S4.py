@@ -1,4 +1,4 @@
-"""Trace la figure S4 (trames envoyées vs densité, SNIR on/off)."""
+"""Trace la figure S4 (trames envoyées saturées vs densité, SNIR on/off)."""
 
 from __future__ import annotations
 
@@ -32,12 +32,15 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xlabel("Network size (number of nodes)")
-    ax.set_ylabel("Sent Frames (median, p10-p90)")
+    ax.set_ylabel("Sent Frames (budget saturant, median, p10-p90)")
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
     ax.yaxis.set_label_coords(-0.08, 0.5)
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-    ax.set_title("Step 1 - Sent Frames vs Network size (number of nodes) (SNIR on/off)")
+    ax.set_title(
+        "Step 1 - Sent Frames (budget saturant) vs Network size (number of nodes) "
+        "(SNIR on/off)"
+    )
     place_legend(ax)
     return fig
 
