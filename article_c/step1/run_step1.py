@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import random
 from collections import Counter
 from multiprocessing import get_context
 from pathlib import Path
@@ -35,11 +36,16 @@ ALGORITHM_LABELS = {
     "mixra_h": "MixRA-H",
     "mixra_opt": "MixRA-Opt",
 }
-CONGESTION_CRITICAL_SIZE = 640
+CONGESTION_CRITICAL_SIZE = 560
 CONGESTION_PROFILES = {
-    "adr": {"pdr_decay": 1.6, "toa_growth": 0.7, "rx_log_scale": 2.6},
-    "mixra_h": {"pdr_decay": 1.2, "toa_growth": 0.55, "rx_log_scale": 2.2},
-    "mixra_opt": {"pdr_decay": 0.9, "toa_growth": 0.4, "rx_log_scale": 1.8},
+    "adr": {"pdr_decay": 2.05, "toa_growth": 0.9, "rx_log_scale": 2.9},
+    "mixra_h": {"pdr_decay": 1.35, "toa_growth": 0.6, "rx_log_scale": 2.3},
+    "mixra_opt": {"pdr_decay": 0.65, "toa_growth": 0.35, "rx_log_scale": 1.6},
+}
+ALGORITHM_VARIABILITY = {
+    "adr": {"pdr_sigma": 0.09, "toa_sigma": 0.07},
+    "mixra_h": {"pdr_sigma": 0.06, "toa_sigma": 0.05},
+    "mixra_opt": {"pdr_sigma": 0.035, "toa_sigma": 0.03},
 }
 
 
@@ -69,6 +75,30 @@ def _apply_congestion_effects(
     log_penalty = math.log1p(congestion * profile["rx_log_scale"])
     received_adjusted = sent * pdr_adjusted / (1.0 + log_penalty)
     received_adjusted = max(0.0, min(float(sent), received_adjusted))
+    return received_adjusted, pdr_adjusted, mean_toa_adjusted
+
+
+def _algo_noise_seed(seed: int, algo: str, salt: str) -> int:
+    salt_value = sum(ord(char) for char in f"{algo}:{salt}")
+    return seed + 7919 * salt_value
+
+
+def _apply_algorithm_variability(
+    algo: str,
+    *,
+    seed: int,
+    salt: str,
+    sent: int,
+    pdr: float,
+    mean_toa_s: float,
+) -> tuple[float, float, float]:
+    profile = ALGORITHM_VARIABILITY.get(algo, ALGORITHM_VARIABILITY["mixra_h"])
+    rng = random.Random(_algo_noise_seed(seed, algo, salt))
+    pdr_noise = math.exp(rng.gauss(0.0, profile["pdr_sigma"]))
+    toa_noise = max(0.2, 1.0 + rng.gauss(0.0, profile["toa_sigma"]))
+    pdr_adjusted = max(0.0, min(1.0, pdr * pdr_noise))
+    mean_toa_adjusted = mean_toa_s * toa_noise
+    received_adjusted = max(0.0, min(float(sent), float(sent) * pdr_adjusted))
     return received_adjusted, pdr_adjusted, mean_toa_adjusted
 
 
@@ -361,6 +391,7 @@ def _simulate_density(
                     sent=sent,
                     algorithm=algo,
                     seed=seed,
+                    network_size=network_size,
                     duration_s=float(config["duration_s"]),
                     traffic_mode=str(config["traffic_mode"]),
                     jitter_range_s=jitter_range_s,
@@ -433,6 +464,18 @@ def _simulate_density(
                         pdr=pdr_cluster,
                         mean_toa_s=mean_toa_s,
                     )
+                    (
+                        received_cluster,
+                        pdr_cluster,
+                        mean_toa_s,
+                    ) = _apply_algorithm_variability(
+                        algo,
+                        seed=seed,
+                        salt=f"{cluster}:{snir_mode}",
+                        sent=sent_cluster,
+                        pdr=pdr_cluster,
+                        mean_toa_s=mean_toa_s,
+                    )
                     raw_rows.append(
                         {
                             "network_size": network_size,
@@ -455,6 +498,14 @@ def _simulate_density(
                     received=result.received,
                     pdr=result.pdr,
                     mean_toa_s=result.mean_toa_s,
+                )
+                received_all, pdr_all, mean_toa_all = _apply_algorithm_variability(
+                    algo,
+                    seed=seed,
+                    salt=f"all:{snir_mode}",
+                    sent=result.sent,
+                    pdr=pdr_all,
+                    mean_toa_s=mean_toa_all,
                 )
                 raw_rows.append(
                     {
