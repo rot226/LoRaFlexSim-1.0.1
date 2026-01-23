@@ -11,13 +11,13 @@ from matplotlib import ticker as mticker
 import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
+from article_c.common.plotting_style import LEGEND_STYLE
 from article_c.common.plot_helpers import (
     apply_plot_style,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     load_step1_aggregated,
-    place_legend,
     plot_metric_by_snir,
     save_figure,
 )
@@ -46,8 +46,17 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.set_xticks(network_sizes)
     axes[0].set_ylabel("Packet Delivery Ratio")
-    place_legend(axes[-1])
-    fig.suptitle("Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)")
+    axes[-1].legend(
+        bbox_to_anchor=(0.5, 1.22),
+        loc="lower center",
+        ncol=3,
+        **LEGEND_STYLE,
+    )
+    fig.suptitle(
+        "Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)",
+        y=0.98,
+    )
+    fig.subplots_adjust(top=0.76)
     return fig
 
 
