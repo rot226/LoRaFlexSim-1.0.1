@@ -19,6 +19,7 @@ from article_c.common.plot_helpers import (
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     load_step1_aggregated,
+    select_received_metric_key,
     save_figure,
 )
 
@@ -443,6 +444,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     if raw_rows:
         ensure_network_size(raw_rows)
         raw_rows = filter_mixra_opt_fallback(raw_rows)
+        select_received_metric_key(raw_rows, "received_mean")
         if args.network_sizes:
             raw_rows, _ = filter_rows_by_network_sizes(raw_rows, args.network_sizes)
             network_sizes = sorted({int(row["network_size"]) for row in raw_rows})
@@ -467,6 +469,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
             )
             return
         aggregated_rows = filter_mixra_opt_fallback(aggregated_rows)
+        select_received_metric_key(aggregated_rows, "received_mean")
         if args.network_sizes:
             aggregated_rows, _ = filter_rows_by_network_sizes(
                 aggregated_rows,

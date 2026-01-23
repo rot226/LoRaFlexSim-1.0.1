@@ -50,6 +50,45 @@ SNIR_LINESTYLES = {
 MIXRA_FALLBACK_COLUMNS = ("mixra_opt_fallback", "mixra_fallback", "fallback")
 LOGGER = logging.getLogger(__name__)
 DERIVED_SUFFIXES = ("_mean", "_std", "_count", "_ci95", "_p10", "_p50", "_p90")
+RECEIVED_MEAN_KEY = "received_mean"
+RECEIVED_ALGO_MEAN_KEY = "received_algo_mean"
+RECEIVED_ALGO_TOL = 1e-6
+
+
+def select_received_metric_key(
+    rows: list[dict[str, object]],
+    metric_key: str,
+    *,
+    derived_key: str = RECEIVED_ALGO_MEAN_KEY,
+    tolerance: float = RECEIVED_ALGO_TOL,
+) -> str:
+    """Retourne la clé de métrique à utiliser pour les métriques de réception.
+
+    Source officielle: la valeur "received" est dérivée de sent_mean * pdr_mean.
+    On calcule donc received_algo_mean à partir de ces champs pour éviter toute
+    divergence future entre valeurs agrégées et dérivées par algorithme.
+    """
+    if metric_key != RECEIVED_MEAN_KEY:
+        return metric_key
+    differences: list[float] = []
+    for row in rows:
+        sent = row.get("sent_mean")
+        pdr = row.get("pdr_mean")
+        if isinstance(sent, (int, float)) and isinstance(pdr, (int, float)):
+            derived_value = sent * pdr
+            row[derived_key] = derived_value
+            received = row.get(metric_key)
+            if isinstance(received, (int, float)):
+                differences.append(abs(received - derived_value))
+        else:
+            row[derived_key] = row.get(metric_key, 0.0)
+    if differences and max(differences) > tolerance:
+        warnings.warn(
+            "received_mean ne correspond pas partout à sent_mean*pdr_mean; "
+            "utilisation de received_algo_mean dérivé.",
+            stacklevel=2,
+        )
+    return derived_key
 
 
 def place_legend(ax: plt.Axes) -> None:
