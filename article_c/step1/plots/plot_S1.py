@@ -11,7 +11,11 @@ import matplotlib.ticker as mticker
 import pandas as pd
 
 from article_c.common.plot_helpers import (
+    ALGO_LABELS,
+    SNIR_LABELS,
+    SNIR_MODES,
     apply_plot_style,
+    algo_label,
     ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
@@ -19,8 +23,59 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     place_legend,
     plot_metric_by_snir,
+    resolve_percentile_keys,
     save_figure,
 )
+
+TABLE_COLUMNS = ("Algo", "SNIR", "Min", "Médiane", "Max")
+
+
+def _algo_sort_key(algo: object) -> int:
+    normalized = str(algo).strip().lower().replace("-", "_").replace(" ", "_")
+    order = list(ALGO_LABELS.keys())
+    return order.index(normalized) if normalized in order else len(order)
+
+
+def _add_summary_table(
+    fig: plt.Figure,
+    ax: plt.Axes,
+    rows: list[dict[str, object]],
+    metric_key: str,
+) -> None:
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return
+    median_key, _, _ = resolve_percentile_keys(rows, metric_key)
+    table_rows: list[list[str]] = []
+    for algo in sorted(df["algo"].dropna().unique(), key=_algo_sort_key):
+        for snir_mode in SNIR_MODES:
+            subset = df[(df["algo"] == algo) & (df["snir_mode"] == snir_mode)]
+            if subset.empty or median_key not in subset:
+                continue
+            values = subset[median_key].dropna()
+            if values.empty:
+                continue
+            table_rows.append(
+                [
+                    algo_label(str(algo)),
+                    SNIR_LABELS[snir_mode],
+                    f"{values.min():.3f}",
+                    f"{values.median():.3f}",
+                    f"{values.max():.3f}",
+                ]
+            )
+    if not table_rows:
+        return
+    table = ax.table(
+        cellText=table_rows,
+        colLabels=TABLE_COLUMNS,
+        cellLoc="center",
+        loc="lower center",
+        bbox=[0.0, -0.45, 1.0, 0.3],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(8)
+    fig.subplots_adjust(bottom=0.35)
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
@@ -30,7 +85,15 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
-    plot_metric_by_snir(ax, rows, metric_key)
+    plot_metric_by_snir(
+        ax,
+        rows,
+        metric_key,
+        use_algo_styles=True,
+        line_width=2.4,
+        marker_size=6.5,
+        percentile_line_width=1.4,
+    )
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Packet Delivery Ratio")
     ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.2f}"))
@@ -40,6 +103,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.set_ylim(0.0, 1.0)
     ax.set_title("Step 1 - Packet Delivery Ratio (SNIR on/off)")
     place_legend(ax)
+    _add_summary_table(fig, ax, rows, metric_key)
     return fig
 
 
