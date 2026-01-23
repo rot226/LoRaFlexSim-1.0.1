@@ -257,18 +257,24 @@ def _simulate_density(
     selection_rows: list[dict[str, object]] = []
     learning_curve_rows: list[dict[str, object]] = []
     algorithms = ("adr", "mixra_h", "mixra_opt", "ucb1_sf")
+    algo_offsets = {algo: idx * 10000 for idx, algo in enumerate(algorithms)}
     jitter_range_s = float(config.get("jitter_range_s", 30.0))
     print(f"Jitter range utilisé (s): {jitter_range_s}")
+    offsets_label = ", ".join(
+        f"{algo}={offset}" for algo, offset in algo_offsets.items()
+    )
+    print(f"Offsets de seed par algorithme: {offsets_label}")
 
     for replication in replications:
         seed = int(config["base_seed"]) + density_idx * 1000 + replication
         for algorithm in algorithms:
+            algorithm_seed = seed + algo_offsets[algorithm]
             result = run_simulation(
                 algorithm=algorithm,
                 n_nodes=int(density),
                 density=density,
                 snir_mode="snir_on",
-                seed=seed,
+                seed=algorithm_seed,
                 traffic_mode=str(config["traffic_mode"]),
                 jitter_range_s=jitter_range_s,
                 window_duration_s=float(config["window_duration_s"]),
