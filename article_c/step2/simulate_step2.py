@@ -667,6 +667,8 @@ def run_simulation(
                     successes = sum(
                         1 for _ in range(successes) if rng.random() < link_quality
                     )
+                success_flag = 1 if successes > 0 else 0
+                failure_flag = 1 - success_flag
                 airtime_norm = energy_norm_by_sf[sf_value]
                 airtime_s = airtime_by_sf[sf_value]
                 effective_duration_s = float(
@@ -718,6 +720,8 @@ def run_simulation(
                         "shadowing_db": node_window["shadowing_db"],
                         "shadowing_sigma_db": node_window["shadowing_sigma_db"],
                         "link_quality": node_window["link_quality"],
+                        "success": success_flag,
+                        "failure": failure_flag,
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
@@ -744,6 +748,8 @@ def run_simulation(
                         "shadowing_db": node_window["shadowing_db"],
                         "shadowing_sigma_db": node_window["shadowing_sigma_db"],
                         "link_quality": node_window["link_quality"],
+                        "success": success_flag,
+                        "failure": failure_flag,
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
@@ -910,6 +916,8 @@ def run_simulation(
                     successes = sum(
                         1 for _ in range(successes) if rng.random() < link_quality
                     )
+                success_flag = 1 if successes > 0 else 0
+                failure_flag = 1 - success_flag
                 airtime_norm = energy_norm_by_sf[sf_value]
                 airtime_s = airtime_by_sf[sf_value]
                 effective_duration_s = float(
@@ -961,6 +969,8 @@ def run_simulation(
                         "shadowing_db": node_window["shadowing_db"],
                         "shadowing_sigma_db": node_window["shadowing_sigma_db"],
                         "link_quality": node_window["link_quality"],
+                        "success": success_flag,
+                        "failure": failure_flag,
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,
@@ -987,6 +997,8 @@ def run_simulation(
                         "shadowing_db": node_window["shadowing_db"],
                         "shadowing_sigma_db": node_window["shadowing_sigma_db"],
                         "link_quality": node_window["link_quality"],
+                        "success": success_flag,
+                        "failure": failure_flag,
                         "success_rate": metrics.success_rate,
                         "bitrate_norm": metrics.bitrate_norm,
                         "energy_norm": metrics.energy_norm,

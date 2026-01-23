@@ -25,6 +25,7 @@ BASE_GROUP_KEYS = tuple(
 )
 EXTRA_MEAN_KEYS = {"mean_toa_s", "mean_latency_s"}
 EXCLUDED_NUMERIC_KEYS = {"seed", "replication", "round", "node_id", "packet_id"}
+SUM_KEYS = {"success", "failure"}
 DERIVED_SUFFIXES = ("_mean", "_std", "_count", "_ci95", "_p10", "_p50", "_p90")
 
 logger = logging.getLogger(__name__)
@@ -334,8 +335,9 @@ def _aggregate_rows(
                 if isinstance(row.get(key), (int, float))
             ]
             count = len(values)
+            sum_value = sum(values)
             if values:
-                mean_value = mean(values)
+                mean_value = sum_value / count
                 std_value = stdev(values) if count > 1 else 0.0
             else:
                 mean_value = 0.0
@@ -349,7 +351,9 @@ def _aggregate_rows(
             aggregated_row[f"{key}_p10"] = _percentile(sorted_values, 10)
             aggregated_row[f"{key}_p50"] = _percentile(sorted_values, 50)
             aggregated_row[f"{key}_p90"] = _percentile(sorted_values, 90)
-            if include_base_means or key in EXTRA_MEAN_KEYS:
+            if key in SUM_KEYS:
+                aggregated_row[key] = sum_value
+            elif include_base_means or key in EXTRA_MEAN_KEYS:
                 aggregated_row[key] = mean_value
         aggregated.append(aggregated_row)
     return aggregated
