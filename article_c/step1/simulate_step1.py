@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+import math
 import random
 from time import perf_counter
 from typing import Iterable
@@ -52,6 +53,9 @@ class NodeLink:
     qos_margin: float
     snr_margins: tuple[float, ...]
     rssi_margins: tuple[float, ...]
+    distance_km: float
+    tx_power_dbm: float
+    quality_db: float
 
 
 @dataclass
@@ -176,6 +180,24 @@ def _density_factor(network_size: int) -> float:
     if network_size >= size_max:
         return 1.0
     return (network_size - size_min) / float(size_max - size_min)
+
+
+def _cluster_radio_adjustment(
+    cluster: str | None,
+    *,
+    clusters: tuple[str, ...],
+    density_factor: float,
+) -> tuple[float, float, float]:
+    """Ajuste les conditions radio selon le cluster QoS."""
+    if not cluster or cluster not in clusters or len(clusters) == 1:
+        return 0.0, 0.0, 0.0
+    index = clusters.index(cluster)
+    cluster_scale = (len(clusters) - 1 - index) / (len(clusters) - 1)
+    centered = 2.0 * cluster_scale - 1.0
+    snr_bonus = (1.6 + 1.4 * density_factor) * centered
+    rssi_bonus = (2.0 + 1.2 * density_factor) * centered
+    qos_margin_shift = (-0.35 - 0.2 * density_factor) * centered
+    return snr_bonus, rssi_bonus, qos_margin_shift
 
 
 def _adr_smallest_sf(node: NodeLink) -> int:
@@ -484,7 +506,7 @@ def _estimate_received(
     traffic_times: Iterable[float],
     toa_s_by_node: Iterable[float],
     channels: Iterable[int],
-    rssis: Iterable[float],
+    nodes: Iterable[NodeLink],
     rng: random.Random,
 ) -> list[bool]:
     """Approxime les collisions en tenant compte des overlaps temps/canal."""
@@ -503,20 +525,21 @@ def _estimate_received(
         else:
             delivered = capacity_per_sf + (load - capacity_per_sf) * 0.5
         success_prob_by_sf[sf] = max(0.0, min(1.0, delivered / load))
+    nodes_list = list(nodes)
     signals = [
         Signal(
-            rssi_dbm=rssi,
+            rssi_dbm=node.rssi,
             sf=sf,
             channel_hz=channel,
             start_time_s=start_time,
             end_time_s=start_time + toa_s,
         )
-        for sf, start_time, toa_s, channel, rssi in zip(
+        for sf, start_time, toa_s, channel, node in zip(
             assignments_list,
             traffic_times,
             toa_s_by_node,
             channels,
-            rssis,
+            nodes_list,
         )
     ]
     sweep_result = compute_co_sf_overlaps(signals)
@@ -524,7 +547,15 @@ def _estimate_received(
     results: list[bool] = []
     for index, signal in enumerate(signals):
         overlap_penalty = 1.0 / (1.0 + len(overlaps_by_index[index]))
-        success_probability = success_prob_by_sf[signal.sf] * overlap_penalty
+        node = nodes_list[index]
+        sf_index = SF_INDEX[signal.sf]
+        snr_margin = node.snr_margins[sf_index] - node.qos_margin
+        rssi_margin = node.rssi_margins[sf_index]
+        min_margin = min(snr_margin, rssi_margin)
+        quality_factor = 0.2 + 0.8 * max(0.0, min(1.0, (min_margin + 4.0) / 10.0))
+        success_probability = (
+            success_prob_by_sf[signal.sf] * overlap_penalty * quality_factor
+        )
         results.append(rng.random() < success_probability)
     return results
 
@@ -533,6 +564,7 @@ def _generate_nodes(
     count: int,
     seed: int,
     *,
+    density_factor: float,
     shadowing_sigma_db: float,
     shadowing_mean_db: float,
     fading_type: str | None,
@@ -542,10 +574,25 @@ def _generate_nodes(
     rssi_range: tuple[float, float],
 ) -> list[NodeLink]:
     rng = random.Random(seed)
+    base_tx_power = DEFAULT_CONFIG.radio.tx_power_dbm
+    distance_min_km = 0.12
+    distance_max_km = 0.8 + 2.6 * density_factor
+    distance_mode_km = 0.3 + 0.7 * density_factor
+    quality_sigma = 1.1 + 2.0 * density_factor
+    tx_power_spread = 1.0 + 1.6 * density_factor
     nodes: list[NodeLink] = []
     for _ in range(count):
-        snr = rng.uniform(*snr_range)
-        rssi = rng.uniform(*rssi_range)
+        distance_km = rng.triangular(distance_min_km, distance_max_km, distance_mode_km)
+        tx_power_dbm = base_tx_power + rng.uniform(-tx_power_spread, tx_power_spread)
+        quality_db = rng.gauss(0.0, quality_sigma)
+        distance_loss_db = 12.0 * math.log10(1.0 + distance_km * 2.5)
+        snr = rng.uniform(*snr_range) + quality_db - 0.6 * distance_loss_db
+        rssi = (
+            rng.uniform(*rssi_range)
+            + quality_db
+            - distance_loss_db
+            + (tx_power_dbm - base_tx_power)
+        )
         shadowing_db = (
             rng.gauss(shadowing_mean_db, shadowing_sigma_db)
             if shadowing_sigma_db > 0
@@ -561,12 +608,28 @@ def _generate_nodes(
         if variation_db != 0.0:
             snr -= variation_db
             rssi -= variation_db
-        nodes.append(_build_node_link(snr, rssi))
+        nodes.append(
+            _build_node_link(
+                snr,
+                rssi,
+                distance_km=distance_km,
+                tx_power_dbm=tx_power_dbm,
+                quality_db=quality_db,
+            )
+        )
     return nodes
 
 
-def _build_node_link(snr: float, rssi: float) -> NodeLink:
-    qos_margin = _snr_margin_requirement(snr, rssi)
+def _build_node_link(
+    snr: float,
+    rssi: float,
+    *,
+    distance_km: float,
+    tx_power_dbm: float,
+    quality_db: float,
+    qos_margin_shift: float = 0.0,
+) -> NodeLink:
+    qos_margin = max(0.1, _snr_margin_requirement(snr, rssi) + qos_margin_shift)
     snr_margins = tuple(snr - SNR_THRESHOLDS[sf] for sf in SF_VALUES)
     rssi_margins = tuple(rssi - RSSI_THRESHOLDS[sf] for sf in SF_VALUES)
     return NodeLink(
@@ -575,7 +638,39 @@ def _build_node_link(snr: float, rssi: float) -> NodeLink:
         qos_margin=qos_margin,
         snr_margins=snr_margins,
         rssi_margins=rssi_margins,
+        distance_km=distance_km,
+        tx_power_dbm=tx_power_dbm,
+        quality_db=quality_db,
     )
+
+
+def _apply_cluster_conditions(
+    nodes: list[NodeLink],
+    node_clusters: list[str],
+    *,
+    density_factor: float,
+    clusters: tuple[str, ...] | None = None,
+) -> list[NodeLink]:
+    if clusters is None:
+        clusters = tuple(DEFAULT_CONFIG.qos.clusters)
+    adjusted_nodes: list[NodeLink] = []
+    for node, cluster in zip(nodes, node_clusters):
+        snr_bonus, rssi_bonus, qos_margin_shift = _cluster_radio_adjustment(
+            cluster,
+            clusters=clusters,
+            density_factor=density_factor,
+        )
+        adjusted_nodes.append(
+            _build_node_link(
+                node.snr + snr_bonus,
+                node.rssi + rssi_bonus,
+                distance_km=node.distance_km,
+                tx_power_dbm=node.tx_power_dbm,
+                quality_db=node.quality_db + 0.5 * (snr_bonus + rssi_bonus),
+                qos_margin_shift=qos_margin_shift,
+            )
+        )
+    return adjusted_nodes
 
 
 def _precompute_node_qos_cache(nodes_list: list[NodeLink]) -> NodeQoSCache:
@@ -673,6 +768,7 @@ def run_simulation(
     nodes = _generate_nodes(
         actual_sent,
         seed,
+        density_factor=density_factor,
         shadowing_sigma_db=shadowing_sigma_db,
         shadowing_mean_db=shadowing_mean_db,
         fading_type=fading_type,
@@ -683,6 +779,11 @@ def run_simulation(
     )
     cluster_rng = random.Random(seed + 971)
     node_clusters = assign_clusters(actual_sent, rng=cluster_rng)
+    nodes = _apply_cluster_conditions(
+        nodes,
+        node_clusters,
+        density_factor=density_factor,
+    )
     timings: dict[str, float] | None = {} if profile_timing else None
     start_assignment = perf_counter() if profile_timing else 0.0
     mixra_opt_fallback = False
@@ -746,7 +847,7 @@ def run_simulation(
         traffic_times,
         toa_s_by_node,
         node_channels,
-        [node.rssi for node in nodes],
+        nodes,
         rng,
     )
     if profile_timing and timings is not None:
