@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import argparse
 import csv
-import math
 from pathlib import Path
 from random import Random
 from typing import Iterable
 import warnings
 
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_MODES,
@@ -251,6 +249,7 @@ def _plot_pdr_distribution(
     values_by_group: dict[tuple[str, bool, str], list[float]],
     *,
     target_size: int,
+    snir_mode: str,
 ) -> None:
     if not any(values for values in values_by_group.values()):
         warnings.warn(
@@ -278,76 +277,80 @@ def _plot_pdr_distribution(
             }
         )
 
-    rng = Random(42)
     base_positions = list(range(len(algorithms)))
-    offsets = {"snir_on": -0.18, "snir_off": 0.18}
-    colors = {"snir_on": "#4c78a8", "snir_off": "#f58518"}
+    color = "#4c78a8" if snir_mode == "snir_on" else "#f58518"
 
-    for snir_mode in SNIR_MODES:
-        data_with_positions: list[tuple[float, list[float]]] = []
-        for (algo, fallback), pos in zip(algorithms, base_positions, strict=False):
-            values = values_by_group.get((algo, fallback, snir_mode), [])
-            if not values:
-                algo_name = f"{algo}{'_fallback' if fallback else ''}"
-                warnings.warn(
-                    f"No data for size={target_size}, algo={algo_name}, snir={snir_mode}.",
-                    stacklevel=2,
-                )
-                continue
-            data_with_positions.append((pos + offsets[snir_mode], values))
-
-        if not data_with_positions:
+    data_with_positions: list[tuple[float, list[float]]] = []
+    for (algo, fallback), pos in zip(algorithms, base_positions, strict=False):
+        values = values_by_group.get((algo, fallback, snir_mode), [])
+        if not values:
+            algo_name = f"{algo}{'_fallback' if fallback else ''}"
             warnings.warn(
-                f"Aucune donnée pour size={target_size} et snir={snir_mode}, trace ignorée.",
+                f"No data for size={target_size}, algo={algo_name}, snir={snir_mode}.",
                 stacklevel=2,
             )
             continue
+        data_with_positions.append((pos, values))
 
-        data = [values for _, values in data_with_positions]
-        positions = [pos for pos, _ in data_with_positions]
-        violins = ax.violinplot(
-            data,
-            positions=positions,
-            widths=0.32,
-            showmeans=False,
-            showmedians=False,
-            showextrema=False,
+    if not data_with_positions:
+        warnings.warn(
+            f"Aucune donnée pour size={target_size} et snir={snir_mode}, trace ignorée.",
+            stacklevel=2,
         )
-        for body in violins["bodies"]:
-            body.set_facecolor(colors[snir_mode])
-            body.set_edgecolor("none")
-            body.set_alpha(0.35)
+        return
 
-        ax.boxplot(
-            data,
-            positions=positions,
-            widths=0.12,
-            patch_artist=True,
-            showfliers=False,
-            boxprops={"facecolor": "white", "edgecolor": colors[snir_mode], "linewidth": 1.0},
-            medianprops={"color": colors[snir_mode], "linewidth": 1.5},
-            whiskerprops={"color": colors[snir_mode], "linewidth": 1.0},
-            capprops={"color": colors[snir_mode], "linewidth": 1.0},
-        )
+    data = [values for _, values in data_with_positions]
+    positions = [pos for pos, _ in data_with_positions]
+    violins = ax.violinplot(
+        data,
+        positions=positions,
+        widths=0.42,
+        showmeans=False,
+        showmedians=False,
+        showextrema=False,
+    )
+    for body in violins["bodies"]:
+        body.set_facecolor(color)
+        body.set_edgecolor("none")
+        body.set_alpha(0.25)
 
-        for pos, values in zip(positions, data, strict=False):
-            for value in values:
-                jitter = rng.uniform(-0.05, 0.05)
-                ax.scatter(
-                    pos + jitter,
-                    value,
-                    s=14,
-                    color=colors[snir_mode],
-                    alpha=0.55,
-                    zorder=3,
-                )
+    ax.boxplot(
+        data,
+        positions=positions,
+        widths=0.16,
+        patch_artist=True,
+        showfliers=False,
+        boxprops={"facecolor": "white", "edgecolor": color, "linewidth": 1.1},
+        medianprops={"color": color, "linewidth": 1.6},
+        whiskerprops={"color": color, "linewidth": 1.1},
+        capprops={"color": color, "linewidth": 1.1},
+    )
+
+    rng = Random(42)
+    for pos, values in zip(positions, data, strict=False):
+        if not values:
+            continue
+        step = max(1, len(values) // 12)
+        for value in values[::step]:
+            jitter = rng.uniform(-0.05, 0.05)
+            ax.scatter(
+                pos + jitter,
+                value,
+                s=16,
+                color=color,
+                alpha=0.6,
+                zorder=3,
+            )
 
     ax.set_xticks(base_positions)
     ax.set_xticklabels([algo_label(algo, fallback) for algo, fallback in algorithms])
     ax.set_xlabel("Algorithme")
-    ax.set_ylabel("Packet Delivery Ratio")
-    ax.set_title(f"Step 1 - Distribution du PDR (network size = {target_size})")
-    ax.set_ylim(0.0, 1.05)
+    ax.set_ylabel("PDR (ratio 0–1)")
+    ax.set_title(
+        f"{SNIR_LABELS[snir_mode]} — taille réseau = {target_size}",
+    )
+    ax.set_ylim(0.0, 1.0)
+    ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
 
 
 def _plot_pdr_distributions(
@@ -357,34 +360,29 @@ def _plot_pdr_distributions(
     if not network_sizes:
         network_sizes = [TARGET_NETWORK_SIZE]
     n_sizes = len(network_sizes)
-    ncols = 2 if n_sizes > 1 else 1
-    nrows = math.ceil(n_sizes / ncols)
-    fig, axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 4 * nrows), sharey=True)
-    if nrows == 1 and ncols == 1:
-        axes = [axes]
-    else:
-        axes = list(axes.ravel())
-
-    for ax, size in zip(axes, network_sizes, strict=False):
-        values_by_group = values_by_size.get(size, {})
-        _plot_pdr_distribution(ax, values_by_group, target_size=size)
-
-    for ax in axes[len(network_sizes) :]:
-        ax.axis("off")
-
-    legend_items = [
-        Line2D([0], [0], color="#4c78a8", lw=4, label=SNIR_LABELS["snir_on"]),
-        Line2D([0], [0], color="#f58518", lw=4, label=SNIR_LABELS["snir_off"]),
-    ]
-    fig.legend(
-        handles=legend_items,
-        loc="lower center",
-        bbox_to_anchor=(0.5, 1.02),
-        ncol=3,
-        frameon=False,
+    ncols = 2
+    nrows = n_sizes
+    fig, axes = plt.subplots(
+        nrows,
+        ncols,
+        figsize=(6.6 * ncols, 3.8 * nrows),
+        sharey=True,
     )
-    fig.suptitle("Step 1 - Distribution du PDR par taille de réseau")
-    fig.subplots_adjust(top=0.80)
+    if nrows == 1:
+        axes = [axes]
+
+    for row_axes, size in zip(axes, network_sizes, strict=False):
+        values_by_group = values_by_size.get(size, {})
+        for ax, snir_mode in zip(row_axes, SNIR_MODES, strict=False):
+            _plot_pdr_distribution(
+                ax,
+                values_by_group,
+                target_size=size,
+                snir_mode=snir_mode,
+            )
+
+    fig.suptitle("Figure S5 — Distribution du PDR par algorithme")
+    fig.subplots_adjust(top=0.88, hspace=0.35, wspace=0.2)
     return fig
 
 
