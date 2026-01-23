@@ -78,7 +78,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         choices=("periodic", "poisson"),
-        help="Modèle de trafic pour l'étape 2 (periodic ou poisson).",
+        help="Modèle de trafic pour les étapes 1 et 2 (periodic ou poisson).",
     )
     parser.add_argument(
         "--jitter-range-s",
@@ -153,6 +153,66 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Affiche la progression de l'étape 1.",
     )
     parser.add_argument(
+        "--duration-s",
+        type=float,
+        default=None,
+        help="Durée de la simulation pour l'étape 1 (secondes).",
+    )
+    parser.add_argument(
+        "--mixra-opt-max-iterations",
+        type=int,
+        default=None,
+        help="Nombre maximal d'itérations pour MixRA-Opt.",
+    )
+    parser.add_argument(
+        "--mixra-opt-candidate-subset-size",
+        type=int,
+        default=None,
+        help="Nombre maximal de nœuds optimisés par itération en MixRA-Opt.",
+    )
+    parser.add_argument(
+        "--mixra-opt-epsilon",
+        type=float,
+        default=None,
+        help="Seuil d'amélioration pour la convergence MixRA-Opt.",
+    )
+    parser.add_argument(
+        "--mixra-opt-max-evals",
+        type=int,
+        default=None,
+        help="Nombre maximal d'évaluations pour MixRA-Opt.",
+    )
+    parser.add_argument(
+        "--mixra-opt-budget",
+        type=int,
+        default=None,
+        help="Budget cible d'évaluations pour MixRA-Opt (max d'évaluations).",
+    )
+    parser.add_argument(
+        "--mixra-opt-budget-base",
+        type=int,
+        default=None,
+        help="Offset additif appliqué au budget MixRA-Opt calculé.",
+    )
+    parser.add_argument(
+        "--mixra-opt-budget-scale",
+        type=float,
+        default=None,
+        help="Facteur multiplicatif appliqué au budget MixRA-Opt calculé.",
+    )
+    parser.add_argument(
+        "--mixra-opt-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Active ou désactive MixRA-Opt.",
+    )
+    parser.add_argument(
+        "--mixra-opt-mode",
+        choices=("fast", "balanced", "full"),
+        default=None,
+        help="Mode MixRA-Opt (balanced par défaut).",
+    )
+    parser.add_argument(
         "--mixra-opt-no-fallback",
         "--mixra-opt-hard",
         dest="mixra_opt_no_fallback",
@@ -162,6 +222,30 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "Désactive explicitement le fallback MixRA-H pour MixRA-Opt, "
             "même en mode balanced/fast."
         ),
+    )
+    parser.add_argument(
+        "--mixra-opt-timeout",
+        type=float,
+        default=None,
+        help="Timeout (secondes) pour MixRA-Opt afin d'éviter les blocages.",
+    )
+    parser.add_argument(
+        "--plot-summary",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Génère un plot de synthèse avec barres d'erreur à l'étape 1.",
+    )
+    parser.add_argument(
+        "--profile-timing",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Affiche les durées des étapes internes pour l'étape 1.",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Nombre de processus worker pour paralléliser l'étape 1.",
     )
     return parser
 
@@ -181,14 +265,61 @@ def _build_step1_args(args: argparse.Namespace) -> list[str]:
         step1_args.extend(["--snir-threshold-db", str(args.snir_threshold_db)])
     if args.noise_floor_dbm is not None:
         step1_args.extend(["--noise-floor-dbm", str(args.noise_floor_dbm)])
+    if args.traffic_mode is not None:
+        step1_args.extend(["--traffic-mode", args.traffic_mode])
+    if args.jitter_range_s is not None:
+        step1_args.extend(["--jitter-range-s", str(args.jitter_range_s)])
+    if args.duration_s is not None:
+        step1_args.extend(["--duration-s", str(args.duration_s)])
     if args.step1_outdir:
         step1_args.extend(["--outdir", args.step1_outdir])
     else:
         step1_args.extend(["--outdir", "article_c/step1/results"])
     if args.progress is not None:
         step1_args.append("--progress" if args.progress else "--no-progress")
+    if args.mixra_opt_max_iterations is not None:
+        step1_args.extend(
+            ["--mixra-opt-max-iterations", str(args.mixra_opt_max_iterations)]
+        )
+    if args.mixra_opt_candidate_subset_size is not None:
+        step1_args.extend(
+            [
+                "--mixra-opt-candidate-subset-size",
+                str(args.mixra_opt_candidate_subset_size),
+            ]
+        )
+    if args.mixra_opt_epsilon is not None:
+        step1_args.extend(["--mixra-opt-epsilon", str(args.mixra_opt_epsilon)])
+    if args.mixra_opt_max_evals is not None:
+        step1_args.extend(["--mixra-opt-max-evals", str(args.mixra_opt_max_evals)])
+    if args.mixra_opt_budget is not None:
+        step1_args.extend(["--mixra-opt-budget", str(args.mixra_opt_budget)])
+    if args.mixra_opt_budget_base is not None:
+        step1_args.extend(["--mixra-opt-budget-base", str(args.mixra_opt_budget_base)])
+    if args.mixra_opt_budget_scale is not None:
+        step1_args.extend(["--mixra-opt-budget-scale", str(args.mixra_opt_budget_scale)])
+    if args.mixra_opt_enabled is not None:
+        step1_args.append(
+            "--mixra-opt-enabled"
+            if args.mixra_opt_enabled
+            else "--no-mixra-opt-enabled"
+        )
+    if args.mixra_opt_mode is not None:
+        step1_args.extend(["--mixra-opt-mode", args.mixra_opt_mode])
     if args.mixra_opt_no_fallback:
         step1_args.append("--mixra-opt-no-fallback")
+    if args.mixra_opt_timeout is not None:
+        step1_args.extend(["--mixra-opt-timeout", str(args.mixra_opt_timeout)])
+    if args.plot_summary is not None:
+        step1_args.append(
+            "--plot-summary" if args.plot_summary else "--no-plot-summary"
+        )
+    if args.profile_timing is not None:
+        step1_args.append(
+            "--profile-timing" if args.profile_timing else "--no-profile-timing"
+        )
+    if args.workers is not None:
+        step1_args.extend(["--workers", str(args.workers)])
     return step1_args
 
 
