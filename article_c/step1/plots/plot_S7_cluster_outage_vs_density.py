@@ -20,6 +20,7 @@ from article_c.common.plot_helpers import (
     plot_metric_by_snir,
     save_figure,
 )
+from article_c.step1.plots.plot_utils import configure_figure
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
@@ -84,9 +85,14 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             loc="upper center",
             bbox_to_anchor=(0.5, 1.14),
             ncol=min(len(labels), 4),
+            frameon=False,
         )
-    fig.suptitle("Step 1 - Outage probability by Cluster (SNIR on/off)", y=0.98)
-    plt.tight_layout(rect=(0, 0, 1, 0.84))
+    configure_figure(
+        fig,
+        axes,
+        "Step 1 - Outage probability by Cluster (SNIR on/off)",
+        legend_loc="above",
+    )
     return fig
 
 

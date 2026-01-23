@@ -22,6 +22,7 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     save_figure,
 )
+from article_c.step1.plots.plot_utils import configure_figure
 
 PDR_TARGETS = (0.90, 0.80, 0.70)
 
@@ -122,10 +123,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             handles,
             labels,
             loc="upper center",
+            bbox_to_anchor=(0.5, 1.02),
             ncol=min(len(labels), 4),
+            frameon=False,
         )
-    fig.suptitle("Step 1 - Outage probability by Cluster (network size)")
-    fig.subplots_adjust(top=0.78)
+    configure_figure(
+        fig,
+        axes,
+        "Step 1 - Outage probability by Cluster (network size)",
+        legend_loc="above",
+    )
     return fig
 
 

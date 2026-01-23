@@ -23,6 +23,7 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     save_figure,
 )
+from article_c.step1.plots.plot_utils import configure_figure
 
 PDR_TARGETS = (0.90, 0.80, 0.70)
 
@@ -125,8 +126,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ncol=3,
         frameon=False,
     )
-    fig.subplots_adjust(top=0.80)
-    fig.suptitle("Step 1 - PDR by Cluster (network size)")
+    configure_figure(
+        fig,
+        axes,
+        "Step 1 - PDR by Cluster (network size)",
+        legend_loc="above",
+    )
     return fig
 
 
