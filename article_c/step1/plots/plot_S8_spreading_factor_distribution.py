@@ -216,7 +216,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
     )
     distribution_by_group = _aggregate_distributions(rows, sf_values)
 
-    fig, axes = plt.subplots(1, len(snir_modes), figsize=(6 * len(snir_modes), 4), sharey=True)
+    fig, axes = plt.subplots(1, len(snir_modes), figsize=(6 * len(snir_modes), 6), sharey=True)
     if len(snir_modes) == 1:
         axes = [axes]
 
@@ -250,10 +250,11 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
             handles,
             labels,
             loc="upper center",
-            bbox_to_anchor=(0.5, 1.02),
+            bbox_to_anchor=(0.5, 1.14),
             ncol=len(sf_values),
         )
-    fig.suptitle("Step 1 - Spreading Factor Distribution (SNIR on/off)")
+    fig.suptitle("Step 1 - Spreading Factor Distribution (SNIR on/off)", y=0.98)
+    plt.tight_layout(rect=(0, 0, 1, 0.84))
     return fig
 
 
