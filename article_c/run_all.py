@@ -8,6 +8,7 @@ from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.utils import parse_network_size_list
 from article_c.step1.run_step1 import main as run_step1
 from article_c.step2.run_step2 import main as run_step2
+from article_c.validate_results import main as validate_results
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -381,6 +382,10 @@ def main(argv: list[str] | None = None) -> None:
         if not size_args.skip_step2:
             run_step2(_build_step2_args(size_args))
         print(f"Résumé: taille de réseau {size} terminée.")
+    print("Validation des résultats (article C) en cours...")
+    validation_code = validate_results([])
+    if validation_code != 0:
+        raise SystemExit(validation_code)
 
 
 if __name__ == "__main__":
