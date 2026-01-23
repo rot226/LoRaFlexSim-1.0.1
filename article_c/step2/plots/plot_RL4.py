@@ -1,4 +1,4 @@
-"""Trace la figure RL4 (énergie normalisée médiane vs densité)."""
+"""Trace la figure RL4 (énergie par succès médiane vs densité)."""
 
 from __future__ import annotations
 
@@ -66,9 +66,9 @@ def _plot_metric(
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (number of nodes)")
-    ax.set_ylabel("Energy per successful bit (median, p10-p90)")
+    ax.set_ylabel("Airtime per success (s, median, p10-p90)")
     ax.set_title(
-        "Step 2 - Median Normalized Energy vs Network size (number of nodes)"
+        "Step 2 - Median Energy per Success vs Network size (number of nodes)"
         f"{_title_suffix(network_sizes)}"
     )
     place_legend(ax)
@@ -105,7 +105,7 @@ def main(
     network_sizes_filter = _normalized_network_sizes(network_sizes)
     rows, _ = filter_rows_by_network_sizes(rows, network_sizes_filter)
 
-    fig = _plot_metric(rows, "energy_norm_mean", network_sizes_filter)
+    fig = _plot_metric(rows, "energy_per_success_mean", network_sizes_filter)
     if fig is None:
         return
     output_dir = step_dir / "plots" / "output"
