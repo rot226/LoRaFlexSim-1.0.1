@@ -25,6 +25,7 @@ from article_c.common.plot_helpers import (
 TARGET_NETWORK_SIZE = 1280
 NETWORK_SIZE_COLUMNS = ("network_size", "density", "nodes", "num_nodes")
 PDR_COLUMNS = ("pdr",)
+PDR_AGGREGATED_COLUMNS = ("aggregated_pdr",)
 PDR_MEAN_COLUMNS = ("pdr_mean",)
 PDR_STD_COLUMNS = ("pdr_std",)
 PDR_COUNT_COLUMNS = ("pdr_count",)
@@ -199,12 +200,16 @@ def _extract_aggregated_pdr_groups(
     size_col = _pick_column(columns, NETWORK_SIZE_COLUMNS)
     algo_col = _pick_column(columns, ALGO_COLUMNS)
     snir_col = _pick_column(columns, SNIR_COLUMNS)
+    aggregated_pdr_col = _pick_column(columns, PDR_AGGREGATED_COLUMNS)
+    pdr_col = _pick_column(columns, PDR_COLUMNS)
     mean_col = _pick_column(columns, PDR_MEAN_COLUMNS)
     std_col = _pick_column(columns, PDR_STD_COLUMNS)
     count_col = _pick_column(columns, PDR_COUNT_COLUMNS)
     cluster_col = _pick_column(columns, CLUSTER_COLUMNS)
     fallback_col = _pick_column(columns, MIXRA_FALLBACK_COLUMNS)
-    if not size_col or not algo_col or not snir_col or not mean_col:
+    if not size_col or not algo_col or not snir_col or (
+        not aggregated_pdr_col and not pdr_col and not mean_col
+    ):
         return {}
 
     rng = Random(42)
@@ -214,6 +219,7 @@ def _extract_aggregated_pdr_groups(
             row.get(cluster_col) not in {"all", "", None} for row in rows
         )
 
+    invalid_aggregated = 0
     values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]] = {}
     for row in rows:
         if cluster_col and has_cluster_values and row.get(cluster_col) in {"all", "", None}:
@@ -227,19 +233,38 @@ def _extract_aggregated_pdr_groups(
             fallback = False
         if algo == "mixra_opt" and fallback:
             continue
-        mean_value = _as_float(row.get(mean_col))
-        if mean_value is None:
-            continue
-        std_value = _as_float(row.get(std_col)) if std_col else 0.0
-        count_value = _as_float(row.get(count_col)) if count_col else None
-        count = int(count_value) if count_value and count_value > 0 else 1
-        pdr_values = _sample_distribution(mean_value, std_value or 0.0, count, rng)
+        pdr_values: list[float] = []
+        if aggregated_pdr_col:
+            aggregated_value = _as_float(row.get(aggregated_pdr_col))
+            if aggregated_value and aggregated_value > 0:
+                pdr_values = [aggregated_value]
+            else:
+                invalid_aggregated += 1
+                continue
+        elif pdr_col:
+            pdr_value = _as_float(row.get(pdr_col))
+            if pdr_value is None:
+                continue
+            pdr_values = [pdr_value]
+        else:
+            mean_value = _as_float(row.get(mean_col))
+            if mean_value is None:
+                continue
+            std_value = _as_float(row.get(std_col)) if std_col else 0.0
+            count_value = _as_float(row.get(count_col)) if count_col else None
+            count = int(count_value) if count_value and count_value > 0 else 1
+            pdr_values = _sample_distribution(mean_value, std_value or 0.0, count, rng)
         size_value = _as_float(row.get(size_col))
         if size_value is None:
             continue
         size = int(size_value)
         values_by_size.setdefault(size, {}).setdefault((algo, fallback, snir_mode), []).extend(
             pdr_values
+        )
+    if aggregated_pdr_col and invalid_aggregated:
+        warnings.warn(
+            "Des lignes avec aggregated_pdr manquant ou nul ont été ignorées.",
+            stacklevel=2,
         )
     return values_by_size
 
@@ -327,15 +352,19 @@ def _plot_pdr_distribution(
     )
 
     rng = Random(42)
+    jitter_x_range = 0.06
+    jitter_y_range = 0.01
     for pos, values in zip(positions, data, strict=False):
         if not values:
             continue
         step = max(1, len(values) // 12)
         for value in values[::step]:
-            jitter = rng.uniform(-0.05, 0.05)
+            jitter_x = rng.uniform(-jitter_x_range, jitter_x_range)
+            jitter_y = rng.uniform(-jitter_y_range, jitter_y_range)
+            jittered_value = min(1.0, max(0.0, value + jitter_y))
             ax.scatter(
-                pos + jitter,
-                value,
+                pos + jitter_x,
+                jittered_value,
                 s=16,
                 color=color,
                 alpha=0.6,
@@ -386,6 +415,16 @@ def _plot_pdr_distributions(
     return fig
 
 
+def _resolve_step1_intermediate_path(base_path: Path) -> Path | None:
+    by_round = base_path.with_name("aggregated_results_by_round.csv")
+    if by_round.exists():
+        return by_round
+    by_replication = base_path.with_name("aggregated_results_by_replication.csv")
+    if by_replication.exists():
+        return by_replication
+    return None
+
+
 def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -418,7 +457,9 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
 
     if not values_by_size:
         aggregated_path = step_dir / "results" / "aggregated_results.csv"
-        aggregated_rows = load_step1_aggregated(aggregated_path, allow_sample=allow_sample)
+        intermediate_path = _resolve_step1_intermediate_path(aggregated_path)
+        aggregated_source = intermediate_path or aggregated_path
+        aggregated_rows = load_step1_aggregated(aggregated_source, allow_sample=allow_sample)
         if not aggregated_rows and not allow_sample:
             warnings.warn(
                 "CSV Step1 manquant ou vide, figure ignorée.",
