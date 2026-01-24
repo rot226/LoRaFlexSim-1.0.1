@@ -10,6 +10,7 @@ from typing import Iterable
 import warnings
 
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_MODES,
@@ -273,65 +274,32 @@ def _extract_aggregated_pdr_groups(
 
 def _plot_pdr_distribution(
     ax: plt.Axes,
-    values_by_group: dict[tuple[str, bool, str], list[float]],
     *,
-    target_size: int,
+    values: list[float],
     snir_mode: str,
 ) -> None:
-    if not any(values for values in values_by_group.values()):
-        warnings.warn(
-            f"Aucune donnée disponible pour size={target_size}, plot ignoré.",
-            stacklevel=2,
-        )
-        return
-
-    algorithms: list[tuple[str, bool]] = []
-    for algo in ("adr", "mixra_h", "mixra_opt", "ucb1_sf"):
-        for fallback in (False, True):
-            if any(
-                key[0] == algo
-                and key[1] == fallback
-                and values_by_group.get(key)
-                for key in values_by_group
-            ):
-                algorithms.append((algo, fallback))
-    if not algorithms:
-        algorithms = sorted(
-            {
-                (algo, fallback)
-                for (algo, fallback, _), values in values_by_group.items()
-                if values
-            }
-        )
-
-    base_positions = list(range(len(algorithms)))
     color = "#4c78a8" if snir_mode == "snir_on" else "#f58518"
-
-    data_with_positions: list[tuple[float, list[float]]] = []
-    for (algo, fallback), pos in zip(algorithms, base_positions, strict=False):
-        values = values_by_group.get((algo, fallback, snir_mode), [])
-        if not values:
-            algo_name = f"{algo}{'_fallback' if fallback else ''}"
-            warnings.warn(
-                f"No data for size={target_size}, algo={algo_name}, snir={snir_mode}.",
-                stacklevel=2,
-            )
-            continue
-        data_with_positions.append((pos, values))
-
-    if not data_with_positions:
-        warnings.warn(
-            f"Aucune donnée pour size={target_size} et snir={snir_mode}, trace ignorée.",
-            stacklevel=2,
+    if not values:
+        ax.text(
+            0.5,
+            0.5,
+            "Données manquantes",
+            ha="center",
+            va="center",
+            fontsize=9,
+            color="#666666",
+            transform=ax.transAxes,
         )
+        ax.set_xticks([])
+        ax.set_ylim(0.0, 1.0)
         return
 
-    data = [values for _, values in data_with_positions]
-    positions = [pos for pos, _ in data_with_positions]
+    data = [values]
+    positions = [0]
     violins = ax.violinplot(
         data,
         positions=positions,
-        widths=0.42,
+        widths=0.5,
         showmeans=False,
         showmedians=False,
         showextrema=False,
@@ -344,7 +312,7 @@ def _plot_pdr_distribution(
     ax.boxplot(
         data,
         positions=positions,
-        widths=0.16,
+        widths=0.18,
         patch_artist=True,
         showfliers=False,
         boxprops={"facecolor": "white", "edgecolor": color, "linewidth": 1.1},
@@ -356,10 +324,11 @@ def _plot_pdr_distribution(
     rng = Random(42)
     jitter_x_range = 0.06
     jitter_y_range = 0.01
+    max_points = 24
     for pos, values in zip(positions, data, strict=False):
         if not values:
             continue
-        step = max(1, len(values) // 12)
+        step = max(1, len(values) // max_points)
         for value in values[::step]:
             jitter_x = rng.uniform(-jitter_x_range, jitter_x_range)
             jitter_y = rng.uniform(-jitter_y_range, jitter_y_range)
@@ -373,13 +342,8 @@ def _plot_pdr_distribution(
                 zorder=3,
             )
 
-    ax.set_xticks(base_positions)
-    ax.set_xticklabels([algo_label(algo, fallback) for algo, fallback in algorithms])
-    ax.set_xlabel("Algorithme")
-    ax.set_ylabel("PDR (ratio 0–1)")
-    ax.set_title(
-        f"{SNIR_LABELS[snir_mode]} — taille réseau = {target_size}",
-    )
+    ax.set_xlim(-0.6, 0.6)
+    ax.set_xticks([])
     ax.set_ylim(0.0, 1.0)
     ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
 
@@ -391,32 +355,79 @@ def _plot_pdr_distributions(
     if not network_sizes:
         network_sizes = [TARGET_NETWORK_SIZE]
     n_sizes = len(network_sizes)
-    ncols = 2
-    nrows = n_sizes
-    fig, axes = plt.subplots(
-        nrows,
-        ncols,
-        sharey=True,
-    )
-    apply_figure_layout(fig, figsize=(6.6 * ncols, 3.8 * nrows))
-    if nrows == 1:
-        axes = [axes]
+    algorithms: list[tuple[str, bool]] = []
+    for algo in ("adr", "mixra_h", "mixra_opt", "ucb1_sf"):
+        for fallback in (False, True):
+            if any(
+                key[0] == algo and key[1] == fallback
+                for size in network_sizes
+                for key in values_by_size.get(size, {})
+            ):
+                algorithms.append((algo, fallback))
+    if not algorithms:
+        algorithms = sorted(
+            {
+                (algo, fallback)
+                for size in network_sizes
+                for (algo, fallback, _), values in values_by_size.get(size, {}).items()
+                if values
+            }
+        )
 
-    for row_axes, size in zip(axes, network_sizes, strict=False):
+    ncols = 2
+    nrows = max(1, n_sizes * max(1, len(algorithms)))
+    fig, axes = plt.subplots(nrows, ncols, sharey=True)
+    apply_figure_layout(fig, figsize=(6.2 * ncols, 2.4 * nrows))
+    if nrows == 1 and ncols == 1:
+        axes = [[axes]]
+    elif nrows == 1:
+        axes = [axes]
+    elif ncols == 1:
+        axes = [[ax] for ax in axes]
+
+    for size_index, size in enumerate(network_sizes):
         values_by_group = values_by_size.get(size, {})
-        for ax, snir_mode in zip(row_axes, SNIR_MODES, strict=False):
-            _plot_pdr_distribution(
-                ax,
-                values_by_group,
-                target_size=size,
-                snir_mode=snir_mode,
+        for algo_index, (algo, fallback) in enumerate(algorithms):
+            row_index = size_index * len(algorithms) + algo_index
+            for col_index, snir_mode in enumerate(SNIR_MODES):
+                ax = axes[row_index][col_index]
+                _plot_pdr_distribution(
+                    ax,
+                    values=values_by_group.get((algo, fallback, snir_mode), []),
+                    snir_mode=snir_mode,
+                )
+                if col_index == 0:
+                    ax.set_ylabel(
+                        f"{algo_label(algo, fallback)}\nPDR (ratio 0–1)",
+                        fontsize=9,
+                    )
+                if row_index != nrows - 1:
+                    ax.set_xlabel("")
+            if size_index == 0 and algo_index == 0:
+                axes[row_index][0].set_title(SNIR_LABELS["snir_on"])
+                axes[row_index][1].set_title(SNIR_LABELS["snir_off"])
+            axes[row_index][0].annotate(
+                f"Taille réseau = {size}",
+                xy=(0, 1.05),
+                xycoords="axes fraction",
+                ha="left",
+                va="bottom",
+                fontsize=8,
+                color="#444444",
             )
 
-    fig.suptitle("Figure S5 — Distribution du PDR par algorithme")
-    apply_figure_layout(
-        fig,
-        margins={"top": 0.88, "hspace": 0.35, "wspace": 0.2},
+    legend_handles = [
+        Patch(facecolor="#4c78a8", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_on"]),
+        Patch(facecolor="#f58518", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_off"]),
+    ]
+    fig.legend(
+        handles=legend_handles,
+        loc="upper center",
+        ncol=2,
+        frameon=False,
     )
+    fig.suptitle("Figure S5 — Distribution du PDR par algorithme (SNIR séparé)")
+    apply_figure_layout(fig, margins={"top": 0.86, "hspace": 0.6, "wspace": 0.25})
     return fig
 
 
