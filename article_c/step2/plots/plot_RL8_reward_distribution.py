@@ -56,7 +56,7 @@ def _load_step2_raw_results(
         return []
     if "reward" not in df.columns:
         warnings.warn(
-            "Colonne reward manquante dans raw_results.csv; figure ignorée.",
+            f"Colonne reward manquante dans {results_path.name}; figure ignorée.",
             stacklevel=2,
         )
         return []
@@ -252,7 +252,7 @@ def main(
         return
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "raw_results.csv"
+    results_path = step_dir / "results" / "raw_all.csv"
     rows = _load_step2_raw_results(results_path, allow_sample=allow_sample)
     if not rows:
         warnings.warn("CSV Step2 manquant ou vide, figure ignorée.", stacklevel=2)

@@ -158,7 +158,7 @@ def _load_step2_raw_results(
         return []
     if "reward" not in df.columns:
         warnings.warn(
-            "Colonne reward manquante dans raw_results.csv; figure ignorée.",
+            f"Colonne reward manquante dans {results_path.name}; figure ignorée.",
             stacklevel=2,
         )
         return []
@@ -360,10 +360,10 @@ def main(
     metric_key = "reward_mean"
     if is_constant:
         warnings.warn(
-            "Variance nulle sur les métriques agrégées; bascule vers raw_results.csv.",
+            "Variance nulle sur les métriques agrégées; bascule vers raw_all.csv.",
             stacklevel=2,
         )
-        raw_results_path = step_dir / "results" / "raw_results.csv"
+        raw_results_path = step_dir / "results" / "raw_all.csv"
         raw_rows = _load_step2_raw_results(raw_results_path, allow_sample=allow_sample)
         if raw_rows:
             raw_rows = filter_cluster(raw_rows, "all")
