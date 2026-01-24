@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from article_c.common.csv_io import write_simulation_results, write_step1_results
 
 PLOT_MODULES = {
     "step1": [
@@ -74,6 +75,70 @@ SNIR_ALIASES = {
     "0": "snir_off",
     "no": "snir_off",
 }
+
+
+def _coerce_csv_value(value: str | None) -> object:
+    if value is None or value == "":
+        return ""
+    lowered = value.strip().lower()
+    if lowered in {"true", "false"}:
+        return lowered == "true"
+    try:
+        number = float(value)
+    except ValueError:
+        return value
+    if number.is_integer():
+        return int(number)
+    return number
+
+
+def _load_csv_rows_coerced(path: Path) -> list[dict[str, object]]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        return [
+            {key: _coerce_csv_value(value) for key, value in row.items()}
+            for row in reader
+        ]
+
+
+def _collect_nested_csvs(results_dir: Path, filename: str) -> list[Path]:
+    return sorted(results_dir.glob(f"size_*/rep_*/{filename}"))
+
+
+def _ensure_step1_aggregated(step_dir: Path) -> Path | None:
+    results_dir = step_dir / "results"
+    aggregated_path = results_dir / "aggregated_results.csv"
+    if aggregated_path.exists():
+        return aggregated_path
+    raw_paths = _collect_nested_csvs(results_dir, "raw_metrics.csv")
+    if not raw_paths:
+        return None
+    raw_rows: list[dict[str, object]] = []
+    for path in raw_paths:
+        raw_rows.extend(_load_csv_rows_coerced(path))
+    if not raw_rows:
+        return None
+    print("Assemblage des résultats Step1 à partir des sous-dossiers...")
+    write_step1_results(results_dir, raw_rows)
+    return aggregated_path
+
+
+def _ensure_step2_aggregated(step_dir: Path) -> Path | None:
+    results_dir = step_dir / "results"
+    aggregated_path = results_dir / "aggregated_results.csv"
+    if aggregated_path.exists():
+        return aggregated_path
+    raw_paths = _collect_nested_csvs(results_dir, "raw_results.csv")
+    if not raw_paths:
+        return None
+    raw_rows: list[dict[str, object]] = []
+    for path in raw_paths:
+        raw_rows.extend(_load_csv_rows_coerced(path))
+    if not raw_rows:
+        return None
+    print("Assemblage des résultats Step2 à partir des sous-dossiers...")
+    write_simulation_results(results_dir, raw_rows)
+    return aggregated_path
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour générer les figures."""
@@ -325,37 +390,33 @@ def main(argv: list[str] | None = None) -> None:
     article_dir = Path(__file__).resolve().parent
     step1_results_dir = article_dir / "step1" / "results"
     step2_results_dir = article_dir / "step2" / "results"
-    if "step1" in steps and not (step1_results_dir / "done.flag").exists():
-        print("Step1 incomplete, skipping plots")
-        return
-    if "step2" in steps and not (step2_results_dir / "done.flag").exists():
-        print("Step2 incomplete, skipping plots")
-        return
-    step1_csv = article_dir / "step1" / "results" / "aggregated_results.csv"
-    step2_csv = article_dir / "step2" / "results" / "aggregated_results.csv"
-    csv_paths: list[Path] = []
+    step1_csv = None
+    step2_csv = None
     if "step1" in steps:
-        if not step1_csv.exists():
+        step1_csv = _ensure_step1_aggregated(article_dir / "step1")
+        if step1_csv is None:
             raise FileNotFoundError(
-                "CSV Step1 absent : "
-                f"{step1_csv} introuvable. "
-                "Exécutez l'étape 1 pour générer aggregated_results.csv "
-                "avant de lancer les plots Step1."
+                "CSV Step1 absent : aucun CSV agrégé ou sous-dossier détecté."
             )
-        csv_paths.append(step1_csv)
+        if not (step1_results_dir / "done.flag").exists():
+            print("AVERTISSEMENT: done.flag absent pour Step1, continuation.")
     if "step2" in steps:
-        if not step2_csv.exists():
+        step2_csv = _ensure_step2_aggregated(article_dir / "step2")
+        if step2_csv is None:
             raise FileNotFoundError(
-                "CSV Step2 absent : "
-                f"{step2_csv} introuvable. "
-                "Exécutez l'étape 2 pour générer aggregated_results.csv "
-                "avant de lancer les plots Step2."
+                "CSV Step2 absent : aucun CSV agrégé ou sous-dossier détecté."
             )
+        if not (step2_results_dir / "done.flag").exists():
+            print("AVERTISSEMENT: done.flag absent pour Step2, continuation.")
+    csv_paths: list[Path] = []
+    if "step1" in steps and step1_csv is not None:
+        csv_paths.append(step1_csv)
+    if "step2" in steps and step2_csv is not None:
         csv_paths.append(step2_csv)
     step_network_sizes: dict[str, list[int]] = {}
-    if "step1" in steps:
+    if "step1" in steps and step1_csv is not None:
         step_network_sizes["step1"] = _load_network_sizes_from_csvs([step1_csv])
-    if "step2" in steps:
+    if "step2" in steps and step2_csv is not None:
         step_network_sizes["step2"] = _load_network_sizes_from_csvs([step2_csv])
     if args.network_sizes:
         network_sizes = args.network_sizes
@@ -394,7 +455,7 @@ def main(argv: list[str] | None = None) -> None:
         else:
             if args.network_sizes:
                 expected_sizes = args.network_sizes
-            elif step1_csv.exists():
+            elif step1_csv is not None and step1_csv.exists():
                 expected_sizes = _load_network_sizes_from_csvs([step1_csv])
             else:
                 expected_sizes = []
@@ -415,12 +476,21 @@ def main(argv: list[str] | None = None) -> None:
         if step == "step2" and skip_step2_plots:
             continue
         for module_path in PLOT_MODULES[step]:
-            csv_path = step1_csv if step == "step1" else step2_csv
+            if step == "step1":
+                if step1_csv is None:
+                    continue
+                csv_path = step1_csv
+            else:
+                if step2_csv is None:
+                    continue
+                csv_path = step2_csv
             rl10_network_sizes: list[int] | None = None
             if (
                 step == "step2"
                 and module_path.endswith("plot_RL10_reward_vs_pdr_scatter")
             ):
+                if step1_csv is None or step2_csv is None:
+                    continue
                 step1_sizes = _load_network_sizes_from_csvs([step1_csv])
                 step2_sizes = _load_network_sizes_from_csvs([step2_csv])
                 intersection = sorted(set(step1_sizes) & set(step2_sizes))

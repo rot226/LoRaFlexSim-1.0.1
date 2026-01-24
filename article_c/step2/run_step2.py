@@ -195,6 +195,29 @@ def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
         return sizes
 
 
+def _read_nested_sizes(base_results_dir: Path, replications: list[int]) -> set[int]:
+    sizes: set[int] = set()
+    for size_dir in sorted(base_results_dir.glob("size_*")):
+        if not size_dir.is_dir():
+            continue
+        try:
+            size = int(size_dir.name.split("size_", 1)[1])
+        except (IndexError, ValueError):
+            continue
+        rep_paths = [
+            size_dir / f"rep_{replication}" / "aggregated_results.csv"
+            for replication in replications
+        ]
+        if rep_paths and all(path.exists() for path in rep_paths):
+            sizes.add(size)
+    if not sizes:
+        print(
+            "Aucune taille complète détectée dans les sous-dossiers "
+            f"{base_results_dir / 'size_<N>/rep_<R>'}."
+        )
+    return sizes
+
+
 def _is_non_empty_file(path: Path) -> bool:
     return path.exists() and path.stat().st_size > 0
 
@@ -272,10 +295,21 @@ def _plot_summary_reward(output_dir: Path) -> None:
 
 
 def _simulate_density(
-    task: tuple[int, int, list[int], dict[str, object], Path, Path | None]
+    task: tuple[int, int, list[int], dict[str, object], Path, Path | None, bool]
 ) -> dict[str, object]:
-    density, density_idx, replications, config, base_results_dir, timestamp_dir = task
+    (
+        density,
+        density_idx,
+        replications,
+        config,
+        base_results_dir,
+        timestamp_dir,
+        flat_output,
+    ) = task
     raw_rows: list[dict[str, object]] = []
+    per_rep_rows: dict[int, list[dict[str, object]]] = {
+        replication: [] for replication in replications
+    }
     selection_rows: list[dict[str, object]] = []
     learning_curve_rows: list[dict[str, object]] = []
     algorithms = ("adr", "mixra_h", "mixra_opt", "ucb1_sf")
@@ -311,6 +345,7 @@ def _simulate_density(
             for row in result.raw_rows:
                 row["replication"] = replication
             raw_rows.extend(result.raw_rows)
+            per_rep_rows[replication].extend(result.raw_rows)
             if algorithm == "ucb1_sf":
                 selection_rows.extend(result.selection_prob_rows)
             learning_curve_rows.extend(result.learning_curve_rows)
@@ -328,13 +363,27 @@ def _simulate_density(
     diagnostics = _summarize_success_collision(raw_rows)
     _log_size_diagnostics(int(density), diagnostics)
 
-    write_simulation_results(base_results_dir, raw_rows, network_size=density)
-    _log_results_written(base_results_dir, len(raw_rows))
-    _log_unique_network_sizes(base_results_dir)
-    if timestamp_dir is not None:
-        write_simulation_results(timestamp_dir, raw_rows, network_size=density)
-        _log_results_written(timestamp_dir, len(raw_rows))
-        _log_unique_network_sizes(timestamp_dir)
+    if flat_output:
+        write_simulation_results(base_results_dir, raw_rows, network_size=density)
+        _log_results_written(base_results_dir, len(raw_rows))
+        _log_unique_network_sizes(base_results_dir)
+        if timestamp_dir is not None:
+            write_simulation_results(timestamp_dir, raw_rows, network_size=density)
+            _log_results_written(timestamp_dir, len(raw_rows))
+            _log_unique_network_sizes(timestamp_dir)
+    else:
+        for replication, rows in per_rep_rows.items():
+            rep_dir = base_results_dir / f"size_{density}" / f"rep_{replication}"
+            write_simulation_results(rep_dir, rows, network_size=density)
+            _log_results_written(rep_dir, len(rows))
+            _log_unique_network_sizes(rep_dir)
+            if timestamp_dir is not None:
+                rep_timestamp_dir = (
+                    timestamp_dir / f"size_{density}" / f"rep_{replication}"
+                )
+                write_simulation_results(rep_timestamp_dir, rows, network_size=density)
+                _log_results_written(rep_timestamp_dir, len(rows))
+                _log_unique_network_sizes(rep_timestamp_dir)
     return {
         "density": density,
         "row_count": len(raw_rows),
@@ -349,6 +398,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     base_seed = set_deterministic_seed(args.seeds_base)
     densities = parse_network_size_list(args.network_sizes)
     requested_sizes = list(densities)
+    flat_output = bool(args.flat_output)
     reference_network_size = (
         int(args.reference_network_size)
         if getattr(args, "reference_network_size", None) is not None
@@ -364,7 +414,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         timestamp_dir = base_results_dir / timestamp_tag()
         ensure_dir(timestamp_dir)
     aggregated_path = base_results_dir / "aggregated_results.csv"
-    if _is_non_empty_file(aggregated_path):
+    if flat_output and _is_non_empty_file(aggregated_path):
         size_bytes = aggregated_path.stat().st_size
         print(
             "aggregated_results.csv existant détecté "
@@ -390,7 +440,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         "reference_network_size": max(1, reference_network_size),
     }
 
-    aggregated_sizes = _read_aggregated_sizes(base_results_dir / "aggregated_results.csv")
+    if flat_output:
+        aggregated_sizes = _read_aggregated_sizes(
+            base_results_dir / "aggregated_results.csv"
+        )
+    else:
+        aggregated_sizes = _read_nested_sizes(base_results_dir, replications)
     requested_set = set(requested_sizes)
     existing_sizes = sorted(requested_set & aggregated_sizes)
     remaining_sizes = sorted(requested_set - aggregated_sizes)
@@ -402,11 +457,22 @@ def main(argv: Sequence[str] | None = None) -> None:
     simulated_label = (
         ", ".join(map(str, simulated_targets)) if simulated_targets else "aucune"
     )
-    print(f"Tailles déjà présentes dans aggregated_results.csv: {existing_label}")
+    if flat_output:
+        print(f"Tailles déjà présentes dans aggregated_results.csv: {existing_label}")
+    else:
+        print(f"Tailles déjà présentes dans les sous-dossiers: {existing_label}")
     print(f"Tailles à simuler: {simulated_label}")
 
     tasks = [
-        (density, density_idx, replications, config, base_results_dir, timestamp_dir)
+        (
+            density,
+            density_idx,
+            replications,
+            config,
+            base_results_dir,
+            timestamp_dir,
+            flat_output,
+        )
         for density_idx, density in enumerate(densities)
     ]
 
@@ -474,22 +540,40 @@ def main(argv: Sequence[str] | None = None) -> None:
                 learning_curve_values,
             )
 
-    aggregated_sizes = _read_aggregated_sizes(base_results_dir / "aggregated_results.csv")
+    if flat_output:
+        aggregated_sizes = _read_aggregated_sizes(
+            base_results_dir / "aggregated_results.csv"
+        )
+    else:
+        aggregated_sizes = _read_nested_sizes(base_results_dir, replications)
     missing_sizes = sorted(set(requested_sizes) - aggregated_sizes)
     if missing_sizes:
         missing_label = ", ".join(map(str, missing_sizes))
-        print(
-            "ATTENTION: tailles manquantes dans aggregated_results.csv, "
-            f"done.flag non écrit. Manquantes: {missing_label}"
-        )
+        if flat_output:
+            print(
+                "ATTENTION: tailles manquantes dans aggregated_results.csv, "
+                f"done.flag non écrit. Manquantes: {missing_label}"
+            )
+        else:
+            print(
+                "ATTENTION: tailles manquantes dans les sous-dossiers, "
+                f"done.flag non écrit. Manquantes: {missing_label}"
+            )
     else:
         (base_results_dir / "done.flag").write_text("done\n", encoding="utf-8")
         print("done.flag écrit (agrégation complète).")
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         print(f"Tailles simulées: {sizes_label}")
-    if args.plot_summary:
-        _plot_summary_reward(base_results_dir)
+    aggregated_path = base_results_dir / "aggregated_results.csv"
+    if aggregated_path.exists():
+        if args.plot_summary:
+            _plot_summary_reward(base_results_dir)
+    elif args.plot_summary:
+        print(
+            "Plot de synthèse ignoré: aggregated_results.csv absent "
+            "(utilisez --flat-output ou make_all_plots.py)."
+        )
 
 
 if __name__ == "__main__":

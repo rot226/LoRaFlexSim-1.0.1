@@ -164,6 +164,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Ignore les tailles déjà présentes dans aggregated_results.csv.",
     )
+    parser.add_argument(
+        "--flat-output",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Écrit les résultats directement dans le répertoire de sortie "
+            "(compatibilité avec l'ancien format)."
+        ),
+    )
     return parser
 
 
