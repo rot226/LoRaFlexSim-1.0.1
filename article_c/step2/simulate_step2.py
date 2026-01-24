@@ -65,7 +65,7 @@ def _compute_reward(
 ) -> float:
     latency_norm = _clip(latency_norm**1.35 * 1.08, 0.0, 1.0)
     energy_norm = _clip(energy_norm**1.35 * 1.08, 0.0, 1.0)
-    collision_norm = _clip(collision_norm**1.25 * 1.1, 0.0, 1.0)
+    collision_norm = _clip(collision_norm**1.15 * 1.04, 0.0, 1.0)
     energy_weight = weights.energy_weight * (1.0 + lambda_energy)
     total_weight = weights.sf_weight + weights.latency_weight + energy_weight
     if total_weight <= 0:
@@ -78,9 +78,12 @@ def _compute_reward(
         + weights.latency_weight * latency_score
         + energy_weight * energy_score
     ) / total_weight
-    reward = success_rate * weighted_quality - (
-        lambda_collision * weights.collision_weight * collision_norm
+    collision_penalty = (
+        lambda_collision * weights.collision_weight * collision_norm * (0.7 + 0.3 * (1.0 - success_rate))
     )
+    reward = success_rate * weighted_quality - collision_penalty
+    if reward <= 0.0 and success_rate > 0.0 and weights.exploration_floor > 0.0:
+        reward = weights.exploration_floor
     return _clip(reward, 0.0, 1.0)
 
 
@@ -331,6 +334,14 @@ def _log_reward_stats(
     rewards: list[float],
 ) -> None:
     min_reward, median_reward, max_reward = _summarize_values(rewards)
+    if math.isclose(min_reward, max_reward, abs_tol=1e-6):
+        logger.warning(
+            "Alerte reward uniforme (taille=%s algo=%s round=%s reward=%.4f).",
+            network_size,
+            algo_label,
+            round_id,
+            min_reward,
+        )
     logger.info(
         "Stats reward - taille=%s algo=%s round=%s reward[min/med/max]=%.4f/%.4f/%.4f",
         network_size,
@@ -459,29 +470,44 @@ def _reward_weights_for_algo(algorithm: str) -> AlgoRewardWeights:
             sf_weight=0.45,
             latency_weight=0.32,
             energy_weight=0.23,
-            collision_weight=0.3,
+            collision_weight=0.22,
         )
     if algorithm == "mixra_h":
         return AlgoRewardWeights(
             sf_weight=0.28,
             latency_weight=0.27,
             energy_weight=0.45,
-            collision_weight=0.34,
+            collision_weight=0.28,
         )
     if algorithm == "mixra_opt":
         return AlgoRewardWeights(
             sf_weight=0.23,
             latency_weight=0.22,
             energy_weight=0.55,
-            collision_weight=0.38,
+            collision_weight=0.3,
         )
     return AlgoRewardWeights(
         sf_weight=0.38,
         latency_weight=0.32,
         energy_weight=0.3,
-        collision_weight=0.3,
-        exploration_floor=0.08,
+        collision_weight=0.24,
+        exploration_floor=0.1,
     )
+
+
+def _compute_collision_norm(
+    *,
+    airtime_norm: float,
+    congestion_probability: float,
+    collision_size_factor: float,
+    successes: int,
+    traffic_sent: int,
+) -> float:
+    success_ratio = successes / traffic_sent if traffic_sent > 0 else 0.0
+    congestion_scale = 1.0 + 0.65 * congestion_probability
+    size_scale = collision_size_factor**0.85
+    base = airtime_norm * congestion_scale * size_scale
+    return _clip(base * (1.0 - success_ratio) ** 0.85, 0.0, 1.0)
 
 
 def _apply_cluster_bias(
@@ -852,13 +878,12 @@ def run_simulation(
                 effective_duration_s = float(
                     node_window.get("effective_duration_s", window_duration_value)
                 )
-                collision_norm = _clip(
-                    airtime_norm
-                    * (1.0 + congestion_probability)
-                    * collision_size_factor
-                    * (1.0 - (successes / traffic_sent if traffic_sent > 0 else 0.0)),
-                    0.0,
-                    1.0,
+                collision_norm = _compute_collision_norm(
+                    airtime_norm=airtime_norm,
+                    congestion_probability=congestion_probability,
+                    collision_size_factor=collision_size_factor,
+                    successes=successes,
+                    traffic_sent=traffic_sent,
                 )
                 metrics = _compute_window_metrics(
                     successes,
@@ -1163,13 +1188,12 @@ def run_simulation(
                 effective_duration_s = float(
                     node_window.get("effective_duration_s", window_duration_value)
                 )
-                collision_norm = _clip(
-                    airtime_norm
-                    * (1.0 + congestion_probability)
-                    * collision_size_factor
-                    * (1.0 - (successes / traffic_sent if traffic_sent > 0 else 0.0)),
-                    0.0,
-                    1.0,
+                collision_norm = _compute_collision_norm(
+                    airtime_norm=airtime_norm,
+                    congestion_probability=congestion_probability,
+                    collision_size_factor=collision_size_factor,
+                    successes=successes,
+                    traffic_sent=traffic_sent,
                 )
                 metrics = _compute_window_metrics(
                     successes,
