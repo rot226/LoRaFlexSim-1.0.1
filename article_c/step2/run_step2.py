@@ -86,6 +86,8 @@ def _log_unique_network_sizes(output_dir: Path) -> None:
         return
     with raw_path.open("r", newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
+        headers_label = ", ".join(reader.fieldnames or [])
+        print(f"Headers lus dans {raw_path}: {headers_label or 'aucun'}")
         if not reader.fieldnames or "network_size" not in reader.fieldnames:
             print(f"Colonne network_size absente dans {raw_path}")
             return
