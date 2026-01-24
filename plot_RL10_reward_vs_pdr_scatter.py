@@ -1,4 +1,4 @@
-"""Trace un nuage de points récompense moyenne vs PDR (raw_results)."""
+"""Trace un nuage de points récompense moyenne vs PDR (raw_all)."""
 
 from __future__ import annotations
 
@@ -284,7 +284,7 @@ def _plot_scatter(points: list[dict[str, float | int | str]]) -> plt.Figure:
         )
     ax.set_xlabel("PDR (par réplication)")
     ax.set_ylabel("Récompense moyenne (fenêtre)")
-    ax.set_title("Step 2 - Récompense vs PDR (raw_results)")
+    ax.set_title("Step 2 - Récompense vs PDR (raw_all)")
     ax.set_xlim(0.0, 1.05)
     ax.set_ylim(0.0, 1.05)
     ax.grid(True, linestyle=":", alpha=0.5)
@@ -309,7 +309,7 @@ def main() -> None:
     root_dir = Path(__file__).resolve().parent
     step_dir = root_dir / "article_c" / "step2"
     step1_results_path = root_dir / "article_c" / "step1" / "results" / "raw_results.csv"
-    step2_results_path = step_dir / "results" / "raw_results.csv"
+    step2_results_path = step_dir / "results" / "raw_all.csv"
     points = _collect_points(
         step1_results_path,
         step2_results_path,

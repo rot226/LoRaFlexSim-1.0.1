@@ -106,6 +106,17 @@ def _normalize_snir_mode(value: object) -> str | None:
     return None
 
 
+def _normalize_cluster(value: object) -> str:
+    if value is None:
+        return "all"
+    text = str(value).strip()
+    if not text:
+        return "all"
+    if text.lower() == "all":
+        return "all"
+    return text
+
+
 def _normalize_group_keys(rows: list[dict[str, object]]) -> None:
     for row in rows:
         if row.get("algo") in (None, "") and row.get("algorithm") not in (None, ""):
@@ -396,9 +407,11 @@ def write_simulation_results(
     raw_rows: list[dict[str, object]],
     network_size: object | None = None,
 ) -> None:
-    """Écrit les fichiers raw_results.csv et aggregated_results.csv."""
+    """Écrit raw_results.csv, raw_all.csv, raw_cluster.csv et aggregated_results.csv."""
     output_dir.mkdir(parents=True, exist_ok=True)
     raw_path = output_dir / "raw_results.csv"
+    raw_all_path = output_dir / "raw_all.csv"
+    raw_cluster_path = output_dir / "raw_cluster.csv"
     aggregated_path = output_dir / "aggregated_results.csv"
 
     expected_network_size = network_size
@@ -419,6 +432,7 @@ def write_simulation_results(
         _coerce_positive_network_size(row_network_size)
         if row.get("density") in (None, ""):
             row["density"] = row_network_size
+        row["cluster"] = _normalize_cluster(row.get("cluster"))
 
     if raw_rows:
         _normalize_group_keys(raw_rows)
@@ -456,6 +470,18 @@ def write_simulation_results(
         raw_path,
         raw_header,
         [[row.get(key, "") for key in raw_header] for row in raw_rows],
+    )
+    raw_all_rows = [row for row in raw_rows if row.get("cluster") == "all"]
+    raw_cluster_rows = [row for row in raw_rows if row.get("cluster") != "all"]
+    write_rows(
+        raw_all_path,
+        raw_header,
+        [[row.get(key, "") for key in raw_header] for row in raw_all_rows],
+    )
+    write_rows(
+        raw_cluster_path,
+        raw_header,
+        [[row.get(key, "") for key in raw_header] for row in raw_cluster_rows],
     )
 
     _log_control_table(raw_rows, "raw_results.csv")
