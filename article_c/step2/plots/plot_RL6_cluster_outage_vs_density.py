@@ -12,6 +12,7 @@ import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
+    SUPTITLE_Y,
     algo_label,
     apply_plot_style,
     apply_figure_layout,
@@ -178,7 +179,8 @@ def _plot_metric(
     place_legend(axes[-1])
     fig.suptitle(
         "Step 2 - Outage probability by Cluster (SNIR on)"
-        f"{_title_suffix(network_sizes)}"
+        f"{_title_suffix(network_sizes)}",
+        y=SUPTITLE_Y,
     )
     return fig
 
@@ -324,7 +326,8 @@ def _plot_raw_metric(
     place_legend(axes[-1])
     fig.suptitle(
         "Step 2 - Outage probability brut par cluster et réplication (SNIR on)"
-        f"{_title_suffix(network_sizes)}"
+        f"{_title_suffix(network_sizes)}",
+        y=SUPTITLE_Y,
     )
     return fig
 

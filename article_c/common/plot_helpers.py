@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 from article_c.common.plotting_style import (
     LEGEND_STYLE,
     SAVEFIG_STYLE,
-    apply_plot_style,
     set_network_size_ticks,
 )
 from article_c.common.utils import ensure_dir
@@ -54,6 +53,32 @@ DERIVED_SUFFIXES = ("_mean", "_std", "_count", "_ci95", "_p10", "_p50", "_p90")
 RECEIVED_MEAN_KEY = "received_mean"
 RECEIVED_ALGO_MEAN_KEY = "received_algo_mean"
 RECEIVED_ALGO_TOL = 1e-6
+BASE_FIGSIZE = (7.2, 4.2)
+BASE_FONT_FAMILY = "sans-serif"
+BASE_FONT_SANS = ["DejaVu Sans", "Arial", "Liberation Sans"]
+BASE_FONT_SIZE = 10
+BASE_GRID_ENABLED = True
+AXES_TITLE_Y = 1.02
+SUPTITLE_Y = 0.98
+FIGURE_SUBPLOT_TOP = 0.80
+
+
+def apply_plot_style() -> None:
+    """Applique un style homogène pour les figures Step1/Step2."""
+    plt.rcParams.update(
+        {
+            "figure.figsize": BASE_FIGSIZE,
+            "figure.subplot.top": FIGURE_SUBPLOT_TOP,
+            "axes.grid": BASE_GRID_ENABLED,
+            "axes.titlesize": 12,
+            "axes.labelsize": 10,
+            "axes.titley": AXES_TITLE_Y,
+            "font.family": BASE_FONT_FAMILY,
+            "font.sans-serif": BASE_FONT_SANS,
+            "font.size": BASE_FONT_SIZE,
+        }
+    )
+    plt.subplots_adjust(top=FIGURE_SUBPLOT_TOP)
 
 
 def select_received_metric_key(
