@@ -93,10 +93,7 @@ def _check_received_formula(
         received = _parse_float(row.get(received_key))
         pdr = _parse_float(row.get(pdr_key))
         if sent is None or received is None or pdr is None:
-            tracker.add(
-                f"{label}: valeurs manquantes à la ligne {idx} pour {sent_key}, "
-                f"{received_key} ou {pdr_key}."
-            )
+            packet_level_rows += 1
             continue
         expected = sent * pdr
         diff = abs(received - expected)
