@@ -250,12 +250,18 @@ def _load_network_sizes_from_csvs(paths: list[Path]) -> list[int]:
         if not path.exists():
             raise FileNotFoundError(f"CSV introuvable: {path}")
         df = pd.read_csv(path)
-        if "network_size" not in df.columns:
+        if "network_size" in df.columns:
+            size_column = "network_size"
+        elif "density" in df.columns:
+            size_column = "density"
+        else:
             raise ValueError(
-                f"Le CSV {path} doit contenir une colonne 'network_size'."
+                f"Le CSV {path} doit contenir une colonne "
+                "'network_size' ou 'density'."
             )
         sizes.update(
-            int(value) for value in df["network_size"].dropna().unique().tolist()
+            int(float(value))
+            for value in df[size_column].dropna().unique().tolist()
         )
     return sorted(sizes)
 
@@ -331,6 +337,11 @@ def _validate_plot_data(
         return False
     sizes = _extract_network_sizes(csv_path)
     if len(sizes) < 2:
+        sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
+        print(
+            "Tailles détectées dans "
+            f"{csv_path}: {sizes_label}."
+        )
         print(
             "AVERTISSEMENT: "
             f"{module_path} nécessite au moins 2 tailles "
@@ -366,6 +377,11 @@ def _validate_plot_data(
         mode for mode in REQUIRED_SNIR_MODES[step] if mode not in available_snir
     ]
     if missing_algos or missing_snir:
+        sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
+        print(
+            "Tailles détectées dans "
+            f"{csv_path}: {sizes_label}."
+        )
         details = []
         if missing_algos:
             details.append(f"algos manquants: {', '.join(missing_algos)}")
