@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.utils import parse_network_size_list
