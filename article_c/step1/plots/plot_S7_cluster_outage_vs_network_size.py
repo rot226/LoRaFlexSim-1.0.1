@@ -125,16 +125,17 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             handles,
             labels,
             loc="upper center",
+            bbox_to_anchor=(0.5, 1.12),
             ncol=min(len(labels), 4),
             frameon=False,
         )
-        apply_figure_layout(fig, bbox_to_anchor=(0.5, 1.02))
     configure_figure(
         fig,
         axes,
         "Step 1 - Outage probability by Cluster (network size)",
         legend_loc="above",
     )
+    apply_figure_layout(fig, tight_layout={"rect": (0, 0, 1, 0.86)})
     return fig
 
 

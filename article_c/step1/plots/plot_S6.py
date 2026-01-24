@@ -50,12 +50,23 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.set_xticks(network_sizes)
     axes[0].set_ylabel("Packet Delivery Ratio")
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.12),
+            ncol=min(len(labels), 4),
+            frameon=False,
+        )
     configure_figure(
         fig,
         axes,
         "Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)",
         legend_loc="above",
     )
+    apply_figure_layout(fig, tight_layout={"rect": (0, 0, 1, 0.86)})
     return fig
 
 
