@@ -13,6 +13,7 @@ class AnomalyTracker:
         self.count = 0
         self.max_samples = max_samples
         self.samples: list[str] = []
+        self.packet_level_rows = 0
 
     def add(self, message: str) -> None:
         self.count += 1
@@ -21,6 +22,10 @@ class AnomalyTracker:
 
     def has_anomalies(self) -> bool:
         return self.count > 0
+
+    def add_packet_level_rows(self, count: int) -> None:
+        if count > 0:
+            self.packet_level_rows += count
 
 
 def _parse_float(value: object) -> float | None:
@@ -79,7 +84,11 @@ def _check_received_formula(
     label: str,
     tracker: AnomalyTracker,
 ) -> None:
+    packet_level_rows = 0
     for idx, row in enumerate(rows, start=1):
+        if not {sent_key, received_key, pdr_key}.issubset(row.keys()):
+            packet_level_rows += 1
+            continue
         sent = _parse_float(row.get(sent_key))
         received = _parse_float(row.get(received_key))
         pdr = _parse_float(row.get(pdr_key))
@@ -97,6 +106,7 @@ def _check_received_formula(
                 f"{label}: incohérence ligne {idx} (received={received:.6f}, "
                 f"sent*pdr={expected:.6f}, diff={diff:.6f})."
             )
+    tracker.add_packet_level_rows(packet_level_rows)
 
 
 def _validate_pdr_file(
@@ -272,6 +282,11 @@ def main(argv: list[str] | None = None) -> int:
             remaining = tracker.count - len(tracker.samples)
             print(f"- ... et {remaining} anomalies supplémentaires.")
         return 1
+    if tracker.packet_level_rows:
+        print(
+            "Validation info: "
+            f"{tracker.packet_level_rows} ligne(s) packet-level ignorée(s)."
+        )
     print("Aucune anomalie détectée.")
     return 0
 
