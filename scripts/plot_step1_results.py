@@ -342,6 +342,13 @@ def _apply_network_ticks(ax: Any, network_sizes: Sequence[int]) -> None:
     if not all(isinstance(value, int) for value in network_sizes):
         raise ValueError("network_sizes doit être une liste d'entiers.")
     ax.set_xticks(network_sizes)
+
+
+def _plot_filename(base_name: str, size_tag: int | None) -> str:
+    if size_tag is None:
+        return base_name
+    stem = base_name[:-4] if base_name.lower().endswith(".png") else base_name
+    return f"plot_{stem}_size_{size_tag}.png"
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
 
@@ -477,6 +484,7 @@ def _load_raw_samples(raw_path: Path, fallback_dir: Path, strict: bool) -> List[
                     "algorithm": algorithm,
                     "snir_state": row.get("snir_state", "snir_unknown"),
                     "packet_interval_s": _parse_float(row.get("packet_interval_s")),
+                    "num_nodes": _maybe_int(row.get("num_nodes")),
                     "DER": _parse_float(row.get("DER")),
                 }
                 records.append(record)
@@ -524,6 +532,7 @@ def _plot_global_metric(
     ylabel: str,
     filename_prefix: str,
     figures_dir: Path,
+    size_tag: int | None = None,
 ) -> None:
     if not records or plt is None:
         return
@@ -626,7 +635,11 @@ def _plot_global_metric(
             if ax.get_legend_handles_labels()[0]:
                 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
             figures_dir.mkdir(parents=True, exist_ok=True)
-            output = figures_dir / f"step1_{filename_prefix}{suffix}_tx_{title_period}.png"
+            filename = _plot_filename(
+                f"step1_{filename_prefix}{suffix}_tx_{title_period}.png",
+                size_tag,
+            )
+            output = figures_dir / filename
             plt.subplots_adjust(top=0.80)
             fig.savefig(output, dpi=150)
             plt.close(fig)
@@ -643,6 +656,7 @@ def _plot_summary_bars(
     records: List[Dict[str, Any]],
     figures_dir: Path,
     forced_algorithm: str | None = None,
+    size_tag: int | None = None,
 ) -> None:
     if not records or plt is None:
         return
@@ -758,7 +772,11 @@ def _plot_summary_bars(
                 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
             figures_dir.mkdir(parents=True, exist_ok=True)
-            output = figures_dir / f"summary_{metric.lower()}_tx_{period_label}.png"
+            filename = _plot_filename(
+                f"summary_{metric.lower()}_tx_{period_label}.png",
+                size_tag,
+            )
+            output = figures_dir / filename
             plt.subplots_adjust(top=0.80)
             fig.savefig(output, dpi=150)
             plt.close(fig)
@@ -768,6 +786,7 @@ def _plot_cdf(
     records: Sequence[Mapping[str, Any]],
     figures_dir: Path,
     forced_algorithm: str | None = None,
+    size_tag: int | None = None,
 ) -> None:
     if not records or plt is None:
         return
@@ -811,13 +830,18 @@ def _plot_cdf(
         if ax.get_legend_handles_labels()[0]:
             ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
         figures_dir.mkdir(parents=True, exist_ok=True)
-        output = figures_dir / f"cdf_der_{algorithm}.png"
+        filename = _plot_filename(f"cdf_der_{algorithm}.png", size_tag)
+        output = figures_dir / filename
         plt.subplots_adjust(top=0.80)
         fig.savefig(output, dpi=150)
         plt.close(fig)
 
 
-def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
+def _plot_cluster_pdr(
+    records: List[Dict[str, Any]],
+    figures_dir: Path,
+    size_tag: int | None = None,
+) -> None:
     if not records or plt is None:
         return
     clusters = sorted({cid for r in records for cid in r.get("cluster_pdr", {})})
@@ -897,7 +921,11 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
             title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
             fig.suptitle(f"{title} – period {title_period} s")
             figures_dir.mkdir(parents=True, exist_ok=True)
-            output = figures_dir / f"step1_cluster_pdr{suffix}_tx_{title_period}.png"
+            filename = _plot_filename(
+                f"step1_cluster_pdr{suffix}_tx_{title_period}.png",
+                size_tag,
+            )
+            output = figures_dir / filename
             plt.subplots_adjust(top=0.80)
             fig.savefig(output, dpi=150)
             plt.close(fig)
@@ -910,7 +938,11 @@ def _plot_cluster_pdr(records: List[Dict[str, Any]], figures_dir: Path) -> None:
     )
 
 
-def _plot_cluster_der(records: List[Dict[str, Any]], figures_dir: Path) -> None:
+def _plot_cluster_der(
+    records: List[Dict[str, Any]],
+    figures_dir: Path,
+    size_tag: int | None = None,
+) -> None:
     if not records or plt is None:
         return
     clusters = sorted({cid for r in records for cid in r.get("cluster_der", {})})
@@ -982,13 +1014,21 @@ def _plot_cluster_der(records: List[Dict[str, Any]], figures_dir: Path) -> None:
             f"DER (probability) par cluster – SNIR ON/OFF superposés (period {title_period} s)"
         )
         figures_dir.mkdir(parents=True, exist_ok=True)
-        output = figures_dir / f"step1_cluster_der_overlay_tx_{title_period}.png"
+        filename = _plot_filename(
+            f"step1_cluster_der_overlay_tx_{title_period}.png",
+            size_tag,
+        )
+        output = figures_dir / filename
         plt.subplots_adjust(top=0.80)
         fig.savefig(output, dpi=150)
         plt.close(fig)
 
 
-def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None:
+def _plot_trajectories(
+    records: List[Dict[str, Any]],
+    figures_dir: Path,
+    size_tag: int | None = None,
+) -> None:
     if not records or plt is None:
         return
 
@@ -1085,9 +1125,14 @@ def _plot_trajectories(records: List[Dict[str, Any]], figures_dir: Path) -> None
                 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
             figures_dir.mkdir(parents=True, exist_ok=True)
-            output = figures_dir / (
-                f"step1_trajectories_{metric.lower()}_{filename_tag}_{algorithm}_{fixed_label}.png"
+            filename = _plot_filename(
+                (
+                    f"step1_trajectories_{metric.lower()}_{filename_tag}_"
+                    f"{algorithm}_{fixed_label}.png"
+                ),
+                size_tag,
             )
+            output = figures_dir / filename
             plt.subplots_adjust(top=0.80)
             fig.savefig(output, dpi=180)
             plt.close(fig)
@@ -1146,6 +1191,7 @@ def _histogram_weighted_mean(histogram: Mapping[float, float]) -> float | None:
 def plot_histogram_by_algo_and_snir(
     records: List[Dict[str, Any]],
     figures_dir: Path,
+    size_tag: int | None = None,
 ) -> None:
     if not records or plt is None:
         return
@@ -1198,7 +1244,8 @@ def plot_histogram_by_algo_and_snir(
         ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
     figures_dir.mkdir(parents=True, exist_ok=True)
-    output = figures_dir / "step1_histogram_by_algo_snir.png"
+    filename = _plot_filename("step1_histogram_by_algo_snir.png", size_tag)
+    output = figures_dir / filename
     plt.subplots_adjust(top=0.80)
     fig.savefig(output, dpi=200)
     plt.close(fig)
@@ -1217,7 +1264,11 @@ def _apply_ieee_style() -> None:
     )
 
 
-def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> None:
+def _plot_snir_comparison(
+    records: List[Dict[str, Any]],
+    figures_dir: Path,
+    size_tag: int | None = None,
+) -> None:
     if not records or plt is None:
         return
 
@@ -1321,9 +1372,14 @@ def _plot_snir_comparison(records: List[Dict[str, Any]], figures_dir: Path) -> N
                         ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
                     figures_dir.mkdir(parents=True, exist_ok=True)
-                    output = figures_dir / (
-                        f"algo_{algorithm}_{metric.lower()}_snir-compare{suffix}_tx_{period_label}.png"
+                    filename = _plot_filename(
+                        (
+                            f"algo_{algorithm}_{metric.lower()}_snir-compare"
+                            f"{suffix}_tx_{period_label}.png"
+                        ),
+                        size_tag,
                     )
+                    output = figures_dir / filename
                     plt.subplots_adjust(top=0.80)
                     fig.savefig(output, dpi=200)
                     plt.close(fig)
@@ -1340,6 +1396,7 @@ def plot_distribution_by_state(
     records: List[Dict[str, Any]],
     figures_dir: Path,
     forced_algorithm: str | None = None,
+    size_tag: int | None = None,
 ) -> None:
     if not records or plt is None:
         return
@@ -1397,10 +1454,33 @@ def plot_distribution_by_state(
         ax.set_title(f"{ylabel} distribution by SNIR state")
         _format_axes(ax, integer_x=False)
         figures_dir.mkdir(parents=True, exist_ok=True)
-        output = figures_dir / f"step1_distribution_{metric}.png"
+        filename = _plot_filename(f"step1_distribution_{metric}.png", size_tag)
+        output = figures_dir / filename
         plt.subplots_adjust(top=0.80)
         fig.savefig(output, dpi=200)
         plt.close(fig)
+
+
+def _available_network_sizes(
+    results_dir: Path,
+    use_summary: bool,
+    strict: bool,
+    ieee: bool,
+    network_sizes: Sequence[int] | None,
+) -> List[int]:
+    if use_summary:
+        summary_records = _load_summary_records(results_dir / "summary.csv")
+        records = summary_records
+    else:
+        records = _load_step1_records(results_dir, strict=strict)
+    if not records:
+        return []
+    if ieee:
+        records = _apply_ieee_filters(records)
+    records = _filter_network_sizes(records, network_sizes)
+    return _ensure_network_sizes(
+        r.get("num_nodes") for r in records if r.get("num_nodes") is not None
+    )
 
 
 def generate_step1_figures(
@@ -1415,6 +1495,7 @@ def generate_step1_figures(
     official_only: bool = False,
     ieee: bool = False,
     network_sizes: Sequence[int] | None = None,
+    size_tag: int | None = None,
 ) -> None:
     if plt is None:
         print("matplotlib n'est pas disponible ; aucune figure générée.")
@@ -1456,6 +1537,7 @@ def generate_step1_figures(
                 summary_records,
                 extended_dir,
                 forced_algorithm=EXTENDED_ALGORITHM,
+                size_tag=size_tag,
             )
             if plot_trajectories:
                 trajectory_records = _load_step1_records(results_dir, strict=strict)
@@ -1467,7 +1549,7 @@ def generate_step1_figures(
                     trajectory_records,
                     network_sizes,
                 )
-                _plot_trajectories(trajectory_records, trajectories_dir)
+                _plot_trajectories(trajectory_records, trajectories_dir, size_tag=size_tag)
             comparison_records = summary_records
     elif not official_only:
         records = _load_step1_records(results_dir, strict=strict)
@@ -1477,26 +1559,76 @@ def generate_step1_figures(
         if ieee:
             records = _apply_ieee_filters(records)
         records = _filter_network_sizes(records, network_sizes)
-        _plot_cluster_der(records, output_dir)
-        _plot_cluster_pdr(records, output_dir)
-        _plot_global_metric(records, "PDR", "Overall PDR (probability)", "pdr_global", output_dir)
-        _plot_global_metric(records, "DER", "Overall DER (probability)", "der_global", output_dir)
-        _plot_global_metric(records, "collisions", "Collisions (probability)", "collisions", output_dir)
+        _plot_cluster_der(records, output_dir, size_tag=size_tag)
+        _plot_cluster_pdr(records, output_dir, size_tag=size_tag)
+        _plot_global_metric(
+            records,
+            "PDR",
+            "Overall PDR (probability)",
+            "pdr_global",
+            output_dir,
+            size_tag=size_tag,
+        )
+        _plot_global_metric(
+            records,
+            "DER",
+            "Overall DER (probability)",
+            "der_global",
+            output_dir,
+            size_tag=size_tag,
+        )
+        _plot_global_metric(
+            records,
+            "collisions",
+            "Collisions (probability)",
+            "collisions",
+            output_dir,
+            size_tag=size_tag,
+        )
         _plot_global_metric(
             records,
             "collisions_snir",
             "Collisions (SNIR, probability)",
             "collisions_snir",
             output_dir,
+            size_tag=size_tag,
         )
-        _plot_global_metric(records, "jain_index", "Jain index (unitless)", "jain_index", output_dir)
-        _plot_global_metric(records, "throughput_bps", "Aggregate throughput (bps)", "throughput", output_dir)
+        _plot_global_metric(
+            records,
+            "jain_index",
+            "Jain index (unitless)",
+            "jain_index",
+            output_dir,
+            size_tag=size_tag,
+        )
+        _plot_global_metric(
+            records,
+            "throughput_bps",
+            "Aggregate throughput (bps)",
+            "throughput",
+            output_dir,
+            size_tag=size_tag,
+        )
         if any((r.get("snir_mean") is not None or r.get("snr_mean") is not None) for r in records):
-            _plot_global_metric(records, "snir_mean", "Mean SNIR (dB)", "snir_mean", output_dir)
+            _plot_global_metric(
+                records,
+                "snir_mean",
+                "Mean SNIR (dB)",
+                "snir_mean",
+                output_dir,
+                size_tag=size_tag,
+            )
         if any(r.get("snr_mean") is not None for r in records):
-            _plot_global_metric(records, "snr_mean", "Mean SNR (dB)", "snr_mean", output_dir)
+            _plot_global_metric(
+                records,
+                "snr_mean",
+                "Mean SNR (dB)",
+                "snr_mean",
+                output_dir,
+                size_tag=size_tag,
+            )
         if plot_trajectories:
-            _plot_trajectories(records, trajectories_dir)
+            _plot_trajectories(records, trajectories_dir, size_tag=size_tag)
         comparison_records = records
 
     if compare_snir:
@@ -1510,7 +1642,7 @@ def generate_step1_figures(
         if not comparison_records:
             print("Aucune donnée disponible pour comparer SNIR on/off.")
         else:
-            _plot_snir_comparison(comparison_records, comparison_dir)
+            _plot_snir_comparison(comparison_records, comparison_dir, size_tag=size_tag)
             forced_algorithm = (
                 EXTENDED_ALGORITHM if comparison_dir == extended_dir else None
             )
@@ -1518,10 +1650,12 @@ def generate_step1_figures(
                 comparison_records,
                 comparison_dir,
                 forced_algorithm=forced_algorithm,
+                size_tag=size_tag,
             )
             plot_histogram_by_algo_and_snir(
                 comparison_records,
                 comparison_dir,
+                size_tag=size_tag,
             )
 
     if plot_cdf:
@@ -1540,10 +1674,12 @@ def generate_step1_figures(
         else:
             if ieee:
                 raw_records = _apply_ieee_filters(raw_records)
+            raw_records = _filter_network_sizes(raw_records, network_sizes)
             _plot_cdf(
                 raw_records,
                 extended_dir,
                 forced_algorithm=EXTENDED_ALGORITHM,
+                size_tag=size_tag,
             )
 
 
@@ -1627,6 +1763,11 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="+",
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
     )
+    parser.add_argument(
+        "--per-size",
+        action="store_true",
+        help="Génère une figure par taille de réseau (plot_X_size_<N>.png).",
+    )
     return parser
 
 
@@ -1635,6 +1776,33 @@ def main(argv: List[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.official and (not args.use_summary or not args.plot_cdf):
         parser.error("--official requiert --use-summary et --plot-cdf.")
+    if args.per_size:
+        sizes = _available_network_sizes(
+            args.results_dir,
+            args.use_summary,
+            args.strict,
+            args.ieee,
+            args.network_sizes,
+        )
+        if not sizes:
+            print("Aucune taille de réseau détectée pour --per-size.")
+            return
+        for size in sizes:
+            generate_step1_figures(
+                args.results_dir,
+                args.figures_dir,
+                args.use_summary,
+                args.plot_cdf,
+                args.plot_trajectories,
+                args.compare_snir,
+                args.strict,
+                args.official,
+                args.official_only,
+                args.ieee,
+                [size],
+                size_tag=size,
+            )
+        return
     generate_step1_figures(
         args.results_dir,
         args.figures_dir,
