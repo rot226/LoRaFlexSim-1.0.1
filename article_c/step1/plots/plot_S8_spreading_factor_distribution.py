@@ -281,7 +281,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = False) -> None:
         )
         allow_sample = False
     step_dir = Path(__file__).resolve().parents[1]
-    raw_results_path = step_dir / "results" / "raw_results.csv"
+    raw_results_path = step_dir / "results" / "raw_packets.csv"
     aggregated_results_path = step_dir / "results" / "aggregated_results.csv"
     sf_values = list(DEFAULT_CONFIG.radio.spreading_factors)
     raw_rows = _read_raw_rows(raw_results_path)
@@ -295,7 +295,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = False) -> None:
             )
     elif raw_rows:
         logger.warning(
-            "Aucune ligne sf_selected détectée dans raw_results.csv: utilisation des résultats agrégés."
+            "Aucune ligne sf_selected détectée dans raw_packets.csv: utilisation des résultats agrégés."
         )
     if distribution_by_group:
         rows = [

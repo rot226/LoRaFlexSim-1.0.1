@@ -13,7 +13,7 @@ from statistics import mean
 from time import perf_counter
 
 from article_c.common.config import DEFAULT_CONFIG
-from article_c.common.csv_io import write_simulation_results
+from article_c.common.csv_io import write_step1_results
 from article_c.common.plot_helpers import (
     apply_plot_style,
     filter_cluster,
@@ -536,7 +536,7 @@ def _simulate_density(
                     )
                     timing_totals["metrics_s"] += perf_counter() - metrics_start
                     timing_runs += 1
-    write_simulation_results(output_dir, raw_rows, network_size=network_size)
+    write_step1_results(output_dir, raw_rows, network_size=network_size)
     timing_summary = None
     if config["profile_timing"] and timing_runs > 0:
         mean_assignment = timing_totals["sf_assignment_s"] / timing_runs
@@ -612,13 +612,13 @@ def _load_csv_rows(path: Path) -> list[dict[str, str]]:
 
 
 def _check_pdr_formula_for_size(output_dir: Path, reference_size: int = 80) -> None:
-    raw_path = output_dir / "raw_results.csv"
+    raw_path = output_dir / "raw_metrics.csv"
     aggregated_path = output_dir / "aggregated_results.csv"
     raw_rows = _load_csv_rows(raw_path)
     aggregated_rows = _load_csv_rows(aggregated_path)
     if not raw_rows or not aggregated_rows:
         print(
-            "Vérification PDR ignorée: raw_results.csv ou aggregated_results.csv manquant."
+            "Vérification PDR ignorée: raw_metrics.csv ou aggregated_results.csv manquant."
         )
         return
 
@@ -664,12 +664,12 @@ def _check_pdr_formula_for_size(output_dir: Path, reference_size: int = 80) -> N
     if not grouped_raw:
         print(
             f"Aucune ligne brute exploitable pour network_size={reference_size} "
-            "dans raw_results.csv."
+            "dans raw_metrics.csv."
         )
         return
 
     print(
-        f"Comparaison PDR (network_size={reference_size}) entre raw_results.csv "
+        f"Comparaison PDR (network_size={reference_size}) entre raw_metrics.csv "
         "et aggregated_results.csv:"
     )
     for key, values in grouped_raw.items():

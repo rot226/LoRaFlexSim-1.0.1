@@ -185,7 +185,7 @@ def validate_results(
     tracker = AnomalyTracker(max_samples=max_samples)
 
     _validate_pdr_file(
-        step1_dir / "raw_results.csv",
+        step1_dir / "raw_metrics.csv",
         pdr_key="pdr",
         sent_key="sent",
         received_key="received",
