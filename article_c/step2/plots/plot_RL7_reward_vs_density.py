@@ -131,15 +131,125 @@ def _extract_metric_values(
     return values, median_key
 
 
-def _warn_if_constant(series: pd.Series, label: str) -> None:
+def _warn_if_constant(series: pd.Series, label: str) -> bool:
     if series.empty:
         warnings.warn(f"Aucune valeur disponible pour {label}.", stacklevel=2)
-        return
+        return True
     if series.nunique(dropna=True) <= 1:
         warnings.warn(
             f"Valeurs constantes détectées pour {label} (variance nulle).",
             stacklevel=2,
         )
+        return True
+    return False
+
+
+def _load_step2_raw_results(
+    results_path: Path,
+    *,
+    allow_sample: bool = True,
+) -> list[dict[str, object]]:
+    if not results_path.exists():
+        if allow_sample:
+            return []
+        raise FileNotFoundError(f"CSV Step2 manquant: {results_path}")
+    df = pd.read_csv(results_path)
+    if df.empty:
+        return []
+    if "reward" not in df.columns:
+        warnings.warn(
+            "Colonne reward manquante dans raw_results.csv; figure ignorée.",
+            stacklevel=2,
+        )
+        return []
+    if "network_size" in df.columns:
+        network_size_series = df["network_size"]
+    elif "density" in df.columns:
+        network_size_series = df["density"]
+    else:
+        network_size_series = pd.Series([None] * len(df))
+    df["network_size"] = pd.to_numeric(network_size_series, errors="coerce")
+    df["reward"] = pd.to_numeric(df["reward"], errors="coerce")
+    if "density" in df.columns:
+        df["density"] = pd.to_numeric(df["density"], errors="coerce")
+    df["algo"] = df.get("algo", "")
+    df["snir_mode"] = df.get("snir_mode", "")
+    df["cluster"] = df.get("cluster", "all").fillna("all")
+    df = df.dropna(subset=["network_size", "reward"])
+    return df.to_dict(orient="records")
+
+
+def _aggregate_raw_rewards(
+    rows: list[dict[str, object]],
+    *,
+    metric_key: str = "reward",
+) -> list[dict[str, object]]:
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return []
+    df["network_size"] = pd.to_numeric(df.get("network_size"), errors="coerce")
+    df[metric_key] = pd.to_numeric(df.get(metric_key), errors="coerce")
+    df = df.dropna(subset=["network_size", metric_key, "algo"])
+    if df.empty:
+        return []
+    grouped = df.groupby(["network_size", "algo"], dropna=True)[metric_key]
+    summary = grouped.quantile([0.1, 0.5, 0.9]).unstack()
+    mean_values = grouped.mean()
+    results: list[dict[str, object]] = []
+    for (network_size, algo), quantiles in summary.iterrows():
+        results.append(
+            {
+                "network_size": float(network_size),
+                "algo": algo,
+                f"{metric_key}_mean": float(mean_values.loc[(network_size, algo)]),
+                f"{metric_key}_p10": float(quantiles.get(0.1)),
+                f"{metric_key}_p50": float(quantiles.get(0.5)),
+                f"{metric_key}_p90": float(quantiles.get(0.9)),
+            }
+        )
+    return results
+
+
+def _log_min_max_by_size(
+    rows: list[dict[str, object]],
+    metric_key: str,
+    *,
+    label: str,
+) -> None:
+    df = pd.DataFrame(rows)
+    if df.empty or "network_size" not in df.columns:
+        warnings.warn("Diagnostic min/max indisponible: données absentes.", stacklevel=2)
+        return
+    values = pd.to_numeric(df.get(metric_key), errors="coerce")
+    df = pd.DataFrame(
+        {"network_size": pd.to_numeric(df.get("network_size"), errors="coerce"), "value": values}
+    ).dropna()
+    if df.empty:
+        warnings.warn(
+            f"Diagnostic min/max indisponible pour {label}: valeurs absentes.",
+            stacklevel=2,
+        )
+        return
+    print(f"Diagnostic min/max pour {label} (par taille):")
+    grouped = df.groupby("network_size")["value"]
+    for size, stats in grouped.agg(["min", "max"]).sort_index().iterrows():
+        print(f"  taille={int(size)} -> min={stats['min']:.6f} / max={stats['max']:.6f}")
+
+
+def _plot_constant_message(
+    message: str,
+    *,
+    title: str,
+    output_dir: Path,
+    stem: str,
+) -> None:
+    fig, ax = plt.subplots()
+    apply_figure_layout(fig, figsize=(8, 5))
+    ax.axis("off")
+    ax.set_title(title)
+    ax.text(0.5, 0.5, message, ha="center", va="center", wrap=True)
+    save_figure(fig, output_dir, stem, use_tight=True)
+    plt.close(fig)
 
 
 def _diagnose_density(rows: list[dict[str, object]]) -> None:
@@ -243,11 +353,60 @@ def main(
     rows = _filter_algorithms(rows)
     _diagnose_density(rows)
     metric_values, metric_label = _extract_metric_values(rows, "reward_mean")
-    _warn_if_constant(metric_values, metric_label)
+    is_constant = _warn_if_constant(metric_values, metric_label)
+    rows_for_plot = rows
+    diagnostics_rows = rows
+    diagnostics_metric_key = metric_label
+    metric_key = "reward_mean"
+    if is_constant:
+        warnings.warn(
+            "Variance nulle sur les métriques agrégées; bascule vers raw_results.csv.",
+            stacklevel=2,
+        )
+        raw_results_path = step_dir / "results" / "raw_results.csv"
+        raw_rows = _load_step2_raw_results(raw_results_path, allow_sample=allow_sample)
+        if raw_rows:
+            raw_rows = filter_cluster(raw_rows, "all")
+            raw_rows = [row for row in raw_rows if row.get("snir_mode") == "snir_on"]
+            normalize_network_size_rows(raw_rows)
+            raw_rows, _ = filter_rows_by_network_sizes(raw_rows, network_sizes_filter)
+            raw_rows = _filter_algorithms(raw_rows)
+            _diagnose_density(raw_rows)
+            metric_values = pd.to_numeric(
+                pd.Series([row.get("reward") for row in raw_rows]), errors="coerce"
+            ).dropna()
+            is_constant = _warn_if_constant(metric_values, "reward")
+            diagnostics_rows = raw_rows
+            diagnostics_metric_key = "reward"
+            rows_for_plot = _aggregate_raw_rewards(raw_rows, metric_key="reward")
+            metric_key = "reward_mean"
+        else:
+            warnings.warn(
+                "Données non agrégées indisponibles: maintien des métriques agrégées.",
+                stacklevel=2,
+            )
 
     output_dir = step_dir / "plots" / "output"
-    _plot_diagnostics(rows, "reward_mean", output_dir, "plot_RL7_reward_vs_density")
-    fig = _plot_metric(rows, "reward_mean", network_sizes_filter)
+    _plot_diagnostics(
+        diagnostics_rows,
+        diagnostics_metric_key,
+        output_dir,
+        "plot_RL7_reward_vs_density",
+    )
+    _log_min_max_by_size(
+        diagnostics_rows,
+        diagnostics_metric_key,
+        label=diagnostics_metric_key,
+    )
+    if is_constant:
+        _plot_constant_message(
+            "Variance nulle détectée: valeurs constantes pour la récompense.",
+            title="Step 2 - Global Median Reward vs Network size",
+            output_dir=output_dir,
+            stem="plot_RL7_reward_vs_density",
+        )
+        return
+    fig = _plot_metric(rows_for_plot, metric_key, network_sizes_filter)
     if fig is None:
         return
     save_figure(fig, output_dir, "plot_RL7_reward_vs_density", use_tight=False)

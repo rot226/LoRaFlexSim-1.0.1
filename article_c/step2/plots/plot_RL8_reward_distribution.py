@@ -68,6 +68,8 @@ def _load_step2_raw_results(
         network_size_series = pd.Series([None] * len(df))
     df["network_size"] = pd.to_numeric(network_size_series, errors="coerce")
     df["reward"] = pd.to_numeric(df["reward"], errors="coerce")
+    if "density" in df.columns:
+        df["density"] = pd.to_numeric(df["density"], errors="coerce")
     df["algo"] = df.get("algo", "")
     df["snir_mode"] = df.get("snir_mode", "")
     df["cluster"] = df.get("cluster", "all").fillna("all")
@@ -108,15 +110,17 @@ def _plot_distribution(
     return fig
 
 
-def _warn_if_constant(series: pd.Series, label: str) -> None:
+def _warn_if_constant(series: pd.Series, label: str) -> bool:
     if series.empty:
         warnings.warn(f"Aucune valeur disponible pour {label}.", stacklevel=2)
-        return
+        return True
     if series.nunique(dropna=True) <= 1:
         warnings.warn(
             f"Valeurs constantes détectées pour {label} (variance nulle).",
             stacklevel=2,
         )
+        return True
+    return False
 
 
 def _diagnose_density(rows: list[dict[str, object]]) -> None:
@@ -187,6 +191,48 @@ def _plot_diagnostics(
     plt.close(fig)
 
 
+def _log_min_max_by_size(
+    rows: list[dict[str, object]],
+    metric_key: str,
+    *,
+    label: str,
+) -> None:
+    df = pd.DataFrame(rows)
+    if df.empty or "network_size" not in df.columns:
+        warnings.warn("Diagnostic min/max indisponible: données absentes.", stacklevel=2)
+        return
+    values = pd.to_numeric(df.get(metric_key), errors="coerce")
+    df = pd.DataFrame(
+        {"network_size": pd.to_numeric(df.get("network_size"), errors="coerce"), "value": values}
+    ).dropna()
+    if df.empty:
+        warnings.warn(
+            f"Diagnostic min/max indisponible pour {label}: valeurs absentes.",
+            stacklevel=2,
+        )
+        return
+    print(f"Diagnostic min/max pour {label} (par taille):")
+    grouped = df.groupby("network_size")["value"]
+    for size, stats in grouped.agg(["min", "max"]).sort_index().iterrows():
+        print(f"  taille={int(size)} -> min={stats['min']:.6f} / max={stats['max']:.6f}")
+
+
+def _plot_constant_message(
+    message: str,
+    *,
+    title: str,
+    output_dir: Path,
+    stem: str,
+) -> None:
+    fig, ax = plt.subplots()
+    apply_figure_layout(fig, figsize=(8, 5))
+    ax.axis("off")
+    ax.set_title(title)
+    ax.text(0.5, 0.5, message, ha="center", va="center", wrap=True)
+    save_figure(fig, output_dir, stem, use_tight=True)
+    plt.close(fig)
+
+
 def main(
     network_sizes: list[int] | None = None,
     argv: list[str] | None = None,
@@ -233,10 +279,19 @@ def main(
     rewards_series = pd.to_numeric(
         pd.Series([row.get("reward") for row in rows]), errors="coerce"
     ).dropna()
-    _warn_if_constant(rewards_series, "reward")
+    is_constant = _warn_if_constant(rewards_series, "reward")
 
     output_dir = step_dir / "plots" / "output"
     _plot_diagnostics(rows, output_dir, "plot_RL8_reward_distribution")
+    _log_min_max_by_size(rows, "reward", label="reward")
+    if is_constant:
+        _plot_constant_message(
+            "Variance nulle détectée: distribution des récompenses constante.",
+            title="Step 2 - Reward Distribution by Algorithm",
+            output_dir=output_dir,
+            stem="plot_RL8_reward_distribution",
+        )
+        return
     fig = _plot_distribution(rows, network_sizes)
     save_figure(fig, output_dir, "plot_RL8_reward_distribution", use_tight=False)
     plt.close(fig)
