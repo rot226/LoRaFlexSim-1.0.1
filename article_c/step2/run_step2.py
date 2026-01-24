@@ -131,6 +131,88 @@ def _summarize_success_collision(
     }
 
 
+def _init_collision_histogram() -> dict[str, int]:
+    return {"0-0.1": 0, "0.1-0.3": 0, "0.3-0.6": 0, "0.6-1.0": 0}
+
+
+def _update_collision_histogram(histogram: dict[str, int], value: float) -> None:
+    bounded = max(0.0, min(1.0, value))
+    if bounded < 0.1:
+        histogram["0-0.1"] += 1
+    elif bounded < 0.3:
+        histogram["0.1-0.3"] += 1
+    elif bounded < 0.6:
+        histogram["0.3-0.6"] += 1
+    else:
+        histogram["0.6-1.0"] += 1
+
+
+def _summarize_post_simulation(
+    raw_rows: list[dict[str, object]]
+) -> dict[str, object]:
+    success_sum = 0.0
+    success_count = 0
+    collision_sum = 0.0
+    collision_count = 0
+    collision_hist = _init_collision_histogram()
+    link_quality_sum = 0.0
+    link_quality_count = 0
+    link_quality_min: float | None = None
+    link_quality_max: float | None = None
+    reward_zero_no_success = 0
+    reward_zero_clipped = 0
+    reward_zero_total = 0
+    reward_min: float | None = None
+    reward_max: float | None = None
+    reward_count = 0
+    for row in raw_rows:
+        if str(row.get("cluster", "")) != "all":
+            continue
+        success_rate = float(row.get("success_rate", 0.0) or 0.0)
+        collision_norm = float(row.get("collision_norm", 0.0) or 0.0)
+        link_quality = float(row.get("link_quality", 0.0) or 0.0)
+        reward = float(row.get("reward", 0.0) or 0.0)
+        success_sum += success_rate
+        success_count += 1
+        collision_sum += collision_norm
+        collision_count += 1
+        _update_collision_histogram(collision_hist, collision_norm)
+        link_quality_sum += link_quality
+        link_quality_count += 1
+        link_quality_min = (
+            link_quality if link_quality_min is None else min(link_quality_min, link_quality)
+        )
+        link_quality_max = (
+            link_quality if link_quality_max is None else max(link_quality_max, link_quality)
+        )
+        reward_min = reward if reward_min is None else min(reward_min, reward)
+        reward_max = reward if reward_max is None else max(reward_max, reward)
+        reward_count += 1
+        if reward <= 1e-9:
+            reward_zero_total += 1
+            if success_rate <= 1e-9:
+                reward_zero_no_success += 1
+            else:
+                reward_zero_clipped += 1
+    return {
+        "success_sum": success_sum,
+        "success_count": success_count,
+        "collision_sum": collision_sum,
+        "collision_count": collision_count,
+        "collision_hist": collision_hist,
+        "link_quality_sum": link_quality_sum,
+        "link_quality_count": link_quality_count,
+        "link_quality_min": 0.0 if link_quality_min is None else link_quality_min,
+        "link_quality_max": 0.0 if link_quality_max is None else link_quality_max,
+        "reward_zero_no_success": reward_zero_no_success,
+        "reward_zero_clipped": reward_zero_clipped,
+        "reward_zero_total": reward_zero_total,
+        "reward_min": 0.0 if reward_min is None else reward_min,
+        "reward_max": 0.0 if reward_max is None else reward_max,
+        "reward_count": reward_count,
+    }
+
+
 def _log_size_diagnostics(density: int, metrics: dict[str, float]) -> None:
     print(
         "Diagnostic taille "
@@ -216,6 +298,200 @@ def _read_nested_sizes(base_results_dir: Path, replications: list[int]) -> set[i
             f"{base_results_dir / 'size_<N>/rep_<R>'}."
         )
     return sizes
+
+
+def _compose_post_simulation_report(
+    per_size_stats: dict[int, dict[str, object]],
+    per_size_diagnostics: dict[int, dict[str, float]],
+) -> str:
+    if not per_size_stats:
+        return "Rapport post-simulation indisponible (aucune statistique collectée)."
+    overall_success_sum = 0.0
+    overall_success_count = 0
+    overall_collision_sum = 0.0
+    overall_collision_count = 0
+    overall_collision_hist = _init_collision_histogram()
+    overall_link_quality_sum = 0.0
+    overall_link_quality_count = 0
+    overall_link_quality_min: float | None = None
+    overall_link_quality_max: float | None = None
+    reward_zero_no_success = 0
+    reward_zero_clipped = 0
+    reward_zero_total = 0
+    reward_min: float | None = None
+    reward_max: float | None = None
+    reward_count = 0
+
+    per_size_link_quality_mean: dict[int, float] = {}
+    for size, stats in per_size_stats.items():
+        success_sum = float(stats.get("success_sum", 0.0))
+        success_count = int(stats.get("success_count", 0))
+        collision_sum = float(stats.get("collision_sum", 0.0))
+        collision_count = int(stats.get("collision_count", 0))
+        link_quality_sum = float(stats.get("link_quality_sum", 0.0))
+        link_quality_count = int(stats.get("link_quality_count", 0))
+        link_quality_min = float(stats.get("link_quality_min", 0.0))
+        link_quality_max = float(stats.get("link_quality_max", 0.0))
+        overall_success_sum += success_sum
+        overall_success_count += success_count
+        overall_collision_sum += collision_sum
+        overall_collision_count += collision_count
+        for bucket, count in dict(stats.get("collision_hist", {})).items():
+            overall_collision_hist[bucket] = overall_collision_hist.get(bucket, 0) + int(
+                count
+            )
+        overall_link_quality_sum += link_quality_sum
+        overall_link_quality_count += link_quality_count
+        overall_link_quality_min = (
+            link_quality_min
+            if overall_link_quality_min is None
+            else min(overall_link_quality_min, link_quality_min)
+        )
+        overall_link_quality_max = (
+            link_quality_max
+            if overall_link_quality_max is None
+            else max(overall_link_quality_max, link_quality_max)
+        )
+        reward_zero_no_success += int(stats.get("reward_zero_no_success", 0))
+        reward_zero_clipped += int(stats.get("reward_zero_clipped", 0))
+        reward_zero_total += int(stats.get("reward_zero_total", 0))
+        reward_min = (
+            float(stats.get("reward_min", 0.0))
+            if reward_min is None
+            else min(reward_min, float(stats.get("reward_min", 0.0)))
+        )
+        reward_max = (
+            float(stats.get("reward_max", 0.0))
+            if reward_max is None
+            else max(reward_max, float(stats.get("reward_max", 0.0)))
+        )
+        reward_count += int(stats.get("reward_count", 0))
+        if link_quality_count > 0:
+            per_size_link_quality_mean[size] = link_quality_sum / link_quality_count
+
+    success_mean = (
+        overall_success_sum / overall_success_count
+        if overall_success_count > 0
+        else 0.0
+    )
+    collision_mean = (
+        overall_collision_sum / overall_collision_count
+        if overall_collision_count > 0
+        else 0.0
+    )
+    link_quality_mean = (
+        overall_link_quality_sum / overall_link_quality_count
+        if overall_link_quality_count > 0
+        else 0.0
+    )
+    link_quality_min = 0.0 if overall_link_quality_min is None else overall_link_quality_min
+    link_quality_max = 0.0 if overall_link_quality_max is None else overall_link_quality_max
+
+    lines = [
+        "Rapport post-simulation (étape 2)",
+        "",
+        "Taux de succès moyen:",
+        f"- success_rate moyen global: {success_mean:.4f}",
+    ]
+    if per_size_diagnostics:
+        lines.append("- success_rate moyen par taille:")
+        for size in sorted(per_size_diagnostics):
+            metrics = per_size_diagnostics[size]
+            lines.append(
+                f"  - taille {size}: {metrics['success_mean']:.4f} "
+                f"(min {metrics['success_min']:.4f}, max {metrics['success_max']:.4f})"
+            )
+
+    total_collisions = sum(overall_collision_hist.values()) or 1
+    lines.extend(
+        [
+            "",
+            "Distribution des collisions (collision_norm):",
+            f"- moyenne globale: {collision_mean:.4f}",
+        ]
+    )
+    for bucket in ("0-0.1", "0.1-0.3", "0.3-0.6", "0.6-1.0"):
+        count = overall_collision_hist.get(bucket, 0)
+        percent = 100.0 * count / total_collisions
+        lines.append(f"  - {bucket}: {count} fenêtres ({percent:.1f}%)")
+
+    lines.extend(
+        [
+            "",
+            "Variation de link_quality:",
+            (
+                f"- moyenne globale: {link_quality_mean:.4f} "
+                f"(min {link_quality_min:.4f}, max {link_quality_max:.4f})"
+            ),
+        ]
+    )
+    if per_size_link_quality_mean:
+        lq_means = list(per_size_link_quality_mean.values())
+        lq_delta = max(lq_means) - min(lq_means) if lq_means else 0.0
+        variation_label = (
+            "variation détectée"
+            if lq_delta >= 1e-3
+            else "variation très faible (quasi stable)"
+        )
+        lines.append(f"- amplitude inter-tailles: {lq_delta:.4f} ({variation_label})")
+        lines.append("- moyenne link_quality par taille:")
+        for size in sorted(per_size_link_quality_mean):
+            lines.append(
+                f"  - taille {size}: {per_size_link_quality_mean[size]:.4f}"
+            )
+
+    reward_zero_ratio = reward_zero_total / reward_count if reward_count > 0 else 0.0
+    reward_min_value = 0.0 if reward_min is None else reward_min
+    reward_max_value = 0.0 if reward_max is None else reward_max
+    lines.extend(
+        [
+            "",
+            "Analyse reward nul:",
+            (
+                f"- reward min/max observé: {reward_min_value:.4f}/"
+                f"{reward_max_value:.4f}"
+            ),
+            f"- part de reward nul: {reward_zero_total}/{reward_count} "
+            f"({reward_zero_ratio:.1%})",
+        ]
+    )
+    if reward_zero_total > 0:
+        no_success_ratio = reward_zero_no_success / reward_zero_total
+        clipped_ratio = reward_zero_clipped / reward_zero_total
+        lines.append(
+            f"- reward nul sans succès: {reward_zero_no_success} "
+            f"({no_success_ratio:.1%})"
+        )
+        lines.append(
+            f"- reward nul malgré succès (>0): {reward_zero_clipped} "
+            f"({clipped_ratio:.1%})"
+        )
+        if no_success_ratio > 0.6:
+            conclusion = "Le reward nul provient majoritairement d'une absence de succès."
+        elif clipped_ratio > 0.6:
+            conclusion = (
+                "Le reward nul provient majoritairement d'un écrêtage (pénalité collision)."
+            )
+        else:
+            conclusion = (
+                "Le reward nul est mixte: absence de succès et écrêtage contribuent."
+            )
+        lines.append(f"- conclusion: {conclusion}")
+    else:
+        lines.append("- conclusion: aucun reward nul détecté.")
+
+    return "\n".join(lines)
+
+
+def _write_post_simulation_report(
+    output_dir: Path,
+    per_size_stats: dict[int, dict[str, object]],
+    per_size_diagnostics: dict[int, dict[str, float]],
+) -> None:
+    report = _compose_post_simulation_report(per_size_stats, per_size_diagnostics)
+    report_path = output_dir / "post_simulation_report.txt"
+    report_path.write_text(report + "\n", encoding="utf-8")
+    print(report)
 
 
 def _is_non_empty_file(path: Path) -> bool:
@@ -361,6 +637,7 @@ def _simulate_density(
             f"{density}: {sorted(invalid_sizes)}"
         )
     diagnostics = _summarize_success_collision(raw_rows)
+    post_stats = _summarize_post_simulation(raw_rows)
     _log_size_diagnostics(int(density), diagnostics)
 
     if flat_output:
@@ -390,6 +667,7 @@ def _simulate_density(
         "selection_rows": selection_rows,
         "learning_curve_rows": learning_curve_rows,
         "diagnostics": diagnostics,
+        "post_stats": post_stats,
     }
 
 
@@ -424,6 +702,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     selection_rows: list[dict[str, object]] = []
     learning_curve_rows: list[dict[str, object]] = []
     size_diagnostics: dict[int, dict[str, float]] = {}
+    size_post_stats: dict[int, dict[str, object]] = {}
     total_rows = 0
 
     config: dict[str, object] = {
@@ -485,6 +764,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             selection_rows.extend(result["selection_rows"])
             learning_curve_rows.extend(result["learning_curve_rows"])
             size_diagnostics[int(result["density"])] = dict(result["diagnostics"])
+            size_post_stats[int(result["density"])] = dict(result["post_stats"])
     else:
         ctx = get_context("spawn")
         with ctx.Pool(processes=worker_count) as pool:
@@ -494,9 +774,11 @@ def main(argv: Sequence[str] | None = None) -> None:
                 selection_rows.extend(result["selection_rows"])
                 learning_curve_rows.extend(result["learning_curve_rows"])
                 size_diagnostics[int(result["density"])] = dict(result["diagnostics"])
+                size_post_stats[int(result["density"])] = dict(result["post_stats"])
 
     print(f"Rows written: {total_rows}")
     _verify_metric_variation(size_diagnostics)
+    _write_post_simulation_report(base_results_dir, size_post_stats, size_diagnostics)
 
     if selection_rows:
         rl5_rows = _aggregate_selection_probs(selection_rows)
