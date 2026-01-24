@@ -13,6 +13,7 @@ import pandas as pd
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
     apply_plot_style,
+    apply_figure_layout,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
@@ -64,7 +65,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         clusters = sorted(available_clusters)
     cluster_labels = _cluster_labels(clusters)
 
-    fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 6), sharey=True)
+    fig, axes = plt.subplots(1, len(clusters), sharey=True)
+    apply_figure_layout(fig, figsize=(5 * len(clusters), 8))
     if len(clusters) == 1:
         axes = [axes]
 
@@ -83,10 +85,10 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             handles,
             labels,
             loc="upper center",
-            bbox_to_anchor=(0.5, 1.14),
             ncol=min(len(labels), 4),
             frameon=False,
         )
+        apply_figure_layout(fig, bbox_to_anchor=(0.5, 1.14))
     configure_figure(
         fig,
         axes,

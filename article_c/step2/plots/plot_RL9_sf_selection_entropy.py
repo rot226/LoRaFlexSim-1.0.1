@@ -12,6 +12,7 @@ import pandas as pd
 
 from article_c.common.plot_helpers import (
     apply_plot_style,
+    apply_figure_layout,
     filter_rows_by_network_sizes,
     load_step2_aggregated,
     load_step2_selection_probs,
@@ -59,6 +60,8 @@ def _plot_entropy(
     network_sizes: list[int],
 ) -> plt.Figure:
     fig, ax = plt.subplots()
+    width, height = fig.get_size_inches()
+    apply_figure_layout(fig, figsize=(width, height + 2))
     network_sizes = sorted(network_sizes)
     for network_size in network_sizes:
         size_rows = [row for row in rows if row["network_size"] == network_size]

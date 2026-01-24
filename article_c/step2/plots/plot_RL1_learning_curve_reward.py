@@ -10,6 +10,7 @@ import warnings
 import matplotlib.pyplot as plt
 from article_c.common.plot_helpers import (
     apply_plot_style,
+    apply_figure_layout,
     filter_rows_by_network_sizes,
     place_legend,
     save_figure,
@@ -125,6 +126,8 @@ def _plot_learning_curve(
     reference_size: int | None = None,
 ) -> plt.Figure:
     fig, ax = plt.subplots()
+    width, height = fig.get_size_inches()
+    apply_figure_layout(fig, figsize=(width, height + 2))
     preferred_algos = ["ADR", "UCB1-SF"]
     available = {row["algo"] for row in rows}
     algorithms = [algo for algo in preferred_algos if algo in available]

@@ -13,6 +13,7 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
+    apply_figure_layout,
     ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
@@ -83,6 +84,8 @@ def _plot_metric(
     network_sizes: list[int] | None,
 ) -> plt.Figure | None:
     fig, ax = plt.subplots()
+    width, height = fig.get_size_inches()
+    apply_figure_layout(fig, figsize=(width, height + 2))
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
     if network_sizes is None:
@@ -165,7 +168,8 @@ def _plot_diagnostics(
     if df.empty:
         return
     metric_values, metric_label = _extract_metric_values(rows, metric_key)
-    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+    fig, axes = plt.subplots(2, 2)
+    apply_figure_layout(fig, figsize=(10, 10))
     axes = axes.flatten()
 
     network_sizes = pd.to_numeric(df.get("network_size"), errors="coerce").dropna()
