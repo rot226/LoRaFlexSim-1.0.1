@@ -164,18 +164,34 @@ def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
         return set()
     with aggregated_path.open("r", newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
-        if not reader.fieldnames or "network_size" not in reader.fieldnames:
-            print(f"Colonne network_size absente dans {aggregated_path}")
+        fieldnames = reader.fieldnames or []
+        preview = ", ".join(fieldnames[:6]) if fieldnames else "aucun"
+        print(f"Premiers headers lus dans {aggregated_path}: {preview}")
+        size_key = None
+        if "network_size" in fieldnames:
+            size_key = "network_size"
+        elif "density" in fieldnames:
+            size_key = "density"
+            print(
+                f"Colonne network_size absente dans {aggregated_path}, "
+                "fallback sur density."
+            )
+        else:
+            print(
+                f"Colonnes network_size/density absentes dans {aggregated_path}"
+            )
             return set()
         sizes: set[int] = set()
         for row in reader:
-            value = row.get("network_size")
+            value = row.get(size_key)
             if value in (None, ""):
                 continue
             try:
                 sizes.add(int(float(value)))
             except ValueError:
-                print(f"Valeur network_size invalide détectée: {value}")
+                print(
+                    f"Valeur {size_key} invalide détectée: {value}"
+                )
         return sizes
 
 

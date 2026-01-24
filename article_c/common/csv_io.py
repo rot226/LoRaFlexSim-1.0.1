@@ -461,9 +461,20 @@ def write_simulation_results(
     _log_control_table(raw_rows, "raw_results.csv")
     aggregated_rows, intermediate_rows = aggregate_results(raw_rows)
     _log_control_table(aggregated_rows, "aggregated_results.csv")
+    for row in aggregated_rows:
+        if row.get("network_size") in (None, "") and row.get("density") not in (None, ""):
+            row["network_size"] = row["density"]
+        if row.get("density") in (None, "") and row.get("network_size") not in (None, ""):
+            row["density"] = row["network_size"]
     aggregated_header = (
         list(aggregated_rows[0].keys()) if aggregated_rows else list(BASE_GROUP_KEYS)
     )
+    if "network_size" not in aggregated_header and "density" in aggregated_header:
+        density_index = aggregated_header.index("density")
+        aggregated_header.insert(density_index, "network_size")
+    if "density" not in aggregated_header and "network_size" in aggregated_header:
+        size_index = aggregated_header.index("network_size")
+        aggregated_header.insert(size_index + 1, "density")
     write_rows(
         aggregated_path,
         aggregated_header,
