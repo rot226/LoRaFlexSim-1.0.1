@@ -810,6 +810,7 @@ def run_simulation(
                 raw_rows.append(
                     {
                         "network_size": network_size_value,
+                        "density": network_size_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
                         "cluster": node_clusters[node_id],
@@ -838,6 +839,7 @@ def run_simulation(
                 raw_rows.append(
                     {
                         "network_size": network_size_value,
+                        "density": network_size_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
                         "cluster": "all",
@@ -895,6 +897,7 @@ def run_simulation(
             learning_curve_rows.append(
                 {
                     "network_size": network_size_value,
+                    "density": network_size_value,
                     "round": round_id,
                     "algo": algo_label,
                     "avg_reward": avg_reward,
@@ -906,6 +909,7 @@ def run_simulation(
                 selection_prob_rows.append(
                     {
                         "network_size": network_size_value,
+                        "density": network_size_value,
                         "round": round_id,
                         "sf": sf_value,
                         "selection_prob": bandit.counts[sf_index] / total,
@@ -1095,6 +1099,7 @@ def run_simulation(
                 raw_rows.append(
                     {
                         "network_size": network_size_value,
+                        "density": network_size_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
                         "cluster": node_clusters[node_id],
@@ -1123,6 +1128,7 @@ def run_simulation(
                 raw_rows.append(
                     {
                         "network_size": network_size_value,
+                        "density": network_size_value,
                         "algo": algo_label,
                         "snir_mode": snir_mode,
                         "cluster": "all",
@@ -1180,6 +1186,7 @@ def run_simulation(
             learning_curve_rows.append(
                 {
                     "network_size": network_size_value,
+                    "density": network_size_value,
                     "round": round_id,
                     "algo": algo_label,
                     "avg_reward": avg_reward,
