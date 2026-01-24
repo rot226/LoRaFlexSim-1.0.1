@@ -369,6 +369,16 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    if args.step1_outdir is not None:
+        default_step1_dir = (
+            Path(__file__).resolve().parent / "step1" / "results"
+        ).resolve()
+        requested_dir = Path(args.step1_outdir).resolve()
+        if requested_dir != default_step1_dir:
+            raise ValueError(
+                "Étape 1: le répertoire de sortie doit être "
+                f"{default_step1_dir}."
+            )
     network_sizes = (
         parse_network_size_list(args.network_sizes)
         if args.network_sizes

@@ -101,6 +101,16 @@ def _load_csv_rows_coerced(path: Path) -> list[dict[str, object]]:
         ]
 
 
+def _ensure_expected_results_dir(csv_path: Path, expected_dir: Path, label: str) -> None:
+    try:
+        csv_path.resolve().relative_to(expected_dir.resolve())
+    except ValueError as exc:
+        raise ValueError(
+            "Chemin CSV inattendu pour "
+            f"{label}: {csv_path} (attendu sous {expected_dir})."
+        ) from exc
+
+
 def _collect_nested_csvs(results_dir: Path, filename: str) -> list[Path]:
     return sorted(results_dir.glob(f"size_*/rep_*/{filename}"))
 
@@ -414,6 +424,7 @@ def main(argv: list[str] | None = None) -> None:
             raise FileNotFoundError(
                 "CSV Step1 absent : aucun CSV agrégé ou sous-dossier détecté."
             )
+        _ensure_expected_results_dir(step1_csv, step1_results_dir, "Step1")
         if not (step1_results_dir / "done.flag").exists():
             print("AVERTISSEMENT: done.flag absent pour Step1, continuation.")
     if "step2" in steps:
@@ -422,8 +433,18 @@ def main(argv: list[str] | None = None) -> None:
             raise FileNotFoundError(
                 "CSV Step2 absent : aucun CSV agrégé ou sous-dossier détecté."
             )
+        _ensure_expected_results_dir(step2_csv, step2_results_dir, "Step2")
         if not (step2_results_dir / "done.flag").exists():
             print("AVERTISSEMENT: done.flag absent pour Step2, continuation.")
+    if (
+        step1_csv is not None
+        and step2_csv is not None
+        and step1_csv.resolve() == step2_csv.resolve()
+    ):
+        raise ValueError(
+            "Step1 et Step2 pointent vers le même CSV agrégé. "
+            "Vérifiez que chaque étape écrit dans son dossier results."
+        )
     csv_paths: list[Path] = []
     if "step1" in steps and step1_csv is not None:
         csv_paths.append(step1_csv)
