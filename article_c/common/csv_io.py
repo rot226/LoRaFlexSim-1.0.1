@@ -532,6 +532,9 @@ def write_step1_results(
     output_dir: Path,
     raw_rows: list[dict[str, object]],
     network_size: object | None = None,
+    *,
+    packet_rows: list[dict[str, object]] | None = None,
+    metric_rows: list[dict[str, object]] | None = None,
 ) -> None:
     """Écrit raw_packets.csv, raw_metrics.csv et aggregated_results.csv pour l'étape 1."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -556,14 +559,16 @@ def write_step1_results(
         row_network_size = row.get("network_size")
         _coerce_positive_network_size(row_network_size)
 
-    packet_keys = ("packet_id", "sf_selected")
+    packet_keys = ("node_id", "packet_id", "sf_selected")
     metric_keys = ("sent", "received", "pdr")
-    packet_rows = [
-        row for row in raw_rows if _row_has_any_keys(row, packet_keys)
-    ]
-    metric_rows = [
-        row for row in raw_rows if _row_has_any_keys(row, metric_keys)
-    ]
+    if packet_rows is None:
+        packet_rows = [
+            row for row in raw_rows if _row_has_any_keys(row, packet_keys)
+        ]
+    if metric_rows is None:
+        metric_rows = [
+            row for row in raw_rows if _row_has_any_keys(row, metric_keys)
+        ]
 
     if raw_rows:
         _normalize_group_keys(raw_rows)

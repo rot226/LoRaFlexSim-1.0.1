@@ -410,7 +410,15 @@ def _simulate_density(
         flat_output,
     ) = task
     raw_rows: list[dict[str, object]] = []
+    packet_rows: list[dict[str, object]] = []
+    metric_rows: list[dict[str, object]] = []
     per_rep_rows: dict[int, list[dict[str, object]]] = {
+        replication: [] for replication in replications
+    }
+    per_rep_packet_rows: dict[int, list[dict[str, object]]] = {
+        replication: [] for replication in replications
+    }
+    per_rep_metric_rows: dict[int, list[dict[str, object]]] = {
         replication: [] for replication in replications
     }
     run_index = 0
@@ -497,7 +505,9 @@ def _simulate_density(
                         "sf_selected": sf_selected,
                     }
                     raw_rows.append(packet_row)
+                    packet_rows.append(packet_row)
                     per_rep_rows[replication].append(packet_row)
+                    per_rep_packet_rows[replication].append(packet_row)
                 for cluster, stats in cluster_stats.items():
                     sent_cluster = stats["sent"]
                     received_cluster = stats["received"]
@@ -541,7 +551,9 @@ def _simulate_density(
                         "mean_toa_s": mean_toa_s,
                     }
                     raw_rows.append(metric_row)
+                    metric_rows.append(metric_row)
                     per_rep_rows[replication].append(metric_row)
+                    per_rep_metric_rows[replication].append(metric_row)
                 received_all, pdr_all, mean_toa_all = _apply_congestion_effects(
                     algo,
                     network_size=network_size,
@@ -572,7 +584,9 @@ def _simulate_density(
                     "mean_toa_s": mean_toa_all,
                 }
                 raw_rows.append(summary_row)
+                metric_rows.append(summary_row)
                 per_rep_rows[replication].append(summary_row)
+                per_rep_metric_rows[replication].append(summary_row)
                 if config["profile_timing"] and result.timing_s is not None:
                     timing_totals["sf_assignment_s"] += result.timing_s.get(
                         "sf_assignment_s", 0.0
@@ -583,11 +597,23 @@ def _simulate_density(
                     timing_totals["metrics_s"] += perf_counter() - metrics_start
                     timing_runs += 1
     if flat_output:
-        write_step1_results(output_dir, raw_rows, network_size=network_size)
+        write_step1_results(
+            output_dir,
+            raw_rows,
+            network_size=network_size,
+            packet_rows=packet_rows,
+            metric_rows=metric_rows,
+        )
     else:
         for replication, rows in per_rep_rows.items():
             rep_dir = output_dir / f"size_{network_size}" / f"rep_{replication}"
-            write_step1_results(rep_dir, rows, network_size=network_size)
+            write_step1_results(
+                rep_dir,
+                rows,
+                network_size=network_size,
+                packet_rows=per_rep_packet_rows[replication],
+                metric_rows=per_rep_metric_rows[replication],
+            )
     timing_summary = None
     if config["profile_timing"] and timing_runs > 0:
         mean_assignment = timing_totals["sf_assignment_s"] / timing_runs
