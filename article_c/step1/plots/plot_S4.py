@@ -21,9 +21,12 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     filter_cluster,
     filter_mixra_opt_fallback,
+    is_constant_metric,
     load_step1_aggregated,
+    metric_values,
     place_legend,
     plot_metric_by_snir,
+    render_constant_metric,
     select_received_metric_key,
     resolve_percentile_keys,
     save_figure,
@@ -92,6 +95,13 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     if len(network_sizes) < 2:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     metric_key = select_received_metric_key(rows, metric_key)
+    if is_constant_metric(metric_values(rows, metric_key)):
+        render_constant_metric(fig, ax)
+        ax.set_title(
+            "Step 1 - Sent Frames (budget saturant) vs Network size (number of nodes) "
+            "(SNIR on/off)"
+        )
+        return fig
     plot_metric_by_snir(
         ax,
         rows,

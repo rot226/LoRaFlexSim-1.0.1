@@ -18,6 +18,8 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     ensure_network_size,
     filter_rows_by_network_sizes,
+    is_constant_metric,
+    render_constant_metric,
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
@@ -159,6 +161,18 @@ def plot_cdf_by_algo(
         raise ValueError("Aucune donnée RSSI/SNR compatible trouvée.")
 
     fig, ax = plt.subplots()
+    all_values = [value for values in values_by_group.values() for value in values]
+    if is_constant_metric(all_values):
+        render_constant_metric(fig, ax)
+        configure_figure(
+            fig,
+            [ax],
+            f"CDF {metric_key.upper()} par algorithme (SNIR on/off)",
+            legend_loc="above",
+        )
+        save_figure(fig, output_dir, "plot_S10_rssi_or_snr_cdf")
+        plt.close(fig)
+        return
     algo_keys = sorted({(algo, fallback) for algo, fallback, _ in values_by_group})
 
     for algo, fallback in algo_keys:

@@ -20,8 +20,11 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
     filter_mixra_opt_fallback,
+    is_constant_metric,
     load_step1_aggregated,
+    metric_values,
     filter_rows_by_network_sizes,
+    render_constant_metric,
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
@@ -71,6 +74,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     apply_figure_layout(fig, figsize=(10, 6))
     if len(SNIR_MODES) == 1:
         axes = [axes]
+
+    if is_constant_metric(metric_values(rows, metric_key)):
+        render_constant_metric(fig, axes)
+        configure_figure(
+            fig,
+            axes,
+            "Step 1 - PDR by Cluster (network size)",
+            legend_loc="above",
+        )
+        return fig
 
     cluster_handles: list[plt.Line2D] = []
     legend_labels: list[str] = []

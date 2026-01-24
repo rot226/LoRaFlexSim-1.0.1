@@ -21,7 +21,9 @@ from article_c.common.plot_helpers import (
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
+    is_constant_metric,
     load_step1_aggregated,
+    render_constant_metric,
     select_received_metric_key,
     save_figure,
 )
@@ -353,6 +355,22 @@ def _plot_pdr_distributions(
     values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]],
     network_sizes: list[int],
 ) -> plt.Figure:
+    all_values = [
+        float(value)
+        for groups in values_by_size.values()
+        for values in groups.values()
+        for value in values
+        if isinstance(value, (int, float))
+    ]
+    if is_constant_metric(all_values):
+        fig, ax = plt.subplots()
+        apply_figure_layout(fig, figsize=(8, 5))
+        render_constant_metric(fig, ax)
+        fig.suptitle(
+            "Figure S5 — Distribution du PDR par algorithme (SNIR séparé)",
+            y=SUPTITLE_Y,
+        )
+        return fig
     if not network_sizes:
         network_sizes = [TARGET_NETWORK_SIZE]
     n_sizes = len(network_sizes)

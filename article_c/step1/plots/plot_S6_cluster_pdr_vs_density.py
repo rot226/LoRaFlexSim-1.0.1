@@ -21,7 +21,10 @@ from article_c.common.plot_helpers import (
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
+    is_constant_metric,
     load_step1_aggregated,
+    metric_values,
+    render_constant_metric,
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
@@ -77,6 +80,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         axes = [axes]
     elif len(clusters) == 1:
         axes = [[ax] for ax in axes]
+
+    if is_constant_metric(metric_values(rows, metric_key)):
+        render_constant_metric(fig, axes)
+        configure_figure(
+            fig,
+            axes,
+            "Step 1 - PDR by Cluster (SNIR on/off, per algorithm)",
+            legend_loc="above",
+        )
+        return fig
 
     for algo_idx, (algo, fallback) in enumerate(algorithms):
         algo_rows = [row for row in rows if _algo_key(row) == (algo, fallback)]

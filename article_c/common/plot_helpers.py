@@ -61,6 +61,8 @@ BASE_GRID_ENABLED = True
 AXES_TITLE_Y = 1.02
 SUPTITLE_Y = 0.98
 FIGURE_SUBPLOT_TOP = 0.80
+CONSTANT_METRIC_VARIANCE_THRESHOLD = 1e-6
+CONSTANT_METRIC_MESSAGE = "métrique constante – à investiguer"
 
 
 def apply_plot_style() -> None:
@@ -79,6 +81,72 @@ def apply_plot_style() -> None:
         }
     )
     plt.subplots_adjust(top=FIGURE_SUBPLOT_TOP)
+
+
+def _flatten_axes(axes: object) -> list[plt.Axes]:
+    if isinstance(axes, plt.Axes):
+        return [axes]
+    if hasattr(axes, "flat"):
+        return list(axes.flat)
+    if isinstance(axes, (list, tuple)):
+        flattened: list[plt.Axes] = []
+        for item in axes:
+            flattened.extend(_flatten_axes(item))
+        return flattened
+    return []
+
+
+def render_constant_metric(
+    fig: plt.Figure,
+    axes: object,
+    *,
+    message: str = CONSTANT_METRIC_MESSAGE,
+) -> None:
+    """Affiche un message centré lorsque la métrique est constante."""
+    for ax in _flatten_axes(axes):
+        ax.clear()
+        ax.axis("off")
+    fig.text(
+        0.5,
+        0.5,
+        message,
+        ha="center",
+        va="center",
+        fontsize=12,
+        color="#444444",
+    )
+
+
+def _metric_variance(
+    values: list[float],
+) -> float:
+    if len(values) < 2:
+        return 0.0
+    mean_value = sum(values) / len(values)
+    return sum((value - mean_value) ** 2 for value in values) / (len(values) - 1)
+
+
+def is_constant_metric(
+    values: list[float],
+    *,
+    threshold: float = CONSTANT_METRIC_VARIANCE_THRESHOLD,
+) -> bool:
+    if not values:
+        return True
+    return _metric_variance(values) < threshold
+
+
+def metric_values(
+    rows: list[dict[str, object]],
+    metric_key: str,
+) -> list[float]:
+    median_key, _, _ = resolve_percentile_keys(rows, metric_key)
+    values: list[float] = []
+    for row in rows:
+        value = row.get(median_key)
+        if isinstance(value, (int, float)) and not math.isnan(value):
+            values.append(float(value))
+    return values
 
 
 def select_received_metric_key(
