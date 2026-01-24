@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import random
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -154,28 +155,16 @@ def _collect_points(
     for row in step1_rows:
         key = (int(row["network_size"]), str(row["algo"]), int(row["replication"]))
         pdr_by_key[key] = row
-    reward_totals: dict[tuple[int, str, int], float] = {}
-    reward_counts: dict[tuple[int, str, int], int] = {}
-    traffic_totals: dict[tuple[int, str, int], float] = {}
+    points: list[dict[str, float | int | str]] = []
     for row in step2_rows:
         key = (int(row["network_size"]), str(row["algo"]), int(row["replication"]))
-        reward_totals[key] = reward_totals.get(key, 0.0) + float(row["reward"])
-        reward_counts[key] = reward_counts.get(key, 0) + 1
-        traffic_totals[key] = traffic_totals.get(key, 0.0) + float(
-            row.get("traffic_sent", 0.0)
-        )
-    points: list[dict[str, float | int | str]] = []
-    for key, reward_total in reward_totals.items():
+        if key not in pdr_by_key:
+            continue
         network_size, algo, replication = key
         if algo not in TARGET_ALGOS:
             continue
-        if key not in pdr_by_key:
-            continue
-        reward_count = reward_counts.get(key, 0)
-        if reward_count <= 0:
-            continue
         pdr_row = pdr_by_key[key]
-        traffic_value = traffic_totals.get(key, 0.0)
+        traffic_value = float(row.get("traffic_sent", 0.0))
         size_value = (
             traffic_value
             if traffic_value > 0.0
@@ -186,7 +175,7 @@ def _collect_points(
                 "algo": algo,
                 "network_size": network_size,
                 "replication": replication,
-                "reward_mean": reward_total / reward_count,
+                "reward_mean": float(row["reward"]),
                 "pdr": float(pdr_row["pdr"]),
                 "size_value": size_value,
             }
@@ -247,19 +236,35 @@ def _add_size_legend(
     ax.add_artist(legend)
 
 
+def _apply_jitter(
+    value: float,
+    rng: random.Random,
+    jitter: float,
+    lower: float,
+    upper: float,
+) -> float:
+    jittered = value + rng.uniform(-jitter, jitter)
+    return max(lower, min(upper, jittered))
+
+
 def _plot_scatter(points: list[dict[str, float | int | str]]) -> plt.Figure:
     fig, ax = plt.subplots()
     size_values = [float(point["size_value"]) for point in points]
     sizes = _scale_sizes(size_values)
     labeled_algos: set[str] = set()
+    rng = random.Random(7)
     for point, size in zip(points, sizes, strict=False):
         algo = str(point["algo"])
         label = algo_label(algo) if algo not in labeled_algos else None
         if label is not None:
             labeled_algos.add(algo)
+        jittered_pdr = _apply_jitter(float(point["pdr"]), rng, 0.006, 0.0, 1.05)
+        jittered_reward = _apply_jitter(
+            float(point["reward_mean"]), rng, 0.006, 0.0, 1.05
+        )
         ax.scatter(
-            point["pdr"],
-            point["reward_mean"],
+            jittered_pdr,
+            jittered_reward,
             label=label,
             s=size,
             color=ALGO_COLORS.get(algo, "#4c4c4c"),
@@ -267,6 +272,15 @@ def _plot_scatter(points: list[dict[str, float | int | str]]) -> plt.Figure:
             alpha=0.75,
             edgecolors="black",
             linewidths=0.4,
+        )
+        size_label = f"{float(point['size_value']):.0f}"
+        ax.annotate(
+            size_label,
+            (jittered_pdr, jittered_reward),
+            textcoords="offset points",
+            xytext=(4, 4),
+            fontsize=7,
+            alpha=0.75,
         )
     ax.set_xlabel("PDR (par réplication)")
     ax.set_ylabel("Récompense moyenne (fenêtre)")
