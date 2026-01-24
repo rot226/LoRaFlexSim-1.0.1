@@ -56,6 +56,13 @@ pytest tests/test_qos_validation_script.py
 
 > Exécuter ces commandes dans un terminal PowerShell (Windows 11).
 
+### Nettoyage sûr des résultats (Windows)
+
+```powershell
+if (Test-Path .\article_c\step1\results) { Remove-Item -Recurse -Force .\article_c\step1\results }
+if (Test-Path .\article_c\step2\results) { Remove-Item -Recurse -Force .\article_c\step2\results }
+```
+
 ### 1) Step 1 — Générer les CSV
 
 ```powershell
