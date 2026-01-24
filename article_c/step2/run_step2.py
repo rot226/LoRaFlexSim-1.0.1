@@ -689,7 +689,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     ensure_dir(base_results_dir)
     timestamp_dir: Path | None = None
     if args.timestamp:
-        timestamp_dir = base_results_dir / timestamp_tag()
+        timestamp_dir = base_results_dir / timestamp_tag(with_timezone=True)
         ensure_dir(timestamp_dir)
     aggregated_path = base_results_dir / "aggregated_results.csv"
     if flat_output and _is_non_empty_file(aggregated_path):

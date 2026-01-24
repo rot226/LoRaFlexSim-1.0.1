@@ -204,9 +204,12 @@ def replication_ids(count: int) -> list[int]:
 
 
 def timestamp_tag(with_timezone: bool = True) -> str:
-    """Retourne un timestamp ISO pour les sorties."""
-    now = datetime.now(timezone.utc if with_timezone else None)
-    return now.isoformat(timespec="seconds")
+    """Retourne un timestamp compatible Windows pour les sorties."""
+    if with_timezone:
+        now = datetime.now(timezone.utc)
+        return now.strftime("%Y-%m-%d_%H-%M-%SZ")
+    now = datetime.now()
+    return now.strftime("%Y-%m-%d_%H-%M-%S")
 
 
 def flatten(values: Iterable[Sequence[float]]) -> list[float]:
