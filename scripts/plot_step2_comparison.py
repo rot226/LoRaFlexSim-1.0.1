@@ -130,6 +130,13 @@ def _apply_network_ticks(ax: plt.Axes, network_sizes: Sequence[int]) -> None:
     ax.set_xticks(network_sizes)
 
 
+def _plot_filename(base_name: str, size_tag: int | None) -> str:
+    if size_tag is None:
+        return base_name
+    stem = base_name[:-4] if base_name.lower().endswith(".png") else base_name
+    return f"plot_{stem}_size_{size_tag}.png"
+
+
 def _filter_network_sizes(
     records: List[Dict[str, Any]],
     network_sizes: Sequence[int] | None,
@@ -156,6 +163,14 @@ def _filter_network_sizes(
         for record in records
         if int(record.get("num_nodes", -1)) in requested
     ]
+
+
+def _available_network_sizes(records: Iterable[Mapping[str, Any]]) -> List[int]:
+    return _ensure_network_sizes(
+        record.get("num_nodes")
+        for record in records
+        if record.get("num_nodes") is not None
+    )
 
 
 def _add_state_legend(fig: plt.Figure) -> None:
@@ -307,9 +322,9 @@ def _aggregate_metrics(
     return aggregated
 
 
-def _save_plot(fig: plt.Figure, output_dir: Path, name: str) -> Path:
+def _save_plot(fig: plt.Figure, output_dir: Path, name: str, size_tag: int | None = None) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / name
+    path = output_dir / _plot_filename(name, size_tag)
     plt.subplots_adjust(top=0.80)
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -320,6 +335,7 @@ def _plot_performance(
     records: Sequence[Mapping[str, Any]],
     output_dir: Path,
     algorithms: Sequence[str],
+    size_tag: int | None = None,
 ) -> None:
     metrics = [
         ("reward_mean", "reward_ci95", "Average reward (unitless)"),
@@ -375,13 +391,14 @@ def _plot_performance(
     axes[-1][0].set_xlabel("Round")
     axes[-1][1].set_xlabel("Round")
     _add_state_legend(fig)
-    _save_plot(fig, output_dir, "step2_performance_rounds.png")
+    _save_plot(fig, output_dir, "step2_performance_rounds.png", size_tag=size_tag)
 
 
 def _plot_convergence(
     records: Sequence[Mapping[str, Any]],
     output_dir: Path,
     algorithms: Sequence[str],
+    size_tag: int | None = None,
 ) -> None:
     metrics = [
         ("reward_mean", "reward_ci95", "Average reward (unitless)"),
@@ -437,13 +454,14 @@ def _plot_convergence(
     axes[-1][0].set_xlabel("Episode")
     axes[-1][1].set_xlabel("Episode")
     _add_state_legend(fig)
-    _save_plot(fig, output_dir, "step2_convergence_ci95.png")
+    _save_plot(fig, output_dir, "step2_convergence_ci95.png", size_tag=size_tag)
 
 
 def _plot_distribution(
     records: Sequence[Mapping[str, Any]],
     output_dir: Path,
     algorithms: Sequence[str],
+    size_tag: int | None = None,
 ) -> None:
     if not records:
         return
@@ -507,7 +525,7 @@ def _plot_distribution(
     axes[1][0].set_xlabel("SF")
     axes[1][1].set_xlabel("TX Power")
     _add_state_legend(fig)
-    _save_plot(fig, output_dir, "step2_sf_tx_distribution.png")
+    _save_plot(fig, output_dir, "step2_sf_tx_distribution.png", size_tag=size_tag)
 
 
 def _plot_metrics(
@@ -519,6 +537,7 @@ def _plot_metrics(
     figure_name: str,
     x_label: str,
     network_sizes: Sequence[int] | None = None,
+    size_tag: int | None = None,
 ) -> None:
     if not records:
         return
@@ -575,7 +594,7 @@ def _plot_metrics(
     axes[-1][0].set_xlabel(x_label)
     axes[-1][1].set_xlabel(x_label)
     _add_state_legend(fig)
-    _save_plot(fig, output_dir, figure_name)
+    _save_plot(fig, output_dir, figure_name, size_tag=size_tag)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -625,6 +644,11 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="+",
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
     )
+    parser.add_argument(
+        "--per-size",
+        action="store_true",
+        help="Génère une figure par taille de réseau (plot_X_size_<N>.png).",
+    )
     return parser
 
 
@@ -660,8 +684,14 @@ def main() -> None:
         _load_csv(raw_dir / "metrics.csv"),
         args.network_sizes,
     )
+    distribution_rows: List[Dict[str, Any]] = []
+    if not args.skip_distribution and not args.only_core_figures:
+        distribution_rows = _filter_network_sizes(
+            _load_csv(agg_dir / "sf_tp_distribution.csv"),
+            args.network_sizes,
+        )
 
-    all_records = performance_rows or convergence_rows or metrics_rows
+    all_records = performance_rows or convergence_rows or metrics_rows or distribution_rows
     algorithms_input = _parse_list(args.algorithms)
     if args.algorithm:
         algorithms_input.extend(args.algorithm)
@@ -669,6 +699,101 @@ def main() -> None:
         algorithms_input = list(ARTICLE_COMPARISON_ALGOS)
     if algorithms_input and all_records:
         _validate_algorithms(algorithms_input, _available_algorithms(all_records))
+    if args.per_size:
+        sizes = _available_network_sizes(all_records)
+        if not sizes:
+            print("Aucune taille de réseau détectée pour --per-size.")
+            return
+        for size in sizes:
+            size_filter = [size]
+            size_performance = _filter_network_sizes(performance_rows, size_filter)
+            size_convergence = _filter_network_sizes(convergence_rows, size_filter)
+            size_metrics = _filter_network_sizes(metrics_rows, size_filter)
+            size_distribution = _filter_network_sizes(distribution_rows, size_filter)
+            size_records = size_performance or size_convergence or size_metrics or size_distribution
+            if not size_records:
+                continue
+            algorithms = _select_algorithms(
+                size_records,
+                algorithms_input or None,
+            )
+            if size_performance:
+                _plot_performance(size_performance, args.output_dir, algorithms, size_tag=size)
+            if size_convergence:
+                _plot_convergence(size_convergence, args.output_dir, algorithms, size_tag=size)
+            if size_metrics:
+                x_key = _select_metrics_x_key(size_metrics)
+                x_label = _x_label_for_key(x_key)
+                metric_keys = [
+                    "reward_mean",
+                    "success_rate",
+                    "snir_avg",
+                    "energy_j",
+                    "collision_rate",
+                    "fairness",
+                    "der",
+                    "pdr",
+                ]
+                aggregated_metrics = _aggregate_metrics(size_metrics, metric_keys, x_key)
+                network_sizes = None
+                if x_key == "num_nodes":
+                    network_sizes = _ensure_network_sizes(
+                        rec.get("x_value")
+                        for rec in aggregated_metrics
+                        if rec.get("x_value") is not None
+                    )
+                _plot_metrics(
+                    aggregated_metrics,
+                    args.output_dir,
+                    algorithms,
+                    [
+                        ("reward_mean", "Récompense moyenne (unité arbitraire)"),
+                        ("success_rate", "Succès moyen (probabilité)"),
+                        ("snir_avg", "SNIR moyen (dB)"),
+                        ("energy_j", "Énergie (J)"),
+                        ("collision_rate", "Collision (1 - PDR, probabilité)"),
+                        ("fairness", "Équité (sans unité)"),
+                    ],
+                    figure_name="step2_reward_components_ci95.png",
+                    x_label=x_label,
+                    network_sizes=network_sizes,
+                    size_tag=size,
+                )
+                _plot_metrics(
+                    aggregated_metrics,
+                    args.output_dir,
+                    algorithms,
+                    [
+                        ("der", "DER (probabilité)"),
+                        ("snir_avg", "SNIR moyen (dB)"),
+                        ("energy_j", "Énergie (J)"),
+                        ("fairness", "Équité (sans unité)"),
+                    ],
+                    figure_name="step2_metrics_ci95.png",
+                    x_label=x_label,
+                    network_sizes=network_sizes,
+                    size_tag=size,
+                )
+                _plot_metrics(
+                    aggregated_metrics,
+                    args.output_dir,
+                    algorithms,
+                    [
+                        ("pdr", "PDR (probabilité)"),
+                        ("der", "DER (probabilité)"),
+                        ("snir_avg", "SNIR moyen (dB)"),
+                        ("energy_j", "Énergie (J)"),
+                        ("fairness", "Équité (sans unité)"),
+                    ],
+                    figure_name="step2_key_metrics_combined.png",
+                    x_label=x_label,
+                    network_sizes=network_sizes,
+                    size_tag=size,
+                )
+            if size_distribution:
+                _plot_distribution(size_distribution, args.output_dir, algorithms, size_tag=size)
+        return
+
     algorithms = _select_algorithms(
         all_records,
         algorithms_input or None,
@@ -743,13 +868,8 @@ def main() -> None:
             network_sizes=network_sizes,
         )
 
-    if not args.skip_distribution and not args.only_core_figures:
-        distribution_rows = _filter_network_sizes(
-            _load_csv(agg_dir / "sf_tp_distribution.csv"),
-            args.network_sizes,
-        )
-        if distribution_rows:
-            _plot_distribution(distribution_rows, args.output_dir, algorithms)
+    if distribution_rows:
+        _plot_distribution(distribution_rows, args.output_dir, algorithms)
 
 
 if __name__ == "__main__":
