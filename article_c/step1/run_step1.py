@@ -154,6 +154,29 @@ def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
         return sizes
 
 
+def _read_nested_sizes(output_dir: Path, replications: list[int]) -> set[int]:
+    sizes: set[int] = set()
+    for size_dir in sorted(output_dir.glob("size_*")):
+        if not size_dir.is_dir():
+            continue
+        try:
+            size = int(size_dir.name.split("size_", 1)[1])
+        except (IndexError, ValueError):
+            continue
+        rep_paths = [
+            size_dir / f"rep_{replication}" / "aggregated_results.csv"
+            for replication in replications
+        ]
+        if rep_paths and all(path.exists() for path in rep_paths):
+            sizes.add(size)
+    if not sizes:
+        print(
+            "Aucune taille complète détectée dans les sous-dossiers "
+            f"{output_dir / 'size_<N>/rep_<R>'}."
+        )
+    return sizes
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour l'étape 1."""
     parser = argparse.ArgumentParser(description="Exécute l'étape 1 de l'article C.")
@@ -333,6 +356,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Répertoire de sortie des CSV.",
     )
     parser.add_argument(
+        "--flat-output",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Écrit les résultats directement dans le répertoire de sortie "
+            "(compatibilité avec l'ancien format)."
+        ),
+    )
+    parser.add_argument(
         "--progress",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -363,10 +395,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def _simulate_density(
-    task: tuple[int, int, list[str], list[int], dict[str, object], Path, list[str]]
+    task: tuple[
+        int, int, list[str], list[int], dict[str, object], Path, list[str], bool
+    ]
 ) -> dict[str, object]:
-    network_size, size_idx, snir_modes, replications, config, output_dir, cluster_ids = task
+    (
+        network_size,
+        size_idx,
+        snir_modes,
+        replications,
+        config,
+        output_dir,
+        cluster_ids,
+        flat_output,
+    ) = task
     raw_rows: list[dict[str, object]] = []
+    per_rep_rows: dict[int, list[dict[str, object]]] = {
+        replication: [] for replication in replications
+    }
     run_index = 0
     timing_totals = {"sf_assignment_s": 0.0, "interference_s": 0.0, "metrics_s": 0.0}
     timing_runs = 0
@@ -438,20 +484,20 @@ def _simulate_density(
                         strict=True,
                     )
                 ):
-                    raw_rows.append(
-                        {
-                            "network_size": network_size,
-                            "algo": algo,
-                            "snir_mode": snir_mode,
-                            "cluster": cluster,
-                            "replication": replication,
-                            "seed": seed,
-                            "mixra_opt_fallback": result.mixra_opt_fallback,
-                            "node_id": node_id,
-                            "packet_id": packet_id,
-                            "sf_selected": sf_selected,
-                        }
-                    )
+                    packet_row = {
+                        "network_size": network_size,
+                        "algo": algo,
+                        "snir_mode": snir_mode,
+                        "cluster": cluster,
+                        "replication": replication,
+                        "seed": seed,
+                        "mixra_opt_fallback": result.mixra_opt_fallback,
+                        "node_id": node_id,
+                        "packet_id": packet_id,
+                        "sf_selected": sf_selected,
+                    }
+                    raw_rows.append(packet_row)
+                    per_rep_rows[replication].append(packet_row)
                 for cluster, stats in cluster_stats.items():
                     sent_cluster = stats["sent"]
                     received_cluster = stats["received"]
@@ -481,21 +527,21 @@ def _simulate_density(
                         pdr=pdr_cluster,
                         mean_toa_s=mean_toa_s,
                     )
-                    raw_rows.append(
-                        {
-                            "network_size": network_size,
-                            "algo": algo,
-                            "snir_mode": snir_mode,
-                            "cluster": cluster,
-                            "replication": replication,
-                            "seed": seed,
-                            "mixra_opt_fallback": result.mixra_opt_fallback,
-                            "sent": sent_cluster,
-                            "received": received_cluster,
-                            "pdr": pdr_cluster,
-                            "mean_toa_s": mean_toa_s,
-                        }
-                    )
+                    metric_row = {
+                        "network_size": network_size,
+                        "algo": algo,
+                        "snir_mode": snir_mode,
+                        "cluster": cluster,
+                        "replication": replication,
+                        "seed": seed,
+                        "mixra_opt_fallback": result.mixra_opt_fallback,
+                        "sent": sent_cluster,
+                        "received": received_cluster,
+                        "pdr": pdr_cluster,
+                        "mean_toa_s": mean_toa_s,
+                    }
+                    raw_rows.append(metric_row)
+                    per_rep_rows[replication].append(metric_row)
                 received_all, pdr_all, mean_toa_all = _apply_congestion_effects(
                     algo,
                     network_size=network_size,
@@ -512,21 +558,21 @@ def _simulate_density(
                     pdr=pdr_all,
                     mean_toa_s=mean_toa_all,
                 )
-                raw_rows.append(
-                    {
-                        "network_size": network_size,
-                        "algo": algo,
-                        "snir_mode": snir_mode,
-                        "cluster": "all",
-                        "replication": replication,
-                        "seed": seed,
-                        "mixra_opt_fallback": result.mixra_opt_fallback,
-                        "sent": result.sent,
-                        "received": received_all,
-                        "pdr": pdr_all,
-                        "mean_toa_s": mean_toa_all,
-                    }
-                )
+                summary_row = {
+                    "network_size": network_size,
+                    "algo": algo,
+                    "snir_mode": snir_mode,
+                    "cluster": "all",
+                    "replication": replication,
+                    "seed": seed,
+                    "mixra_opt_fallback": result.mixra_opt_fallback,
+                    "sent": result.sent,
+                    "received": received_all,
+                    "pdr": pdr_all,
+                    "mean_toa_s": mean_toa_all,
+                }
+                raw_rows.append(summary_row)
+                per_rep_rows[replication].append(summary_row)
                 if config["profile_timing"] and result.timing_s is not None:
                     timing_totals["sf_assignment_s"] += result.timing_s.get(
                         "sf_assignment_s", 0.0
@@ -536,7 +582,12 @@ def _simulate_density(
                     )
                     timing_totals["metrics_s"] += perf_counter() - metrics_start
                     timing_runs += 1
-    write_step1_results(output_dir, raw_rows, network_size=network_size)
+    if flat_output:
+        write_step1_results(output_dir, raw_rows, network_size=network_size)
+    else:
+        for replication, rows in per_rep_rows.items():
+            rep_dir = output_dir / f"size_{network_size}" / f"rep_{replication}"
+            write_step1_results(rep_dir, rows, network_size=network_size)
     timing_summary = None
     if config["profile_timing"] and timing_runs > 0:
         mean_assignment = timing_totals["sf_assignment_s"] / timing_runs
@@ -762,6 +813,7 @@ def main(argv: list[str] | None = None) -> None:
     snir_modes = parse_snir_modes(args.snir_modes)
     replications = replication_ids(args.replications)
     output_dir = Path(args.outdir)
+    flat_output = bool(args.flat_output)
     simulated_sizes: list[int] = []
 
     total_runs = (
@@ -801,6 +853,7 @@ def main(argv: list[str] | None = None) -> None:
             config,
             output_dir,
             cluster_ids,
+            flat_output,
         )
         for size_idx, network_size in enumerate(network_sizes)
     ]
@@ -861,7 +914,10 @@ def main(argv: list[str] | None = None) -> None:
             f"{size}={count}" for size, count in sorted(rows_per_size.items())
         )
         print(f"Rows per size: {sizes_summary}")
-    aggregated_sizes = _read_aggregated_sizes(output_dir / "aggregated_results.csv")
+    if flat_output:
+        aggregated_sizes = _read_aggregated_sizes(output_dir / "aggregated_results.csv")
+    else:
+        aggregated_sizes = _read_nested_sizes(output_dir, replications)
     missing_sizes = sorted(set(network_sizes) - aggregated_sizes)
     if missing_sizes:
         missing_label = ", ".join(map(str, missing_sizes))
@@ -875,10 +931,17 @@ def main(argv: list[str] | None = None) -> None:
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         print(f"Tailles simulées: {sizes_label}")
-    _check_pdr_consistency(output_dir)
-    _check_pdr_formula_for_size(output_dir, reference_size=80)
-    if args.plot_summary:
-        _plot_summary_pdr(output_dir)
+    aggregated_path = output_dir / "aggregated_results.csv"
+    if aggregated_path.exists():
+        _check_pdr_consistency(output_dir)
+        _check_pdr_formula_for_size(output_dir, reference_size=80)
+        if args.plot_summary:
+            _plot_summary_pdr(output_dir)
+    elif args.plot_summary:
+        print(
+            "Plot de synthèse ignoré: aggregated_results.csv absent "
+            "(utilisez --flat-output ou make_all_plots.py)."
+        )
 
 
 if __name__ == "__main__":
