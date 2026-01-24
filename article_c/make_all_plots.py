@@ -12,6 +12,10 @@ import pandas as pd
 
 from article_c.common.csv_io import write_simulation_results, write_step1_results
 
+ARTICLE_DIR = Path(__file__).resolve().parent
+STEP1_RESULTS_DIR = ARTICLE_DIR / "step1" / "results"
+STEP2_RESULTS_DIR = ARTICLE_DIR / "step2" / "results"
+
 PLOT_MODULES = {
     "step1": [
         "article_c.step1.plots.plot_S1",
@@ -115,8 +119,7 @@ def _collect_nested_csvs(results_dir: Path, filename: str) -> list[Path]:
     return sorted(results_dir.glob(f"size_*/rep_*/{filename}"))
 
 
-def _ensure_step1_aggregated(step_dir: Path) -> Path | None:
-    results_dir = step_dir / "results"
+def _ensure_step1_aggregated(results_dir: Path) -> Path | None:
     aggregated_path = results_dir / "aggregated_results.csv"
     if aggregated_path.exists():
         return aggregated_path
@@ -133,8 +136,7 @@ def _ensure_step1_aggregated(step_dir: Path) -> Path | None:
     return aggregated_path
 
 
-def _ensure_step2_aggregated(step_dir: Path) -> Path | None:
-    results_dir = step_dir / "results"
+def _ensure_step2_aggregated(results_dir: Path) -> Path | None:
     aggregated_path = results_dir / "aggregated_results.csv"
     if aggregated_path.exists():
         return aggregated_path
@@ -149,6 +151,25 @@ def _ensure_step2_aggregated(step_dir: Path) -> Path | None:
     print("Assemblage des résultats Step2 à partir des sous-dossiers...")
     write_simulation_results(results_dir, raw_rows)
     return aggregated_path
+
+
+def _report_missing_csv(step_label: str, results_dir: Path) -> None:
+    aggregated_path = results_dir / "aggregated_results.csv"
+    raw_metrics_path = results_dir / "raw_metrics.csv"
+    raw_results_path = results_dir / "raw_results.csv"
+    print(
+        f"ERREUR: CSV {step_label} introuvable. "
+        f"Chemin attendu: {aggregated_path}."
+    )
+    print(
+        "INFO: vérifiez que les simulations ont bien écrit dans "
+        f"{results_dir}."
+    )
+    if step_label == "Step1":
+        print(f"INFO: exemples attendus: {raw_metrics_path}")
+    else:
+        print(f"INFO: exemples attendus: {raw_results_path}")
+
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour générer les figures."""
@@ -413,26 +434,23 @@ def main(argv: list[str] | None = None) -> None:
         steps = _parse_steps(args.steps)
     except ValueError as exc:
         parser.error(str(exc))
-    article_dir = Path(__file__).resolve().parent
-    step1_results_dir = article_dir / "step1" / "results"
-    step2_results_dir = article_dir / "step2" / "results"
+    step1_results_dir = STEP1_RESULTS_DIR
+    step2_results_dir = STEP2_RESULTS_DIR
     step1_csv = None
     step2_csv = None
     if "step1" in steps:
-        step1_csv = _ensure_step1_aggregated(article_dir / "step1")
+        step1_csv = _ensure_step1_aggregated(step1_results_dir)
         if step1_csv is None:
-            raise FileNotFoundError(
-                "CSV Step1 absent : aucun CSV agrégé ou sous-dossier détecté."
-            )
+            _report_missing_csv("Step1", step1_results_dir)
+            return
         _ensure_expected_results_dir(step1_csv, step1_results_dir, "Step1")
         if not (step1_results_dir / "done.flag").exists():
             print("AVERTISSEMENT: done.flag absent pour Step1, continuation.")
     if "step2" in steps:
-        step2_csv = _ensure_step2_aggregated(article_dir / "step2")
+        step2_csv = _ensure_step2_aggregated(step2_results_dir)
         if step2_csv is None:
-            raise FileNotFoundError(
-                "CSV Step2 absent : aucun CSV agrégé ou sous-dossier détecté."
-            )
+            _report_missing_csv("Step2", step2_results_dir)
+            return
         _ensure_expected_results_dir(step2_csv, step2_results_dir, "Step2")
         if not (step2_results_dir / "done.flag").exists():
             print("AVERTISSEMENT: done.flag absent pour Step2, continuation.")
