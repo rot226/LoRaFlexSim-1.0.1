@@ -13,8 +13,10 @@ from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     apply_figure_layout,
+    CONSTANT_METRIC_MESSAGE,
     filter_rows_by_network_sizes,
     filter_cluster,
+    is_constant_metric,
     normalize_network_size_rows,
     save_figure,
 )
@@ -114,9 +116,10 @@ def _warn_if_constant(series: pd.Series, label: str) -> bool:
     if series.empty:
         warnings.warn(f"Aucune valeur disponible pour {label}.", stacklevel=2)
         return True
-    if series.nunique(dropna=True) <= 1:
+    values = [float(value) for value in series.dropna().tolist()]
+    if is_constant_metric(values):
         warnings.warn(
-            f"Valeurs constantes détectées pour {label} (variance nulle).",
+            f"Valeurs constantes détectées pour {label} (variance faible).",
             stacklevel=2,
         )
         return True
@@ -286,7 +289,7 @@ def main(
     _log_min_max_by_size(rows, "reward", label="reward")
     if is_constant:
         _plot_constant_message(
-            "Variance nulle détectée: distribution des récompenses constante.",
+            CONSTANT_METRIC_MESSAGE,
             title="Step 2 - Reward Distribution by Algorithm",
             output_dir=output_dir,
             stem="plot_RL8_reward_distribution",

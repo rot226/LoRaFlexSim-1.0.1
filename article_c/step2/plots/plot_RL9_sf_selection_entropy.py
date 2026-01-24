@@ -14,10 +14,12 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
     filter_rows_by_network_sizes,
+    is_constant_metric,
     load_step2_aggregated,
     load_step2_selection_probs,
     normalize_network_size_rows,
     place_legend,
+    render_constant_metric,
     save_figure,
 )
 
@@ -63,6 +65,7 @@ def _plot_entropy(
     width, height = fig.get_size_inches()
     apply_figure_layout(fig, figsize=(width, height + 2))
     network_sizes = sorted(network_sizes)
+    all_entropy_values: list[float] = []
     for network_size in network_sizes:
         size_rows = [row for row in rows if row["network_size"] == network_size]
         rounds = sorted({row["round"] for row in size_rows})
@@ -74,7 +77,15 @@ def _plot_entropy(
                 if row["round"] == round_id
             ]
             entropy_values.append(_entropy(_normalized_probs(probs)))
+        all_entropy_values.extend(entropy_values)
         ax.plot(rounds, entropy_values, marker="o", label=f"N={network_size}")
+    if is_constant_metric(all_entropy_values):
+        render_constant_metric(fig, ax)
+        ax.set_title(
+            "Step 2 - SF Selection Entropy vs Round"
+            f"{_title_suffix(network_sizes)}"
+        )
+        return fig
     ax.set_xlabel("Round")
     ax.set_ylabel("Selection Entropy (bits)")
     ax.set_title(

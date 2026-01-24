@@ -22,7 +22,9 @@ from article_c.common.plot_helpers import (
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     filter_cluster,
+    is_constant_metric,
     load_step1_aggregated,
+    render_constant_metric,
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
@@ -222,6 +224,23 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
     apply_figure_layout(fig, figsize=(6 * len(snir_modes), 8))
     if len(snir_modes) == 1:
         axes = [axes]
+
+    distribution_values = [
+        float(value)
+        for values in distribution_by_group.values()
+        for value in values.values()
+        if isinstance(value, (int, float))
+    ]
+    if is_constant_metric(distribution_values):
+        render_constant_metric(fig, axes)
+        configure_figure(
+            fig,
+            axes,
+            "Step 1 - Spreading Factor Distribution (SNIR on/off)",
+            legend_loc="above",
+        )
+        apply_figure_layout(fig, tight_layout={"rect": (0, 0, 1, 0.86)})
+        return fig
 
     colors = [plt.get_cmap("viridis")(idx / max(1, len(sf_values) - 1)) for idx in range(len(sf_values))]
     x_positions = list(range(len(algorithms)))

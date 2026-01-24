@@ -17,10 +17,14 @@ from article_c.common.plot_helpers import (
     ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
+    CONSTANT_METRIC_MESSAGE,
+    is_constant_metric,
     load_step2_aggregated,
+    metric_values,
     normalize_network_size_rows,
     place_legend,
     plot_metric_by_algo,
+    render_constant_metric,
     resolve_percentile_keys,
     save_figure,
 )
@@ -97,6 +101,13 @@ def _plot_metric(
             f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
             stacklevel=2,
         )
+    if is_constant_metric(metric_values(rows, metric_key)):
+        render_constant_metric(fig, ax)
+        ax.set_title(
+            "Step 2 - Global Median Reward vs Network size (adaptive algorithms)"
+            f"{_title_suffix(network_sizes)}"
+        )
+        return fig
     plot_metric_by_algo(
         ax,
         rows,
@@ -135,9 +146,10 @@ def _warn_if_constant(series: pd.Series, label: str) -> bool:
     if series.empty:
         warnings.warn(f"Aucune valeur disponible pour {label}.", stacklevel=2)
         return True
-    if series.nunique(dropna=True) <= 1:
+    values = [float(value) for value in series.dropna().tolist()]
+    if is_constant_metric(values):
         warnings.warn(
-            f"Valeurs constantes détectées pour {label} (variance nulle).",
+            f"Valeurs constantes détectées pour {label} (variance faible).",
             stacklevel=2,
         )
         return True
@@ -400,7 +412,7 @@ def main(
     )
     if is_constant:
         _plot_constant_message(
-            "Variance nulle détectée: valeurs constantes pour la récompense.",
+            CONSTANT_METRIC_MESSAGE,
             title="Step 2 - Global Median Reward vs Network size",
             output_dir=output_dir,
             stem="plot_RL7_reward_vs_density",

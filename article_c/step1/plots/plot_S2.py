@@ -17,9 +17,12 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     filter_cluster,
     filter_mixra_opt_fallback,
+    is_constant_metric,
     load_step1_aggregated,
+    metric_values,
     place_legend,
     plot_metric_by_snir,
+    render_constant_metric,
     save_figure,
 )
 
@@ -31,6 +34,10 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+    if is_constant_metric(metric_values(rows, metric_key)):
+        render_constant_metric(fig, ax)
+        ax.set_title("Step 1 - Mean Time on Air vs Network Size (SNIR on/off)")
+        return fig
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Mean Time on Air (s)")

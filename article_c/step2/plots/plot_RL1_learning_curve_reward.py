@@ -12,7 +12,9 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
     filter_rows_by_network_sizes,
+    is_constant_metric,
     place_legend,
+    render_constant_metric,
     save_figure,
 )
 
@@ -128,6 +130,15 @@ def _plot_learning_curve(
     fig, ax = plt.subplots()
     width, height = fig.get_size_inches()
     apply_figure_layout(fig, figsize=(width, height + 2))
+    reward_values = [
+        float(row.get("avg_reward"))
+        for row in rows
+        if isinstance(row.get("avg_reward"), (int, float))
+    ]
+    if is_constant_metric(reward_values):
+        render_constant_metric(fig, ax)
+        ax.set_title("Average window reward vs Decision rounds")
+        return fig
     preferred_algos = ["ADR", "UCB1-SF"]
     available = {row["algo"] for row in rows}
     algorithms = [algo for algo in preferred_algos if algo in available]

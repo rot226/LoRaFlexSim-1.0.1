@@ -16,10 +16,13 @@ from article_c.common.plot_helpers import (
     ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
+    is_constant_metric,
     load_step2_aggregated,
+    metric_values,
     normalize_network_size_rows,
     place_legend,
     plot_metric_by_algo,
+    render_constant_metric,
     save_figure,
 )
 
@@ -68,6 +71,13 @@ def _plot_metric(
             f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
             stacklevel=2,
         )
+    if is_constant_metric(metric_values(rows, metric_key)):
+        render_constant_metric(fig, ax)
+        ax.set_title(
+            "Step 2 - Median Reward by QoS Cluster "
+            f"({cluster_label} vs network size){_title_suffix(network_sizes)}"
+        )
+        return fig
     plot_metric_by_algo(ax, rows, metric_key, network_sizes)
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))

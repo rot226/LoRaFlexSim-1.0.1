@@ -17,8 +17,11 @@ from article_c.common.plot_helpers import (
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
+    is_constant_metric,
     load_step1_aggregated,
+    metric_values,
     plot_metric_by_snir,
+    render_constant_metric,
     select_received_metric_key,
     save_figure,
 )
@@ -41,6 +44,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     apply_figure_layout(fig, figsize=(5 * len(clusters), 8))
     if len(clusters) == 1:
         axes = [axes]
+    if is_constant_metric(metric_values(rows, metric_key)):
+        render_constant_metric(fig, axes)
+        configure_figure(
+            fig,
+            axes,
+            "Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)",
+            legend_loc="above",
+        )
+        apply_figure_layout(fig, tight_layout={"rect": (0, 0, 1, 0.86)})
+        return fig
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
         plot_metric_by_snir(ax, cluster_rows, metric_key)

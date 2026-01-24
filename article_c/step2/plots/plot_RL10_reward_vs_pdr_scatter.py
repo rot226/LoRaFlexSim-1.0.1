@@ -16,10 +16,12 @@ from article_c.common.plot_helpers import (
     apply_figure_layout,
     filter_cluster,
     filter_rows_by_network_sizes,
+    is_constant_metric,
     load_step1_aggregated,
     load_step2_aggregated,
     normalize_network_size_rows,
     place_legend,
+    render_constant_metric,
     save_figure,
 )
 
@@ -251,6 +253,20 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
     fig, ax = plt.subplots()
     width, height = fig.get_size_inches()
     apply_figure_layout(fig, figsize=(width, height + 2))
+    reward_values = [
+        float(point["reward_mean"])
+        for point in points
+        if isinstance(point.get("reward_mean"), (int, float))
+    ]
+    pdr_values = [
+        float(point["pdr_mean"])
+        for point in points
+        if isinstance(point.get("pdr_mean"), (int, float))
+    ]
+    if is_constant_metric(reward_values) or is_constant_metric(pdr_values):
+        render_constant_metric(fig, ax)
+        ax.set_title("Step 2 - Mean reward vs Aggregated PDR")
+        return fig
     for point in points:
         algo = str(point["algo"])
         ax.scatter(point["pdr_mean"], point["reward_mean"], label=algo_label(algo))

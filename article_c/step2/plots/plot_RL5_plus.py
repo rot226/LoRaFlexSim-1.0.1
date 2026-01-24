@@ -13,9 +13,11 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
     filter_rows_by_network_sizes,
+    is_constant_metric,
     load_step2_aggregated,
     load_step2_selection_probs,
     normalize_network_size_rows,
+    render_constant_metric,
     save_figure,
 )
 
@@ -50,6 +52,18 @@ def _plot_selection(
 ) -> plt.Figure:
     fig, ax = plt.subplots()
     apply_figure_layout(fig, figsize=(12, 9))
+    selection_values = [
+        float(row.get("selection_prob"))
+        for row in rows
+        if isinstance(row.get("selection_prob"), (int, float))
+    ]
+    if is_constant_metric(selection_values):
+        render_constant_metric(fig, ax)
+        ax.set_title(
+            "Step 2 - UCB1-SF Selection Probability (p10/p50/p90)"
+            f"{_title_suffix(sorted(network_sizes))}"
+        )
+        return fig
     data = _summarize_selection(rows, network_sizes)
     network_sizes = sorted(network_sizes)
     sfs = sorted({row["sf"] for row in rows})

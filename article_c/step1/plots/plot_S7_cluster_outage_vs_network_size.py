@@ -20,7 +20,10 @@ from article_c.common.plot_helpers import (
     apply_figure_layout,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
+    is_constant_metric,
     load_step1_aggregated,
+    metric_values,
+    render_constant_metric,
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
@@ -89,6 +92,17 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     apply_figure_layout(fig, figsize=(10, 6))
     if len(SNIR_MODES) == 1:
         axes = [axes]
+
+    if is_constant_metric(metric_values(rows, metric_key)):
+        render_constant_metric(fig, axes)
+        configure_figure(
+            fig,
+            axes,
+            "Step 1 - Outage probability by Cluster (network size)",
+            legend_loc="above",
+        )
+        apply_figure_layout(fig, tight_layout={"rect": (0, 0, 1, 0.86)})
+        return fig
 
     for ax, snir_mode in zip(axes, SNIR_MODES, strict=False):
         snir_rows = [row for row in rows if row["snir_mode"] == snir_mode]
