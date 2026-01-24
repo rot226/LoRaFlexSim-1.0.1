@@ -253,16 +253,17 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
             handles,
             labels,
             loc="upper center",
+            bbox_to_anchor=(0.5, 1.12),
             ncol=len(sf_values),
             frameon=False,
         )
-        apply_figure_layout(fig, bbox_to_anchor=(0.5, 1.14))
     configure_figure(
         fig,
         axes,
         "Step 1 - Spreading Factor Distribution (SNIR on/off)",
         legend_loc="above",
     )
+    apply_figure_layout(fig, tight_layout={"rect": (0, 0, 1, 0.86)})
     return fig
 
 
