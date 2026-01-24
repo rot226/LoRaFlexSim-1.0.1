@@ -14,6 +14,7 @@ from matplotlib.patches import Patch
 from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_MODES,
+    SUPTITLE_Y,
     algo_label,
     apply_plot_style,
     apply_figure_layout,
@@ -426,7 +427,10 @@ def _plot_pdr_distributions(
         ncol=2,
         frameon=False,
     )
-    fig.suptitle("Figure S5 — Distribution du PDR par algorithme (SNIR séparé)")
+    fig.suptitle(
+        "Figure S5 — Distribution du PDR par algorithme (SNIR séparé)",
+        y=SUPTITLE_Y,
+    )
     apply_figure_layout(fig, margins={"top": 0.86, "hspace": 0.6, "wspace": 0.25})
     return fig
 

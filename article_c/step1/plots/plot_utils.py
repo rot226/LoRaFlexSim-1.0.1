@@ -6,7 +6,7 @@ from collections.abc import Iterable
 
 import matplotlib.pyplot as plt
 
-from article_c.common.plot_helpers import apply_figure_layout
+from article_c.common.plot_helpers import SUPTITLE_Y, apply_figure_layout
 from article_c.common.plotting_style import LEGEND_STYLE
 
 
@@ -65,7 +65,7 @@ def configure_figure(
                 )
                 apply_figure_layout(fig, bbox_to_anchor=(1.02, 0.5))
 
-    fig.suptitle(title, y=0.98)
+    fig.suptitle(title, y=SUPTITLE_Y)
     if legend_loc == "above":
         apply_figure_layout(
             fig,
