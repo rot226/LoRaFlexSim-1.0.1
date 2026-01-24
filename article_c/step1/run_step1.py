@@ -813,6 +813,12 @@ def main(argv: list[str] | None = None) -> None:
     snir_modes = parse_snir_modes(args.snir_modes)
     replications = replication_ids(args.replications)
     output_dir = Path(args.outdir)
+    default_output_dir = Path(__file__).resolve().parent / "results"
+    if output_dir.resolve() != default_output_dir.resolve():
+        raise ValueError(
+            "Étape 1: le répertoire de sortie doit être "
+            f"{default_output_dir}."
+        )
     flat_output = bool(args.flat_output)
     simulated_sizes: list[int] = []
 

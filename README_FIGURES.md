@@ -1,5 +1,15 @@
 # Figures Step 1
 
+## Emplacements des résultats (article C)
+
+Les scripts de l'article C écrivent leurs CSV aux emplacements fixes suivants :
+
+- **Step1** : `article_c/step1/results`
+- **Step2** : `article_c/step2/results`
+
+Ces chemins sont requis par `article_c/make_all_plots.py` afin d'éviter les
+confusions entre étapes lorsque seul un CSV est disponible.
+
 Ce document décrit les figures générées par `scripts/plot_step1_comparison.py`.
 Les titres, axes et légendes sont en anglais afin d'être directement publiables.
 
