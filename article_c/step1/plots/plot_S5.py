@@ -15,6 +15,7 @@ from article_c.common.plot_helpers import (
     SNIR_MODES,
     algo_label,
     apply_plot_style,
+    apply_figure_layout,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
@@ -395,9 +396,9 @@ def _plot_pdr_distributions(
     fig, axes = plt.subplots(
         nrows,
         ncols,
-        figsize=(6.6 * ncols, 3.8 * nrows),
         sharey=True,
     )
+    apply_figure_layout(fig, figsize=(6.6 * ncols, 3.8 * nrows))
     if nrows == 1:
         axes = [axes]
 
@@ -412,7 +413,10 @@ def _plot_pdr_distributions(
             )
 
     fig.suptitle("Figure S5 — Distribution du PDR par algorithme")
-    fig.subplots_adjust(top=0.88, hspace=0.35, wspace=0.2)
+    apply_figure_layout(
+        fig,
+        margins={"top": 0.88, "hspace": 0.35, "wspace": 0.2},
+    )
     return fig
 
 

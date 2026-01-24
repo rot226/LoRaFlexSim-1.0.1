@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     SNIR_MODES,
     algo_label,
     apply_plot_style,
+    apply_figure_layout,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
@@ -63,9 +64,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, axes = plt.subplots(
         len(algorithms),
         len(clusters),
-        figsize=(4.2 * len(clusters), 3.4 * len(algorithms)),
         sharex=True,
         sharey=True,
+    )
+    apply_figure_layout(
+        fig,
+        figsize=(4.2 * len(clusters), 3.4 * len(algorithms) + 2),
     )
     if len(algorithms) == 1 and len(clusters) == 1:
         axes = [[axes]]
@@ -112,10 +116,10 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             handles,
             labels,
             loc="upper center",
-            bbox_to_anchor=(0.5, 1.02),
             ncol=3,
             frameon=False,
         )
+        apply_figure_layout(fig, bbox_to_anchor=(0.5, 1.02))
     configure_figure(
         fig,
         axes,

@@ -12,6 +12,7 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
+    apply_figure_layout,
     filter_rows_by_network_sizes,
     filter_cluster,
     normalize_network_size_rows,
@@ -79,6 +80,8 @@ def _plot_distribution(
     network_sizes: list[int],
 ) -> plt.Figure:
     fig, ax = plt.subplots()
+    width, height = fig.get_size_inches()
+    apply_figure_layout(fig, figsize=(width, height + 2))
     algorithms = sorted({row["algo"] for row in rows})
     rewards_by_algo = [
         [row["reward"] for row in rows if row["algo"] == algo]
@@ -140,7 +143,8 @@ def _plot_diagnostics(
     df = pd.DataFrame(rows)
     if df.empty:
         return
-    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+    fig, axes = plt.subplots(2, 2)
+    apply_figure_layout(fig, figsize=(10, 10))
     axes = axes.flatten()
 
     network_sizes = pd.to_numeric(df.get("network_size"), errors="coerce").dropna()

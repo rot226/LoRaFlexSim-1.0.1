@@ -15,6 +15,7 @@ from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_MODES,
     apply_plot_style,
+    apply_figure_layout,
     algo_label,
     ensure_network_size,
     filter_rows_by_network_sizes,
@@ -80,7 +81,7 @@ def _add_summary_table(
     )
     table.auto_set_font_size(False)
     table.set_fontsize(8)
-    fig.subplots_adjust(bottom=0.35)
+    apply_figure_layout(fig, margins={"bottom": 0.35})
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:

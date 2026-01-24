@@ -13,6 +13,7 @@ from article_c.common.config import BASE_DIR
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
+    apply_figure_layout,
     filter_cluster,
     filter_rows_by_network_sizes,
     load_step1_aggregated,
@@ -248,6 +249,8 @@ def _collect_points(
 
 def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
     fig, ax = plt.subplots()
+    width, height = fig.get_size_inches()
+    apply_figure_layout(fig, figsize=(width, height + 2))
     for point in points:
         algo = str(point["algo"])
         ax.scatter(point["pdr_mean"], point["reward_mean"], label=algo_label(algo))

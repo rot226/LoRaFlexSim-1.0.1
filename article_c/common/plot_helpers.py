@@ -6,6 +6,7 @@ import csv
 import logging
 import math
 import warnings
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -111,6 +112,34 @@ def save_figure(
         fig.tight_layout()
     for ext in ("png", "pdf"):
         fig.savefig(output_dir / f"{stem}.{ext}", dpi=300, **SAVEFIG_STYLE)
+
+
+def apply_figure_layout(
+    fig: plt.Figure,
+    *,
+    figsize: tuple[float, float] | None = None,
+    tight_layout: bool | Mapping[str, object] = False,
+    bbox_to_anchor: tuple[float, float] | None = None,
+    margins: dict[str, float] | None = None,
+) -> None:
+    """Applique taille, marges, légendes et tight_layout sur une figure."""
+    if figsize is not None:
+        fig.set_size_inches(*figsize, forward=True)
+    if margins:
+        fig.subplots_adjust(**margins)
+    if bbox_to_anchor is not None:
+        legends = list(fig.legends)
+        for ax in fig.axes:
+            legend = ax.get_legend()
+            if legend is not None:
+                legends.append(legend)
+        for legend in legends:
+            legend.set_bbox_to_anchor(bbox_to_anchor)
+    if tight_layout:
+        if isinstance(tight_layout, Mapping):
+            fig.tight_layout(**tight_layout)
+        else:
+            fig.tight_layout()
 
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:

@@ -13,6 +13,7 @@ import pandas as pd
 
 from article_c.common.plot_helpers import (
     apply_plot_style,
+    apply_figure_layout,
     ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
@@ -63,6 +64,7 @@ def _warn_if_low_algo_variance(
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, ax = plt.subplots()
+    apply_figure_layout(fig, figsize=tuple(fig.get_size_inches()))
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())

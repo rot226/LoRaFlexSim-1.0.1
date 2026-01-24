@@ -11,6 +11,7 @@ import pandas as pd
 
 from article_c.common.plot_helpers import (
     apply_plot_style,
+    apply_figure_layout,
     filter_rows_by_network_sizes,
     load_step2_aggregated,
     load_step2_selection_probs,
@@ -45,7 +46,8 @@ def _plot_selection(
     rows: list[dict[str, object]],
     network_sizes: list[int],
 ) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=(12, 7))
+    fig, ax = plt.subplots()
+    apply_figure_layout(fig, figsize=(12, 9))
     network_sizes = sorted(network_sizes)
     sfs = sorted({row["sf"] for row in rows})
     for network_size in network_sizes:
@@ -68,11 +70,14 @@ def _plot_selection(
     )
     ax.legend(
         loc="upper center",
-        bbox_to_anchor=(0.5, 1.12),
         ncol=4,
         frameon=True,
     )
-    fig.subplots_adjust(top=0.78)
+    apply_figure_layout(
+        fig,
+        bbox_to_anchor=(0.5, 1.12),
+        margins={"top": 0.78},
+    )
     return fig
 
 

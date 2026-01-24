@@ -6,6 +6,7 @@ from collections.abc import Iterable
 
 import matplotlib.pyplot as plt
 
+from article_c.common.plot_helpers import apply_figure_layout
 from article_c.common.plotting_style import LEGEND_STYLE
 
 
@@ -52,20 +53,28 @@ def configure_figure(
                     **LEGEND_STYLE,
                     "ncol": min(len(labels), LEGEND_STYLE.get("ncol", 3)),
                 }
+                bbox_to_anchor = legend_style.pop("bbox_to_anchor", None)
                 fig.legend(handles, labels, **legend_style)
+                apply_figure_layout(fig, bbox_to_anchor=bbox_to_anchor)
             else:
                 fig.legend(
                     handles,
                     labels,
                     loc="center left",
-                    bbox_to_anchor=(1.02, 0.5),
                     frameon=False,
                 )
+                apply_figure_layout(fig, bbox_to_anchor=(1.02, 0.5))
 
     fig.suptitle(title, y=0.98)
     if legend_loc == "above":
-        fig.subplots_adjust(top=0.80)
-        fig.tight_layout(rect=(0, 0, 1, 0.88))
+        apply_figure_layout(
+            fig,
+            margins={"top": 0.80},
+            tight_layout={"rect": (0, 0, 1, 0.88)},
+        )
     else:
-        fig.subplots_adjust(top=0.88, right=0.80)
-        fig.tight_layout(rect=(0, 0, 0.80, 1))
+        apply_figure_layout(
+            fig,
+            margins={"top": 0.88, "right": 0.80},
+            tight_layout={"rect": (0, 0, 0.80, 1)},
+        )

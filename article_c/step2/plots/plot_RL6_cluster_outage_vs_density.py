@@ -14,6 +14,7 @@ from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
+    apply_figure_layout,
     ensure_network_size,
     filter_rows_by_network_sizes,
     load_step2_aggregated,
@@ -141,7 +142,8 @@ def _plot_metric(
         return None
     cluster_labels = _cluster_labels(clusters)
 
-    fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 4), sharey=True)
+    fig, axes = plt.subplots(1, len(clusters), sharey=True)
+    apply_figure_layout(fig, figsize=(5 * len(clusters), 6))
     if len(clusters) == 1:
         axes = [axes]
 
@@ -281,7 +283,8 @@ def _plot_raw_metric(
         )
         return None
     cluster_labels = _cluster_labels(clusters)
-    fig, axes = plt.subplots(1, len(clusters), figsize=(5 * len(clusters), 4), sharey=True)
+    fig, axes = plt.subplots(1, len(clusters), sharey=True)
+    apply_figure_layout(fig, figsize=(5 * len(clusters), 6))
     if len(clusters) == 1:
         axes = [axes]
     algorithms = sorted({row["algo"] for row in rows})
