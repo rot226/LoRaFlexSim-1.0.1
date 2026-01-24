@@ -63,6 +63,9 @@ def _compute_reward(
     lambda_energy: float,
     lambda_collision: float,
 ) -> float:
+    latency_norm = _clip(latency_norm**1.35 * 1.08, 0.0, 1.0)
+    energy_norm = _clip(energy_norm**1.35 * 1.08, 0.0, 1.0)
+    collision_norm = _clip(collision_norm**1.25 * 1.1, 0.0, 1.0)
     energy_weight = weights.energy_weight * (1.0 + lambda_energy)
     total_weight = weights.sf_weight + weights.latency_weight + energy_weight
     if total_weight <= 0:
@@ -320,6 +323,25 @@ def _summarize_values(values: list[float]) -> tuple[float, float, float]:
     return min(values), median(values), max(values)
 
 
+def _log_reward_stats(
+    *,
+    network_size: int,
+    algo_label: str,
+    round_id: int,
+    rewards: list[float],
+) -> None:
+    min_reward, median_reward, max_reward = _summarize_values(rewards)
+    logger.info(
+        "Stats reward - taille=%s algo=%s round=%s reward[min/med/max]=%.4f/%.4f/%.4f",
+        network_size,
+        algo_label,
+        round_id,
+        min_reward,
+        median_reward,
+        max_reward,
+    )
+
+
 def _log_pre_collision_stats(
     *,
     network_size: int,
@@ -354,6 +376,11 @@ def _sample_log_normal_shadowing(
     return shadowing_db, 10 ** (-shadowing_db / 10.0)
 
 
+def _apply_link_quality_variation(rng: random.Random, link_quality: float) -> float:
+    variation = rng.gauss(1.0, 0.12)
+    return _clip(link_quality * variation, 0.0, 1.0)
+
+
 def _weights_for_algo(algorithm: str, n_arms: int) -> list[float]:
     if algorithm == "mixra_h":
         base = [0.28, 0.24, 0.2, 0.15, 0.09, 0.04]
@@ -369,30 +396,30 @@ def _weights_for_algo(algorithm: str, n_arms: int) -> list[float]:
 def _reward_weights_for_algo(algorithm: str) -> AlgoRewardWeights:
     if algorithm == "adr":
         return AlgoRewardWeights(
-            sf_weight=0.5,
-            latency_weight=0.3,
-            energy_weight=0.2,
-            collision_weight=0.25,
+            sf_weight=0.45,
+            latency_weight=0.32,
+            energy_weight=0.23,
+            collision_weight=0.3,
         )
     if algorithm == "mixra_h":
         return AlgoRewardWeights(
-            sf_weight=0.3,
-            latency_weight=0.25,
+            sf_weight=0.28,
+            latency_weight=0.27,
             energy_weight=0.45,
-            collision_weight=0.3,
+            collision_weight=0.34,
         )
     if algorithm == "mixra_opt":
         return AlgoRewardWeights(
-            sf_weight=0.25,
-            latency_weight=0.2,
+            sf_weight=0.23,
+            latency_weight=0.22,
             energy_weight=0.55,
-            collision_weight=0.35,
+            collision_weight=0.38,
         )
     return AlgoRewardWeights(
-        sf_weight=0.4,
-        latency_weight=0.3,
+        sf_weight=0.38,
+        latency_weight=0.32,
         energy_weight=0.3,
-        collision_weight=0.25,
+        collision_weight=0.3,
         exploration_floor=0.08,
     )
 
@@ -667,7 +694,9 @@ def run_simulation(
                     mean_db=shadowing_mean_db,
                     sigma_db=shadowing_sigma_db_node,
                 )
-                link_quality = _clip(shadowing_linear, 0.0, 1.0)
+                link_quality = _apply_link_quality_variation(
+                    rng, _clip(shadowing_linear, 0.0, 1.0)
+                )
                 node_offset_s = (
                     rng.uniform(0.0, window_delay_range_value)
                     if window_delay_enabled_value and window_delay_range_value > 0
@@ -851,6 +880,12 @@ def run_simulation(
                     avg_link_quality,
                 )
             avg_reward = sum(window_rewards) / len(window_rewards)
+            _log_reward_stats(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                rewards=window_rewards,
+            )
             logger.info(
                 "Round %s - %s : récompense moyenne = %.4f",
                 round_id,
@@ -928,7 +963,9 @@ def run_simulation(
                     mean_db=shadowing_mean_db,
                     sigma_db=shadowing_sigma_db_node,
                 )
-                link_quality = _clip(shadowing_linear, 0.0, 1.0)
+                link_quality = _apply_link_quality_variation(
+                    rng, _clip(shadowing_linear, 0.0, 1.0)
+                )
                 if algorithm == "adr":
                     arm_index = _select_adr_arm(
                         link_quality, sf_values, cluster, qos_clusters
@@ -1128,6 +1165,12 @@ def run_simulation(
                     avg_link_quality,
                 )
             avg_reward = sum(window_rewards) / len(window_rewards)
+            _log_reward_stats(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                rewards=window_rewards,
+            )
             logger.info(
                 "Round %s - %s : récompense moyenne = %.4f",
                 round_id,
