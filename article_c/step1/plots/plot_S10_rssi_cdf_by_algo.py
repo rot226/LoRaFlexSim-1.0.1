@@ -209,8 +209,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--input",
         type=Path,
-        default=Path(__file__).resolve().parents[1] / "results" / "raw_results.csv",
-        help="Chemin du fichier raw_results.csv.",
+        default=Path(__file__).resolve().parents[1] / "results" / "raw_packets.csv",
+        help="Chemin du fichier raw_packets.csv.",
     )
     parser.add_argument(
         "--metric",

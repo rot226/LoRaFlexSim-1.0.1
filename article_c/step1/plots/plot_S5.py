@@ -173,7 +173,7 @@ def _extract_raw_pdr_groups(
         values_by_size.setdefault(size, {}).setdefault((algo, fallback, snir_mode), []).append(pdr)
     if values_by_size and not has_cluster_values:
         warnings.warn(
-            "Aucune distribution par cluster détectée dans raw_results.csv; "
+            "Aucune distribution par cluster détectée dans raw_metrics.csv; "
             "utilisation des valeurs agrégées cluster='all'.",
             stacklevel=2,
         )
@@ -437,7 +437,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     args = parser.parse_args(argv)
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
-    raw_results_path = step_dir / "results" / "raw_results.csv"
+    raw_results_path = step_dir / "results" / "raw_metrics.csv"
     raw_rows = _read_rows(raw_results_path)
     values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]] = {}
     network_sizes: list[int] = []

@@ -481,3 +481,128 @@ def write_simulation_results(
                 for row in intermediate_rows
             ],
         )
+
+
+def _row_has_any_keys(row: dict[str, object], keys: tuple[str, ...]) -> bool:
+    return any(key in row for key in keys)
+
+
+def write_step1_results(
+    output_dir: Path,
+    raw_rows: list[dict[str, object]],
+    network_size: object | None = None,
+) -> None:
+    """Écrit raw_packets.csv, raw_metrics.csv et aggregated_results.csv pour l'étape 1."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    packets_path = output_dir / "raw_packets.csv"
+    metrics_path = output_dir / "raw_metrics.csv"
+    aggregated_path = output_dir / "aggregated_results.csv"
+
+    expected_network_size = network_size
+    if expected_network_size is not None:
+        _coerce_positive_network_size(expected_network_size)
+    for row in raw_rows:
+        row_network_size = row.get("network_size")
+        if row_network_size is None or row_network_size == "":
+            if row.get("density") not in (None, ""):
+                row["network_size"] = row["density"]
+            elif expected_network_size == 0.0:
+                raise AssertionError(
+                    "network_size ne doit pas être remplacé par une valeur par défaut 0.0."
+                )
+            elif expected_network_size is not None:
+                row["network_size"] = expected_network_size
+        row_network_size = row.get("network_size")
+        _coerce_positive_network_size(row_network_size)
+
+    packet_keys = ("packet_id", "sf_selected")
+    metric_keys = ("sent", "received", "pdr")
+    packet_rows = [
+        row for row in raw_rows if _row_has_any_keys(row, packet_keys)
+    ]
+    metric_rows = [
+        row for row in raw_rows if _row_has_any_keys(row, metric_keys)
+    ]
+
+    if raw_rows:
+        _normalize_group_keys(raw_rows)
+        missing_network_size = [
+            row for row in raw_rows if row.get("network_size") in (None, "")
+        ]
+        if missing_network_size:
+            raise AssertionError("network_size manquant dans les lignes raw.")
+        network_sizes = sorted({row.get("network_size") for row in raw_rows})
+        network_sizes_label = ", ".join(map(str, network_sizes))
+        logger.info("network_size written: %s", network_sizes_label)
+        print(f"network_size written = {network_sizes_label}")
+        _log_reward_min_max(metric_rows)
+        _log_metric_summary(
+            metric_rows,
+            (
+                "reward",
+                "success_rate",
+                "throughput_success",
+                "energy_per_success",
+            ),
+        )
+
+    packets_header: list[str] = []
+    seen: set[str] = set()
+    if packet_rows:
+        for row in packet_rows:
+            for key in row.keys():
+                if key not in seen:
+                    seen.add(key)
+                    packets_header.append(key)
+    else:
+        packets_header = list(GROUP_KEYS)
+    write_rows(
+        packets_path,
+        packets_header,
+        [[row.get(key, "") for key in packets_header] for row in packet_rows],
+    )
+
+    metrics_header: list[str] = []
+    seen = set()
+    if metric_rows:
+        for row in metric_rows:
+            for key in row.keys():
+                if key not in seen:
+                    seen.add(key)
+                    metrics_header.append(key)
+    else:
+        metrics_header = list(GROUP_KEYS)
+    write_rows(
+        metrics_path,
+        metrics_header,
+        [[row.get(key, "") for key in metrics_header] for row in metric_rows],
+    )
+
+    _log_control_table(packet_rows, "raw_packets.csv")
+    _log_control_table(metric_rows, "raw_metrics.csv")
+    aggregated_rows, intermediate_rows = aggregate_results(metric_rows)
+    _log_control_table(aggregated_rows, "aggregated_results.csv")
+    aggregated_header = (
+        list(aggregated_rows[0].keys()) if aggregated_rows else list(BASE_GROUP_KEYS)
+    )
+    write_rows(
+        aggregated_path,
+        aggregated_header,
+        [[row.get(key, "") for key in aggregated_header] for row in aggregated_rows],
+    )
+    if intermediate_rows:
+        has_round = any(row.get("round") not in (None, "") for row in intermediate_rows)
+        if has_round:
+            intermediate_name = "aggregated_results_by_round.csv"
+        else:
+            intermediate_name = "aggregated_results_by_replication.csv"
+        intermediate_path = output_dir / intermediate_name
+        intermediate_header = list(intermediate_rows[0].keys())
+        write_rows(
+            intermediate_path,
+            intermediate_header,
+            [
+                [row.get(key, "") for key in intermediate_header]
+                for row in intermediate_rows
+            ],
+        )
