@@ -284,6 +284,69 @@ def _compute_collision_successes(
     return successes_by_node, total_transmissions, approx_mode
 
 
+def _collect_traffic_sent(node_windows: list[dict[str, object]]) -> dict[int, int]:
+    traffic_sent_by_node: dict[int, int] = {}
+    for node_window in node_windows:
+        node_id = int(node_window["node_id"])
+        traffic_sent = int(node_window["traffic_sent"])
+        traffic_sent_by_node[node_id] = traffic_sent_by_node.get(node_id, 0) + traffic_sent
+    return traffic_sent_by_node
+
+
+def _compute_successes_and_traffic(
+    node_windows: list[dict[str, object]],
+    airtime_by_sf: dict[int, float],
+    *,
+    rng: random.Random,
+) -> tuple[dict[int, int], dict[int, int], int, bool]:
+    transmissions_by_sf: dict[int, list[tuple[float, float, int]]] = {}
+    for node_window in node_windows:
+        sf_value = int(node_window["sf"])
+        airtime = airtime_by_sf[sf_value]
+        for start_time in node_window["tx_starts"]:
+            transmissions_by_sf.setdefault(sf_value, []).append(
+                (start_time, start_time + airtime, int(node_window["node_id"]))
+            )
+    successes_by_node, transmission_count, approx_mode = _compute_collision_successes(
+        transmissions_by_sf, rng=rng
+    )
+    traffic_sent_by_node = _collect_traffic_sent(node_windows)
+    return successes_by_node, traffic_sent_by_node, transmission_count, approx_mode
+
+
+def _summarize_values(values: list[float]) -> tuple[float, float, float]:
+    if not values:
+        return 0.0, 0.0, 0.0
+    return min(values), median(values), max(values)
+
+
+def _log_pre_collision_stats(
+    *,
+    network_size: int,
+    algo_label: str,
+    round_id: int,
+    traffic_sent_by_node: dict[int, int],
+    link_qualities: list[float],
+) -> None:
+    min_sent, median_sent, max_sent = _summarize_values(
+        [float(value) for value in traffic_sent_by_node.values()]
+    )
+    min_lq, median_lq, max_lq = _summarize_values(link_qualities)
+    logger.info(
+        "Pré-collision - taille=%s algo=%s round=%s traffic_sent[min/med/max]=%.0f/%.1f/%.0f "
+        "link_quality[min/med/max]=%.3f/%.3f/%.3f",
+        network_size,
+        algo_label,
+        round_id,
+        min_sent,
+        median_sent,
+        max_sent,
+        min_lq,
+        median_lq,
+        max_lq,
+    )
+
+
 def _sample_log_normal_shadowing(
     rng: random.Random, mean_db: float, sigma_db: float
 ) -> tuple[float, float]:
@@ -633,28 +696,39 @@ def run_simulation(
                         "link_quality": link_quality,
                     }
                 )
-            transmissions_by_sf: dict[int, list[tuple[float, float, int]]] = {}
-            for node_window in node_windows:
-                sf_value = int(node_window["sf"])
-                airtime = airtime_by_sf[sf_value]
-                for start_time in node_window["tx_starts"]:
-                    transmissions_by_sf.setdefault(sf_value, []).append(
-                        (start_time, start_time + airtime, int(node_window["node_id"]))
-                    )
             (
                 successes_by_node,
+                traffic_sent_by_node,
                 transmission_count,
                 approx_collision_mode,
-            ) = _compute_collision_successes(transmissions_by_sf, rng=rng)
+            ) = _compute_successes_and_traffic(node_windows, airtime_by_sf, rng=rng)
+            _log_pre_collision_stats(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                traffic_sent_by_node=traffic_sent_by_node,
+                link_qualities=[
+                    float(node_window["link_quality"]) for node_window in node_windows
+                ],
+            )
             if approx_collision_mode:
                 logger.debug(
                     "Mode approx collisions activé (%s transmissions).",
                     transmission_count,
                 )
+            collision_success_total = sum(successes_by_node.values())
+            if collision_success_total == 0:
+                logger.warning(
+                    "Aucun succès après collisions (taille=%s algo=%s round=%s).",
+                    network_size_value,
+                    algo_label,
+                    round_id,
+                )
+            final_success_total = 0
             for node_window in node_windows:
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
-                traffic_sent = int(node_window["traffic_sent"])
+                traffic_sent = traffic_sent_by_node.get(node_id, 0)
                 successes = successes_by_node.get(node_id, 0)
                 if successes > 0 and congestion_probability > 0.0:
                     successes = sum(
@@ -667,6 +741,7 @@ def run_simulation(
                     successes = sum(
                         1 for _ in range(successes) if rng.random() < link_quality
                     )
+                final_success_total += successes
                 success_flag = 1 if successes > 0 else 0
                 failure_flag = 1 - success_flag
                 airtime_norm = energy_norm_by_sf[sf_value]
@@ -758,6 +833,22 @@ def run_simulation(
                         "energy_per_success": metrics.energy_per_success,
                         "reward": reward,
                     }
+                )
+            if collision_success_total > 0 and final_success_total == 0:
+                avg_link_quality = (
+                    sum(float(node_window["link_quality"]) for node_window in node_windows)
+                    / len(node_windows)
+                    if node_windows
+                    else 0.0
+                )
+                logger.warning(
+                    "Succès annulés après congestion/link_quality (taille=%s algo=%s round=%s "
+                    "congestion=%.3f link_quality_avg=%.3f).",
+                    network_size_value,
+                    algo_label,
+                    round_id,
+                    congestion_probability,
+                    avg_link_quality,
                 )
             avg_reward = sum(window_rewards) / len(window_rewards)
             logger.info(
@@ -882,28 +973,39 @@ def run_simulation(
                         "link_quality": link_quality,
                     }
                 )
-            transmissions_by_sf: dict[int, list[tuple[float, float, int]]] = {}
-            for node_window in node_windows:
-                sf_value = int(node_window["sf"])
-                airtime = airtime_by_sf[sf_value]
-                for start_time in node_window["tx_starts"]:
-                    transmissions_by_sf.setdefault(sf_value, []).append(
-                        (start_time, start_time + airtime, int(node_window["node_id"]))
-                    )
             (
                 successes_by_node,
+                traffic_sent_by_node,
                 transmission_count,
                 approx_collision_mode,
-            ) = _compute_collision_successes(transmissions_by_sf, rng=rng)
+            ) = _compute_successes_and_traffic(node_windows, airtime_by_sf, rng=rng)
+            _log_pre_collision_stats(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                traffic_sent_by_node=traffic_sent_by_node,
+                link_qualities=[
+                    float(node_window["link_quality"]) for node_window in node_windows
+                ],
+            )
             if approx_collision_mode:
                 logger.debug(
                     "Mode approx collisions activé (%s transmissions).",
                     transmission_count,
                 )
+            collision_success_total = sum(successes_by_node.values())
+            if collision_success_total == 0:
+                logger.warning(
+                    "Aucun succès après collisions (taille=%s algo=%s round=%s).",
+                    network_size_value,
+                    algo_label,
+                    round_id,
+                )
+            final_success_total = 0
             for node_window in node_windows:
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
-                traffic_sent = int(node_window["traffic_sent"])
+                traffic_sent = traffic_sent_by_node.get(node_id, 0)
                 successes = successes_by_node.get(node_id, 0)
                 if successes > 0 and congestion_probability > 0.0:
                     successes = sum(
@@ -916,6 +1018,7 @@ def run_simulation(
                     successes = sum(
                         1 for _ in range(successes) if rng.random() < link_quality
                     )
+                final_success_total += successes
                 success_flag = 1 if successes > 0 else 0
                 failure_flag = 1 - success_flag
                 airtime_norm = energy_norm_by_sf[sf_value]
@@ -1007,6 +1110,22 @@ def run_simulation(
                         "energy_per_success": metrics.energy_per_success,
                         "reward": reward,
                     }
+                )
+            if collision_success_total > 0 and final_success_total == 0:
+                avg_link_quality = (
+                    sum(float(node_window["link_quality"]) for node_window in node_windows)
+                    / len(node_windows)
+                    if node_windows
+                    else 0.0
+                )
+                logger.warning(
+                    "Succès annulés après congestion/link_quality (taille=%s algo=%s round=%s "
+                    "congestion=%.3f link_quality_avg=%.3f).",
+                    network_size_value,
+                    algo_label,
+                    round_id,
+                    congestion_probability,
+                    avg_link_quality,
                 )
             avg_reward = sum(window_rewards) / len(window_rewards)
             logger.info(
