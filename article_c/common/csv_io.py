@@ -328,6 +328,8 @@ def _aggregate_rows(
         aggregated_row: dict[str, object] = dict(zip(group_keys, group_key))
         if aggregated_row.get("network_size") in (None, ""):
             raise AssertionError("network_size manquant dans les résultats agrégés.")
+        if aggregated_row.get("density") in (None, ""):
+            aggregated_row["density"] = aggregated_row.get("network_size")
         for key in sorted(numeric_keys):
             values = [
                 row[key]
@@ -415,6 +417,8 @@ def write_simulation_results(
                 row["network_size"] = expected_network_size
         row_network_size = row.get("network_size")
         _coerce_positive_network_size(row_network_size)
+        if row.get("density") in (None, ""):
+            row["density"] = row_network_size
 
     if raw_rows:
         _normalize_group_keys(raw_rows)

@@ -38,6 +38,7 @@ def _aggregate_selection_probs(
         aggregated.append(
             {
                 "network_size": network_size,
+                "density": network_size,
                 "round": round_id,
                 "sf": sf,
                 "selection_prob": round(avg, 6),
@@ -62,6 +63,7 @@ def _aggregate_learning_curve(
         aggregated.append(
             {
                 "network_size": network_size,
+                "density": network_size,
                 "round": round_id,
                 "algo": algo,
                 "avg_reward": round(avg, 6),
@@ -417,9 +419,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     if selection_rows:
         rl5_rows = _aggregate_selection_probs(selection_rows)
         rl5_path = base_results_dir / "rl5_selection_prob.csv"
-        rl5_header = ["network_size", "round", "sf", "selection_prob"]
+        rl5_header = ["network_size", "density", "round", "sf", "selection_prob"]
         rl5_values = [
-            [row["network_size"], row["round"], row["sf"], row["selection_prob"]]
+            [
+                row["network_size"],
+                row["density"],
+                row["round"],
+                row["sf"],
+                row["selection_prob"],
+            ]
             for row in rl5_rows
         ]
         write_rows(rl5_path, rl5_header, rl5_values)
@@ -429,10 +437,11 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     if learning_curve_rows:
         learning_curve = _aggregate_learning_curve(learning_curve_rows)
-        learning_curve_header = ["network_size", "round", "algo", "avg_reward"]
+        learning_curve_header = ["network_size", "density", "round", "algo", "avg_reward"]
         learning_curve_values = [
             [
                 row["network_size"],
+                row["density"],
                 row["round"],
                 row["algo"],
                 row["avg_reward"],
