@@ -67,6 +67,28 @@ SNIR_STATE_LABELS = {
     "snir_unknown": "SNIR inconnu",
 }
 
+MAX_CURVES_PER_PANEL = 4
+
+
+def _method_groups(
+    methods: Sequence[str],
+    per_algo: bool,
+    max_per_panel: int = MAX_CURVES_PER_PANEL,
+) -> List[List[str]]:
+    if not per_algo or max_per_panel <= 0:
+        return [list(methods)]
+    if len(methods) <= max_per_panel:
+        return [list(methods)]
+    return [list(methods[i : i + max_per_panel]) for i in range(0, len(methods), max_per_panel)]
+
+
+def _panel_title(base: str, methods: Sequence[str]) -> str:
+    if not methods:
+        return base
+    if base:
+        return f"{base}\nMéthodes: {', '.join(methods)}"
+    return f"Méthodes: {', '.join(methods)}"
+
 
 def _render_snir_variants(
     render: Callable[[List[str], str, str], Optional[Path]],
@@ -345,6 +367,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         type=int,
         default=3,
         help="Taille de la fenêtre de moyenne mobile (par nombre de scénarios).",
+    )
+    parser.add_argument(
+        "--per-algo",
+        dest="per_algo",
+        action="store_true",
+        help="Découpe les figures en panneaux avec 4 algorithmes maximum par panneau.",
     )
     return parser.parse_args(argv)
 
@@ -628,6 +656,8 @@ def plot_pdr_vs_nodes(
     scenarios: Sequence[str],
     node_counts: Mapping[str, Optional[int]],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> Optional[Path]:
     if not scenarios or not metrics_by_method:
         return None
@@ -635,37 +665,49 @@ def plot_pdr_vs_nodes(
     if not ordered:
         return None
     x_values = [node_counts[scenario] for scenario in ordered]
-    fig, ax = plt.subplots(figsize=(7.0, 4.5))
-    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
-    plotted = False
+    methods = sorted(metrics_by_method.keys())
+    method_styles = _style_mapping(methods)
+    method_groups = _method_groups(methods, per_algo)
+    fig, axes = plt.subplots(
+        nrows=len(method_groups),
+        ncols=1,
+        sharex=True,
+        figsize=(7.0, 4.5 * len(method_groups)),
+    )
+    if len(method_groups) == 1:
+        axes = [axes]  # type: ignore[assignment]
 
-    for method in sorted(metrics_by_method.keys()):
-        values: List[float] = []
-        for scenario in ordered:
-            metric = metrics_by_method.get(method, {}).get(scenario)
-            value = metric.pdr_global if metric else None
-            values.append(float(value) if value is not None else float("nan"))
-        if not values or _all_nan(values):
-            continue
-        color, marker = method_styles[method]
-        ax.plot(x_values, values, marker=marker, color=color, label=method)
-        plotted = True
+    for ax, group in zip(axes, method_groups):
+        plotted = False
+        for method in group:
+            values = []
+            for scenario in ordered:
+                metric = metrics_by_method.get(method, {}).get(scenario)
+                value = metric.pdr_global if metric else None
+                values.append(float(value) if value is not None else float("nan"))
+            if not values or _all_nan(values):
+                continue
+            color, marker = method_styles[method]
+            ax.plot(x_values, values, marker=marker, color=color, label=method)
+            plotted = True
 
-    ax.set_xlabel("Nombre de nœuds")
-    ax.set_ylabel("PDR global")
-    ax.set_ylim(0.0, 1.0)
-    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
-    if plotted:
-        ax.legend(loc="best")
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "PDR indisponible",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
+        ax.set_ylabel("PDR global")
+        ax.set_ylim(0.0, 1.0)
+        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+        if len(method_groups) > 1:
+            ax.set_title(_panel_title("", group))
+        if plotted:
+            ax.legend(loc="best")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "PDR indisponible",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+    axes[-1].set_xlabel("Nombre de nœuds")
     fig.tight_layout()
 
     output_path = out_dir / "pdr_global_vs_nodes.png"
@@ -679,6 +721,8 @@ def plot_der_vs_nodes(
     scenarios: Sequence[str],
     node_counts: Mapping[str, Optional[int]],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> Optional[Path]:
     if not scenarios or not metrics_by_method:
         return None
@@ -686,37 +730,49 @@ def plot_der_vs_nodes(
     if not ordered:
         return None
     x_values = [node_counts[scenario] for scenario in ordered]
-    fig, ax = plt.subplots(figsize=(7.0, 4.5))
-    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
-    plotted = False
+    methods = sorted(metrics_by_method.keys())
+    method_styles = _style_mapping(methods)
+    method_groups = _method_groups(methods, per_algo)
+    fig, axes = plt.subplots(
+        nrows=len(method_groups),
+        ncols=1,
+        sharex=True,
+        figsize=(7.0, 4.5 * len(method_groups)),
+    )
+    if len(method_groups) == 1:
+        axes = [axes]  # type: ignore[assignment]
 
-    for method in sorted(metrics_by_method.keys()):
-        values: List[float] = []
-        for scenario in ordered:
-            metric = metrics_by_method.get(method, {}).get(scenario)
-            value = metric.der_global if metric else None
-            values.append(float(value) if value is not None else float("nan"))
-        if not values or _all_nan(values):
-            continue
-        color, marker = method_styles[method]
-        ax.plot(x_values, values, marker=marker, color=color, label=method)
-        plotted = True
+    for ax, group in zip(axes, method_groups):
+        plotted = False
+        for method in group:
+            values = []
+            for scenario in ordered:
+                metric = metrics_by_method.get(method, {}).get(scenario)
+                value = metric.der_global if metric else None
+                values.append(float(value) if value is not None else float("nan"))
+            if not values or _all_nan(values):
+                continue
+            color, marker = method_styles[method]
+            ax.plot(x_values, values, marker=marker, color=color, label=method)
+            plotted = True
 
-    ax.set_xlabel("Nombre de nœuds")
-    ax.set_ylabel("DER global")
-    ax.set_ylim(0.0, 1.0)
-    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
-    if plotted:
-        ax.legend(loc="best")
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "DER indisponible",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
+        ax.set_ylabel("DER global")
+        ax.set_ylim(0.0, 1.0)
+        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+        if len(method_groups) > 1:
+            ax.set_title(_panel_title("", group))
+        if plotted:
+            ax.legend(loc="best")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "DER indisponible",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+    axes[-1].set_xlabel("Nombre de nœuds")
     fig.tight_layout()
 
     output_path = out_dir / "der_global_vs_nodes.png"
@@ -993,69 +1049,84 @@ def _plot_metric_with_snir_states(
     filename_base: str,
     y_limits: Tuple[Optional[float], Optional[float]] | None = (0.0, 1.0),
     ci_resolver: Optional[Callable[[MethodScenarioMetrics], Tuple[float, float]]] = None,
+    per_algo: bool = False,
 ) -> List[Path]:
     if not scenarios or not metrics_by_method:
         return []
 
     x_positions = list(range(len(scenarios)))
-    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
+    methods = sorted(metrics_by_method.keys())
+    method_styles = _style_mapping(methods)
     values_by_state = _values_by_snir_state(metrics_by_method, scenarios, attribute)
 
     def render(states_to_plot: List[str], suffix: str, title: str) -> Optional[Path]:
-        fig, ax = plt.subplots(figsize=(max(6.0, 2.5 * len(scenarios)), 4.5))
-        plotted = False
-        for state in states_to_plot:
-            state_values = values_by_state.get(state, {})
-            color = SNIR_STATE_COLORS.get(state, "#7f7f7f")
-            label_state = SNIR_STATE_LABELS.get(state, state)
-            for method, values in state_values.items():
-                if not values or _all_nan(values):
-                    continue
-                _, marker = method_styles[method]
-                ax.plot(
-                    x_positions,
-                    values,
-                    marker=marker,
-                    color=color,
-                    label=f"{method} ({label_state})",
-                )
-                if ci_resolver is not None:
-                    lower: List[float] = []
-                    upper: List[float] = []
-                    method_metrics = metrics_by_method.get(method, {})
-                    for scenario in scenarios:
-                        metric = method_metrics.get(scenario)
-                        if metric is None or _metric_snir_state(metric) != state:
-                            lower.append(float("nan"))
-                            upper.append(float("nan"))
-                            continue
-                        ci_low, ci_high = ci_resolver(metric)
-                        lower.append(float(ci_low))
-                        upper.append(float(ci_high))
-                    if not _all_nan(lower) and not _all_nan(upper):
-                        ax.fill_between(x_positions, lower, upper, color=color, alpha=0.15)
-                plotted = True
+        method_groups = _method_groups(methods, per_algo)
+        fig, axes = plt.subplots(
+            nrows=len(method_groups),
+            ncols=1,
+            sharex=True,
+            figsize=(max(6.0, 2.5 * len(scenarios)), 4.5 * len(method_groups)),
+        )
+        if len(method_groups) == 1:
+            axes = [axes]  # type: ignore[assignment]
+        for ax, group in zip(axes, method_groups):
+            plotted = False
+            for state in states_to_plot:
+                state_values = values_by_state.get(state, {})
+                color = SNIR_STATE_COLORS.get(state, "#7f7f7f")
+                label_state = SNIR_STATE_LABELS.get(state, state)
+                for method in group:
+                    values = state_values.get(method, [])
+                    if not values or _all_nan(values):
+                        continue
+                    _, marker = method_styles[method]
+                    ax.plot(
+                        x_positions,
+                        values,
+                        marker=marker,
+                        color=color,
+                        label=f"{method} ({label_state})",
+                    )
+                    if ci_resolver is not None:
+                        lower: List[float] = []
+                        upper: List[float] = []
+                        method_metrics = metrics_by_method.get(method, {})
+                        for scenario in scenarios:
+                            metric = method_metrics.get(scenario)
+                            if metric is None or _metric_snir_state(metric) != state:
+                                lower.append(float("nan"))
+                                upper.append(float("nan"))
+                                continue
+                            ci_low, ci_high = ci_resolver(metric)
+                            lower.append(float(ci_low))
+                            upper.append(float(ci_high))
+                        if not _all_nan(lower) and not _all_nan(upper):
+                            ax.fill_between(x_positions, lower, upper, color=color, alpha=0.15)
+                    plotted = True
 
-        ax.set_xticks(x_positions, scenarios)
-        ax.set_xlabel("Scenario")
-        ax.set_ylabel(ylabel)
-        if y_limits is not None:
-            lower, upper = y_limits
-            ax.set_ylim(bottom=lower, top=upper)
-        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
-        if title:
-            ax.set_title(title)
-        if plotted:
-            ax.legend(loc="best")
-        else:
-            ax.text(
-                0.5,
-                0.5,
-                f"{ylabel} unavailable",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
+            ax.set_xticks(x_positions)
+            ax.set_ylabel(ylabel)
+            if y_limits is not None:
+                lower, upper = y_limits
+                ax.set_ylim(bottom=lower, top=upper)
+            ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+            if title and len(method_groups) == 1:
+                ax.set_title(title)
+            elif title:
+                ax.set_title(_panel_title(title, group))
+            if plotted:
+                ax.legend(loc="best")
+            else:
+                ax.text(
+                    0.5,
+                    0.5,
+                    f"{ylabel} unavailable",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                )
+        axes[-1].set_xticklabels(scenarios)
+        axes[-1].set_xlabel("Scenario")
         fig.tight_layout()
 
         filename = f"{filename_base}{suffix}.png"
@@ -1076,6 +1147,8 @@ def plot_der(
     metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
     scenarios: Sequence[str],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> List[Path]:
     """Trace la DER globale par scénario en distinguant l'état SNIR."""
 
@@ -1087,6 +1160,7 @@ def plot_der(
         ylabel="Global DER",
         filename_base="der_global_vs_scenarios",
         ci_resolver=_ratio_ci_for_metric,
+        per_algo=per_algo,
     )
 
 
@@ -1094,6 +1168,8 @@ def plot_pdr(
     metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
     scenarios: Sequence[str],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> List[Path]:
     """Trace le PDR global en distinguant l'état SNIR."""
 
@@ -1105,6 +1181,7 @@ def plot_pdr(
         ylabel="Global PDR",
         filename_base="pdr_global_vs_scenarios",
         ci_resolver=_ratio_ci_for_metric,
+        per_algo=per_algo,
     )
 
 
@@ -1112,6 +1189,8 @@ def plot_snir_mean(
     metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
     scenarios: Sequence[str],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> List[Path]:
     """Trace le SNIR moyen en distinguant l'état SNIR."""
 
@@ -1124,6 +1203,7 @@ def plot_snir_mean(
         filename_base="snir_mean_vs_scenarios",
         y_limits=None,
         ci_resolver=_snir_ci_for_metric,
+        per_algo=per_algo,
     )
 
 
@@ -1212,6 +1292,8 @@ def plot_energy_snir(
     metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
     scenarios: Sequence[str],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> List[Path]:
     """Trace l'énergie totale par scénario en distinguant l'état SNIR."""
 
@@ -1223,6 +1305,7 @@ def plot_energy_snir(
         ylabel="Énergie cumulée (J)",
         filename_base="energy_total_vs_scenarios",
         y_limits=(0.0, None),
+        per_algo=per_algo,
     )
 
 
@@ -1230,6 +1313,8 @@ def plot_jain_index_snir(
     metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
     scenarios: Sequence[str],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> List[Path]:
     """Trace l'indice de Jain par scénario en distinguant l'état SNIR."""
 
@@ -1240,6 +1325,7 @@ def plot_jain_index_snir(
         attribute="jain_index",
         ylabel="Indice de Jain",
         filename_base="jain_index_vs_scenarios",
+        per_algo=per_algo,
     )
 
 
@@ -1247,40 +1333,55 @@ def plot_collisions(
     metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
     scenarios: Sequence[str],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> Optional[Path]:
     if not scenarios or not metrics_by_method:
         return None
 
-    fig, ax = plt.subplots(figsize=(max(6.0, 2.5 * len(scenarios)), 4.5))
     x_positions = list(range(len(scenarios)))
-    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
-    plotted = False
+    methods = sorted(metrics_by_method.keys())
+    method_styles = _style_mapping(methods)
+    method_groups = _method_groups(methods, per_algo)
+    fig, axes = plt.subplots(
+        nrows=len(method_groups),
+        ncols=1,
+        sharex=True,
+        figsize=(max(6.0, 2.5 * len(scenarios)), 4.5 * len(method_groups)),
+    )
+    if len(method_groups) == 1:
+        axes = [axes]  # type: ignore[assignment]
 
     collision_values = _values_for_attribute(metrics_by_method, scenarios, "collisions")
-    for method in sorted(collision_values.keys()):
-        values = collision_values[method]
-        if not values or _all_nan(values):
-            continue
-        color, marker = method_styles[method]
-        ax.plot(x_positions, values, marker=marker, color=color, label=method)
-        plotted = True
+    for ax, group in zip(axes, method_groups):
+        plotted = False
+        for method in group:
+            values = collision_values.get(method, [])
+            if not values or _all_nan(values):
+                continue
+            color, marker = method_styles[method]
+            ax.plot(x_positions, values, marker=marker, color=color, label=method)
+            plotted = True
 
-    ax.set_xticks(x_positions, scenarios)
-    ax.set_xlabel("Scenario")
-    ax.set_ylabel("Uplink collisions")
-    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
-    ax.set_ylim(bottom=0.0)
-    if plotted:
-        ax.legend(loc="best")
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "Collision data unavailable",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
+        ax.set_xticks(x_positions)
+        ax.set_ylabel("Uplink collisions")
+        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+        ax.set_ylim(bottom=0.0)
+        if len(method_groups) > 1:
+            ax.set_title(_panel_title("", group))
+        if plotted:
+            ax.legend(loc="best")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "Collision data unavailable",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+    axes[-1].set_xticklabels(scenarios)
+    axes[-1].set_xlabel("Scenario")
     fig.tight_layout()
 
     output_path = out_dir / "collisions_vs_scenarios.png"
@@ -1293,40 +1394,55 @@ def plot_energy(
     metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
     scenarios: Sequence[str],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> Optional[Path]:
     if not scenarios or not metrics_by_method:
         return None
 
-    fig, ax = plt.subplots(figsize=(max(6.0, 2.5 * len(scenarios)), 4.5))
     x_positions = list(range(len(scenarios)))
-    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
-    plotted = False
+    methods = sorted(metrics_by_method.keys())
+    method_styles = _style_mapping(methods)
+    method_groups = _method_groups(methods, per_algo)
+    fig, axes = plt.subplots(
+        nrows=len(method_groups),
+        ncols=1,
+        sharex=True,
+        figsize=(max(6.0, 2.5 * len(scenarios)), 4.5 * len(method_groups)),
+    )
+    if len(method_groups) == 1:
+        axes = [axes]  # type: ignore[assignment]
 
     energy_values = _values_for_attribute(metrics_by_method, scenarios, "energy_j")
-    for method in sorted(energy_values.keys()):
-        values = energy_values[method]
-        if not values or _all_nan(values):
-            continue
-        color, marker = method_styles[method]
-        ax.plot(x_positions, values, marker=marker, color=color, label=method)
-        plotted = True
+    for ax, group in zip(axes, method_groups):
+        plotted = False
+        for method in group:
+            values = energy_values.get(method, [])
+            if not values or _all_nan(values):
+                continue
+            color, marker = method_styles[method]
+            ax.plot(x_positions, values, marker=marker, color=color, label=method)
+            plotted = True
 
-    ax.set_xticks(x_positions, scenarios)
-    ax.set_xlabel("Scenario")
-    ax.set_ylabel("Total energy (J)")
-    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
-    ax.set_ylim(bottom=0.0)
-    if plotted:
-        ax.legend(loc="best")
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "Energy data unavailable",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
+        ax.set_xticks(x_positions)
+        ax.set_ylabel("Total energy (J)")
+        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+        ax.set_ylim(bottom=0.0)
+        if len(method_groups) > 1:
+            ax.set_title(_panel_title("", group))
+        if plotted:
+            ax.legend(loc="best")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "Energy data unavailable",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+    axes[-1].set_xticklabels(scenarios)
+    axes[-1].set_xlabel("Scenario")
     fig.tight_layout()
 
     output_path = out_dir / "energy_total_vs_scenarios.png"
@@ -1339,40 +1455,55 @@ def plot_jain_index(
     metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
     scenarios: Sequence[str],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> Optional[Path]:
     if not scenarios or not metrics_by_method:
         return None
 
-    fig, ax = plt.subplots(figsize=(max(6.0, 2.5 * len(scenarios)), 4.5))
     x_positions = list(range(len(scenarios)))
-    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
-    plotted = False
+    methods = sorted(metrics_by_method.keys())
+    method_styles = _style_mapping(methods)
+    method_groups = _method_groups(methods, per_algo)
+    fig, axes = plt.subplots(
+        nrows=len(method_groups),
+        ncols=1,
+        sharex=True,
+        figsize=(max(6.0, 2.5 * len(scenarios)), 4.5 * len(method_groups)),
+    )
+    if len(method_groups) == 1:
+        axes = [axes]  # type: ignore[assignment]
 
     jain_values = _values_for_attribute(metrics_by_method, scenarios, "jain_index")
-    for method in sorted(jain_values.keys()):
-        values = jain_values[method]
-        if not values or _all_nan(values):
-            continue
-        color, marker = method_styles[method]
-        ax.plot(x_positions, values, marker=marker, color=color, label=method)
-        plotted = True
+    for ax, group in zip(axes, method_groups):
+        plotted = False
+        for method in group:
+            values = jain_values.get(method, [])
+            if not values or _all_nan(values):
+                continue
+            color, marker = method_styles[method]
+            ax.plot(x_positions, values, marker=marker, color=color, label=method)
+            plotted = True
 
-    ax.set_xticks(x_positions, scenarios)
-    ax.set_xlabel("Scenario")
-    ax.set_ylabel("Jain index")
-    ax.set_ylim(0.0, 1.0)
-    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
-    if plotted:
-        ax.legend(loc="best")
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "Jain index unavailable",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
+        ax.set_xticks(x_positions)
+        ax.set_ylabel("Jain index")
+        ax.set_ylim(0.0, 1.0)
+        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+        if len(method_groups) > 1:
+            ax.set_title(_panel_title("", group))
+        if plotted:
+            ax.legend(loc="best")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "Jain index unavailable",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+    axes[-1].set_xticklabels(scenarios)
+    axes[-1].set_xlabel("Scenario")
     fig.tight_layout()
 
     output_path = out_dir / "jain_index_vs_scenarios.png"
@@ -1385,40 +1516,55 @@ def plot_min_sf_share(
     metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
     scenarios: Sequence[str],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> Optional[Path]:
     if not scenarios or not metrics_by_method:
         return None
 
-    fig, ax = plt.subplots(figsize=(max(6.0, 2.5 * len(scenarios)), 4.5))
     x_positions = list(range(len(scenarios)))
-    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
-    plotted = False
+    methods = sorted(metrics_by_method.keys())
+    method_styles = _style_mapping(methods)
+    method_groups = _method_groups(methods, per_algo)
+    fig, axes = plt.subplots(
+        nrows=len(method_groups),
+        ncols=1,
+        sharex=True,
+        figsize=(max(6.0, 2.5 * len(scenarios)), 4.5 * len(method_groups)),
+    )
+    if len(method_groups) == 1:
+        axes = [axes]  # type: ignore[assignment]
 
     min_sf_values = _values_for_attribute(metrics_by_method, scenarios, "min_sf_share")
-    for method in sorted(min_sf_values.keys()):
-        values = min_sf_values[method]
-        if not values or _all_nan(values):
-            continue
-        color, marker = method_styles[method]
-        ax.plot(x_positions, values, marker=marker, color=color, label=method)
-        plotted = True
+    for ax, group in zip(axes, method_groups):
+        plotted = False
+        for method in group:
+            values = min_sf_values.get(method, [])
+            if not values or _all_nan(values):
+                continue
+            color, marker = method_styles[method]
+            ax.plot(x_positions, values, marker=marker, color=color, label=method)
+            plotted = True
 
-    ax.set_xticks(x_positions, scenarios)
-    ax.set_xlabel("Scenario")
-    ax.set_ylabel("Minimum SF share")
-    ax.set_ylim(0.0, 1.0)
-    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
-    if plotted:
-        ax.legend(loc="best")
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "SF distribution unavailable",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
+        ax.set_xticks(x_positions)
+        ax.set_ylabel("Minimum SF share")
+        ax.set_ylim(0.0, 1.0)
+        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+        if len(method_groups) > 1:
+            ax.set_title(_panel_title("", group))
+        if plotted:
+            ax.legend(loc="best")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "SF distribution unavailable",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+    axes[-1].set_xticklabels(scenarios)
+    axes[-1].set_xlabel("Scenario")
     fig.tight_layout()
 
     output_path = out_dir / "min_sf_share_vs_scenarios.png"
@@ -1585,40 +1731,55 @@ def plot_pdr_vs_snir_by_method(
     metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
     scenarios: Sequence[str],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> List[Path]:
     saved: List[Path] = []
     if not scenarios or not metrics_by_method:
         return saved
 
-    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
+    methods = sorted(metrics_by_method.keys())
+    method_styles = _style_mapping(methods)
+    method_groups = _method_groups(methods, per_algo)
 
     for scenario in scenarios:
-        fig, ax = plt.subplots(figsize=(6.5, 4.5))
-        plotted = False
-        for method in sorted(metrics_by_method.keys()):
-            metric = metrics_by_method[method].get(scenario)
-            if metric is None or not metric.pdr_by_snir_bin:
-                continue
-            xs, ys = zip(*sorted(metric.pdr_by_snir_bin))
-            color, marker = method_styles[method]
-            ax.plot(xs, ys, label=method, color=color, marker=marker)
-            plotted = True
-        ax.set_xlabel("SNIR (dB)")
-        ax.set_ylabel("PDR")
-        ax.set_ylim(0.0, 1.0)
-        ax.grid(True, linestyle="--", alpha=0.4)
-        ax.set_title(f"PDR vs SNIR – {scenario}")
-        if plotted:
-            ax.legend(loc="best")
-        else:
-            ax.text(
-                0.5,
-                0.5,
-                "PDR vs SNIR indisponible",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
+        fig, axes = plt.subplots(
+            nrows=len(method_groups),
+            ncols=1,
+            sharex=True,
+            figsize=(6.5, 4.5 * len(method_groups)),
+        )
+        if len(method_groups) == 1:
+            axes = [axes]  # type: ignore[assignment]
+        for ax, group in zip(axes, method_groups):
+            plotted = False
+            for method in group:
+                metric = metrics_by_method[method].get(scenario)
+                if metric is None or not metric.pdr_by_snir_bin:
+                    continue
+                xs, ys = zip(*sorted(metric.pdr_by_snir_bin))
+                color, marker = method_styles[method]
+                ax.plot(xs, ys, label=method, color=color, marker=marker)
+                plotted = True
+            ax.set_ylabel("PDR")
+            ax.set_ylim(0.0, 1.0)
+            ax.grid(True, linestyle="--", alpha=0.4)
+            if len(method_groups) > 1:
+                ax.set_title(_panel_title(f"PDR vs SNIR – {scenario}", group))
+            else:
+                ax.set_title(f"PDR vs SNIR – {scenario}")
+            if plotted:
+                ax.legend(loc="best")
+            else:
+                ax.text(
+                    0.5,
+                    0.5,
+                    "PDR vs SNIR indisponible",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                )
+        axes[-1].set_xlabel("SNIR (dB)")
         fig.tight_layout()
 
         filename = f"pdr_vs_snir_{sanitize_filename(scenario)}.png"
@@ -1634,12 +1795,16 @@ def plot_pdr_vs_snir_by_cluster(
     metrics_by_method: Mapping[str, Mapping[str, MethodScenarioMetrics]],
     scenarios: Sequence[str],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> List[Path]:
     saved: List[Path] = []
     if not scenarios or not metrics_by_method:
         return saved
 
-    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
+    methods = sorted(metrics_by_method.keys())
+    method_styles = _style_mapping(methods)
+    method_groups = _method_groups(methods, per_algo)
 
     for scenario in scenarios:
         data_per_method: Dict[str, pd.DataFrame] = {}
@@ -1666,32 +1831,47 @@ def plot_pdr_vs_snir_by_cluster(
 
         unique_clusters = sorted({cluster for cluster in clusters})
         for cluster in unique_clusters:
-            fig, ax = plt.subplots(figsize=(6.5, 4.5))
-            plotted = False
-            for method, df in data_per_method.items():
-                bins = _compute_pdr_by_snir_bins(df, cluster_value=cluster)
-                if not bins:
-                    continue
-                xs, ys = zip(*sorted(bins))
-                color, marker = method_styles[method]
-                ax.plot(xs, ys, label=method, color=color, marker=marker)
-                plotted = True
-            ax.set_xlabel("SNIR (dB)")
-            ax.set_ylabel("PDR")
-            ax.set_ylim(0.0, 1.0)
-            ax.grid(True, linestyle="--", alpha=0.4)
-            ax.set_title(f"PDR vs SNIR – {scenario} (cluster {cluster})")
-            if plotted:
-                ax.legend(loc="best")
-            else:
-                ax.text(
-                    0.5,
-                    0.5,
-                    "PDR vs SNIR indisponible",
-                    ha="center",
-                    va="center",
-                    transform=ax.transAxes,
-                )
+            fig, axes = plt.subplots(
+                nrows=len(method_groups),
+                ncols=1,
+                sharex=True,
+                figsize=(6.5, 4.5 * len(method_groups)),
+            )
+            if len(method_groups) == 1:
+                axes = [axes]  # type: ignore[assignment]
+            for ax, group in zip(axes, method_groups):
+                plotted = False
+                for method in group:
+                    df = data_per_method.get(method)
+                    if df is None:
+                        continue
+                    bins = _compute_pdr_by_snir_bins(df, cluster_value=cluster)
+                    if not bins:
+                        continue
+                    xs, ys = zip(*sorted(bins))
+                    color, marker = method_styles[method]
+                    ax.plot(xs, ys, label=method, color=color, marker=marker)
+                    plotted = True
+                ax.set_ylabel("PDR")
+                ax.set_ylim(0.0, 1.0)
+                ax.grid(True, linestyle="--", alpha=0.4)
+                title = f"PDR vs SNIR – {scenario} (cluster {cluster})"
+                if len(method_groups) > 1:
+                    ax.set_title(_panel_title(title, group))
+                else:
+                    ax.set_title(title)
+                if plotted:
+                    ax.legend(loc="best")
+                else:
+                    ax.text(
+                        0.5,
+                        0.5,
+                        "PDR vs SNIR indisponible",
+                        ha="center",
+                        va="center",
+                        transform=ax.transAxes,
+                    )
+            axes[-1].set_xlabel("SNIR (dB)")
             fig.tight_layout()
 
             filename = f"pdr_vs_snir_{sanitize_filename(scenario)}_cluster_{sanitize_filename(cluster)}.png"
@@ -1707,6 +1887,8 @@ def plot_collision_rates_vs_nodes(
     scenarios: Sequence[str],
     node_counts: Mapping[str, Optional[int]],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> Optional[Path]:
     if not scenarios or not metrics_by_method:
         return None
@@ -1715,64 +1897,76 @@ def plot_collision_rates_vs_nodes(
         return None
 
     x_values = [node_counts[scenario] for scenario in ordered]
-    fig, ax = plt.subplots(figsize=(7.0, 4.5))
-    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
-    plotted = False
+    methods = sorted(metrics_by_method.keys())
+    method_styles = _style_mapping(methods)
+    method_groups = _method_groups(methods, per_algo)
+    fig, axes = plt.subplots(
+        nrows=len(method_groups),
+        ncols=1,
+        sharex=True,
+        figsize=(7.0, 4.5 * len(method_groups)),
+    )
+    if len(method_groups) == 1:
+        axes = [axes]  # type: ignore[assignment]
 
-    for method in sorted(metrics_by_method.keys()):
-        destructive_values: List[float] = []
-        captured_values: List[float] = []
-        for scenario in ordered:
-            metric = metrics_by_method.get(method, {}).get(scenario)
-            if metric is None or metric.attempted <= 0:
-                destructive_values.append(float("nan"))
-                captured_values.append(float("nan"))
-                continue
-            destructive = metric.collision_destructive
-            captured = metric.collision_captured
-            destructive_values.append(
-                float(destructive) / metric.attempted if destructive is not None else float("nan")
-            )
-            captured_values.append(
-                float(captured) / metric.attempted if captured is not None else float("nan")
-            )
-        color, marker = method_styles[method]
-        if not _all_nan(destructive_values):
-            ax.plot(
-                x_values,
-                destructive_values,
-                marker=marker,
-                color=color,
-                linestyle="-",
-                label=f"{method} (destructive)",
-            )
-            plotted = True
-        if not _all_nan(captured_values):
-            ax.plot(
-                x_values,
-                captured_values,
-                marker=marker,
-                color=color,
-                linestyle="--",
-                label=f"{method} (capture)",
-            )
-            plotted = True
+    for ax, group in zip(axes, method_groups):
+        plotted = False
+        for method in group:
+            destructive_values = []
+            captured_values = []
+            for scenario in ordered:
+                metric = metrics_by_method.get(method, {}).get(scenario)
+                if metric is None or metric.attempted <= 0:
+                    destructive_values.append(float("nan"))
+                    captured_values.append(float("nan"))
+                    continue
+                destructive = metric.collision_destructive
+                captured = metric.collision_captured
+                destructive_values.append(
+                    float(destructive) / metric.attempted if destructive is not None else float("nan")
+                )
+                captured_values.append(
+                    float(captured) / metric.attempted if captured is not None else float("nan")
+                )
+            color, marker = method_styles[method]
+            if not _all_nan(destructive_values):
+                ax.plot(
+                    x_values,
+                    destructive_values,
+                    marker=marker,
+                    color=color,
+                    linestyle="-",
+                    label=f"{method} (destructive)",
+                )
+                plotted = True
+            if not _all_nan(captured_values):
+                ax.plot(
+                    x_values,
+                    captured_values,
+                    marker=marker,
+                    color=color,
+                    linestyle="--",
+                    label=f"{method} (capture)",
+                )
+                plotted = True
 
-    ax.set_xlabel("Nombre de nœuds")
-    ax.set_ylabel("Taux de collisions")
-    ax.set_ylim(0.0, 1.0)
-    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
-    if plotted:
-        ax.legend(loc="best", fontsize="small")
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "Taux de collisions indisponible",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
+        ax.set_ylabel("Taux de collisions")
+        ax.set_ylim(0.0, 1.0)
+        ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+        if len(method_groups) > 1:
+            ax.set_title(_panel_title("", group))
+        if plotted:
+            ax.legend(loc="best", fontsize="small")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "Taux de collisions indisponible",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+    axes[-1].set_xlabel("Nombre de nœuds")
     fig.tight_layout()
 
     output_path = out_dir / "collision_rates_vs_nodes.png"
@@ -1786,53 +1980,67 @@ def plot_energy_vs_qos(
     scenarios: Sequence[str],
     node_counts: Mapping[str, Optional[int]],
     out_dir: Path,
+    *,
+    per_algo: bool = False,
 ) -> List[Path]:
     saved: List[Path] = []
     if not scenarios or not metrics_by_method:
         return saved
 
-    method_styles = _style_mapping(sorted(metrics_by_method.keys()))
+    methods = sorted(metrics_by_method.keys())
+    method_styles = _style_mapping(methods)
+    method_groups = _method_groups(methods, per_algo)
 
     def _plot(y_attr: str, ylabel: str, filename: str) -> Optional[Path]:
-        fig, ax = plt.subplots(figsize=(6.5, 4.5))
-        plotted = False
-        for method in sorted(metrics_by_method.keys()):
-            xs: List[float] = []
-            ys: List[float] = []
-            for scenario in scenarios:
-                metric = metrics_by_method.get(method, {}).get(scenario)
-                node_count = node_counts.get(scenario)
-                if metric is None or node_count is None or node_count <= 0:
+        fig, axes = plt.subplots(
+            nrows=len(method_groups),
+            ncols=1,
+            sharex=True,
+            figsize=(6.5, 4.5 * len(method_groups)),
+        )
+        if len(method_groups) == 1:
+            axes = [axes]  # type: ignore[assignment]
+        for ax, group in zip(axes, method_groups):
+            plotted = False
+            for method in group:
+                xs = []
+                ys = []
+                for scenario in scenarios:
+                    metric = metrics_by_method.get(method, {}).get(scenario)
+                    node_count = node_counts.get(scenario)
+                    if metric is None or node_count is None or node_count <= 0:
+                        continue
+                    if metric.energy_j is None:
+                        continue
+                    energy_per_node = metric.energy_j / node_count
+                    y_value = getattr(metric, y_attr, None)
+                    if y_value is None:
+                        continue
+                    xs.append(float(energy_per_node))
+                    ys.append(float(y_value))
+                if not xs or not ys:
                     continue
-                if metric.energy_j is None:
-                    continue
-                energy_per_node = metric.energy_j / node_count
-                y_value = getattr(metric, y_attr, None)
-                if y_value is None:
-                    continue
-                xs.append(float(energy_per_node))
-                ys.append(float(y_value))
-            if not xs or not ys:
-                continue
-            color, marker = method_styles[method]
-            ax.plot(xs, ys, marker=marker, color=color, linestyle="", label=method)
-            plotted = True
-        ax.set_xlabel("Énergie moyenne par nœud (J)")
-        ax.set_ylabel(ylabel)
-        if y_attr in {"pdr_global"}:
-            ax.set_ylim(0.0, 1.0)
-        ax.grid(True, linestyle="--", alpha=0.4)
-        if plotted:
-            ax.legend(loc="best")
-        else:
-            ax.text(
-                0.5,
-                0.5,
-                "Données énergie/QoS indisponibles",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
+                color, marker = method_styles[method]
+                ax.plot(xs, ys, marker=marker, color=color, linestyle="", label=method)
+                plotted = True
+            ax.set_ylabel(ylabel)
+            if y_attr in {"pdr_global"}:
+                ax.set_ylim(0.0, 1.0)
+            ax.grid(True, linestyle="--", alpha=0.4)
+            if len(method_groups) > 1:
+                ax.set_title(_panel_title("", group))
+            if plotted:
+                ax.legend(loc="best")
+            else:
+                ax.text(
+                    0.5,
+                    0.5,
+                    "Données énergie/QoS indisponibles",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                )
+        axes[-1].set_xlabel("Énergie moyenne par nœud (J)")
         fig.tight_layout()
         output_path = out_dir / filename
         fig.savefig(output_path, dpi=150)
@@ -1946,13 +2154,22 @@ def _plot_rolling_metric_for_scenario(
     *,
     window_size: float,
     window_mode: str,
+    per_algo: bool = False,
 ) -> Optional[Path]:
     if not data_per_method:
         return None
 
-    fig, ax = plt.subplots(figsize=(7.0, 4.5))
-    method_styles = _style_mapping(sorted(data_per_method.keys()))
-    plotted = False
+    methods = sorted(data_per_method.keys())
+    method_styles = _style_mapping(methods)
+    method_groups = _method_groups(methods, per_algo)
+    fig, axes = plt.subplots(
+        nrows=len(method_groups),
+        ncols=1,
+        sharex=True,
+        figsize=(7.0, 4.5 * len(method_groups)),
+    )
+    if len(method_groups) == 1:
+        axes = [axes]  # type: ignore[assignment]
 
     label_map = {
         "pdr": "PDR",
@@ -1960,41 +2177,57 @@ def _plot_rolling_metric_for_scenario(
         "snir": "SNIR (dB)",
     }
 
-    for method, df in data_per_method.items():
-        if df.empty or metric not in df.columns:
-            continue
-        color, marker = method_styles[method]
-        lower = df.get(f"{metric}_low")
-        upper = df.get(f"{metric}_high")
-        ax.plot(df["x"], df[metric], label=method, color=color, marker=marker, linewidth=1.5, markersize=4)
-        if lower is not None and upper is not None:
-            ax.fill_between(df["x"], lower, upper, color=color, alpha=0.15)
-        plotted = True
-
     x_label = "Temps (s)" if window_mode == "duration" else "Position des paquets émis"
     window_label = f"fenêtre {window_size:g} {'s' if window_mode == 'duration' else 'paquets'}"
-    ax.set_xlabel(x_label)
-    ax.set_ylabel(label_map.get(metric, metric))
-    if metric in {"pdr", "der"}:
-        ax.set_ylim(0.0, 1.05)
-    ax.grid(True, linestyle="--", alpha=0.4)
     title_metric = label_map.get(metric, metric)
-    ax.set_title(f"{title_metric} moyenne glissante – {scenario} ({window_label})")
-    if plotted:
-        legend = ax.legend(loc="best", title=window_label)
-        if legend is not None:
-            legend.set_title(window_label)
-            legend.get_title().set_text(window_label)
-            legend.get_title().set_fontsize("small")
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            "Données temporelles indisponibles",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
+
+    for ax, group in zip(axes, method_groups):
+        plotted = False
+        for method in group:
+            df = data_per_method.get(method)
+            if df is None or df.empty or metric not in df.columns:
+                continue
+            color, marker = method_styles[method]
+            lower = df.get(f"{metric}_low")
+            upper = df.get(f"{metric}_high")
+            ax.plot(
+                df["x"],
+                df[metric],
+                label=method,
+                color=color,
+                marker=marker,
+                linewidth=1.5,
+                markersize=4,
+            )
+            if lower is not None and upper is not None:
+                ax.fill_between(df["x"], lower, upper, color=color, alpha=0.15)
+            plotted = True
+
+        ax.set_ylabel(label_map.get(metric, metric))
+        if metric in {"pdr", "der"}:
+            ax.set_ylim(0.0, 1.05)
+        ax.grid(True, linestyle="--", alpha=0.4)
+        base_title = f"{title_metric} moyenne glissante – {scenario} ({window_label})"
+        if len(method_groups) > 1:
+            ax.set_title(_panel_title(base_title, group))
+        else:
+            ax.set_title(base_title)
+        if plotted:
+            legend = ax.legend(loc="best", title=window_label)
+            if legend is not None:
+                legend.set_title(window_label)
+                legend.get_title().set_text(window_label)
+                legend.get_title().set_fontsize("small")
+        else:
+            ax.text(
+                0.5,
+                0.5,
+                "Données temporelles indisponibles",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+    axes[-1].set_xlabel(x_label)
     fig.tight_layout()
 
     filename = f"rolling_{metric}_{sanitize_filename(scenario)}_{window_mode}.png"
@@ -2012,6 +2245,7 @@ def plot_rolling_qos(
     *,
     window_size: float,
     window_mode: str,
+    per_algo: bool = False,
 ) -> List[Path]:
     saved: List[Path] = []
     methods = sorted(metrics_by_method.keys())
@@ -2030,7 +2264,13 @@ def plot_rolling_qos(
 
         for metric in ["pdr", "der", "snir"]:
             output = _plot_rolling_metric_for_scenario(
-                metric, data_per_method, scenario, out_dir, window_size=window_size, window_mode=window_mode
+                metric,
+                data_per_method,
+                scenario,
+                out_dir,
+                window_size=window_size,
+                window_mode=window_mode,
+                per_algo=per_algo,
             )
             if output:
                 saved.append(output)
@@ -2068,32 +2308,32 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     plot_cluster_pdr(metrics_by_method, scenarios, out_dir)
-    plot_pdr(metrics_by_method, scenarios, out_dir)
-    plot_der(metrics_by_method, scenarios, out_dir)
-    plot_snir_mean(metrics_by_method, scenarios, out_dir)
+    plot_pdr(metrics_by_method, scenarios, out_dir, per_algo=args.per_algo)
+    plot_der(metrics_by_method, scenarios, out_dir, per_algo=args.per_algo)
+    plot_snir_mean(metrics_by_method, scenarios, out_dir, per_algo=args.per_algo)
     plot_snir_moving_average(
         metrics_by_method,
         scenarios,
         out_dir,
         window_size=int(args.moving_average_window),
     )
-    plot_collisions(metrics_by_method, scenarios, out_dir)
-    plot_energy(metrics_by_method, scenarios, out_dir)
-    plot_energy_snir(metrics_by_method, scenarios, out_dir)
-    plot_jain_index(metrics_by_method, scenarios, out_dir)
-    plot_jain_index_snir(metrics_by_method, scenarios, out_dir)
-    plot_min_sf_share(metrics_by_method, scenarios, out_dir)
+    plot_collisions(metrics_by_method, scenarios, out_dir, per_algo=args.per_algo)
+    plot_energy(metrics_by_method, scenarios, out_dir, per_algo=args.per_algo)
+    plot_energy_snir(metrics_by_method, scenarios, out_dir, per_algo=args.per_algo)
+    plot_jain_index(metrics_by_method, scenarios, out_dir, per_algo=args.per_algo)
+    plot_jain_index_snir(metrics_by_method, scenarios, out_dir, per_algo=args.per_algo)
+    plot_min_sf_share(metrics_by_method, scenarios, out_dir, per_algo=args.per_algo)
     plot_snir_cdf(metrics_by_method, scenarios, out_dir)
-    plot_pdr_vs_nodes(metrics_by_method, scenarios, node_counts, out_dir)
-    plot_der_vs_nodes(metrics_by_method, scenarios, node_counts, out_dir)
+    plot_pdr_vs_nodes(metrics_by_method, scenarios, node_counts, out_dir, per_algo=args.per_algo)
+    plot_der_vs_nodes(metrics_by_method, scenarios, node_counts, out_dir, per_algo=args.per_algo)
     plot_cluster_pdr_vs_nodes(metrics_by_method, scenarios, node_counts, out_dir)
     plot_snir_mean_vs_nodes_by_sf(metrics_by_method, scenarios, node_counts, out_dir)
     plot_snir_mean_vs_nodes_by_cluster(metrics_by_method, scenarios, node_counts, out_dir)
-    plot_pdr_vs_snir_by_method(metrics_by_method, scenarios, out_dir)
-    plot_pdr_vs_snir_by_cluster(metrics_root, metrics_by_method, scenarios, out_dir)
+    plot_pdr_vs_snir_by_method(metrics_by_method, scenarios, out_dir, per_algo=args.per_algo)
+    plot_pdr_vs_snir_by_cluster(metrics_root, metrics_by_method, scenarios, out_dir, per_algo=args.per_algo)
     plot_effective_sf_vs_distance(metrics_root, metrics_by_method, scenarios, out_dir)
-    plot_collision_rates_vs_nodes(metrics_by_method, scenarios, node_counts, out_dir)
-    plot_energy_vs_qos(metrics_by_method, scenarios, node_counts, out_dir)
+    plot_collision_rates_vs_nodes(metrics_by_method, scenarios, node_counts, out_dir, per_algo=args.per_algo)
+    plot_energy_vs_qos(metrics_by_method, scenarios, node_counts, out_dir, per_algo=args.per_algo)
     plot_rolling_qos(
         metrics_by_method,
         metrics_root,
@@ -2101,6 +2341,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         out_dir,
         window_size=float(args.rolling_window),
         window_mode=str(args.window_mode),
+        per_algo=args.per_algo,
     )
 
 
