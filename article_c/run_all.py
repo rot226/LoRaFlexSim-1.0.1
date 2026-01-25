@@ -238,6 +238,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Génère un plot de synthèse avec barres d'erreur à l'étape 1.",
     )
     parser.add_argument(
+        "--flat-output",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Écrit les résultats directement dans le répertoire de sortie "
+            "(compatibilité avec l'ancien format)."
+        ),
+    )
+    parser.add_argument(
         "--profile-timing",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -316,6 +325,8 @@ def _build_step1_args(args: argparse.Namespace) -> list[str]:
         step1_args.append(
             "--plot-summary" if args.plot_summary else "--no-plot-summary"
         )
+    if args.flat_output is not None:
+        step1_args.append("--flat-output" if args.flat_output else "--no-flat-output")
     if args.profile_timing is not None:
         step1_args.append(
             "--profile-timing" if args.profile_timing else "--no-profile-timing"
@@ -364,6 +375,8 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         )
     if args.window_delay_range_s is not None:
         step2_args.extend(["--window-delay-range-s", str(args.window_delay_range_s)])
+    if args.flat_output is not None:
+        step2_args.append("--flat-output" if args.flat_output else "--no-flat-output")
     return step2_args
 
 
