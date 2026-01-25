@@ -20,6 +20,7 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     metric_values,
     normalize_network_size_rows,
+    legend_margins,
     place_legend,
     plot_metric_by_algo,
     render_constant_metric,
@@ -57,7 +58,9 @@ def _plot_metric(
 ) -> plt.Figure | None:
     fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     width, height = fig.get_size_inches()
-    apply_figure_layout(fig, figsize=(width, height + 2))
+    apply_figure_layout(
+        fig, figsize=(width, height + 2), margins=legend_margins("top")
+    )
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
     if network_sizes is None:

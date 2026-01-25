@@ -67,6 +67,8 @@ BASE_GRID_ENABLED = True
 AXES_TITLE_Y = 1.02
 SUPTITLE_Y = 0.98
 FIGURE_SUBPLOT_TOP = 0.80
+LEGEND_TOP_MARGIN = 0.78
+LEGEND_RIGHT_MARGIN = 0.78
 CONSTANT_METRIC_VARIANCE_THRESHOLD = 1e-6
 CONSTANT_METRIC_MESSAGE = "métrique constante – à investiguer"
 
@@ -212,18 +214,22 @@ def select_received_metric_key(
 def place_legend(ax: plt.Axes, *, legend_loc: str = "top") -> None:
     """Place la légende selon les consignes."""
     handles, labels = ax.get_legend_handles_labels()
-    if handles:
-        legend_style = _legend_style(legend_loc)
-        ax.figure.legend(handles, labels, **legend_style)
-        apply_figure_layout(
-            ax.figure,
-            margins=_legend_margins(legend_loc),
-            bbox_to_anchor=legend_style.get("bbox_to_anchor"),
-        )
+    if not handles:
+        handles, labels = fallback_legend_handles()
+    if not handles:
+        return
+    legend_style = _legend_style(legend_loc)
+    ax.figure.legend(handles, labels, **legend_style)
+    apply_figure_layout(
+        ax.figure,
+        margins=_legend_margins(legend_loc),
+        bbox_to_anchor=legend_style.get("bbox_to_anchor"),
+    )
 
 
 def _legend_style(legend_loc: str) -> dict[str, object]:
-    if legend_loc == "right":
+    normalized = _normalize_legend_loc(legend_loc)
+    if normalized == "right":
         return {
             "loc": "center left",
             "bbox_to_anchor": (1.02, 0.5),
@@ -234,10 +240,26 @@ def _legend_style(legend_loc: str) -> dict[str, object]:
 
 
 def _legend_margins(legend_loc: str) -> dict[str, float]:
-    margins = {"top": FIGURE_SUBPLOT_TOP}
-    if legend_loc == "right":
-        margins["right"] = 0.78
-    return margins
+    normalized = _normalize_legend_loc(legend_loc)
+    if normalized == "right":
+        return {"top": FIGURE_SUBPLOT_TOP, "right": LEGEND_RIGHT_MARGIN}
+    if normalized == "top":
+        return {"top": LEGEND_TOP_MARGIN}
+    return {"top": FIGURE_SUBPLOT_TOP}
+
+
+def legend_margins(legend_loc: str) -> dict[str, float]:
+    """Expose les marges recommandées pour une légende donnée."""
+    return _legend_margins(legend_loc)
+
+
+def _normalize_legend_loc(legend_loc: str) -> str:
+    normalized = str(legend_loc or "").strip().lower()
+    if normalized in {"haut", "top"}:
+        return "top"
+    if normalized in {"droite", "right"}:
+        return "right"
+    return normalized
 
 
 def _figure_has_legend(fig: plt.Figure) -> bool:

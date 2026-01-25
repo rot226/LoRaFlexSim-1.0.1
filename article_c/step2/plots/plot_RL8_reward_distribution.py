@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     filter_cluster,
     is_constant_metric,
+    legend_margins,
     normalize_network_size_rows,
     save_figure,
 )
@@ -86,7 +87,9 @@ def _plot_distribution(
 ) -> plt.Figure:
     fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     width, height = fig.get_size_inches()
-    apply_figure_layout(fig, figsize=(width, height + 2))
+    apply_figure_layout(
+        fig, figsize=(width, height + 2), margins=legend_margins("top")
+    )
     algorithms = sorted({row["algo"] for row in rows})
     rewards_by_algo = [
         [row["reward"] for row in rows if row["algo"] == algo]
