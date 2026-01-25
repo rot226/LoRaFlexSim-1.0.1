@@ -167,7 +167,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--flat-output",
         action=argparse.BooleanOptionalAction,
-        default=False,
+        default=True,
         help=(
             "Écrit les résultats directement dans le répertoire de sortie "
             "(compatibilité avec l'ancien format)."

@@ -7,6 +7,8 @@ import csv
 import math
 from pathlib import Path
 
+from article_c.common.csv_io import write_simulation_results, write_step1_results
+
 
 class AnomalyTracker:
     def __init__(self, max_samples: int = 20) -> None:
@@ -48,6 +50,42 @@ def _read_csv(path: Path) -> tuple[list[dict[str, object]], list[str]]:
         fieldnames = list(reader.fieldnames or [])
         rows: list[dict[str, object]] = [row for row in reader]
     return rows, fieldnames
+
+
+def _collect_nested_csvs(results_dir: Path, filename: str) -> list[Path]:
+    return sorted(results_dir.glob(f"size_*/rep_*/{filename}"))
+
+
+def _collect_nested_rows(results_dir: Path, filename: str) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for path in _collect_nested_csvs(results_dir, filename):
+        nested_rows, _ = _read_csv(path)
+        rows.extend(nested_rows)
+    return rows
+
+
+def _ensure_step1_flat_files(step1_dir: Path) -> None:
+    metrics_path = step1_dir / "raw_metrics.csv"
+    aggregated_path = step1_dir / "aggregated_results.csv"
+    if metrics_path.exists() and aggregated_path.exists():
+        return
+    raw_rows = _collect_nested_rows(step1_dir, "raw_metrics.csv")
+    if not raw_rows:
+        return
+    print("Assemblage des résultats Step1 depuis les sous-dossiers...")
+    write_step1_results(step1_dir, raw_rows)
+
+
+def _ensure_step2_flat_files(step2_dir: Path) -> None:
+    results_path = step2_dir / "raw_results.csv"
+    aggregated_path = step2_dir / "aggregated_results.csv"
+    if results_path.exists() and aggregated_path.exists():
+        return
+    raw_rows = _collect_nested_rows(step2_dir, "raw_results.csv")
+    if not raw_rows:
+        return
+    print("Assemblage des résultats Step2 depuis les sous-dossiers...")
+    write_simulation_results(step2_dir, raw_rows)
 
 
 def _check_constant(
@@ -190,6 +228,8 @@ def validate_results(
     max_samples: int,
 ) -> AnomalyTracker:
     tracker = AnomalyTracker(max_samples=max_samples)
+    _ensure_step1_flat_files(step1_dir)
+    _ensure_step2_flat_files(step2_dir)
 
     _validate_pdr_file(
         step1_dir / "raw_metrics.csv",
