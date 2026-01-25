@@ -48,6 +48,13 @@ Exécuter toutes les étapes :
 python article_c/run_all.py
 ```
 
+Exécuter toutes les étapes en sortie **flat** + générer les figures (exemple Windows 11) :
+
+```powershell
+python article_c/run_all.py --flat-output
+python article_c/make_all_plots.py
+```
+
 Exécuter toutes les étapes en sautant l'étape 1 :
 
 ```powershell
@@ -105,6 +112,26 @@ python article_c/make_all_plots.py
 > **Network size = number of nodes (integer)**.
 
 Les résultats sont écrits dans `article_c/step*/results/` et les figures dans `article_c/step*/plots/output/`.
+
+## Résultats
+
+Les scripts écrivent les CSV dans deux formats :
+
+- **Format imbriqué (nested)** : chaque taille/réplication écrit dans
+  `article_c/step*/results/size_<N>/rep_<R>/` (`raw_metrics.csv` ou
+  `raw_results.csv`, plus un `aggregated_results.csv` local par réplication).
+- **Format flat** : les CSV sont directement au niveau de
+  `article_c/step*/results/` (`raw_metrics.csv` ou `raw_results.csv` + un
+  `aggregated_results.csv` global).
+
+Les **plots de synthèse** (ex. courbes globales) et `validate_results.py`
+attendent des CSV **flat** (présence de `aggregated_results.csv` dans
+`article_c/step*/results/`). Pensez à activer `--flat-output` sur `run_all.py`,
+`run_step1.py` et `run_step2.py` pour écrire ces fichiers directement.
+
+Si vous avez uniquement un format imbriqué, `make_all_plots.py` peut servir de
+**fallback d'agrégation** : il reconstitue les `aggregated_results.csv` flat à
+partir des sous-dossiers avant de lancer les figures.
 
 ## Figures disponibles
 
