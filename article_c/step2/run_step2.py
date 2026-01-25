@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 import csv
+import logging
 from multiprocessing import get_context
 from pathlib import Path
 from statistics import median
@@ -585,6 +586,11 @@ def _simulate_density(
         timestamp_dir,
         flat_output,
     ) = task
+    if config.get("debug_step2"):
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(levelname)s:%(name)s:%(message)s",
+        )
     raw_rows: list[dict[str, object]] = []
     per_rep_rows: dict[int, list[dict[str, object]]] = {
         replication: [] for replication in replications
@@ -620,6 +626,7 @@ def _simulate_density(
                 window_delay_enabled=bool(config["window_delay_enabled"]),
                 window_delay_range_s=float(config["window_delay_range_s"]),
                 reference_network_size=int(config["reference_network_size"]),
+                debug_step2=bool(config.get("debug_step2", False)),
             )
             for row in result.raw_rows:
                 row["replication"] = replication
@@ -676,6 +683,11 @@ def _simulate_density(
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_cli_args(argv)
+    if args.debug_step2:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(levelname)s:%(name)s:%(message)s",
+        )
     base_seed = set_deterministic_seed(args.seeds_base)
     densities = parse_network_size_list(args.network_sizes)
     requested_sizes = list(densities)
@@ -720,6 +732,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "window_delay_enabled": args.window_delay_enabled,
         "window_delay_range_s": args.window_delay_range_s,
         "reference_network_size": max(1, reference_network_size),
+        "debug_step2": args.debug_step2,
     }
 
     if flat_output:

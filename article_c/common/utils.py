@@ -173,6 +173,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "(compatibilité avec l'ancien format)."
         ),
     )
+    parser.add_argument(
+        "--debug-step2",
+        action="store_true",
+        help="Active les logs détaillés pour l'étape 2.",
+    )
     return parser
 
 
