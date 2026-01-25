@@ -97,7 +97,7 @@ def _plot_entropy(
         f"{_title_suffix(network_sizes)}"
     )
     if network_sizes:
-        place_legend(ax, legend_loc="top")
+        place_legend(ax, legend_loc="above")
     return fig
 
 

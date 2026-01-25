@@ -88,7 +88,7 @@ def _plot_metric(
         "Step 2 - Median Successful Throughput vs Network size (number of nodes)"
         f"{_title_suffix(network_sizes)}"
     )
-    place_legend(ax, legend_loc="top")
+    place_legend(ax, legend_loc="above")
     return fig
 
 

@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_LINESTYLES,
     SNIR_MODES,
+    LEGEND_ABOVE_TIGHT_LAYOUT_TOP,
     algo_labels,
     apply_plot_style,
     apply_figure_layout,
@@ -25,10 +26,12 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     filter_cluster,
     is_constant_metric,
+    legend_margins,
     load_step1_aggregated,
     render_constant_metric,
     save_figure,
 )
+from article_c.common.plotting_style import LEGEND_STYLE
 from article_c.step1.plots.plot_utils import configure_figure
 
 
@@ -249,10 +252,11 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         fig.legend(
             snir_handles,
             snir_labels,
-            loc="upper center",
-            bbox_to_anchor=(0.5, 1.08),
-            ncol=len(SNIR_MODES),
-            frameon=False,
+            **{
+                **LEGEND_STYLE,
+                "bbox_to_anchor": (0.5, 1.04),
+                "ncol": len(SNIR_MODES),
+            },
         )
         configure_figure(
             fig,
@@ -262,8 +266,8 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         )
         apply_figure_layout(
             fig,
-            margins={"top": 0.76},
-            tight_layout={"rect": (0, 0, 1, 0.82)},
+            margins=legend_margins("above"),
+            tight_layout={"rect": (0, 0, 1, LEGEND_ABOVE_TIGHT_LAYOUT_TOP)},
         )
         return fig
 
@@ -296,10 +300,11 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         fig.legend(
             handles,
             labels,
-            loc="upper center",
-            bbox_to_anchor=(0.5, 1.12),
-            ncol=len(sf_values),
-            frameon=False,
+            **{
+                **LEGEND_STYLE,
+                "bbox_to_anchor": (0.5, 1.04),
+                "ncol": len(sf_values),
+            },
         )
     configure_figure(
         fig,
@@ -307,7 +312,11 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         "Step 1 - Spreading Factor Distribution (SNIR on/off)",
         legend_loc="above",
     )
-    apply_figure_layout(fig, tight_layout={"rect": (0, 0, 1, 0.86)})
+    apply_figure_layout(
+        fig,
+        margins=legend_margins("above"),
+        tight_layout={"rect": (0, 0, 1, LEGEND_ABOVE_TIGHT_LAYOUT_TOP)},
+    )
     return fig
 
 

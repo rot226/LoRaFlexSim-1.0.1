@@ -86,7 +86,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Received Frames (median, p10-p90)")
     ax.set_title("Step 1 - Received Frames vs Network size (number of nodes) (SNIR on/off)")
-    place_legend(ax, legend_loc="top")
+    place_legend(ax, legend_loc="above")
     return fig
 
 
