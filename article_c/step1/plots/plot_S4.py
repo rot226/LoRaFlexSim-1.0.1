@@ -8,11 +8,15 @@ import warnings
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from matplotlib.lines import Line2D
 import pandas as pd
 
 from article_c.common.plot_helpers import (
+    ALGO_COLORS,
     ALGO_LABELS,
+    ALGO_MARKERS,
     SNIR_LABELS,
+    SNIR_LINESTYLES,
     SNIR_MODES,
     apply_plot_style,
     apply_figure_layout,
@@ -32,8 +36,6 @@ from article_c.common.plot_helpers import (
     save_figure,
 )
 
-TABLE_COLUMNS = ("Algo", "SNIR", "Min", "Médiane", "Max")
-
 
 def _algo_sort_key(algo: object) -> int:
     normalized = str(algo).strip().lower().replace("-", "_").replace(" ", "_")
@@ -41,12 +43,11 @@ def _algo_sort_key(algo: object) -> int:
     return order.index(normalized) if normalized in order else len(order)
 
 
-def _format_value(value: float) -> str:
-    return f"{value:.2e}"
+def _normalize_algo(algo: object) -> str:
+    return str(algo).strip().lower().replace("-", "_").replace(" ", "_")
 
 
-def _add_summary_table(
-    fig: plt.Figure,
+def _add_summary_plot(
     ax: plt.Axes,
     rows: list[dict[str, object]],
     metric_key: str,
@@ -55,40 +56,57 @@ def _add_summary_table(
     if df.empty:
         return
     median_key, _, _ = resolve_percentile_keys(rows, metric_key)
-    table_rows: list[list[str]] = []
-    for algo in sorted(df["algo"].dropna().unique(), key=_algo_sort_key):
-        for snir_mode in SNIR_MODES:
+    algos = sorted(df["algo"].dropna().unique(), key=_algo_sort_key)
+    if not algos:
+        return
+    offsets = {"snir_on": -0.15, "snir_off": 0.15}
+    for snir_mode in SNIR_MODES:
+        for index, algo in enumerate(algos):
             subset = df[(df["algo"] == algo) & (df["snir_mode"] == snir_mode)]
             if subset.empty or median_key not in subset:
                 continue
             values = subset[median_key].dropna()
             if values.empty:
                 continue
-            table_rows.append(
-                [
-                    algo_label(str(algo)),
-                    SNIR_LABELS[snir_mode],
-                    _format_value(values.min()),
-                    _format_value(values.median()),
-                    _format_value(values.max()),
-                ]
+            median = float(values.median())
+            vmin = float(values.min())
+            vmax = float(values.max())
+            normalized_algo = _normalize_algo(algo)
+            color = ALGO_COLORS.get(normalized_algo, "#4c4c4c")
+            marker = ALGO_MARKERS.get(normalized_algo, "o")
+            ax.errorbar(
+                index + offsets[snir_mode],
+                median,
+                yerr=[[median - vmin], [vmax - median]],
+                fmt=marker,
+                color=color,
+                ecolor=color,
+                linestyle=SNIR_LINESTYLES.get(snir_mode, "solid"),
+                capsize=3,
+                markersize=5,
             )
-    if not table_rows:
-        return
-    table = ax.table(
-        cellText=table_rows,
-        colLabels=TABLE_COLUMNS,
-        cellLoc="center",
-        loc="lower center",
-        bbox=[0.0, -0.45, 1.0, 0.3],
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(8)
-    apply_figure_layout(fig, margins={"bottom": 0.35})
+    ax.set_xticks(range(len(algos)))
+    ax.set_xticklabels([algo_label(str(algo)) for algo in algos])
+    ax.set_ylabel("Trames\n(médiane ± min/max)")
+    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    ax.set_title("Synthèse min/médiane/max")
+    legend_handles = [
+        Line2D(
+            [0],
+            [0],
+            color="#222222",
+            linestyle=SNIR_LINESTYLES.get(snir_mode, "solid"),
+            label=SNIR_LABELS[snir_mode],
+        )
+        for snir_mode in SNIR_MODES
+    ]
+    ax.legend(handles=legend_handles, title="SNIR", ncol=2, frameon=False)
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
-    fig, ax = plt.subplots()
+    fig, (ax, ax_summary) = plt.subplots(
+        2, 1, gridspec_kw={"height_ratios": [4.0, 1.4]}
+    )
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
@@ -96,8 +114,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     metric_key = select_received_metric_key(rows, metric_key)
     if is_constant_metric(metric_values(rows, metric_key)):
-        render_constant_metric(fig, ax)
-        ax.set_title(
+        render_constant_metric(fig, (ax, ax_summary))
+        fig.suptitle(
             "Step 1 - Sent Frames (budget saturant) vs Network size (number of nodes) "
             "(SNIR on/off)"
         )
@@ -122,7 +140,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         "(SNIR on/off)"
     )
     place_legend(ax)
-    _add_summary_table(fig, ax, rows, metric_key)
+    _add_summary_plot(ax_summary, rows, metric_key)
+    apply_figure_layout(fig, margins={"hspace": 0.4})
     return fig
 
 
