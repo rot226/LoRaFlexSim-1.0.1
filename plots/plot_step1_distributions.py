@@ -92,41 +92,72 @@ def _plot_distribution(
     if plt is None:
         return
 
-    grouped = [_collect_values(records, metric, state) for state in SNIR_STATES]
-    if not any(grouped):
+    grouped = {state: _collect_values(records, metric, state) for state in SNIR_STATES}
+    if not any(grouped.values()):
         return
 
-    fig, axes = plt.subplots(1, 2, figsize=(9, 4.2), sharey=True)
+    fig, axes = plt.subplots(2, len(SNIR_STATES), figsize=(10.0, 6.0), sharey="row")
 
-    boxplot = axes[0].boxplot(
-        grouped,
-        labels=[_snir_label(state) for state in SNIR_STATES],
-        patch_artist=True,
-        medianprops={"color": "#000000", "linewidth": 1.3},
-        boxprops={"linewidth": 1.2},
-        whiskerprops={"linewidth": 1.1},
-        capprops={"linewidth": 1.1},
-    )
-    for patch, state in zip(boxplot["boxes"], SNIR_STATES):
-        patch.set_facecolor(_snir_color(state))
-        patch.set_alpha(0.5)
-    axes[0].set_title("Box plot")
-    axes[0].set_xlabel("SNIR state")
-    axes[0].set_ylabel(label)
-    _format_axes(axes[0], integer_x=False)
+    for col, state in enumerate(SNIR_STATES):
+        values = grouped[state]
+        box_ax = axes[0][col]
+        violin_ax = axes[1][col]
 
-    violin = axes[1].violinplot(grouped, showmeans=True, showmedians=False, showextrema=True)
-    for body, state in zip(violin.get("bodies", []), SNIR_STATES):
-        body.set_facecolor(_snir_color(state))
-        body.set_edgecolor("#333333")
-        body.set_alpha(0.6)
-    axes[1].set_xticks(range(1, len(SNIR_STATES) + 1))
-    axes[1].set_xticklabels([_snir_label(state) for state in SNIR_STATES])
-    axes[1].set_title("Violin")
-    axes[1].set_xlabel("SNIR state")
-    _format_axes(axes[1], integer_x=False)
+        if values:
+            boxplot = box_ax.boxplot(
+                [values],
+                patch_artist=True,
+                medianprops={"color": "#000000", "linewidth": 1.3},
+                boxprops={"linewidth": 1.2},
+                whiskerprops={"linewidth": 1.1},
+                capprops={"linewidth": 1.1},
+            )
+            for patch in boxplot["boxes"]:
+                patch.set_facecolor(_snir_color(state))
+                patch.set_alpha(0.5)
+        else:
+            box_ax.text(
+                0.5,
+                0.5,
+                "Aucune donnée",
+                ha="center",
+                va="center",
+                transform=box_ax.transAxes,
+            )
+            box_ax.set_xticks([])
 
-    fig.suptitle(f"{label} – {algorithm} – distribution by SNIR state")
+        if values:
+            violin = violin_ax.violinplot(
+                [values],
+                showmeans=True,
+                showmedians=False,
+                showextrema=True,
+            )
+            for body in violin.get("bodies", []):
+                body.set_facecolor(_snir_color(state))
+                body.set_edgecolor("#333333")
+                body.set_alpha(0.6)
+        else:
+            violin_ax.text(
+                0.5,
+                0.5,
+                "Aucune donnée",
+                ha="center",
+                va="center",
+                transform=violin_ax.transAxes,
+            )
+            violin_ax.set_xticks([])
+
+        box_ax.set_title(_snir_label(state))
+        for ax in (box_ax, violin_ax):
+            ax.set_xticks([])
+            _format_axes(ax, integer_x=False)
+
+        if col == 0:
+            box_ax.set_ylabel(f"{label}\n(Box plot)")
+            violin_ax.set_ylabel(f"{label}\n(Violin)")
+
+    fig.suptitle(f"{label} – {algorithm} – distributions SNIR séparées")
     figures_dir.mkdir(parents=True, exist_ok=True)
     safe_algorithm = algorithm.replace(" ", "_")
     output = figures_dir / f"step1_distribution_{metric}_{safe_algorithm}.png"
