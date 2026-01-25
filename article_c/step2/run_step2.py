@@ -156,6 +156,7 @@ def _summarize_post_simulation(
 ) -> dict[str, object]:
     success_sum = 0.0
     success_count = 0
+    success_zero_count = 0
     collision_sum = 0.0
     collision_count = 0
     collision_hist = _init_collision_histogram()
@@ -178,6 +179,8 @@ def _summarize_post_simulation(
         reward = float(row.get("reward", 0.0) or 0.0)
         success_sum += success_rate
         success_count += 1
+        if success_rate <= 1e-9:
+            success_zero_count += 1
         collision_sum += collision_norm
         collision_count += 1
         _update_collision_histogram(collision_hist, collision_norm)
@@ -201,6 +204,7 @@ def _summarize_post_simulation(
     return {
         "success_sum": success_sum,
         "success_count": success_count,
+        "success_zero_count": success_zero_count,
         "collision_sum": collision_sum,
         "collision_count": collision_count,
         "collision_hist": collision_hist,
@@ -312,6 +316,7 @@ def _compose_post_simulation_report(
         return "Rapport post-simulation indisponible (aucune statistique collectée)."
     overall_success_sum = 0.0
     overall_success_count = 0
+    overall_success_zero_count = 0
     overall_collision_sum = 0.0
     overall_collision_count = 0
     overall_collision_hist = _init_collision_histogram()
@@ -330,6 +335,7 @@ def _compose_post_simulation_report(
     for size, stats in per_size_stats.items():
         success_sum = float(stats.get("success_sum", 0.0))
         success_count = int(stats.get("success_count", 0))
+        success_zero_count = int(stats.get("success_zero_count", 0))
         collision_sum = float(stats.get("collision_sum", 0.0))
         collision_count = int(stats.get("collision_count", 0))
         link_quality_sum = float(stats.get("link_quality_sum", 0.0))
@@ -338,6 +344,7 @@ def _compose_post_simulation_report(
         link_quality_max = float(stats.get("link_quality_max", 0.0))
         overall_success_sum += success_sum
         overall_success_count += success_count
+        overall_success_zero_count += success_zero_count
         overall_collision_sum += collision_sum
         overall_collision_count += collision_count
         for bucket, count in dict(stats.get("collision_hist", {})).items():
@@ -397,6 +404,21 @@ def _compose_post_simulation_report(
         "Taux de succès moyen:",
         f"- success_rate moyen global: {success_mean:.4f}",
     ]
+    zero_success_ratio = (
+        overall_success_zero_count / overall_success_count
+        if overall_success_count > 0
+        else 0.0
+    )
+    if overall_success_count > 0 and zero_success_ratio > 0.95:
+        lines.extend(
+            [
+                "",
+                (
+                    "AVERTISSEMENT: plus de 95% des fenêtres ont un success_rate "
+                    "nul. Vérifiez la configuration (trafic, SNIR, collisions)."
+                ),
+            ]
+        )
     if per_size_diagnostics:
         lines.append("- success_rate moyen par taille:")
         for size in sorted(per_size_diagnostics):
