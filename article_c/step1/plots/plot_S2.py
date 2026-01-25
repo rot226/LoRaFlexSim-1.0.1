@@ -25,10 +25,11 @@ from article_c.common.plot_helpers import (
     render_constant_metric,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())

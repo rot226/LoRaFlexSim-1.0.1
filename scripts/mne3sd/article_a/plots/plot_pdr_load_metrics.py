@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from scripts.mne3sd.common import apply_ieee_style, prepare_figure_directory, save_figure
+from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
 
 ROOT = Path(__file__).resolve().parents[4]
 RESULTS_PATH = ROOT / "results" / "mne3sd" / "article_a" / "pdr_load_summary.csv"
@@ -149,7 +150,7 @@ def plot_pdr(summary: pd.DataFrame, *, figures_dir: Path | None) -> None:
         column for column in ("mode", "sf_assignment", "adr_node", "adr_server") if column in summary.columns
     ]
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
 
     for group_key, group in _iterate_groups(summary, group_columns):
         label = _configuration_label(group_columns, group_key)
@@ -198,7 +199,7 @@ def plot_delay(summary: pd.DataFrame, *, figures_dir: Path | None) -> bool:
         column for column in ("mode", "sf_assignment", "adr_node", "adr_server") if column in summary.columns
     ]
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
 
     for group_key, group in _iterate_groups(summary, group_columns):
         label = _configuration_label(group_columns, group_key)
@@ -249,7 +250,7 @@ def plot_energy(summary: pd.DataFrame, *, figures_dir: Path | None) -> bool:
         column for column in ("mode", "sf_assignment", "adr_node", "adr_server") if column in summary.columns
     ]
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
 
     for group_key, group in _iterate_groups(summary, group_columns):
         label = _configuration_label(group_columns, group_key)

@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 # Allow running the script from a clone without installation
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from loraflexsim.launcher.simulator import Simulator
+from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -52,7 +53,7 @@ def main(argv: list[str] | None = None) -> None:
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
     node_points = ax.scatter(
         xs,
         ys,

@@ -20,6 +20,7 @@ from article_c.common.plot_helpers import (
     render_constant_metric,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
@@ -50,7 +51,7 @@ def _plot_selection(
     *,
     lite: bool,
 ) -> plt.Figure:
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     apply_figure_layout(fig, figsize=(12, 9))
     selection_values = [
         float(row.get("selection_prob"))

@@ -20,6 +20,7 @@ try:  # pandas and matplotlib are optional but required for plotting
     import matplotlib.pyplot as plt
 except Exception as exc:  # pragma: no cover - handled at runtime
     raise SystemExit(f"Required plotting libraries missing: {exc}")
+from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
 FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "figures")
@@ -37,7 +38,7 @@ def main() -> None:
 
     stats = df.groupby("channels")[["PDR(%)", "collisions"]].mean().reset_index()
 
-    fig, ax1 = plt.subplots()
+    fig, ax1 = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
     ax2 = ax1.twinx()
 
     ax1.plot(stats["channels"], stats["PDR(%)"], marker="o", color="C0")

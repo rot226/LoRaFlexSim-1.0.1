@@ -34,6 +34,7 @@ from article_c.common.plot_helpers import (
     resolve_percentile_keys,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 
 def _algo_sort_key(algo: object) -> int:
@@ -104,7 +105,10 @@ def _add_summary_plot(
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, (ax, ax_summary) = plt.subplots(
-        2, 1, gridspec_kw={"height_ratios": [4.0, 1.4]}
+        2,
+        1,
+        figsize=DEFAULT_FIGSIZE_MULTI,
+        gridspec_kw={"height_ratios": [4.0, 1.4]},
     )
     ensure_network_size(rows)
     df = pd.DataFrame(rows)

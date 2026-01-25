@@ -25,6 +25,7 @@ from article_c.common.plot_helpers import (
     render_constant_metric,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 
 METRIC_KEY = "mean_toa_s"
@@ -32,7 +33,7 @@ METRIC_LABEL = "Mean ToA (s)"
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str, y_label: str) -> plt.Figure:
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     apply_figure_layout(fig, figsize=tuple(fig.get_size_inches()))
     ensure_network_size(rows)
     df = pd.DataFrame(rows)

@@ -13,6 +13,7 @@ from scripts.mne3sd.common import (
     prepare_figure_directory,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
 
 ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_INPUT = ROOT / "results" / "mne3sd" / "article_a" / "energy_consumption_summary.csv"
@@ -143,7 +144,7 @@ def plot_energy_per_node_vs_duty_cycle(
 ) -> None:
     """Tracer l'énergie moyenne par nœud en fonction du duty-cycle."""
 
-    fig, ax = plt.subplots(constrained_layout=True)
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE, constrained_layout=True)
     for class_name, group in df.groupby("class"):
         ordered = group.sort_values("duty_cycle")
         duty_cycle_pct = ordered["duty_cycle"] * 100.0
@@ -183,7 +184,7 @@ def plot_energy_per_node_vs_duty_cycle(
 def plot_pdr_vs_duty_cycle(df: pd.DataFrame, figures_base: Path) -> None:
     """Tracer le PDR moyen en fonction du duty-cycle."""
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
     for class_name, group in df.groupby("class"):
         ordered = group.sort_values("duty_cycle")
         duty_cycle_pct = ordered["duty_cycle"] * 100.0
@@ -228,7 +229,7 @@ def plot_energy_breakdown(df: pd.DataFrame, figures_base: Path) -> None:
     ]
     x = range(len(ordered))
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
     width = 0.8
 
     tx = ordered["energy_tx_per_node_J_mean"]

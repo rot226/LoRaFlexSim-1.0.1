@@ -25,6 +25,7 @@ from article_c.common.plot_helpers import (
     render_constant_metric,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
@@ -54,7 +55,7 @@ def _plot_metric(
     metric_key: str,
     network_sizes: list[int] | None,
 ) -> plt.Figure | None:
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     width, height = fig.get_size_inches()
     apply_figure_layout(fig, figsize=(width, height + 2))
     ensure_network_size(rows)

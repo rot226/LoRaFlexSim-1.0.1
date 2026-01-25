@@ -18,6 +18,7 @@ from scripts.mne3sd.common import (
     prepare_figure_directory,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
 
 RESULTS_PATH = ROOT / "results" / "mne3sd" / "article_a" / "class_load_metrics.csv"
 ARTICLE = "article_a"
@@ -107,7 +108,7 @@ def plot_energy_by_interval(
 
     should_split = enable_split and ratio >= split_threshold and len(class_peaks) > 1
 
-    fig, ax_low = plt.subplots()
+    fig, ax_low = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
     ax_high = None
 
     if should_split:
@@ -207,7 +208,7 @@ def plot_pdr_by_interval(df: pd.DataFrame) -> None:
     stats["pdr_mean"] *= 100.0
     stats["pdr_std"] = stats["pdr_std"].fillna(0.0) * 100.0
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
 
     for class_name, class_data in stats.groupby("class"):
         ordered = class_data.sort_values("interval_s")

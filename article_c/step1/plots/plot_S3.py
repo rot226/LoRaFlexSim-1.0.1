@@ -27,6 +27,7 @@ from article_c.common.plot_helpers import (
     select_received_metric_key,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 _ALGO_SPECIFIC_TOL = 1e-6
 
@@ -66,7 +67,7 @@ def _warn_if_low_algo_variance(
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     apply_figure_layout(fig, figsize=tuple(fig.get_size_inches()))
     ensure_network_size(rows)
     df = pd.DataFrame(rows)

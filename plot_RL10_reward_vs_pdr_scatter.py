@@ -18,6 +18,7 @@ from article_c.common.plot_helpers import (
     place_legend,
     save_figure,
 )
+from plot_defaults import resolve_figsize
 
 ALGO_ALIASES = {
     "adr": "adr",
@@ -248,7 +249,7 @@ def _apply_jitter(
 
 
 def _plot_scatter(points: list[dict[str, float | int | str]]) -> plt.Figure:
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=resolve_figsize(len(TARGET_ALGOS)))
     size_values = [float(point["size_value"]) for point in points]
     sizes = _scale_sizes(size_values)
     labeled_algos: set[str] = set()
