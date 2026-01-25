@@ -9,11 +9,13 @@ from pathlib import Path
 import warnings
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
     SNIR_LABELS,
+    SNIR_LINESTYLES,
     SNIR_MODES,
     algo_labels,
     apply_plot_style,
@@ -232,14 +234,37 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         if isinstance(value, (int, float))
     ]
     if is_constant_metric(distribution_values):
-        render_constant_metric(fig, axes)
+        render_constant_metric(fig, axes, show_fallback_legend=False)
+        snir_handles = [
+            Line2D(
+                [0],
+                [0],
+                color="#444444",
+                linestyle=SNIR_LINESTYLES[mode],
+                linewidth=2.0,
+            )
+            for mode in SNIR_MODES
+        ]
+        snir_labels = [SNIR_LABELS[mode] for mode in SNIR_MODES]
+        fig.legend(
+            snir_handles,
+            snir_labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.08),
+            ncol=len(SNIR_MODES),
+            frameon=False,
+        )
         configure_figure(
             fig,
             axes,
             "Step 1 - Spreading Factor Distribution (SNIR on/off)",
             legend_loc="above",
         )
-        apply_figure_layout(fig, tight_layout={"rect": (0, 0, 1, 0.86)})
+        apply_figure_layout(
+            fig,
+            margins={"top": 0.76},
+            tight_layout={"rect": (0, 0, 1, 0.82)},
+        )
         return fig
 
     colors = [plt.get_cmap("viridis")(idx / max(1, len(sf_values) - 1)) for idx in range(len(sf_values))]
