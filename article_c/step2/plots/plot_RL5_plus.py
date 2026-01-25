@@ -12,8 +12,10 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
+    fallback_legend_handles,
     filter_rows_by_network_sizes,
     is_constant_metric,
+    legend_margins,
     load_step2_aggregated,
     load_step2_selection_probs,
     normalize_network_size_rows,
@@ -95,15 +97,23 @@ def _plot_selection(
         "Step 2 - UCB1-SF Selection Probability (p10/p50/p90)"
         f"{_title_suffix(network_sizes)}"
     )
-    ax.legend(
-        loc="upper center",
-        ncol=4,
-        frameon=True,
-    )
+    handles, labels = ax.get_legend_handles_labels()
+    if not handles:
+        handles, labels = fallback_legend_handles()
+    if handles:
+        ncol = min(4, max(1, len(labels)))
+        fig.legend(
+            handles,
+            labels,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.12),
+            ncol=ncol,
+            frameon=False,
+        )
     apply_figure_layout(
         fig,
         bbox_to_anchor=(0.5, 1.12),
-        margins={"top": 0.78},
+        margins=legend_margins("top"),
     )
     return fig
 

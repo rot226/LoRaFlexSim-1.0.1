@@ -22,6 +22,7 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     metric_values,
     normalize_network_size_rows,
+    legend_margins,
     place_legend,
     render_constant_metric,
     save_figure,
@@ -147,7 +148,9 @@ def _plot_metric(
     cluster_labels = _cluster_labels(clusters)
 
     fig, axes = plt.subplots(1, len(clusters), sharey=True)
-    apply_figure_layout(fig, figsize=(5 * len(clusters), 6))
+    apply_figure_layout(
+        fig, figsize=(5 * len(clusters), 6), margins=legend_margins("top")
+    )
     if len(clusters) == 1:
         axes = [axes]
 

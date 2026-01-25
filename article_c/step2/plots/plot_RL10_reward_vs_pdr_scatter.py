@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     filter_cluster,
     filter_rows_by_network_sizes,
     is_constant_metric,
+    legend_margins,
     load_step1_aggregated,
     load_step2_aggregated,
     normalize_network_size_rows,
@@ -253,7 +254,9 @@ def _collect_points(
 def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
     fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     width, height = fig.get_size_inches()
-    apply_figure_layout(fig, figsize=(width, height + 2))
+    apply_figure_layout(
+        fig, figsize=(width, height + 2), margins=legend_margins("top")
+    )
     reward_values = [
         float(point["reward_mean"])
         for point in points

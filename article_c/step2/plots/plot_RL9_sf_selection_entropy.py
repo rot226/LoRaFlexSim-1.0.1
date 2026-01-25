@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     is_constant_metric,
     load_step2_aggregated,
     load_step2_selection_probs,
+    legend_margins,
     normalize_network_size_rows,
     place_legend,
     render_constant_metric,
@@ -64,7 +65,9 @@ def _plot_entropy(
 ) -> plt.Figure:
     fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     width, height = fig.get_size_inches()
-    apply_figure_layout(fig, figsize=(width, height + 2))
+    apply_figure_layout(
+        fig, figsize=(width, height + 2), margins=legend_margins("top")
+    )
     network_sizes = sorted(network_sizes)
     all_entropy_values: list[float] = []
     for network_size in network_sizes:
