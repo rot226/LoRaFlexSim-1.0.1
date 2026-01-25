@@ -228,9 +228,13 @@ def _compute_collision_successes(
     rng: random.Random | None = None,
     approx_threshold: int = 5000,
     approx_sample_size: int = 2500,
+    capture_probability: float = 0.12,
 ) -> tuple[dict[int, int], int, bool]:
     def _compute_collisions(
-        events: list[tuple[float, float, int]]
+        events: list[tuple[float, float, int]],
+        *,
+        rng: random.Random,
+        capture_probability: float,
     ) -> list[bool]:
         collided = [False] * len(events)
         indexed_events = sorted(enumerate(events), key=lambda item: item[1][0])
@@ -239,8 +243,13 @@ def _compute_collision_successes(
         for event_index, (start, end, _node_id) in indexed_events:
             if group_end is None or start >= group_end:
                 if len(group_indices) > 1:
-                    for index in group_indices:
-                        collided[index] = True
+                    if rng.random() < capture_probability:
+                        survivor = rng.choice(group_indices)
+                        for index in group_indices:
+                            collided[index] = index != survivor
+                    else:
+                        for index in group_indices:
+                            collided[index] = True
                 group_indices = [event_index]
                 group_end = end
             else:
@@ -248,8 +257,13 @@ def _compute_collision_successes(
                 if end > group_end:
                     group_end = end
         if len(group_indices) > 1:
-            for index in group_indices:
-                collided[index] = True
+            if rng.random() < capture_probability:
+                survivor = rng.choice(group_indices)
+                for index in group_indices:
+                    collided[index] = index != survivor
+            else:
+                for index in group_indices:
+                    collided[index] = True
         return collided
 
     total_transmissions = sum(len(events) for events in transmissions.values())
@@ -271,7 +285,11 @@ def _compute_collision_successes(
             ]
             if not sampled_events:
                 sampled_events = [rng.choice(events)]
-        collided = _compute_collisions(sampled_events)
+        collided = _compute_collisions(
+            sampled_events,
+            rng=rng,
+            capture_probability=capture_probability,
+        )
         sample_successes: dict[int, int] = {}
         for event_index, (_start, _end, node_id) in enumerate(sampled_events):
             if not collided[event_index]:
@@ -324,6 +342,28 @@ def _summarize_values(values: list[float]) -> tuple[float, float, float]:
     if not values:
         return 0.0, 0.0, 0.0
     return min(values), median(values), max(values)
+
+
+def _should_debug_log(debug_step2: bool, round_id: int, max_rounds: int = 3) -> bool:
+    return debug_step2 and round_id < max_rounds
+
+
+def _log_debug_stage(
+    *,
+    stage: str,
+    network_size: int,
+    algo_label: str,
+    round_id: int,
+    details: str,
+) -> None:
+    logger.info(
+        "Debug step2 [%s] - taille=%s algo=%s round=%s %s",
+        stage,
+        network_size,
+        algo_label,
+        round_id,
+        details,
+    )
 
 
 def _log_reward_stats(
@@ -531,6 +571,86 @@ def _apply_cluster_bias(
     return [value / total for value in adjusted]
 
 
+def _apply_congestion_and_link_quality(
+    *,
+    node_windows: list[dict[str, object]],
+    successes_by_node: dict[int, int],
+    congestion_probability: float,
+    rng: random.Random,
+) -> tuple[dict[int, int], dict[str, int], float]:
+    per_node_after_congestion: dict[int, int] = {}
+    losses_congestion = 0
+    for node_window in node_windows:
+        node_id = int(node_window["node_id"])
+        successes = successes_by_node.get(node_id, 0)
+        successes_before = successes
+        if successes > 0 and congestion_probability > 0.0:
+            successes = sum(
+                1 for _ in range(successes) if rng.random() > congestion_probability
+            )
+        per_node_after_congestion[node_id] = successes
+        losses_congestion += successes_before - successes
+
+    successes_after_congestion_total = sum(per_node_after_congestion.values())
+    link_quality_weighted = 0.0
+    if successes_after_congestion_total > 0:
+        weighted_sum = 0.0
+        for node_window in node_windows:
+            node_id = int(node_window["node_id"])
+            successes = per_node_after_congestion.get(node_id, 0)
+            if successes <= 0:
+                continue
+            link_quality = float(node_window["link_quality"])
+            weighted_sum += link_quality * successes
+        link_quality_weighted = weighted_sum / successes_after_congestion_total
+    successes_after_link_total = sum(
+        1
+        for _ in range(successes_after_congestion_total)
+        if rng.random() < link_quality_weighted
+    )
+    if (
+        successes_after_link_total == 0
+        and successes_after_congestion_total > 0
+        and congestion_probability == 0.0
+        and link_quality_weighted >= 0.2
+    ):
+        successes_after_link_total = 1
+
+    per_node_after_link: dict[int, int] = {
+        int(node_window["node_id"]): 0 for node_window in node_windows
+    }
+    if successes_after_congestion_total > 0 and successes_after_link_total > 0:
+        weighted_nodes = [
+            (node_id, weight)
+            for node_id, weight in per_node_after_congestion.items()
+            if weight > 0
+        ]
+        total_weight = sum(weight for _node_id, weight in weighted_nodes)
+        for _ in range(successes_after_link_total):
+            threshold = rng.random() * total_weight
+            cumulative = 0.0
+            chosen_node = weighted_nodes[-1][0]
+            for node_id, weight in weighted_nodes:
+                cumulative += weight
+                if cumulative >= threshold:
+                    chosen_node = node_id
+                    break
+            per_node_after_link[chosen_node] += 1
+    losses_link_quality = successes_after_congestion_total - successes_after_link_total
+    return (
+        per_node_after_link,
+        {
+            "successes_before_congestion": sum(successes_by_node.values()),
+            "successes_after_congestion": successes_after_congestion_total,
+            "successes_before_link": successes_after_congestion_total,
+            "successes_after_link": successes_after_link_total,
+            "losses_congestion": losses_congestion,
+            "losses_link_quality": losses_link_quality,
+        },
+        link_quality_weighted,
+    )
+
+
 def _select_adr_arm(
     link_quality: float, sf_values: list[int], cluster: str, clusters: tuple[str, ...]
 ) -> int:
@@ -584,6 +704,7 @@ def run_simulation(
     shadowing_sigma_db: float | None = None,
     reference_network_size: int | None = None,
     output_dir: Path | None = None,
+    debug_step2: bool = False,
 ) -> Step2Result:
     """Exécute une simulation proxy de l'étape 2."""
     rng = random.Random(seed)
@@ -840,6 +961,22 @@ def run_simulation(
                 )
             collision_success_total = sum(successes_by_node.values())
             total_traffic_sent = sum(traffic_sent_by_node.values())
+            if _should_debug_log(debug_step2, round_id):
+                link_qualities = [
+                    float(node_window["link_quality"]) for node_window in node_windows
+                ]
+                min_lq, median_lq, max_lq = _summarize_values(link_qualities)
+                _log_debug_stage(
+                    stage="avant_collisions",
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    details=(
+                        "traffic_sent_total=%s tx_starts=%s "
+                        "link_quality[min/med/max]=%.3f/%.3f/%.3f"
+                    )
+                    % (total_traffic_sent, transmission_count, min_lq, median_lq, max_lq),
+                )
             if collision_success_total == 0:
                 logger.warning(
                     "Aucun succès après collisions (taille=%s algo=%s round=%s).",
@@ -847,30 +984,69 @@ def run_simulation(
                     algo_label,
                     round_id,
                 )
-            final_success_total = 0
-            losses_congestion = 0
-            losses_link_quality = 0
+            if _should_debug_log(debug_step2, round_id):
+                min_succ, median_succ, max_succ = _summarize_values(
+                    [float(value) for value in successes_by_node.values()]
+                )
+                _log_debug_stage(
+                    stage="apres_collisions",
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    details=(
+                        "collision_success_total=%s successes_by_node[min/med/max]=%.0f/%.1f/%.0f"
+                    )
+                    % (collision_success_total, min_succ, median_succ, max_succ),
+                )
+            per_node_successes, loss_stats, link_quality_weighted = (
+                _apply_congestion_and_link_quality(
+                    node_windows=node_windows,
+                    successes_by_node=successes_by_node,
+                    congestion_probability=congestion_probability,
+                    rng=rng,
+                )
+            )
+            if _should_debug_log(debug_step2, round_id):
+                _log_debug_stage(
+                    stage="apres_congestion",
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    details=(
+                        "successes_before_congestion=%s successes=%s"
+                    )
+                    % (
+                        loss_stats["successes_before_congestion"],
+                        loss_stats["successes_after_congestion"],
+                    ),
+                )
+                _log_debug_stage(
+                    stage="apres_link_quality",
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    details=(
+                        "successes_before_link=%s successes=%s link_quality_weighted=%.3f"
+                    )
+                    % (
+                        loss_stats["successes_before_link"],
+                        loss_stats["successes_after_link"],
+                        link_quality_weighted,
+                    ),
+                )
+            final_success_total = loss_stats["successes_after_link"]
+            losses_congestion = loss_stats["losses_congestion"]
+            losses_link_quality = loss_stats["losses_link_quality"]
+            round_success_rates: list[float] = []
+            round_rewards: list[float] = []
+            round_collision_norms: list[float] = []
+            round_throughput: list[float] = []
+            round_energy_per_success: list[float] = []
             for node_window in node_windows:
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
                 traffic_sent = traffic_sent_by_node.get(node_id, 0)
-                successes = successes_by_node.get(node_id, 0)
-                successes_before_congestion = successes
-                if successes > 0 and congestion_probability > 0.0:
-                    successes = sum(
-                        1
-                        for _ in range(successes)
-                        if rng.random() > congestion_probability
-                    )
-                losses_congestion += successes_before_congestion - successes
-                successes_before_link = successes
-                link_quality = float(node_window["link_quality"])
-                if link_quality < 1.0 and successes > 0:
-                    successes = sum(
-                        1 for _ in range(successes) if rng.random() < link_quality
-                    )
-                losses_link_quality += successes_before_link - successes
-                final_success_total += successes
+                successes = per_node_successes.get(node_id, 0)
                 success_flag = 1 if successes > 0 else 0
                 failure_flag = 1 - success_flag
                 airtime_norm = energy_norm_by_sf[sf_value]
@@ -906,6 +1082,11 @@ def run_simulation(
                     lambda_collision,
                 )
                 window_rewards.append(reward)
+                round_success_rates.append(metrics.success_rate)
+                round_rewards.append(reward)
+                round_collision_norms.append(metrics.collision_norm)
+                round_throughput.append(metrics.throughput_success)
+                round_energy_per_success.append(metrics.energy_per_success)
                 common_raw_row = {
                     "network_size": network_size_value,
                     "density": network_size_value,
@@ -967,6 +1148,31 @@ def run_simulation(
                     round_id,
                     congestion_probability,
                     avg_link_quality,
+                )
+            if _should_debug_log(debug_step2, round_id) and round_success_rates:
+                avg_success = sum(round_success_rates) / len(round_success_rates)
+                avg_reward = sum(round_rewards) / len(round_rewards)
+                avg_collision = sum(round_collision_norms) / len(round_collision_norms)
+                avg_throughput = sum(round_throughput) / len(round_throughput)
+                avg_energy_per_success = (
+                    sum(round_energy_per_success) / len(round_energy_per_success)
+                )
+                _log_debug_stage(
+                    stage="final",
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    details=(
+                        "success_rate=%.4f reward=%.4f collision_norm=%.4f "
+                        "throughput_success=%.4f energy_per_success=%.4f"
+                    )
+                    % (
+                        avg_success,
+                        avg_reward,
+                        avg_collision,
+                        avg_throughput,
+                        avg_energy_per_success,
+                    ),
                 )
             avg_reward = sum(window_rewards) / len(window_rewards)
             _log_reward_stats(
@@ -1130,6 +1336,22 @@ def run_simulation(
                 )
             collision_success_total = sum(successes_by_node.values())
             total_traffic_sent = sum(traffic_sent_by_node.values())
+            if _should_debug_log(debug_step2, round_id):
+                link_qualities = [
+                    float(node_window["link_quality"]) for node_window in node_windows
+                ]
+                min_lq, median_lq, max_lq = _summarize_values(link_qualities)
+                _log_debug_stage(
+                    stage="avant_collisions",
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    details=(
+                        "traffic_sent_total=%s tx_starts=%s "
+                        "link_quality[min/med/max]=%.3f/%.3f/%.3f"
+                    )
+                    % (total_traffic_sent, transmission_count, min_lq, median_lq, max_lq),
+                )
             if collision_success_total == 0:
                 logger.warning(
                     "Aucun succès après collisions (taille=%s algo=%s round=%s).",
@@ -1137,30 +1359,69 @@ def run_simulation(
                     algo_label,
                     round_id,
                 )
-            final_success_total = 0
-            losses_congestion = 0
-            losses_link_quality = 0
+            if _should_debug_log(debug_step2, round_id):
+                min_succ, median_succ, max_succ = _summarize_values(
+                    [float(value) for value in successes_by_node.values()]
+                )
+                _log_debug_stage(
+                    stage="apres_collisions",
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    details=(
+                        "collision_success_total=%s successes_by_node[min/med/max]=%.0f/%.1f/%.0f"
+                    )
+                    % (collision_success_total, min_succ, median_succ, max_succ),
+                )
+            per_node_successes, loss_stats, link_quality_weighted = (
+                _apply_congestion_and_link_quality(
+                    node_windows=node_windows,
+                    successes_by_node=successes_by_node,
+                    congestion_probability=congestion_probability,
+                    rng=rng,
+                )
+            )
+            if _should_debug_log(debug_step2, round_id):
+                _log_debug_stage(
+                    stage="apres_congestion",
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    details=(
+                        "successes_before_congestion=%s successes=%s"
+                    )
+                    % (
+                        loss_stats["successes_before_congestion"],
+                        loss_stats["successes_after_congestion"],
+                    ),
+                )
+                _log_debug_stage(
+                    stage="apres_link_quality",
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    details=(
+                        "successes_before_link=%s successes=%s link_quality_weighted=%.3f"
+                    )
+                    % (
+                        loss_stats["successes_before_link"],
+                        loss_stats["successes_after_link"],
+                        link_quality_weighted,
+                    ),
+                )
+            final_success_total = loss_stats["successes_after_link"]
+            losses_congestion = loss_stats["losses_congestion"]
+            losses_link_quality = loss_stats["losses_link_quality"]
+            round_success_rates: list[float] = []
+            round_rewards: list[float] = []
+            round_collision_norms: list[float] = []
+            round_throughput: list[float] = []
+            round_energy_per_success: list[float] = []
             for node_window in node_windows:
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
                 traffic_sent = traffic_sent_by_node.get(node_id, 0)
-                successes = successes_by_node.get(node_id, 0)
-                successes_before_congestion = successes
-                if successes > 0 and congestion_probability > 0.0:
-                    successes = sum(
-                        1
-                        for _ in range(successes)
-                        if rng.random() > congestion_probability
-                    )
-                losses_congestion += successes_before_congestion - successes
-                successes_before_link = successes
-                link_quality = float(node_window["link_quality"])
-                if link_quality < 1.0 and successes > 0:
-                    successes = sum(
-                        1 for _ in range(successes) if rng.random() < link_quality
-                    )
-                losses_link_quality += successes_before_link - successes
-                final_success_total += successes
+                successes = per_node_successes.get(node_id, 0)
                 success_flag = 1 if successes > 0 else 0
                 failure_flag = 1 - success_flag
                 airtime_norm = energy_norm_by_sf[sf_value]
@@ -1196,6 +1457,11 @@ def run_simulation(
                     lambda_collision,
                 )
                 window_rewards.append(reward)
+                round_success_rates.append(metrics.success_rate)
+                round_rewards.append(reward)
+                round_collision_norms.append(metrics.collision_norm)
+                round_throughput.append(metrics.throughput_success)
+                round_energy_per_success.append(metrics.energy_per_success)
                 common_raw_row = {
                     "network_size": network_size_value,
                     "density": network_size_value,
@@ -1257,6 +1523,31 @@ def run_simulation(
                     round_id,
                     congestion_probability,
                     avg_link_quality,
+                )
+            if _should_debug_log(debug_step2, round_id) and round_success_rates:
+                avg_success = sum(round_success_rates) / len(round_success_rates)
+                avg_reward = sum(round_rewards) / len(round_rewards)
+                avg_collision = sum(round_collision_norms) / len(round_collision_norms)
+                avg_throughput = sum(round_throughput) / len(round_throughput)
+                avg_energy_per_success = (
+                    sum(round_energy_per_success) / len(round_energy_per_success)
+                )
+                _log_debug_stage(
+                    stage="final",
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    details=(
+                        "success_rate=%.4f reward=%.4f collision_norm=%.4f "
+                        "throughput_success=%.4f energy_per_success=%.4f"
+                    )
+                    % (
+                        avg_success,
+                        avg_reward,
+                        avg_collision,
+                        avg_throughput,
+                        avg_energy_per_success,
+                    ),
                 )
             avg_reward = sum(window_rewards) / len(window_rewards)
             _log_reward_stats(
