@@ -101,7 +101,14 @@ def _add_summary_plot(
         )
         for snir_mode in SNIR_MODES
     ]
-    ax.legend(handles=legend_handles, title="SNIR", ncol=2, frameon=False)
+    ax.legend(
+        handles=legend_handles,
+        title="SNIR",
+        ncol=2,
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.25),
+    )
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
@@ -145,7 +152,14 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     )
     place_legend(ax, legend_loc="top")
     _add_summary_plot(ax_summary, rows, metric_key)
-    apply_figure_layout(fig, margins={"hspace": 0.4})
+    apply_figure_layout(
+        fig,
+        margins={
+            "top": 0.78,
+            "hspace": 0.55,
+            "bottom": 0.16,
+        },
+    )
     return fig
 
 
