@@ -136,7 +136,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_ylim(0.0, 1.0)
     ax.set_title("Step 1 - Packet Delivery Ratio (SNIR on/off)")
-    place_legend(ax)
+    place_legend(ax, legend_loc="top")
     _add_summary_plot(ax_summary, rows, metric_key)
     apply_figure_layout(fig, margins={"hspace": 0.4})
     return fig

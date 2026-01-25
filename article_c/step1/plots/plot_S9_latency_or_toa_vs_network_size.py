@@ -50,7 +50,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str, y_label: str) -
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel(y_label)
     ax.set_title("Step 1 - ToA/Latency vs Network Size (SNIR on/off)")
-    place_legend(ax)
+    place_legend(ax, legend_loc="top")
     return fig
 
 

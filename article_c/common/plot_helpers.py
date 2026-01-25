@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 from article_c.common.plotting_style import (
     LEGEND_STYLE,
@@ -112,6 +113,8 @@ def render_constant_metric(
     axes: object,
     *,
     message: str = CONSTANT_METRIC_MESSAGE,
+    legend_loc: str = "top",
+    show_fallback_legend: bool = True,
 ) -> None:
     """Affiche un message centré lorsque la métrique est constante."""
     for ax in _flatten_axes(axes):
@@ -126,6 +129,16 @@ def render_constant_metric(
         fontsize=12,
         color="#444444",
     )
+    if show_fallback_legend and not _figure_has_legend(fig):
+        handles, labels = fallback_legend_handles()
+        if handles:
+            legend_style = _legend_style(legend_loc)
+            fig.legend(handles, labels, **legend_style)
+            apply_figure_layout(
+                fig,
+                margins=_legend_margins(legend_loc),
+                bbox_to_anchor=legend_style.get("bbox_to_anchor"),
+            )
 
 
 def _metric_variance(
@@ -196,11 +209,63 @@ def select_received_metric_key(
     return derived_key
 
 
-def place_legend(ax: plt.Axes) -> None:
-    """Place la légende en haut du graphique selon les consignes."""
+def place_legend(ax: plt.Axes, *, legend_loc: str = "top") -> None:
+    """Place la légende selon les consignes."""
     handles, labels = ax.get_legend_handles_labels()
     if handles:
-        ax.figure.legend(handles, labels, **LEGEND_STYLE)
+        legend_style = _legend_style(legend_loc)
+        ax.figure.legend(handles, labels, **legend_style)
+        apply_figure_layout(
+            ax.figure,
+            margins=_legend_margins(legend_loc),
+            bbox_to_anchor=legend_style.get("bbox_to_anchor"),
+        )
+
+
+def _legend_style(legend_loc: str) -> dict[str, object]:
+    if legend_loc == "right":
+        return {
+            "loc": "center left",
+            "bbox_to_anchor": (1.02, 0.5),
+            "ncol": 1,
+            "frameon": False,
+        }
+    return dict(LEGEND_STYLE)
+
+
+def _legend_margins(legend_loc: str) -> dict[str, float]:
+    margins = {"top": FIGURE_SUBPLOT_TOP}
+    if legend_loc == "right":
+        margins["right"] = 0.78
+    return margins
+
+
+def _figure_has_legend(fig: plt.Figure) -> bool:
+    if fig.legends:
+        return True
+    return any(ax.get_legend() is not None for ax in fig.axes)
+
+
+def fallback_legend_handles() -> tuple[list[Line2D], list[str]]:
+    handles: list[Line2D] = []
+    labels: list[str] = []
+    for algo_key, algo_label_value in ALGO_LABELS.items():
+        color = ALGO_COLORS.get(algo_key, "#333333")
+        marker = ALGO_MARKERS.get(algo_key, "o")
+        for snir_mode in SNIR_MODES:
+            handles.append(
+                Line2D(
+                    [0],
+                    [0],
+                    color=color,
+                    marker=marker,
+                    linestyle=SNIR_LINESTYLES[snir_mode],
+                    linewidth=BASE_LINE_WIDTH,
+                    markersize=5.5,
+                )
+            )
+            labels.append(f"{algo_label_value} ({SNIR_LABELS[snir_mode]})")
+    return handles, labels
 
 
 def save_figure(
