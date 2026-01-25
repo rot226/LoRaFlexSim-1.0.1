@@ -65,9 +65,10 @@ BASE_GRID_LINEWIDTH = 0.8
 BASE_DPI = 300
 BASE_GRID_ENABLED = True
 AXES_TITLE_Y = 1.02
-SUPTITLE_Y = 0.98
-FIGURE_SUBPLOT_TOP = 0.80
-LEGEND_TOP_MARGIN = 0.78
+SUPTITLE_Y = 0.955
+FIGURE_SUBPLOT_TOP = 0.78
+LEGEND_TOP_MARGIN = 0.74
+LEGEND_ABOVE_TIGHT_LAYOUT_TOP = 0.86
 LEGEND_RIGHT_MARGIN = 0.78
 CONSTANT_METRIC_VARIANCE_THRESHOLD = 1e-6
 CONSTANT_METRIC_MESSAGE = "métrique constante – à investiguer"
@@ -115,7 +116,7 @@ def render_constant_metric(
     axes: object,
     *,
     message: str = CONSTANT_METRIC_MESSAGE,
-    legend_loc: str = "top",
+    legend_loc: str = "above",
     show_fallback_legend: bool = True,
 ) -> None:
     """Affiche un message centré lorsque la métrique est constante."""
@@ -211,7 +212,7 @@ def select_received_metric_key(
     return derived_key
 
 
-def place_legend(ax: plt.Axes, *, legend_loc: str = "top") -> None:
+def place_legend(ax: plt.Axes, *, legend_loc: str = "above") -> None:
     """Place la légende selon les consignes."""
     handles, labels = ax.get_legend_handles_labels()
     if not handles:
@@ -243,7 +244,7 @@ def _legend_margins(legend_loc: str) -> dict[str, float]:
     normalized = _normalize_legend_loc(legend_loc)
     if normalized == "right":
         return {"top": FIGURE_SUBPLOT_TOP, "right": LEGEND_RIGHT_MARGIN}
-    if normalized == "top":
+    if normalized == "above":
         return {"top": LEGEND_TOP_MARGIN}
     return {"top": FIGURE_SUBPLOT_TOP}
 
@@ -255,8 +256,8 @@ def legend_margins(legend_loc: str) -> dict[str, float]:
 
 def _normalize_legend_loc(legend_loc: str) -> str:
     normalized = str(legend_loc or "").strip().lower()
-    if normalized in {"haut", "top"}:
-        return "top"
+    if normalized in {"haut", "top", "above"}:
+        return "above"
     if normalized in {"droite", "right"}:
         return "right"
     return normalized

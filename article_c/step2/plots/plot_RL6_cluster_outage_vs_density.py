@@ -191,7 +191,7 @@ def _plot_metric(
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     axes[0].set_ylabel("Outage probability")
-    place_legend(axes[-1], legend_loc="top")
+    place_legend(axes[-1], legend_loc="above")
     fig.suptitle(
         "Step 2 - Outage probability by Cluster (SNIR on)"
         f"{_title_suffix(network_sizes)}",
@@ -338,7 +338,7 @@ def _plot_raw_metric(
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     axes[0].set_ylabel("Outage probability (raw)")
-    place_legend(axes[-1], legend_loc="top")
+    place_legend(axes[-1], legend_loc="above")
     fig.suptitle(
         "Step 2 - Outage probability brut par cluster et réplication (SNIR on)"
         f"{_title_suffix(network_sizes)}",

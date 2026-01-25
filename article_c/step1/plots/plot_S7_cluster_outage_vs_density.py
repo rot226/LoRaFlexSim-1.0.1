@@ -12,23 +12,26 @@ import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
+    LEGEND_ABOVE_TIGHT_LAYOUT_TOP,
     apply_plot_style,
     apply_figure_layout,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     is_constant_metric,
+    legend_margins,
     load_step1_aggregated,
     metric_values,
     plot_metric_by_snir,
     render_constant_metric,
     save_figure,
 )
+from article_c.common.plotting_style import LEGEND_STYLE
 from article_c.step1.plots.plot_utils import configure_figure
 
-LEGEND_BBOX = (0.5, 1.16)
-LAYOUT_MARGINS = {"top": 0.76}
-LAYOUT_RECT = (0, 0, 1, 0.80)
+LEGEND_BBOX = LEGEND_STYLE.get("bbox_to_anchor", (0.5, 1.02))
+LAYOUT_MARGINS = legend_margins("above")
+LAYOUT_RECT = (0, 0, 1, LEGEND_ABOVE_TIGHT_LAYOUT_TOP)
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
@@ -107,10 +110,11 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         fig.legend(
             handles,
             labels,
-            loc="upper center",
-            bbox_to_anchor=LEGEND_BBOX,
-            ncol=min(len(labels), 4),
-            frameon=False,
+            **{
+                **LEGEND_STYLE,
+                "bbox_to_anchor": LEGEND_BBOX,
+                "ncol": min(len(labels), 4),
+            },
         )
     configure_figure(
         fig,

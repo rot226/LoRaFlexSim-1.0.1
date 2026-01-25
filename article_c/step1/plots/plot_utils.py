@@ -6,7 +6,12 @@ from collections.abc import Iterable
 
 import matplotlib.pyplot as plt
 
-from article_c.common.plot_helpers import SUPTITLE_Y, apply_figure_layout
+from article_c.common.plot_helpers import (
+    LEGEND_ABOVE_TIGHT_LAYOUT_TOP,
+    SUPTITLE_Y,
+    apply_figure_layout,
+    legend_margins,
+)
 from article_c.common.plotting_style import LEGEND_STYLE
 
 
@@ -68,8 +73,8 @@ def configure_figure(
     if legend_loc == "above":
         apply_figure_layout(
             fig,
-            margins={"top": 0.80},
-            tight_layout={"rect": (0, 0, 1, 0.88)},
+            margins=legend_margins("above"),
+            tight_layout={"rect": (0, 0, 1, LEGEND_ABOVE_TIGHT_LAYOUT_TOP)},
         )
     else:
         apply_figure_layout(

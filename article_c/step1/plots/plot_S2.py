@@ -47,7 +47,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_title("Step 1 - Mean Time on Air vs Network Size (SNIR on/off)")
-    place_legend(ax, legend_loc="top")
+    place_legend(ax, legend_loc="above")
     legend = ax.get_legend()
     if legend is not None:
         legend.set_title("Mean Time on Air (s)")

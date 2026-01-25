@@ -17,16 +17,19 @@ from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_LINESTYLES,
     SNIR_MODES,
+    LEGEND_ABOVE_TIGHT_LAYOUT_TOP,
     apply_plot_style,
     apply_figure_layout,
     filter_mixra_opt_fallback,
     is_constant_metric,
+    legend_margins,
     load_step1_aggregated,
     metric_values,
     filter_rows_by_network_sizes,
     render_constant_metric,
     save_figure,
 )
+from article_c.common.plotting_style import LEGEND_STYLE
 from article_c.step1.plots.plot_utils import configure_figure
 
 PDR_TARGETS = (0.90, 0.80, 0.70)
@@ -135,10 +138,11 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         cluster_handles,
         legend_labels,
         title="Clusters",
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.16),
-        ncol=3,
-        frameon=False,
+        **{
+            **LEGEND_STYLE,
+            "bbox_to_anchor": (0.5, 1.12),
+            "ncol": 3,
+        },
     )
     fig.add_artist(cluster_legend)
     snir_labels = [handle.get_label() for handle in snir_handles]
@@ -146,10 +150,11 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         snir_handles,
         snir_labels,
         title="SNIR",
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.08),
-        ncol=min(len(snir_labels), 3),
-        frameon=False,
+        **{
+            **LEGEND_STYLE,
+            "bbox_to_anchor": (0.5, 1.04),
+            "ncol": min(len(snir_labels), 3),
+        },
     )
     configure_figure(
         fig,
@@ -157,10 +162,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         "Step 1 - PDR by Cluster (network size)",
         legend_loc="above",
     )
+    layout_margins = legend_margins("above")
     apply_figure_layout(
         fig,
-        margins={"top": 0.72},
-        tight_layout={"rect": (0, 0, 1, 0.80)},
+        margins={
+            **layout_margins,
+            "top": max(0.7, layout_margins.get("top", 0.0) - 0.04),
+        },
+        tight_layout={
+            "rect": (0, 0, 1, max(0.8, LEGEND_ABOVE_TIGHT_LAYOUT_TOP - 0.04)),
+        },
     )
     return fig
 

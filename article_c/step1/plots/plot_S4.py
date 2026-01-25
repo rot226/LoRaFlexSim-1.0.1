@@ -26,6 +26,7 @@ from article_c.common.plot_helpers import (
     filter_cluster,
     filter_mixra_opt_fallback,
     is_constant_metric,
+    legend_margins,
     load_step1_aggregated,
     metric_values,
     place_legend,
@@ -150,12 +151,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         "Step 1 - Sent Frames (budget saturant) vs Network size (number of nodes) "
         "(SNIR on/off)"
     )
-    place_legend(ax, legend_loc="top")
+    place_legend(ax, legend_loc="above")
     _add_summary_plot(ax_summary, rows, metric_key)
     apply_figure_layout(
         fig,
         margins={
-            "top": 0.78,
+            **legend_margins("above"),
             "hspace": 0.55,
             "bottom": 0.16,
         },

@@ -280,7 +280,7 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
     ax.set_xlim(0.0, 1.05)
     ax.set_ylim(0.0, 1.05)
     ax.grid(True, linestyle=":", alpha=0.5)
-    place_legend(ax, legend_loc="top")
+    place_legend(ax, legend_loc="above")
     return fig
 
 
