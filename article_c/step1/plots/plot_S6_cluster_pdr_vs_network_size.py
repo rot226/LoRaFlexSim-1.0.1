@@ -131,22 +131,36 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         )
         for snir_mode in SNIR_MODES
     ]
-    handles = [*cluster_handles, *snir_handles]
-    labels = [*legend_labels, *[handle.get_label() for handle in snir_handles]]
-    fig.legend(
-        handles,
-        labels,
+    cluster_legend = fig.legend(
+        cluster_handles,
+        legend_labels,
+        title="Clusters",
         loc="upper center",
-        bbox_to_anchor=(0.5, 1.02),
+        bbox_to_anchor=(0.5, 1.16),
         ncol=3,
         frameon=False,
     )
-    apply_figure_layout(fig, bbox_to_anchor=(0.5, 1.02))
+    fig.add_artist(cluster_legend)
+    snir_labels = [handle.get_label() for handle in snir_handles]
+    fig.legend(
+        snir_handles,
+        snir_labels,
+        title="SNIR",
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.08),
+        ncol=min(len(snir_labels), 3),
+        frameon=False,
+    )
     configure_figure(
         fig,
         axes,
         "Step 1 - PDR by Cluster (network size)",
         legend_loc="above",
+    )
+    apply_figure_layout(
+        fig,
+        margins={"top": 0.72},
+        tight_layout={"rect": (0, 0, 1, 0.80)},
     )
     return fig
 
