@@ -23,6 +23,7 @@ from article_c.common.plot_helpers import (
     plot_metric_by_snir,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_MULTI
 from article_c.common.utils import (
     parse_network_size_list,
     replication_ids,
@@ -648,7 +649,7 @@ def _plot_summary_pdr(output_dir: Path) -> None:
     apply_plot_style()
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     plot_metric_by_snir(ax, rows, "pdr_mean")
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Packet Delivery Ratio")

@@ -20,6 +20,7 @@ from scripts.mne3sd.common import (  # noqa: E402
     prepare_figure_directory,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
 
 RESULTS_PATH = (
     ROOT
@@ -150,7 +151,7 @@ def plot_pdr_distribution_by_gateway(df: pd.DataFrame) -> None:
         raise ValueError("No gateway distribution data available for plotting")
 
     gateway_ids = ordered_gateway_ids(entry["shares"] for entry in entries)
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
     indices = range(len(entries))
     bottoms = [0.0] * len(entries)
 
@@ -183,7 +184,7 @@ def plot_pdr_distribution_by_gateway(df: pd.DataFrame) -> None:
 def plot_downlink_delay_vs_gateways(df: pd.DataFrame) -> None:
     """Plot the average downlink delay versus the number of gateways."""
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
 
     for model_name, model_data in df.groupby("model"):
         ordered = model_data.sort_values("gateways")
@@ -218,7 +219,7 @@ def plot_downlink_delay_vs_gateways(df: pd.DataFrame) -> None:
 def plot_model_comparison(df: pd.DataFrame) -> None:
     """Plot a scatter chart comparing mobility models on PDR and downlink delay."""
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
 
     markers = {"random_waypoint": "o", "smooth": "s"}
     for model_name, model_data in df.groupby("model"):

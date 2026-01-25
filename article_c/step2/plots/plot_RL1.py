@@ -25,6 +25,7 @@ from article_c.common.plot_helpers import (
     render_constant_metric,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 TARGET_CLUSTER = "gold"
 
@@ -57,7 +58,7 @@ def _plot_metric(
     network_sizes: list[int] | None,
     cluster_label: str,
 ) -> plt.Figure | None:
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     width, height = fig.get_size_inches()
     apply_figure_layout(fig, figsize=(width, height + 2))
     ensure_network_size(rows)

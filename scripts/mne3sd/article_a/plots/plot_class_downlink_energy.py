@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from scripts.mne3sd.common import apply_ieee_style, prepare_figure_directory, save_figure
+from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
 
 ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_INPUT = ROOT / "results" / "mne3sd" / "article_a" / "class_downlink_energy.csv"
@@ -108,7 +109,7 @@ def plot_energy_breakdown(
     rx = summary["energy_rx_J"].to_numpy()
     idle = summary["energy_idle_J"].to_numpy()
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
     width = 0.6
 
     ax.bar(indices, tx, width=width, label="TX")

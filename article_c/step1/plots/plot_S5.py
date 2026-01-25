@@ -27,6 +27,7 @@ from article_c.common.plot_helpers import (
     select_received_metric_key,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 TARGET_NETWORK_SIZE = 1280
 NETWORK_SIZE_COLUMNS = ("network_size", "density", "nodes", "num_nodes")
@@ -363,7 +364,7 @@ def _plot_pdr_distributions(
         if isinstance(value, (int, float))
     ]
     if is_constant_metric(all_values):
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
         apply_figure_layout(fig, figsize=(8, 5))
         render_constant_metric(fig, ax)
         fig.suptitle(
@@ -395,7 +396,7 @@ def _plot_pdr_distributions(
 
     ncols = 2
     nrows = max(1, n_sizes * max(1, len(algorithms)))
-    fig, axes = plt.subplots(nrows, ncols, sharey=True)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(6.2 * ncols, 2.4 * nrows), sharey=True)
     apply_figure_layout(fig, figsize=(6.2 * ncols, 2.4 * nrows))
     if nrows == 1 and ncols == 1:
         axes = [[axes]]

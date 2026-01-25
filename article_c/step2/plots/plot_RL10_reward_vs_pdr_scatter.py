@@ -24,6 +24,7 @@ from article_c.common.plot_helpers import (
     render_constant_metric,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 ALGO_ALIASES = {
     "adr": "adr",
@@ -250,7 +251,7 @@ def _collect_points(
 
 
 def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     width, height = fig.get_size_inches()
     apply_figure_layout(fig, figsize=(width, height + 2))
     reward_values = [

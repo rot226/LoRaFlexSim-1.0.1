@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from scripts.mne3sd.common import prepare_figure_directory, save_figure
+from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
 
 ROOT = Path(__file__).resolve().parents[4]
 RESULTS_PATH = ROOT / "results" / "mne3sd" / "article_a" / "class_density_metrics.csv"
@@ -130,7 +131,7 @@ def plot_pdr_vs_nodes(df: pd.DataFrame) -> None:
     stats["pdr_mean"] *= 100.0
     stats["pdr_std"] *= 100.0
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
 
     for class_name, class_data in stats.groupby("class"):
         ordered = class_data.sort_values("nodes")
@@ -183,7 +184,7 @@ def plot_energy_vs_nodes(df: pd.DataFrame) -> bool:
     stats["energy_total_J_mean"] = stats["energy_per_node_J_mean"] * stats["nodes"]
     stats["energy_total_J_std"] = stats["energy_per_node_J_std"] * stats["nodes"]
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
 
     for class_name, class_data in stats.groupby("class"):
         ordered = class_data.sort_values("nodes")

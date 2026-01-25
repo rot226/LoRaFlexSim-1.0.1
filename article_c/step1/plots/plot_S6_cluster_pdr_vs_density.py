@@ -67,6 +67,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, axes = plt.subplots(
         len(algorithms),
         len(clusters),
+        figsize=(4.2 * len(clusters), 3.4 * len(algorithms) + 2),
         sharex=True,
         sharey=True,
     )

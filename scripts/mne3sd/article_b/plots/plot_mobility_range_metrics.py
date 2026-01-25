@@ -18,6 +18,7 @@ from scripts.mne3sd.common import (
     prepare_figure_directory,
     save_figure,
 )
+from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
 
 RESULTS_PATH = ROOT / "results" / "mne3sd" / "article_b" / "mobility_range_metrics.csv"
 ARTICLE = "article_b"
@@ -99,7 +100,7 @@ def plot_pdr_vs_range(
 ) -> None:
     """Plot aggregated PDR versus communication range with error bars."""
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
     highlight_label_added = False
 
     for model_name, model_data in df.groupby("model"):
@@ -154,7 +155,7 @@ def plot_pdr_vs_range(
 def plot_delay_vs_range(df: pd.DataFrame) -> None:
     """Plot aggregated average delay versus communication range."""
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
 
     for model_name, model_data in df.groupby("model"):
         ordered = model_data.sort_values("range_km")

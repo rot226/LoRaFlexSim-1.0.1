@@ -34,6 +34,7 @@ try:  # Import default battery capacity constant
     from .run_battery_tracking import DEFAULT_BATTERY_J
 except Exception:  # pragma: no cover - fallback when running as a script
     from run_battery_tracking import DEFAULT_BATTERY_J
+from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
 FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "figures")
@@ -133,7 +134,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     stats = rep_avg.groupby("time")["energy_pct"].agg(["mean", "std"]).reset_index()
 
     try:
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
     except AttributeError:
         # Some lightweight matplotlib backends (or stub modules used in tests)
         # only expose ``figure``; fall back to that API instead of crashing.
@@ -184,7 +185,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 return None
 
         try:
-            fig = plt.figure()
+            fig = plt.figure(figsize=DEFAULT_FIGSIZE_SIMPLE)
         except AttributeError:
             fig = _DummyFigure()
             ax = _DummyAxis()

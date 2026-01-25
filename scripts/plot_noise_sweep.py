@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 
 # Allow running the script from a clone without installation
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 FIGURES_DIR = Path(__file__).resolve().parent.parent / "figures"
@@ -31,7 +32,7 @@ def main() -> None:
     mean_pdr = [sum(pdr_map[ns]) / len(pdr_map[ns]) for ns in noise_levels]
 
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
     ax.plot(noise_levels, mean_pdr, marker="o")
     ax.set_xlabel("Noise standard deviation")
     ax.set_ylabel("Packet delivery ratio (%)")
