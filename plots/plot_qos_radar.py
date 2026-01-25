@@ -201,7 +201,7 @@ def _plot_radar(
     ax.fill(angles, values, color=color, alpha=0.2)
 
     ax.set_title(f"QoS radar – {algorithm} ({SNIR_LABELS.get(state, state)})", y=1.1)
-    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+    fig.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
     figures_dir.mkdir(parents=True, exist_ok=True)
     output_name = f"qos_radar_{algorithm.replace(' ', '_')}_{state}.png"

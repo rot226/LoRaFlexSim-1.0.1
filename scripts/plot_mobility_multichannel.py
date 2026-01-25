@@ -113,7 +113,7 @@ def plot(
             ax.set_ylim(0, cap)
 
         ax.bar_label(bars, fmt=fmt, label_type="center")
-        ax.legend(
+        fig.legend(
             loc="lower center",
             bbox_to_anchor=(0.5, 1.02),
             ncol=3,

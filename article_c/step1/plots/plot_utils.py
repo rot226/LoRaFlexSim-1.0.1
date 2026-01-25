@@ -53,9 +53,8 @@ def configure_figure(
                     **LEGEND_STYLE,
                     "ncol": min(len(labels), LEGEND_STYLE.get("ncol", 3)),
                 }
-                bbox_to_anchor = legend_style.pop("bbox_to_anchor", None)
                 fig.legend(handles, labels, **legend_style)
-                apply_figure_layout(fig, bbox_to_anchor=bbox_to_anchor)
+                apply_figure_layout(fig, bbox_to_anchor=legend_style.get("bbox_to_anchor"))
             else:
                 fig.legend(
                     handles,

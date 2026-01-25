@@ -176,7 +176,7 @@ def plot_energy_by_interval(
     else:
         legend_labels.extend(labels_low)
 
-    ax_low.legend(
+    fig.legend(
         legend_handles,
         legend_labels,
         title="Class",
@@ -223,7 +223,7 @@ def plot_pdr_by_interval(df: pd.DataFrame) -> None:
     ax.set_xlabel("Reporting interval (s)")
     ax.set_ylabel("PDR (%)")
     ax.set_ylim(0, 105)
-    ax.legend(
+    fig.legend(
         title="Class",
         loc="lower center",
         bbox_to_anchor=(0.5, 1.02),

@@ -633,7 +633,7 @@ def _plot_global_metric(
             _apply_network_ticks(ax, network_sizes)
             _format_axes(ax, integer_x=True)
             if ax.get_legend_handles_labels()[0]:
-                ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+                fig.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
             figures_dir.mkdir(parents=True, exist_ok=True)
             filename = _plot_filename(
                 f"step1_{filename_prefix}{suffix}_tx_{title_period}.png",
@@ -769,7 +769,7 @@ def _plot_summary_bars(
             ax.set_title(f"{ylabel} – period {period_label} s")
             _format_axes(ax, integer_x=False)
             if ax.get_legend_handles_labels()[0]:
-                ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+                fig.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
             figures_dir.mkdir(parents=True, exist_ok=True)
             filename = _plot_filename(
@@ -828,7 +828,7 @@ def _plot_cdf(
         ax.set_title(f"CDF DER (probability) – {algorithm}")
         _format_axes(ax, integer_x=False)
         if ax.get_legend_handles_labels()[0]:
-            ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+            fig.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
         figures_dir.mkdir(parents=True, exist_ok=True)
         filename = _plot_filename(f"cdf_der_{algorithm}.png", size_tag)
         output = figures_dir / filename
@@ -1122,7 +1122,7 @@ def _plot_trajectories(
                 _apply_network_ticks(ax, network_sizes)
             _format_axes(ax, integer_x=integer_x)
             if ax.get_legend_handles_labels()[0]:
-                ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+                fig.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
             figures_dir.mkdir(parents=True, exist_ok=True)
             filename = _plot_filename(
@@ -1241,7 +1241,7 @@ def plot_histogram_by_algo_and_snir(
     ax.set_title("Histogramme SNIR – comparaison algorithmes")
     _format_axes(ax, integer_x=False)
     if ax.get_legend_handles_labels()[0]:
-        ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+        fig.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
     figures_dir.mkdir(parents=True, exist_ok=True)
     filename = _plot_filename("step1_histogram_by_algo_snir.png", size_tag)
@@ -1369,7 +1369,7 @@ def _plot_snir_comparison(
                     _apply_network_ticks(ax, network_sizes)
                     _format_axes(ax, integer_x=True)
                     if ax.get_legend_handles_labels()[0]:
-                        ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+                        fig.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
                     figures_dir.mkdir(parents=True, exist_ok=True)
                     filename = _plot_filename(

@@ -382,7 +382,10 @@ def _plot_performance(
             ax.set_ylabel(ylabel)
             ax.grid(True, linestyle=":", alpha=0.4)
             if row_idx == 0 and ax.get_legend_handles_labels()[1]:
-                ax.legend(
+                handles, labels = ax.get_legend_handles_labels()
+                fig.legend(
+                    handles,
+                    labels,
                     fontsize=8,
                     loc="lower center",
                     bbox_to_anchor=(0.5, 1.02),
@@ -445,7 +448,10 @@ def _plot_convergence(
             ax.set_ylabel(ylabel)
             ax.grid(True, linestyle=":", alpha=0.4)
             if row_idx == 0 and ax.get_legend_handles_labels()[1]:
-                ax.legend(
+                handles, labels = ax.get_legend_handles_labels()
+                fig.legend(
+                    handles,
+                    labels,
                     fontsize=8,
                     loc="lower center",
                     bbox_to_anchor=(0.5, 1.02),
@@ -515,8 +521,11 @@ def _plot_distribution(
         axes[row_idx][0].set_ylabel("Share (probability)")
         axes[row_idx][0].grid(True, linestyle=":", alpha=0.4)
         axes[row_idx][1].grid(True, linestyle=":", alpha=0.4)
-        if axes[row_idx][0].get_legend_handles_labels()[1]:
-            axes[row_idx][0].legend(
+        if row_idx == 0 and axes[row_idx][0].get_legend_handles_labels()[1]:
+            handles, labels = axes[row_idx][0].get_legend_handles_labels()
+            fig.legend(
+                handles,
+                labels,
                 fontsize=8,
                 loc="lower center",
                 bbox_to_anchor=(0.5, 1.02),
@@ -583,7 +592,10 @@ def _plot_metrics(
             ax.set_ylabel(ylabel)
             ax.grid(True, linestyle=":", alpha=0.4)
             if row_idx == 0 and ax.get_legend_handles_labels()[1]:
-                ax.legend(
+                handles, labels = ax.get_legend_handles_labels()
+                fig.legend(
+                    handles,
+                    labels,
                     fontsize=8,
                     loc="lower center",
                     bbox_to_anchor=(0.5, 1.02),
