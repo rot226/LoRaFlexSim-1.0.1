@@ -176,7 +176,7 @@ def _plot_learning_curve(
     ax.set_xlabel("Decision rounds")
     ax.set_ylabel("Average window reward")
     ax.set_title("Average window reward vs Decision rounds")
-    place_legend(ax)
+    place_legend(ax, legend_loc="top")
     return fig
 
 

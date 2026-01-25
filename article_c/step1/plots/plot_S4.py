@@ -143,7 +143,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         "Step 1 - Sent Frames (budget saturant) vs Network size (number of nodes) "
         "(SNIR on/off)"
     )
-    place_legend(ax)
+    place_legend(ax, legend_loc="top")
     _add_summary_plot(ax_summary, rows, metric_key)
     apply_figure_layout(fig, margins={"hspace": 0.4})
     return fig

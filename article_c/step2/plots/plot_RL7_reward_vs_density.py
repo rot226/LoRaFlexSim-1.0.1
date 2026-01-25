@@ -124,7 +124,7 @@ def _plot_metric(
         "Step 2 - Global Median Reward vs Network size (adaptive algorithms)"
         f"{_title_suffix(network_sizes)}"
     )
-    place_legend(ax)
+    place_legend(ax, legend_loc="top")
     return fig
 
 

@@ -85,7 +85,7 @@ def _plot_metric(
         "Step 2 - Median Energy per Success vs Network size (number of nodes)"
         f"{_title_suffix(network_sizes)}"
     )
-    place_legend(ax)
+    place_legend(ax, legend_loc="top")
     return fig
 
 
