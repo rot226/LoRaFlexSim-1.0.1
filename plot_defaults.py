@@ -11,5 +11,7 @@ DEFAULT_FIGSIZE_MULTI: Tuple[float, float] = (7.0, 4.0)
 def resolve_figsize(num_series: int | None = None) -> Tuple[float, float]:
     """Retourne la taille de figure selon le nombre de séries/algorithmes."""
     if num_series and num_series > 1:
-        return DEFAULT_FIGSIZE_MULTI
-    return DEFAULT_FIGSIZE_SIMPLE
+        width, height = DEFAULT_FIGSIZE_MULTI
+    else:
+        width, height = DEFAULT_FIGSIZE_SIMPLE
+    return (width, height + 2)

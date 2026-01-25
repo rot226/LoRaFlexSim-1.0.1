@@ -231,7 +231,8 @@ def _add_size_legend(
         handles,
         labels,
         title="Taille (trafic ou nœuds)",
-        loc="lower right",
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1.0),
         frameon=True,
     )
     ax.add_artist(legend)
