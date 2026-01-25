@@ -356,6 +356,11 @@ def _plot_pdr_distributions(
     values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]],
     network_sizes: list[int],
 ) -> plt.Figure:
+    legend_handles = [
+        Patch(facecolor="#4c78a8", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_on"]),
+        Patch(facecolor="#f58518", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_off"]),
+    ]
+    legend_bbox = (0.5, 0.93)
     all_values = [
         float(value)
         for groups in values_by_size.values()
@@ -366,11 +371,19 @@ def _plot_pdr_distributions(
     if is_constant_metric(all_values):
         fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
         apply_figure_layout(fig, figsize=(8, 5))
-        render_constant_metric(fig, ax)
+        render_constant_metric(fig, ax, show_fallback_legend=False)
+        fig.legend(
+            handles=legend_handles,
+            loc="upper center",
+            bbox_to_anchor=legend_bbox,
+            ncol=2,
+            frameon=False,
+        )
         fig.suptitle(
-            "Figure S5 — Distribution du PDR par algorithme (SNIR séparé)",
+            "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)",
             y=SUPTITLE_Y,
         )
+        apply_figure_layout(fig, margins={"top": 0.82}, bbox_to_anchor=legend_bbox)
         return fig
     if not network_sizes:
         network_sizes = [TARGET_NETWORK_SIZE]
@@ -427,30 +440,32 @@ def _plot_pdr_distributions(
                 axes[row_index][0].set_title(SNIR_LABELS["snir_on"])
                 axes[row_index][1].set_title(SNIR_LABELS["snir_off"])
             axes[row_index][0].annotate(
-                f"Taille réseau = {size}",
-                xy=(0, 1.05),
+                f"Taille réseau = {size} nœuds",
+                xy=(0.02, 1.02),
                 xycoords="axes fraction",
                 ha="left",
                 va="bottom",
                 fontsize=8,
                 color="#444444",
+                bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.0},
             )
 
-    legend_handles = [
-        Patch(facecolor="#4c78a8", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_on"]),
-        Patch(facecolor="#f58518", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_off"]),
-    ]
     fig.legend(
         handles=legend_handles,
         loc="upper center",
+        bbox_to_anchor=legend_bbox,
         ncol=2,
         frameon=False,
     )
     fig.suptitle(
-        "Figure S5 — Distribution du PDR par algorithme (SNIR séparé)",
+        "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)",
         y=SUPTITLE_Y,
     )
-    apply_figure_layout(fig, margins={"top": 0.86, "hspace": 0.6, "wspace": 0.25})
+    apply_figure_layout(
+        fig,
+        margins={"top": 0.82, "hspace": 0.75, "wspace": 0.25},
+        bbox_to_anchor=legend_bbox,
+    )
     return fig
 
 
