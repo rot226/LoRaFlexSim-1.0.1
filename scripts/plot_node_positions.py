@@ -95,7 +95,7 @@ def main(argv: list[str] | None = None) -> None:
         legend_handles.append(gateway_points)
 
     if legend_handles:
-        ax.legend(handles=legend_handles, loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+        fig.legend(handles=legend_handles, loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
 
     ax.set_xlabel("x coordinate (m)")
     ax.set_ylabel("y coordinate (m)")

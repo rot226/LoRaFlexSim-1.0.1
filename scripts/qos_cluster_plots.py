@@ -150,7 +150,7 @@ def _plot_metric_vs_nodes(
         title_period = f"{period:.0f}" if float(period).is_integer() else f"{period:g}"
         ax.set_title(f"{ylabel} – période {title_period} s")
         ax.grid(True, linestyle=":", alpha=0.5)
-        ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+        fig.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
         figures_dir.mkdir(parents=True, exist_ok=True)
         output = figures_dir / f"{filename_prefix}_tx_{title_period}.png"
         plt.subplots_adjust(top=0.80)
@@ -263,7 +263,7 @@ def _plot_snr_cdf(records: List[Dict[str, Any]], figures_dir: Path) -> None:
     ax.set_ylabel("CDF")
     ax.set_title("CDF du SNIR – charge maximale")
     ax.grid(True, linestyle=":", alpha=0.5)
-    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+    fig.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
     figures_dir.mkdir(parents=True, exist_ok=True)
     plt.subplots_adjust(top=0.80)
     fig.savefig(figures_dir / "snr_cdf_max_load.png", dpi=150)

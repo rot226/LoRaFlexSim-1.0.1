@@ -179,6 +179,9 @@ def test_mixed_plot_filters_snir_unknown(tmp_path: Path, monkeypatch: pytest.Mon
         def tight_layout(self) -> None:
             return None
 
+        def legend(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
         def savefig(self, output: Path, **_kwargs: object) -> None:
             captures.append((str(output), list(self._axis._labels)))
 
@@ -287,6 +290,9 @@ def test_compare_mixed_plot_excludes_unknown_state(
             self._axis = axis
 
         def tight_layout(self) -> None:
+            return None
+
+        def legend(self, *_args: object, **_kwargs: object) -> None:
             return None
 
         def savefig(self, output: Path, **_kwargs: object) -> None:
@@ -499,6 +505,9 @@ def test_extended_summary_includes_mixra_opt_series(
         def tight_layout(self) -> None:
             return None
 
+        def legend(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
         def savefig(self, *_args: object, **_kwargs: object) -> None:
             return None
 
@@ -552,6 +561,9 @@ def test_extended_cdf_legend_includes_mixra_opt(
             self._axis = axis
 
         def tight_layout(self) -> None:
+            return None
+
+        def legend(self, *_args: object, **_kwargs: object) -> None:
             return None
 
         def savefig(self, *_args: object, **_kwargs: object) -> None:
@@ -674,6 +686,9 @@ def test_cli_includes_mixra_opt_in_standard_outputs(
         def tight_layout(self) -> None:
             return None
 
+        def legend(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
         def savefig(self, output: Path, **_kwargs: object) -> None:
             captures.append((str(output), list(self._axis._labels)))
 
@@ -789,6 +804,9 @@ def test_cli_includes_mixra_opt_in_all_global_outputs(
             self._axis = axis
 
         def tight_layout(self) -> None:
+            return None
+
+        def legend(self, *_args: object, **_kwargs: object) -> None:
             return None
 
         def savefig(self, output: Path, **_kwargs: object) -> None:
@@ -931,6 +949,9 @@ def test_plot_trajectories_includes_mixra_opt_series(
         def tight_layout(self) -> None:
             return None
 
+        def legend(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
         def savefig(self, output: Path, **_kwargs: object) -> None:
             captures.append((str(output), list(self._axis._labels)))
 
@@ -1037,6 +1058,9 @@ def test_plot_trajectories_has_seed_series(
             self._axis = axis
 
         def tight_layout(self) -> None:
+            return None
+
+        def legend(self, *_args: object, **_kwargs: object) -> None:
             return None
 
         def savefig(self, *_args: object, **_kwargs: object) -> None:
@@ -1153,6 +1177,9 @@ def test_global_metric_deduplicates_algorithm_labels(
             self._axis = axis
 
         def tight_layout(self) -> None:
+            return None
+
+        def legend(self, *_args: object, **_kwargs: object) -> None:
             return None
 
         def savefig(self, output: Path, **_kwargs: object) -> None:

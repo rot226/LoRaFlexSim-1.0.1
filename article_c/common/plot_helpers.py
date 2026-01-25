@@ -198,7 +198,9 @@ def select_received_metric_key(
 
 def place_legend(ax: plt.Axes) -> None:
     """Place la légende en haut du graphique selon les consignes."""
-    ax.legend(**LEGEND_STYLE)
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.figure.legend(handles, labels, **LEGEND_STYLE)
 
 
 def save_figure(

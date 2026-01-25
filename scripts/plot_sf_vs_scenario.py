@@ -57,7 +57,7 @@ def plot(csv_path: str, output_dir: str = "figures", by_model: bool = False) -> 
     ax.set_xlabel("Mobility model" if by_model else "Scenario")
     ax.set_ylabel("Average spreading factor (SF)")
     ax.bar_label(bars, fmt="%.2f", label_type="center")
-    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+    fig.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
     plt.subplots_adjust(top=0.80)
 
     stem = "avg_sf_vs_model" if by_model else "avg_sf_vs_scenario"

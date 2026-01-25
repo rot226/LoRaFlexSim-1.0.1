@@ -178,7 +178,7 @@ def plot_pdr(summary: pd.DataFrame, *, figures_dir: Path | None) -> None:
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Packet delivery ratio (%)")
     ax.set_ylim(0, 105)
-    ax.legend(
+    fig.legend(
         title="Configuration",
         loc="lower center",
         bbox_to_anchor=(0.5, 1.02),
@@ -225,7 +225,7 @@ def plot_delay(summary: pd.DataFrame, *, figures_dir: Path | None) -> bool:
 
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Average delay (s)")
-    ax.legend(
+    fig.legend(
         title="Configuration",
         loc="lower center",
         bbox_to_anchor=(0.5, 1.02),
@@ -273,7 +273,7 @@ def plot_energy(summary: pd.DataFrame, *, figures_dir: Path | None) -> bool:
 
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Energy per node (J)")
-    ax.legend(
+    fig.legend(
         title="Configuration",
         loc="lower center",
         bbox_to_anchor=(0.5, 1.02),

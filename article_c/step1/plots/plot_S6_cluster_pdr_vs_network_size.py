@@ -137,6 +137,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         handles,
         labels,
         loc="upper center",
+        bbox_to_anchor=(0.5, 1.02),
         ncol=3,
         frameon=False,
     )

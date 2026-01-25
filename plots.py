@@ -158,10 +158,10 @@ def _plot_pdr_by_cluster(
     axes[0].set_ylabel("PDR")
     handles, labels = axes[0].get_legend_handles_labels()
     if handles:
-        fig.legend(handles, labels, loc="upper center", ncol=len(handles))
+        fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(handles))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.08, 1.0, 0.92))
+    fig.tight_layout(rect=(0.0, 0.08, 1.0, 0.88))
     output_path = output_dir / "pdr_clusters.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -209,10 +209,10 @@ def _plot_pdr_global(
     ax.set_xlabel("Scénario")
     ax.set_ylim(0.0, 1.05)
     ax.grid(True, which="both", axis="y", linestyle=":", alpha=0.5)
-    fig.legend(loc="upper center", ncol=len(algorithms))
+    fig.legend(loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.9))
+    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
     output_path = output_dir / "pdr_global.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -264,10 +264,10 @@ def _plot_der_global(
     ax.set_ylim(0.0, 1.05)
     _apply_small_value_ylim(ax, all_heights)
     ax.grid(True, which="both", axis="y", linestyle=":", alpha=0.5)
-    fig.legend(loc="upper center", ncol=len(algorithms))
+    fig.legend(loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.9))
+    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
     output_path = output_dir / "der_global.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -331,10 +331,10 @@ def _plot_der_global_log(
     ax.set_title("DER global (échelle log)")
     ax.set_yscale("log")
     ax.grid(True, which="both", axis="y", linestyle=":", alpha=0.5)
-    fig.legend(loc="upper center", ncol=len(algorithms))
+    fig.legend(loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.9))
+    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
     output_path = output_dir / "der_global_log.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -428,10 +428,10 @@ def _plot_snir_distributions(
         handles.extend(h)
         labels.extend(l)
     if handles:
-        fig.legend(handles, labels, loc="upper center", ncol=len(algorithms))
+        fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.92))
+    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
     output_path = output_dir / "snir_distributions.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -500,10 +500,10 @@ def _plot_rates_vs_snir(
     axes[-1].set_xlabel("SNIR (dB)")
     handles, labels = axes[0].get_legend_handles_labels()
     if handles:
-        fig.legend(handles, labels, loc="upper center", ncol=len(algorithms))
+        fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.92))
+    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
     output_path = output_dir / "pdr_vs_snir.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -546,10 +546,10 @@ def _plot_collisions_vs_load(
     ax.grid(True, linestyle=":", alpha=0.5)
     ax.set_title("Collisions en fonction de la charge (échelle linéaire)")
     _apply_small_value_ylim(ax, all_rates)
-    fig.legend(loc="upper center", ncol=len(algorithms))
+    fig.legend(loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.9))
+    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
     output_path = output_dir / "collisions_vs_charge.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -600,10 +600,10 @@ def _plot_collisions_vs_load_log(
     ax.set_yscale("log")
     ax.grid(True, linestyle=":", alpha=0.5)
     ax.set_title("Collisions en fonction de la charge (échelle log)")
-    fig.legend(loc="upper center", ncol=len(algorithms))
+    fig.legend(loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.9))
+    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
     output_path = output_dir / "collisions_vs_charge_log.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -670,10 +670,10 @@ def _plot_delivery_breakdown(
     ax.grid(True, which="both", axis="y", linestyle=":", alpha=0.5)
     handles, labels = ax.get_legend_handles_labels()
     if handles:
-        fig.legend(handles, labels, loc="upper center", ncol=2)
+        fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=2)
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.9))
+    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
     output_path = output_dir / "breakdown_tentatives.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)

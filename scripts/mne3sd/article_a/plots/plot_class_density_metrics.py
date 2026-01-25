@@ -147,7 +147,7 @@ def plot_pdr_vs_nodes(df: pd.DataFrame) -> None:
     ax.set_ylabel("Packet delivery ratio (%)")
     ax.set_ylim(0, 105)
     handles, labels = ax.get_legend_handles_labels()
-    ax.legend(
+    fig.legend(
         handles,
         labels,
         title="Class",
@@ -199,7 +199,7 @@ def plot_energy_vs_nodes(df: pd.DataFrame) -> bool:
     ax.set_xlabel("Number of nodes")
     ax.set_ylabel("Energy consumption (J)")
     handles, labels = ax.get_legend_handles_labels()
-    ax.legend(
+    fig.legend(
         handles,
         labels,
         title="Class",

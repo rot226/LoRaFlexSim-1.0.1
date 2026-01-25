@@ -19,11 +19,21 @@ def test_plot(tmp_path, monkeypatch):
 
     # Minimal matplotlib stand-ins.
     class _Figure:
+        def __init__(self):
+            self._legend = None
+
         def savefig(self, filename, dpi=None):
             pass
 
         def tight_layout(self, *args, **kwargs):
             pass
+
+        def legend(self, *args, **kwargs):
+            self._legend = _Legend(kwargs.get("title", ""))
+            return self._legend
+
+        def get_legend(self):
+            return self._legend
 
     class _Tick:
         def __init__(self, text):
@@ -116,6 +126,7 @@ def test_plot(tmp_path, monkeypatch):
     def fake_subplots(*args, **kwargs):
         fig, ax = orig_subplots(*args, **kwargs)
         captured['ax'] = ax
+        captured['fig'] = fig
         return fig, ax
 
     monkeypatch.setattr(plt_module, 'subplots', fake_subplots)
@@ -168,7 +179,7 @@ def test_plot(tmp_path, monkeypatch):
     expected_scenarios = [_label(row) for row in df_scen.to_dict("records")]
     assert unique_labels == expected_scenarios
 
-    legend = captured['ax'].get_legend()
+    legend = captured['fig'].get_legend()
     if legend is not None:
         title = legend.get_title().get_text()
         # Legend should explain the abbreviations for nodes and channels.

@@ -114,7 +114,7 @@ def _plot_histograms(records: Sequence[Mapping[str, Any]], output_dir: Path) -> 
                 ax.set_title(f"{metric_label} cluster {cluster_id} ({algorithm})")
                 ax.set_xlabel(metric_label)
                 ax.set_ylabel("Occurrences (count)")
-                ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+                fig.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
                 ax.grid(True, linestyle=":", alpha=0.5)
                 output_dir.mkdir(parents=True, exist_ok=True)
                 stem = f"step1_hist_{metric.lower()}_cluster{cluster_id}_{algorithm}"
@@ -157,7 +157,7 @@ def _plot_ecdf(records: Sequence[Mapping[str, Any]], output_dir: Path) -> None:
             ax.set_xlabel(metric_label)
             ax.set_ylabel("ECDF (probability)")
             ax.set_ylim(0.0, 1.05)
-            ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
+            fig.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3)
             ax.grid(True, linestyle=":", alpha=0.5)
             output_dir.mkdir(parents=True, exist_ok=True)
             stem = f"step1_ecdf_{metric.lower()}_{algorithm}"
