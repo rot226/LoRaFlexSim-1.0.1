@@ -29,6 +29,9 @@ from article_c.common.plot_helpers import (
 from article_c.step1.plots.plot_utils import configure_figure
 
 PDR_TARGETS = (0.90, 0.80, 0.70)
+LEGEND_BBOX = (0.5, 1.16)
+LAYOUT_MARGINS = {"top": 0.76}
+LAYOUT_RECT = (0, 0, 1, 0.80)
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
@@ -101,7 +104,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             "Step 1 - Outage probability by Cluster (network size)",
             legend_loc="above",
         )
-        apply_figure_layout(fig, tight_layout={"rect": (0, 0, 1, 0.86)})
+        apply_figure_layout(
+            fig,
+            tight_layout={"rect": LAYOUT_RECT},
+            margins=LAYOUT_MARGINS,
+            bbox_to_anchor=LEGEND_BBOX,
+        )
         return fig
 
     for ax, snir_mode in zip(axes, SNIR_MODES, strict=False):
@@ -139,7 +147,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             handles,
             labels,
             loc="upper center",
-            bbox_to_anchor=(0.5, 1.12),
+            bbox_to_anchor=LEGEND_BBOX,
             ncol=min(len(labels), 4),
             frameon=False,
         )
@@ -149,7 +157,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         "Step 1 - Outage probability by Cluster (network size)",
         legend_loc="above",
     )
-    apply_figure_layout(fig, tight_layout={"rect": (0, 0, 1, 0.86)})
+    apply_figure_layout(
+        fig,
+        tight_layout={"rect": LAYOUT_RECT},
+        margins=LAYOUT_MARGINS,
+        bbox_to_anchor=LEGEND_BBOX,
+    )
     return fig
 
 
