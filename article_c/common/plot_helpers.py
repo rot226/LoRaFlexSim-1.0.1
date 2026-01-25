@@ -57,6 +57,11 @@ BASE_FIGSIZE = (7.2, 4.2)
 BASE_FONT_FAMILY = "sans-serif"
 BASE_FONT_SANS = ["DejaVu Sans", "Arial", "Liberation Sans"]
 BASE_FONT_SIZE = 10
+BASE_LINE_WIDTH = 1.6
+BASE_GRID_COLOR = "#e0e0e0"
+BASE_GRID_ALPHA = 0.6
+BASE_GRID_LINEWIDTH = 0.8
+BASE_DPI = 300
 BASE_GRID_ENABLED = True
 AXES_TITLE_Y = 1.02
 SUPTITLE_Y = 0.98
@@ -71,13 +76,19 @@ def apply_plot_style() -> None:
         {
             "figure.figsize": BASE_FIGSIZE,
             "figure.subplot.top": FIGURE_SUBPLOT_TOP,
+            "figure.dpi": BASE_DPI,
             "axes.grid": BASE_GRID_ENABLED,
             "axes.titlesize": 12,
             "axes.labelsize": 10,
             "axes.titley": AXES_TITLE_Y,
+            "grid.color": BASE_GRID_COLOR,
+            "grid.alpha": BASE_GRID_ALPHA,
+            "grid.linewidth": BASE_GRID_LINEWIDTH,
             "font.family": BASE_FONT_FAMILY,
             "font.sans-serif": BASE_FONT_SANS,
             "font.size": BASE_FONT_SIZE,
+            "lines.linewidth": BASE_LINE_WIDTH,
+            "savefig.dpi": BASE_DPI,
         }
     )
     plt.subplots_adjust(top=FIGURE_SUBPLOT_TOP)
@@ -204,7 +215,7 @@ def save_figure(
     if use_tight:
         fig.tight_layout()
     for ext in ("png", "pdf"):
-        fig.savefig(output_dir / f"{stem}.{ext}", dpi=300, **SAVEFIG_STYLE)
+        fig.savefig(output_dir / f"{stem}.{ext}", dpi=BASE_DPI, **SAVEFIG_STYLE)
 
 
 def apply_figure_layout(
