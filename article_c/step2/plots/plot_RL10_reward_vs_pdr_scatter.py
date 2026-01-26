@@ -268,7 +268,7 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
         if isinstance(point.get("pdr_mean"), (int, float))
     ]
     if is_constant_metric(reward_values) or is_constant_metric(pdr_values):
-        render_constant_metric(fig, ax)
+        render_constant_metric(fig, ax, legend_handles=None)
         ax.set_title("Step 2 - Mean reward vs Aggregated PDR")
         return fig
     for point in points:

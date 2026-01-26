@@ -61,7 +61,7 @@ def _plot_selection(
         if isinstance(row.get("selection_prob"), (int, float))
     ]
     if is_constant_metric(selection_values):
-        render_constant_metric(fig, ax)
+        render_constant_metric(fig, ax, legend_handles=None)
         ax.set_title(
             "Step 2 - UCB1-SF Selection Probability (p10/p50/p90)"
             f"{_title_suffix(sorted(network_sizes))}"

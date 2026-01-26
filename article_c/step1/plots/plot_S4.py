@@ -127,7 +127,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     metric_key = select_received_metric_key(rows, metric_key)
     if is_constant_metric(metric_values(rows, metric_key)):
-        render_constant_metric(fig, (ax, ax_summary))
+        render_constant_metric(fig, (ax, ax_summary), legend_handles=None)
         fig.suptitle(
             "Step 1 - Sent Frames (budget saturant) vs Network size (number of nodes) "
             "(SNIR on/off)"

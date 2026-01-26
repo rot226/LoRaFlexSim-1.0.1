@@ -155,7 +155,7 @@ def _plot_metric(
         axes = [axes]
 
     if is_constant_metric(metric_values(rows, metric_key)):
-        render_constant_metric(fig, axes)
+        render_constant_metric(fig, axes, legend_handles=None)
         fig.suptitle(
             "Step 2 - Outage probability by Cluster (SNIR on)"
             f"{_title_suffix(network_sizes)}",

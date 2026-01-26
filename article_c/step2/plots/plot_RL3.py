@@ -73,7 +73,7 @@ def _plot_metric(
             stacklevel=2,
         )
     if is_constant_metric(metric_values(rows, metric_key)):
-        render_constant_metric(fig, ax)
+        render_constant_metric(fig, ax, legend_handles=None)
         ax.set_title(
             "Step 2 - Median Normalized Bitrate vs Network size (number of nodes)"
             f"{_title_suffix(network_sizes)}"

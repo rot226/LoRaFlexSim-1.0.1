@@ -362,6 +362,7 @@ def _plot_pdr_distributions(
         Patch(facecolor="#4c78a8", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_on"]),
         Patch(facecolor="#f58518", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_off"]),
     ]
+    legend_labels = [handle.get_label() for handle in legend_handles]
     legend_style = {**LEGEND_STYLE, "ncol": 2}
     legend_bbox = legend_style.get("bbox_to_anchor", (0.5, 1.02))
     all_values = [
@@ -374,7 +375,12 @@ def _plot_pdr_distributions(
     if is_constant_metric(all_values):
         fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
         apply_figure_layout(fig, figsize=(8, 5))
-        render_constant_metric(fig, ax, show_fallback_legend=False)
+        render_constant_metric(
+            fig,
+            ax,
+            show_fallback_legend=False,
+            legend_handles=(legend_handles, legend_labels),
+        )
         fig.legend(handles=legend_handles, **legend_style)
         fig.suptitle(
             "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)",

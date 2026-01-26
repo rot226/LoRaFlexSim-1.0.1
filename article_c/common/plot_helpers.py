@@ -118,8 +118,12 @@ def render_constant_metric(
     message: str = CONSTANT_METRIC_MESSAGE,
     legend_loc: str = "above",
     show_fallback_legend: bool = True,
+    legend_handles: tuple[list[Line2D], list[str]] | None = None,
 ) -> None:
-    """Affiche un message centré lorsque la métrique est constante."""
+    """Affiche un message centré lorsque la métrique est constante.
+
+    legend_handles permet de fournir des handles/labels factices pour la légende.
+    """
     for ax in _flatten_axes(axes):
         ax.clear()
         ax.axis("off")
@@ -133,7 +137,10 @@ def render_constant_metric(
         color="#444444",
     )
     if show_fallback_legend and not _figure_has_legend(fig):
-        handles, labels = fallback_legend_handles()
+        if legend_handles is None:
+            handles, labels = fallback_legend_handles()
+        else:
+            handles, labels = legend_handles
         if handles:
             legend_style = _legend_style(legend_loc, len(labels))
             fig.legend(handles, labels, **legend_style)

@@ -83,7 +83,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         axes = [[ax] for ax in axes]
 
     if is_constant_metric(metric_values(rows, metric_key)):
-        render_constant_metric(fig, axes)
+        render_constant_metric(fig, axes, legend_handles=None)
         configure_figure(
             fig,
             axes,
