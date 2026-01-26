@@ -165,7 +165,7 @@ def plot_cdf_by_algo(
     fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     all_values = [value for values in values_by_group.values() for value in values]
     if is_constant_metric(all_values):
-        render_constant_metric(fig, ax)
+        render_constant_metric(fig, ax, legend_handles=None)
         configure_figure(
             fig,
             [ax],

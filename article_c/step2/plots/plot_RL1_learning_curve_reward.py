@@ -137,7 +137,7 @@ def _plot_learning_curve(
         if isinstance(row.get("avg_reward"), (int, float))
     ]
     if is_constant_metric(reward_values):
-        render_constant_metric(fig, ax)
+        render_constant_metric(fig, ax, legend_handles=None)
         ax.set_title("Average window reward vs Decision rounds")
         return fig
     preferred_algos = ["ADR", "UCB1-SF"]

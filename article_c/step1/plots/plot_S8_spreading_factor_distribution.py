@@ -237,7 +237,12 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         if isinstance(value, (int, float))
     ]
     if is_constant_metric(distribution_values):
-        render_constant_metric(fig, axes, show_fallback_legend=False)
+        render_constant_metric(
+            fig,
+            axes,
+            show_fallback_legend=False,
+            legend_handles=None,
+        )
         snir_handles = [
             Line2D(
                 [0],

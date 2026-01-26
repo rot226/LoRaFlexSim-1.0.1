@@ -76,7 +76,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     metric_key = select_received_metric_key(rows, metric_key)
     if is_constant_metric(metric_values(rows, metric_key)):
-        render_constant_metric(fig, ax)
+        render_constant_metric(fig, ax, legend_handles=None)
         ax.set_title("Step 1 - Received Frames vs Network size (number of nodes) (SNIR on/off)")
         return fig
     _warn_if_low_algo_variance(rows, metric_key)

@@ -84,7 +84,7 @@ def _plot_entropy(
         all_entropy_values.extend(entropy_values)
         ax.plot(rounds, entropy_values, marker="o", label=f"N={network_size}")
     if is_constant_metric(all_entropy_values):
-        render_constant_metric(fig, ax)
+        render_constant_metric(fig, ax, legend_handles=None)
         ax.set_title(
             "Step 2 - SF Selection Entropy vs Round"
             f"{_title_suffix(network_sizes)}"
