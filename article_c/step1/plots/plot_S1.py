@@ -98,7 +98,7 @@ def _add_summary_plot(
             linestyle=SNIR_LINESTYLES.get(snir_mode, "solid"),
             label=SNIR_LABELS[snir_mode],
         )
-        for snir_mode in SNIR_MODES:
+        for snir_mode in SNIR_MODES
     ]
     ax.figure.legend(
         handles=legend_handles,
