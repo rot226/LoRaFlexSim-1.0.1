@@ -21,7 +21,8 @@ from article_c.common.plot_helpers import (
     metric_values,
     normalize_network_size_rows,
     legend_margins,
-    place_legend,
+    add_global_legend,
+    legend_handles_for_algos_snir,
     plot_metric_by_algo,
     render_constant_metric,
     save_figure,
@@ -76,7 +77,11 @@ def _plot_metric(
             stacklevel=2,
         )
     if is_constant_metric(metric_values(rows, metric_key)):
-        render_constant_metric(fig, ax, legend_handles=None)
+        render_constant_metric(
+            fig,
+            ax,
+            legend_handles=legend_handles_for_algos_snir(["snir_on"]),
+        )
         ax.set_title(
             "Step 2 - Median Reward by QoS Cluster "
             f"({cluster_label} vs network size){_title_suffix(network_sizes)}"
@@ -91,7 +96,7 @@ def _plot_metric(
         "Step 2 - Median Reward by QoS Cluster "
         f"({cluster_label} vs network size){_title_suffix(network_sizes)}"
     )
-    place_legend(ax, legend_loc="above")
+    add_global_legend(fig, ax, legend_loc="above")
     return fig
 
 
