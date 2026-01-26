@@ -28,12 +28,12 @@ from article_c.common.plot_helpers import (
     is_constant_metric,
     load_step1_aggregated,
     metric_values,
-    place_legend,
     plot_metric_by_snir,
     render_constant_metric,
     resolve_percentile_keys,
     save_figure,
 )
+from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 
@@ -125,7 +125,13 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     if is_constant_metric(metric_values(rows, metric_key)):
         render_constant_metric(fig, (ax, ax_summary), legend_handles=None)
-        fig.suptitle("Step 1 - Packet Delivery Ratio (SNIR on/off)")
+        configure_figure(
+            fig,
+            (ax, ax_summary),
+            "Step 1 - Packet Delivery Ratio (SNIR on/off)",
+            legend_loc="above",
+        )
+        apply_figure_layout(fig, margins={"hspace": 0.4})
         return fig
     plot_metric_by_snir(
         ax,
@@ -143,8 +149,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_ylim(0.0, 1.0)
-    ax.set_title("Step 1 - Packet Delivery Ratio (SNIR on/off)")
-    place_legend(ax, legend_loc="above")
+    configure_figure(
+        fig,
+        (ax, ax_summary),
+        "Step 1 - Packet Delivery Ratio (SNIR on/off)",
+        legend_loc="above",
+    )
     _add_summary_plot(ax_summary, rows, metric_key)
     apply_figure_layout(fig, margins={"hspace": 0.4})
     return fig

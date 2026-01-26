@@ -14,7 +14,6 @@ from matplotlib.patches import Patch
 from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_MODES,
-    SUPTITLE_Y,
     algo_label,
     apply_plot_style,
     apply_figure_layout,
@@ -29,6 +28,7 @@ from article_c.common.plot_helpers import (
     save_figure,
 )
 from article_c.common.plotting_style import LEGEND_STYLE
+from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 TARGET_NETWORK_SIZE = 1280
@@ -382,9 +382,11 @@ def _plot_pdr_distributions(
             legend_handles=(legend_handles, legend_labels),
         )
         fig.legend(handles=legend_handles, **legend_style)
-        fig.suptitle(
+        configure_figure(
+            fig,
+            ax,
             "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)",
-            y=SUPTITLE_Y,
+            legend_loc="above",
         )
         apply_figure_layout(fig, margins=legend_margins("above"), bbox_to_anchor=legend_bbox)
         return fig
@@ -454,9 +456,11 @@ def _plot_pdr_distributions(
             )
 
     fig.legend(handles=legend_handles, **legend_style)
-    fig.suptitle(
+    configure_figure(
+        fig,
+        axes,
         "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)",
-        y=SUPTITLE_Y,
+        legend_loc="above",
     )
     apply_figure_layout(
         fig,

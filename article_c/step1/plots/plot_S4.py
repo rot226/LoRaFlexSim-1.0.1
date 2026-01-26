@@ -29,13 +29,13 @@ from article_c.common.plot_helpers import (
     legend_margins,
     load_step1_aggregated,
     metric_values,
-    place_legend,
     plot_metric_by_snir,
     render_constant_metric,
     select_received_metric_key,
     resolve_percentile_keys,
     save_figure,
 )
+from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 
@@ -128,9 +128,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     metric_key = select_received_metric_key(rows, metric_key)
     if is_constant_metric(metric_values(rows, metric_key)):
         render_constant_metric(fig, (ax, ax_summary), legend_handles=None)
-        fig.suptitle(
+        configure_figure(
+            fig,
+            (ax, ax_summary),
             "Step 1 - Sent Frames (budget saturant) vs Network size (number of nodes) "
-            "(SNIR on/off)"
+            "(SNIR on/off)",
+            legend_loc="above",
         )
         return fig
     plot_metric_by_snir(
@@ -148,11 +151,13 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.yaxis.set_label_coords(-0.08, 0.5)
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-    ax.set_title(
+    configure_figure(
+        fig,
+        (ax, ax_summary),
         "Step 1 - Sent Frames (budget saturant) vs Network size (number of nodes) "
-        "(SNIR on/off)"
+        "(SNIR on/off)",
+        legend_loc="above",
     )
-    place_legend(ax, legend_loc="above")
     _add_summary_plot(ax_summary, rows, metric_key)
     apply_figure_layout(
         fig,

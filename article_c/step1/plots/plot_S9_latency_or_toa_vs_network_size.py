@@ -20,11 +20,11 @@ from article_c.common.plot_helpers import (
     is_constant_metric,
     load_step1_aggregated,
     metric_values,
-    place_legend,
     plot_metric_by_snir,
     render_constant_metric,
     save_figure,
 )
+from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 
@@ -42,15 +42,24 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str, y_label: str) -
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     if is_constant_metric(metric_values(rows, metric_key)):
         render_constant_metric(fig, ax, legend_handles=None)
-        ax.set_title("Step 1 - ToA/Latency vs Network Size (SNIR on/off)")
+        configure_figure(
+            fig,
+            ax,
+            "Step 1 - ToA/Latency vs Network Size (SNIR on/off)",
+            legend_loc="above",
+        )
         return fig
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel(y_label)
-    ax.set_title("Step 1 - ToA/Latency vs Network Size (SNIR on/off)")
-    place_legend(ax, legend_loc="above")
+    configure_figure(
+        fig,
+        ax,
+        "Step 1 - ToA/Latency vs Network Size (SNIR on/off)",
+        legend_loc="above",
+    )
     return fig
 
 
