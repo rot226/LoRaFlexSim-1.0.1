@@ -102,13 +102,14 @@ def _add_summary_plot(
         )
         for snir_mode in SNIR_MODES
     ]
-    ax.legend(
+    ax.figure.legend(
         handles=legend_handles,
         title="SNIR",
         ncol=2,
         frameon=False,
         loc="upper center",
         bbox_to_anchor=(0.5, -0.25),
+        bbox_transform=ax.transAxes,
     )
 
 

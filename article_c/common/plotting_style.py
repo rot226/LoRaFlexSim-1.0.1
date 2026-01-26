@@ -9,8 +9,8 @@ from matplotlib import ticker as mticker
 
 LEGEND_STYLE = {
     "loc": "lower center",
-    "bbox_to_anchor": (0.5, 1.02),
-    "ncol": 3,
+    "bbox_to_anchor": (0.5, 1.10),
+    "ncol": 4,
     "frameon": False,
 }
 
