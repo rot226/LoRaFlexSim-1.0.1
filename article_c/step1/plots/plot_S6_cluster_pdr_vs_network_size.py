@@ -129,7 +129,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             [0],
             color="black",
             linestyle=SNIR_LINESTYLES[snir_mode],
-            marker="o",
+            marker=None,
             label=SNIR_LABELS[snir_mode],
         )
         for snir_mode in SNIR_MODES
@@ -140,7 +140,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         title="Clusters",
         **{
             **LEGEND_STYLE,
-            "bbox_to_anchor": (0.5, 1.12),
+            "bbox_to_anchor": (0.5, 1.14),
             "ncol": 3,
         },
     )
@@ -152,7 +152,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         title="SNIR",
         **{
             **LEGEND_STYLE,
-            "bbox_to_anchor": (0.5, 1.04),
+            "bbox_to_anchor": (0.5, 1.06),
             "ncol": min(len(snir_labels), 3),
         },
     )
@@ -167,11 +167,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         fig,
         margins={
             **layout_margins,
-            "top": max(0.7, layout_margins.get("top", 0.0) - 0.04),
+            "top": max(0.7, layout_margins.get("top", 0.0)),
         },
         tight_layout={
-            "rect": (0, 0, 1, max(0.8, LEGEND_ABOVE_TIGHT_LAYOUT_TOP - 0.04)),
+            "rect": (0, 0, 1, max(0.8, LEGEND_ABOVE_TIGHT_LAYOUT_TOP)),
         },
+        legend_rows=2,
     )
     return fig
 

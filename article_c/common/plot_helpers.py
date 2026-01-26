@@ -325,18 +325,25 @@ def apply_figure_layout(
     tight_layout: bool | Mapping[str, object] = False,
     bbox_to_anchor: tuple[float, float] | None = None,
     margins: dict[str, float] | None = None,
+    legend_rows: int = 1,
 ) -> None:
     """Applique taille, marges, légendes et tight_layout sur une figure."""
     layout_rect: tuple[float, float, float, float] | None = None
+    extra_legend_rows = max(0, legend_rows - 1)
     if figsize is not None:
         fig.set_size_inches(*figsize, forward=True)
     if margins:
-        fig.subplots_adjust(**margins)
+        adjusted_margins = dict(margins)
+        if extra_legend_rows and "top" in adjusted_margins:
+            adjusted_margins["top"] = max(
+                0.0, adjusted_margins["top"] - 0.05 * extra_legend_rows
+            )
+        fig.subplots_adjust(**adjusted_margins)
         layout_rect = (
-            margins.get("left", 0.0),
-            margins.get("bottom", 0.0),
-            margins.get("right", 1.0),
-            margins.get("top", 1.0),
+            adjusted_margins.get("left", 0.0),
+            adjusted_margins.get("bottom", 0.0),
+            adjusted_margins.get("right", 1.0),
+            adjusted_margins.get("top", 1.0),
         )
     if bbox_to_anchor is not None:
         legends = list(fig.legends)
@@ -348,7 +355,17 @@ def apply_figure_layout(
             legend.set_bbox_to_anchor(bbox_to_anchor)
     if tight_layout:
         if isinstance(tight_layout, Mapping):
-            fig.tight_layout(**tight_layout)
+            adjusted_tight = dict(tight_layout)
+            rect = adjusted_tight.get("rect")
+            if extra_legend_rows and rect:
+                left, bottom, right, top = rect
+                adjusted_tight["rect"] = (
+                    left,
+                    bottom,
+                    right,
+                    max(0.0, top - 0.05 * extra_legend_rows),
+                )
+            fig.tight_layout(**adjusted_tight)
         else:
             fig.tight_layout()
     elif layout_rect is not None:
