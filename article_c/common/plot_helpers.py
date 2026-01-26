@@ -68,6 +68,7 @@ AXES_TITLE_Y = 1.02
 SUPTITLE_Y = 0.965
 FIGURE_SUBPLOT_TOP = 0.8
 LEGEND_TOP_MARGIN = 0.74
+LEGEND_TOP_RESERVED = 0.02
 LEGEND_ABOVE_TIGHT_LAYOUT_TOP = 0.86
 LEGEND_RIGHT_MARGIN = 0.78
 CONSTANT_METRIC_VARIANCE_THRESHOLD = 1e-6
@@ -279,13 +280,20 @@ def _figure_has_legend(fig: plt.Figure) -> bool:
     return any(ax.get_legend() is not None for ax in fig.axes)
 
 
-def fallback_legend_handles() -> tuple[list[Line2D], list[str]]:
+def legend_handles_for_algos_snir(
+    snir_modes: Iterable[str] | None = None,
+) -> tuple[list[Line2D], list[str]]:
     handles: list[Line2D] = []
     labels: list[str] = []
+    normalized_snir_modes = [
+        str(mode).strip().lower() for mode in (snir_modes or SNIR_MODES)
+    ]
     for algo_key, algo_label_value in ALGO_LABELS.items():
         color = ALGO_COLORS.get(algo_key, "#333333")
         marker = ALGO_MARKERS.get(algo_key, "o")
-        for snir_mode in SNIR_MODES:
+        for snir_mode in normalized_snir_modes:
+            if snir_mode not in SNIR_LINESTYLES or snir_mode not in SNIR_LABELS:
+                continue
             handles.append(
                 Line2D(
                     [0],
@@ -299,6 +307,38 @@ def fallback_legend_handles() -> tuple[list[Line2D], list[str]]:
             )
             labels.append(f"{algo_label_value} ({SNIR_LABELS[snir_mode]})")
     return handles, labels
+
+
+def fallback_legend_handles() -> tuple[list[Line2D], list[str]]:
+    return legend_handles_for_algos_snir()
+
+
+def add_global_legend(
+    fig: plt.Figure,
+    ax: plt.Axes,
+    *,
+    legend_loc: str = "above",
+    handles: list[Line2D] | None = None,
+    labels: list[str] | None = None,
+    use_fallback: bool = True,
+) -> None:
+    """Ajoute une légende globale à la figure."""
+    if handles is None or labels is None:
+        handles, labels = ax.get_legend_handles_labels()
+    if not handles and use_fallback:
+        handles, labels = fallback_legend_handles()
+    if not handles:
+        return
+    legend_style = _legend_style(legend_loc, len(labels))
+    fig.legend(handles, labels, **legend_style)
+    ncol = int(legend_style.get("ncol", len(labels)) or 1)
+    legend_rows = max(1, math.ceil(len(labels) / ncol))
+    apply_figure_layout(
+        fig,
+        margins=_legend_margins(legend_loc),
+        bbox_to_anchor=legend_style.get("bbox_to_anchor"),
+        legend_rows=legend_rows,
+    )
 
 
 def save_figure(
@@ -330,6 +370,7 @@ def apply_figure_layout(
     """Applique taille, marges, légendes et tight_layout sur une figure."""
     layout_rect: tuple[float, float, float, float] | None = None
     extra_legend_rows = max(0, legend_rows - 1)
+    reserved_top = 0.0
     if figsize is not None:
         fig.set_size_inches(*figsize, forward=True)
     if margins:
@@ -338,12 +379,14 @@ def apply_figure_layout(
             adjusted_margins["top"] = max(
                 0.0, adjusted_margins["top"] - 0.05 * extra_legend_rows
             )
+        if "top" in adjusted_margins:
+            reserved_top = min(LEGEND_TOP_RESERVED, adjusted_margins["top"])
         fig.subplots_adjust(**adjusted_margins)
         layout_rect = (
             adjusted_margins.get("left", 0.0),
             adjusted_margins.get("bottom", 0.0),
             adjusted_margins.get("right", 1.0),
-            adjusted_margins.get("top", 1.0),
+            max(0.0, adjusted_margins.get("top", 1.0) - reserved_top),
         )
     if bbox_to_anchor is not None:
         legends = list(fig.legends)
@@ -364,6 +407,14 @@ def apply_figure_layout(
                     bottom,
                     right,
                     max(0.0, top - 0.05 * extra_legend_rows),
+                )
+            if reserved_top and adjusted_tight.get("rect"):
+                left, bottom, right, top = adjusted_tight["rect"]
+                adjusted_tight["rect"] = (
+                    left,
+                    bottom,
+                    right,
+                    max(0.0, top - reserved_top),
                 )
             fig.tight_layout(**adjusted_tight)
         else:
