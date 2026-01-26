@@ -59,10 +59,10 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     )
     if fig.legends:
         fig.legends[0].set_title("Mean Time on Air (s)")
-    metric_values = pd.to_numeric(df[metric_key], errors="coerce").dropna()
-    if not metric_values.empty:
-        y_min = metric_values.min()
-        y_max = metric_values.max()
+    metric_series = pd.to_numeric(df[metric_key], errors="coerce").dropna()
+    if not metric_series.empty:
+        y_min = metric_series.min()
+        y_max = metric_series.max()
         padding = max((y_max - y_min) * 0.05, 0.01)
         y_min = 0.0 if y_min >= 0 else y_min - padding
         y_max = y_max + padding
