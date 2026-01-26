@@ -327,10 +327,17 @@ def apply_figure_layout(
     margins: dict[str, float] | None = None,
 ) -> None:
     """Applique taille, marges, légendes et tight_layout sur une figure."""
+    layout_rect: tuple[float, float, float, float] | None = None
     if figsize is not None:
         fig.set_size_inches(*figsize, forward=True)
     if margins:
         fig.subplots_adjust(**margins)
+        layout_rect = (
+            margins.get("left", 0.0),
+            margins.get("bottom", 0.0),
+            margins.get("right", 1.0),
+            margins.get("top", 1.0),
+        )
     if bbox_to_anchor is not None:
         legends = list(fig.legends)
         for ax in fig.axes:
@@ -344,6 +351,8 @@ def apply_figure_layout(
             fig.tight_layout(**tight_layout)
         else:
             fig.tight_layout()
+    elif layout_rect is not None:
+        fig.tight_layout(rect=layout_rect)
 
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
