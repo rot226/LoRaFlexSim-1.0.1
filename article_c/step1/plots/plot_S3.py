@@ -21,12 +21,12 @@ from article_c.common.plot_helpers import (
     is_constant_metric,
     load_step1_aggregated,
     metric_values,
-    place_legend,
     plot_metric_by_snir,
     render_constant_metric,
     select_received_metric_key,
     save_figure,
 )
+from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import DEFAULT_FIGSIZE_MULTI
 
 _ALGO_SPECIFIC_TOL = 1e-6
@@ -77,7 +77,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     metric_key = select_received_metric_key(rows, metric_key)
     if is_constant_metric(metric_values(rows, metric_key)):
         render_constant_metric(fig, ax, legend_handles=None)
-        ax.set_title("Step 1 - Received Frames vs Network size (number of nodes) (SNIR on/off)")
+        configure_figure(
+            fig,
+            ax,
+            "Step 1 - Received Frames vs Network size (number of nodes) (SNIR on/off)",
+            legend_loc="above",
+        )
         return fig
     _warn_if_low_algo_variance(rows, metric_key)
     plot_metric_by_snir(ax, rows, metric_key)
@@ -85,8 +90,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Received Frames (median, p10-p90)")
-    ax.set_title("Step 1 - Received Frames vs Network size (number of nodes) (SNIR on/off)")
-    place_legend(ax, legend_loc="above")
+    configure_figure(
+        fig,
+        ax,
+        "Step 1 - Received Frames vs Network size (number of nodes) (SNIR on/off)",
+        legend_loc="above",
+    )
     return fig
 
 
