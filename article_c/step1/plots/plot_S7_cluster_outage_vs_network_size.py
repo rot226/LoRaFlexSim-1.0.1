@@ -16,7 +16,6 @@ from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_LINESTYLES,
     SNIR_MODES,
-    LEGEND_ABOVE_TIGHT_LAYOUT_TOP,
     apply_plot_style,
     apply_figure_layout,
     filter_mixra_opt_fallback,
@@ -32,9 +31,9 @@ from article_c.common.plotting_style import LEGEND_STYLE
 from article_c.step1.plots.plot_utils import configure_figure
 
 PDR_TARGETS = (0.90, 0.80, 0.70)
-LEGEND_BBOX = LEGEND_STYLE.get("bbox_to_anchor", (0.5, 1.02))
+LEGEND_BBOX = (0.5, 1.18)
 LAYOUT_MARGINS = legend_margins("above")
-LAYOUT_RECT = (0, 0, 1, LEGEND_ABOVE_TIGHT_LAYOUT_TOP)
+LAYOUT_RECT = (0, 0, 1, 0.78)
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
@@ -95,7 +94,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     cluster_targets = _cluster_targets(clusters)
 
     fig, axes = plt.subplots(1, len(SNIR_MODES), sharey=True)
-    apply_figure_layout(fig, figsize=(10, 6))
+    apply_figure_layout(fig, figsize=(10, 6.8))
     if len(SNIR_MODES) == 1:
         axes = [axes]
 
