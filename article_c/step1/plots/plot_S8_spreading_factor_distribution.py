@@ -250,13 +250,12 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
                 color="#444444",
                 linestyle=SNIR_LINESTYLES[mode],
                 linewidth=2.0,
+                label=SNIR_LABELS[mode],
             )
             for mode in SNIR_MODES
         ]
-        snir_labels = [SNIR_LABELS[mode] for mode in SNIR_MODES]
         fig.legend(
-            snir_handles,
-            snir_labels,
+            handles=snir_handles,
             **{
                 **LEGEND_STYLE,
                 "bbox_to_anchor": (0.5, 1.04),
