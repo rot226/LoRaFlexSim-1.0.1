@@ -135,7 +135,7 @@ def render_constant_metric(
     if show_fallback_legend and not _figure_has_legend(fig):
         handles, labels = fallback_legend_handles()
         if handles:
-            legend_style = _legend_style(legend_loc)
+            legend_style = _legend_style(legend_loc, len(labels))
             fig.legend(handles, labels, **legend_style)
             apply_figure_layout(
                 fig,
@@ -213,13 +213,13 @@ def select_received_metric_key(
 
 
 def place_legend(ax: plt.Axes, *, legend_loc: str = "above") -> None:
-    """Place la légende selon les consignes."""
+    """Place la légende selon les consignes (au-dessus ou à droite)."""
     handles, labels = ax.get_legend_handles_labels()
     if not handles:
         handles, labels = fallback_legend_handles()
     if not handles:
         return
-    legend_style = _legend_style(legend_loc)
+    legend_style = _legend_style(legend_loc, len(labels))
     ax.figure.legend(handles, labels, **legend_style)
     apply_figure_layout(
         ax.figure,
@@ -228,7 +228,7 @@ def place_legend(ax: plt.Axes, *, legend_loc: str = "above") -> None:
     )
 
 
-def _legend_style(legend_loc: str) -> dict[str, object]:
+def _legend_style(legend_loc: str, label_count: int | None = None) -> dict[str, object]:
     normalized = _normalize_legend_loc(legend_loc)
     if normalized == "right":
         return {
@@ -237,7 +237,10 @@ def _legend_style(legend_loc: str) -> dict[str, object]:
             "ncol": 1,
             "frameon": False,
         }
-    return dict(LEGEND_STYLE)
+    legend_style = dict(LEGEND_STYLE)
+    if label_count is not None and "ncol" in legend_style:
+        legend_style["ncol"] = min(label_count, int(legend_style["ncol"]))
+    return legend_style
 
 
 def _legend_margins(legend_loc: str) -> dict[str, float]:

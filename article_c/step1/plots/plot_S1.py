@@ -100,7 +100,15 @@ def _add_summary_plot(
         )
         for snir_mode in SNIR_MODES:
     ]
-    ax.legend(handles=legend_handles, title="SNIR", ncol=2, frameon=False)
+    ax.figure.legend(
+        handles=legend_handles,
+        title="SNIR",
+        ncol=2,
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.02),
+        bbox_transform=ax.transAxes,
+    )
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
