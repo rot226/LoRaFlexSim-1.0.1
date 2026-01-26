@@ -363,8 +363,13 @@ def _plot_pdr_distributions(
         Patch(facecolor="#f58518", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_off"]),
     ]
     legend_labels = [handle.get_label() for handle in legend_handles]
-    legend_style = {**LEGEND_STYLE, "ncol": 2}
-    legend_bbox = legend_style.get("bbox_to_anchor", (0.5, 1.02))
+    legend_bbox = (0.5, 1.14)
+    legend_style = {
+        **LEGEND_STYLE,
+        "ncol": 2,
+        "loc": "lower center",
+        "bbox_to_anchor": legend_bbox,
+    }
     all_values = [
         float(value)
         for groups in values_by_size.values()
@@ -381,7 +386,7 @@ def _plot_pdr_distributions(
             show_fallback_legend=False,
             legend_handles=(legend_handles, legend_labels),
         )
-        fig.legend(handles=legend_handles, **legend_style)
+        fig.legend(handles=legend_handles, labels=legend_labels, **legend_style)
         configure_figure(
             fig,
             ax,
@@ -450,7 +455,7 @@ def _plot_pdr_distributions(
                 xycoords="axes fraction",
                 ha="left",
                 va="bottom",
-                fontsize=8,
+                fontsize=7,
                 color="#444444",
                 bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.0},
             )
@@ -466,7 +471,7 @@ def _plot_pdr_distributions(
         fig,
         margins={
             **legend_margins("above"),
-            "hspace": 0.75,
+            "hspace": 0.95,
             "wspace": 0.25,
         },
         bbox_to_anchor=legend_bbox,
