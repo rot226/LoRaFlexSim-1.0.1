@@ -93,7 +93,7 @@ def _plot_selection(
         fig.legend(
             handles,
             labels,
-            loc="lower center",
+            loc="upper center",
             bbox_to_anchor=(0.5, 1.12),
             ncol=ncol,
             frameon=False,
