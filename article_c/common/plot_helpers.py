@@ -27,21 +27,30 @@ from article_c.common.config import DEFAULT_CONFIG
 
 ALGO_LABELS = {
     "adr": "ADR",
+    "loba": "LoBa",
     "mixra_h": "MixRA-H",
     "mixra_opt": "MixRA-Opt",
     "ucb1_sf": "UCB1-SF",
 }
 ALGO_COLORS = {
     "adr": "#1f77b4",
+    "loba": "#9467bd",
     "mixra_h": "#ff7f0e",
     "mixra_opt": "#2ca02c",
     "ucb1_sf": "#d62728",
 }
 ALGO_MARKERS = {
     "adr": "o",
+    "loba": "v",
     "mixra_h": "s",
     "mixra_opt": "^",
     "ucb1_sf": "D",
+}
+ALGO_ALIASES = {
+    "loba": "loba",
+    "lo_ba": "loba",
+    "lora_baseline": "loba",
+    "lorawan_baseline": "loba",
 }
 SNIR_MODES = ("snir_on", "snir_off")
 SNIR_LABELS = {
@@ -629,7 +638,8 @@ def _to_bool(value: object) -> bool:
 
 
 def _normalize_algo(value: object) -> str:
-    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    normalized = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    return ALGO_ALIASES.get(normalized, normalized)
 
 
 def _is_mixra_opt(row: dict[str, object]) -> bool:

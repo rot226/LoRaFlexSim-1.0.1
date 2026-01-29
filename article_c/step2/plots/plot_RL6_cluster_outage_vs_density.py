@@ -33,15 +33,15 @@ from article_c.common.plotting_style import LEGEND_STYLE, legend_bbox_to_anchor
 
 ALGO_ALIASES = {
     "adr": "adr",
-    "ADR": "adr",
+    "loba": "loba",
+    "lo_ba": "loba",
+    "lora_baseline": "loba",
+    "lorawan_baseline": "loba",
     "mixra_h": "mixra_h",
-    "MixRA-H": "mixra_h",
     "mixra_opt": "mixra_opt",
-    "MixRA-Opt": "mixra_opt",
     "ucb1_sf": "ucb1_sf",
-    "UCB1-SF": "ucb1_sf",
 }
-TARGET_ALGOS = {"adr", "mixra_h", "mixra_opt", "ucb1_sf"}
+TARGET_ALGOS = {"adr", "loba", "mixra_h", "mixra_opt", "ucb1_sf"}
 
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
@@ -70,8 +70,15 @@ def _cluster_labels(clusters: list[str]) -> dict[str, str]:
     return {cluster: f"C{idx + 1}" for idx, cluster in enumerate(clusters)}
 
 
+def _normalize_algo_label(value: object) -> str:
+    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+
+
 def _canonical_algo(algo: str) -> str | None:
-    return ALGO_ALIASES.get(algo)
+    normalized = _normalize_algo_label(algo)
+    if not normalized:
+        return None
+    return ALGO_ALIASES.get(normalized, normalized)
 
 
 def _label_for_algo(algo: str) -> str:
@@ -108,8 +115,15 @@ def _with_outage(rows: list[dict[str, object]]) -> list[dict[str, object]]:
 
 
 def _filter_algorithms(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    normalized_labels = {
+        _canonical_algo(str(row.get("algo", "")))
+        for row in rows
+        if row.get("algo") is not None
+    }
+    normalized_labels.discard(None)
+    allowed = TARGET_ALGOS | normalized_labels
     filtered = [
-        row for row in rows if _canonical_algo(str(row.get("algo", ""))) in TARGET_ALGOS
+        row for row in rows if _canonical_algo(str(row.get("algo", ""))) in allowed
     ]
     return filtered or rows
 
