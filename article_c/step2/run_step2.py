@@ -87,6 +87,20 @@ def _log_results_written(output_dir: Path, row_count: int) -> None:
     print(f"Append rows: {row_count} -> {aggregated_path}")
 
 
+def _assert_flat_output_files(output_dir: Path, density: int | float) -> None:
+    raw_path = output_dir / "raw_results.csv"
+    aggregated_path = output_dir / "aggregated_results.csv"
+    missing = [str(path) for path in (raw_path, aggregated_path) if not path.exists()]
+    if missing:
+        missing_label = ", ".join(missing)
+        message = (
+            "ERREUR: fichiers de sortie attendus absents après "
+            f"write_simulation_results pour la taille {density}: {missing_label}"
+        )
+        print(message)
+        raise FileNotFoundError(message)
+
+
 def _log_unique_network_sizes(output_dir: Path) -> None:
     raw_path = output_dir / "raw_results.csv"
     if not raw_path.exists():
@@ -154,6 +168,23 @@ def _summarize_success_collision(
         "throughput_success_mean": sum(throughput_success_values)
         / len(throughput_success_values),
     }
+
+
+def _assert_flat_output_sizes(
+    base_results_dir: Path, simulated_sizes: list[int]
+) -> None:
+    aggregated_sizes = _read_aggregated_sizes(
+        base_results_dir / "aggregated_results.csv"
+    )
+    missing_sizes = sorted(set(simulated_sizes) - aggregated_sizes)
+    if missing_sizes:
+        missing_label = ", ".join(map(str, missing_sizes))
+        message = (
+            "ERREUR: write_simulation_results manquant pour certaines tailles "
+            f"simulées (flat_output=True): {missing_label}"
+        )
+        print(message)
+        raise RuntimeError(message)
 
 
 def _init_collision_histogram() -> dict[str, int]:
@@ -732,10 +763,12 @@ def _simulate_density(
     if flat_output:
         write_simulation_results(base_results_dir, raw_rows, network_size=density)
         _log_results_written(base_results_dir, len(raw_rows))
+        _assert_flat_output_files(base_results_dir, density)
         _log_unique_network_sizes(base_results_dir)
         if timestamp_dir is not None:
             write_simulation_results(timestamp_dir, raw_rows, network_size=density)
             _log_results_written(timestamp_dir, len(raw_rows))
+            _assert_flat_output_files(timestamp_dir, density)
             _log_unique_network_sizes(timestamp_dir)
     else:
         for replication, rows in per_rep_rows.items():
@@ -881,6 +914,8 @@ def main(argv: Sequence[str] | None = None) -> None:
                 size_post_stats[int(result["density"])] = dict(result["post_stats"])
 
     print(f"Rows written: {total_rows}")
+    if flat_output and simulated_sizes:
+        _assert_flat_output_sizes(base_results_dir, simulated_sizes)
     _verify_metric_variation(size_diagnostics)
     _write_post_simulation_report(base_results_dir, size_post_stats, size_diagnostics)
 
