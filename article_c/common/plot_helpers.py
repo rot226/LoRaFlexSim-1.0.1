@@ -7,6 +7,8 @@ import logging
 import math
 import warnings
 from collections.abc import Mapping
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -77,6 +79,19 @@ LEGEND_ABOVE_TIGHT_LAYOUT_TOP = 0.86
 LEGEND_RIGHT_MARGIN = 0.78
 CONSTANT_METRIC_VARIANCE_THRESHOLD = 1e-6
 CONSTANT_METRIC_MESSAGE = "métrique constante – à investiguer"
+MISSING_METRIC_MESSAGE = "données manquantes"
+
+
+class MetricStatus(str, Enum):
+    OK = "ok"
+    CONSTANT = "constant"
+    MISSING = "missing"
+
+
+@dataclass(frozen=True)
+class MetricValues:
+    values: list[float]
+    status: MetricStatus
 
 
 def apply_plot_style() -> None:
@@ -214,26 +229,69 @@ def _metric_variance(
 
 
 def is_constant_metric(
-    values: list[float],
+    values: MetricValues | list[float],
     *,
     threshold: float = CONSTANT_METRIC_VARIANCE_THRESHOLD,
-) -> bool:
-    if not values:
-        return True
-    return _metric_variance(values) < threshold
+) -> MetricStatus:
+    if isinstance(values, MetricValues):
+        if values.status is MetricStatus.MISSING:
+            return MetricStatus.MISSING
+        metric_values = values.values
+    else:
+        metric_values = values
+    if not metric_values:
+        return MetricStatus.CONSTANT
+    if _metric_variance(metric_values) < threshold:
+        return MetricStatus.CONSTANT
+    return MetricStatus.OK
 
 
 def metric_values(
     rows: list[dict[str, object]],
     metric_key: str,
-) -> list[float]:
+) -> MetricValues:
     median_key, _, _ = resolve_percentile_keys(rows, metric_key)
     values: list[float] = []
+    column_present = any(median_key in row for row in rows)
     for row in rows:
         value = row.get(median_key)
         if isinstance(value, (int, float)) and not math.isnan(value):
             values.append(float(value))
-    return values
+    status = MetricStatus.OK if column_present else MetricStatus.MISSING
+    return MetricValues(values=values, status=status)
+
+
+def metric_status_message(status: MetricStatus) -> str:
+    if status is MetricStatus.MISSING:
+        return MISSING_METRIC_MESSAGE
+    if status is MetricStatus.CONSTANT:
+        return CONSTANT_METRIC_MESSAGE
+    return ""
+
+
+def render_metric_status(
+    fig: plt.Figure,
+    axes: object,
+    status: MetricStatus,
+    *,
+    message_y: float | None = None,
+    legend_loc: str = "above",
+    show_fallback_legend: bool = True,
+    legend_mode: str = "constante",
+    legend_handles: tuple[list[Line2D], list[str]] | None = None,
+) -> None:
+    if status is MetricStatus.OK:
+        return
+    render_constant_metric(
+        fig,
+        axes,
+        message=metric_status_message(status),
+        message_y=message_y,
+        legend_loc=legend_loc,
+        show_fallback_legend=show_fallback_legend,
+        legend_mode=legend_mode,
+        legend_handles=legend_handles,
+    )
 
 
 def select_received_metric_key(

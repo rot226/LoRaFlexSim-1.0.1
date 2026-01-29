@@ -14,6 +14,7 @@ from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
+    MetricStatus,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
@@ -21,7 +22,7 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     metric_values,
     plot_metric_by_snir,
-    render_constant_metric,
+    render_metric_status,
     select_received_metric_key,
     save_figure,
 )
@@ -44,8 +45,9 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     apply_figure_layout(fig, figsize=(5 * len(clusters), 8))
     if len(clusters) == 1:
         axes = [axes]
-    if is_constant_metric(metric_values(rows, metric_key)):
-        render_constant_metric(fig, axes, legend_handles=None)
+    metric_state = is_constant_metric(metric_values(rows, metric_key))
+    if metric_state is not MetricStatus.OK:
+        render_metric_status(fig, axes, metric_state, legend_handles=None)
         configure_figure(
             fig,
             axes,

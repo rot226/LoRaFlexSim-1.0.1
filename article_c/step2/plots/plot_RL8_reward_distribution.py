@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     apply_figure_layout,
     ALGO_COLORS,
     CONSTANT_METRIC_MESSAGE,
+    MetricStatus,
     filter_rows_by_network_sizes,
     filter_cluster,
     is_constant_metric,
@@ -160,7 +161,8 @@ def _warn_if_constant(series: pd.Series, label: str) -> bool:
         warnings.warn(f"Aucune valeur disponible pour {label}.", stacklevel=2)
         return True
     values = [float(value) for value in series.dropna().tolist()]
-    if is_constant_metric(values):
+    metric_state = is_constant_metric(values)
+    if metric_state is MetricStatus.CONSTANT:
         warnings.warn(
             f"Valeurs constantes détectées pour {label} (variance faible).",
             stacklevel=2,

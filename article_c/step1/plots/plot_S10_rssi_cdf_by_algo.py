@@ -14,12 +14,13 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_LINESTYLES,
+    MetricStatus,
     algo_label,
     apply_plot_style,
     ensure_network_size,
     filter_rows_by_network_sizes,
     is_constant_metric,
-    render_constant_metric,
+    render_metric_status,
     save_figure,
 )
 from plot_defaults import resolve_ieee_figsize
@@ -164,8 +165,9 @@ def plot_cdf_by_algo(
 
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(values_by_group)))
     all_values = [value for values in values_by_group.values() for value in values]
-    if is_constant_metric(all_values):
-        render_constant_metric(fig, ax, legend_handles=None)
+    metric_state = is_constant_metric(all_values)
+    if metric_state is not MetricStatus.OK:
+        render_metric_status(fig, ax, metric_state, legend_handles=None)
         configure_figure(
             fig,
             [ax],

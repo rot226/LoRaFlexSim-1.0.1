@@ -14,6 +14,7 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
+    MetricStatus,
     ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
@@ -25,7 +26,7 @@ from article_c.common.plot_helpers import (
     add_global_legend,
     legend_handles_for_algos_snir,
     plot_metric_by_algo,
-    render_constant_metric,
+    render_metric_status,
     save_figure,
 )
 from article_c.common.plotting_style import LEGEND_STYLE, legend_extra_height
@@ -91,10 +92,12 @@ def _plot_metric(
             f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
             stacklevel=2,
         )
-    if is_constant_metric(metric_values(rows, metric_key)):
-        render_constant_metric(
+    metric_state = is_constant_metric(metric_values(rows, metric_key))
+    if metric_state is not MetricStatus.OK:
+        render_metric_status(
             fig,
             ax,
+            metric_state,
             legend_handles=legend_handles_for_algos_snir(["snir_on"]),
         )
         ax.set_title(

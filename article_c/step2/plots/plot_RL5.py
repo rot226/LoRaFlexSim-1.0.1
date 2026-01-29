@@ -12,6 +12,7 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
+    MetricStatus,
     fallback_legend_handles,
     filter_rows_by_network_sizes,
     is_constant_metric,
@@ -19,7 +20,7 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     load_step2_selection_probs,
     normalize_network_size_rows,
-    render_constant_metric,
+    render_metric_status,
     save_figure,
 )
 from plot_defaults import resolve_ieee_figsize
@@ -61,8 +62,9 @@ def _plot_selection(
         for row in rows
         if isinstance(row.get("selection_prob"), (int, float))
     ]
-    if is_constant_metric(selection_values):
-        render_constant_metric(fig, ax, legend_handles=None)
+    metric_state = is_constant_metric(selection_values)
+    if metric_state is not MetricStatus.OK:
+        render_metric_status(fig, ax, metric_state, legend_handles=None)
         ax.set_title(
             "Step 2 - UCB1-SF Selection Probability"
             f"{_title_suffix(sorted(network_sizes))}"

@@ -18,6 +18,7 @@ from article_c.common.plot_helpers import (
     SNIR_LINESTYLES,
     SNIR_MODES,
     LEGEND_ABOVE_TIGHT_LAYOUT_TOP,
+    MetricStatus,
     algo_labels,
     apply_plot_style,
     apply_figure_layout,
@@ -28,7 +29,7 @@ from article_c.common.plot_helpers import (
     is_constant_metric,
     legend_margins,
     load_step1_aggregated,
-    render_constant_metric,
+    render_metric_status,
     save_figure,
 )
 from article_c.common.plotting_style import LEGEND_STYLE
@@ -236,10 +237,12 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         for value in values.values()
         if isinstance(value, (int, float))
     ]
-    if is_constant_metric(distribution_values):
-        render_constant_metric(
+    metric_state = is_constant_metric(distribution_values)
+    if metric_state is not MetricStatus.OK:
+        render_metric_status(
             fig,
             axes,
+            metric_state,
             show_fallback_legend=False,
             legend_handles=None,
         )

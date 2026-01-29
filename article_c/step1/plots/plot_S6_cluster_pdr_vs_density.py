@@ -15,6 +15,7 @@ from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_LINESTYLES,
     SNIR_MODES,
+    MetricStatus,
     algo_label,
     apply_plot_style,
     apply_figure_layout,
@@ -24,7 +25,7 @@ from article_c.common.plot_helpers import (
     is_constant_metric,
     load_step1_aggregated,
     metric_values,
-    render_constant_metric,
+    render_metric_status,
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
@@ -82,8 +83,9 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     elif len(clusters) == 1:
         axes = [[ax] for ax in axes]
 
-    if is_constant_metric(metric_values(rows, metric_key)):
-        render_constant_metric(fig, axes, legend_handles=None)
+    metric_state = is_constant_metric(metric_values(rows, metric_key))
+    if metric_state is not MetricStatus.OK:
+        render_metric_status(fig, axes, metric_state, legend_handles=None)
         configure_figure(
             fig,
             axes,
