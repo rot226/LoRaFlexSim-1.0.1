@@ -104,6 +104,13 @@ Générer toutes les figures :
 python article_c/make_all_plots.py
 ```
 
+Régénérer toutes les figures (Windows 11) :
+
+```powershell
+Remove-Item -Recurse -Force article_c/step1/plots/output, article_c/step2/plots/output
+python article_c/make_all_plots.py
+```
+
 ## Seeds et réplications
 
 - **Seeds** : l'étape 1 et l'étape 2 utilisent `--seeds_base` (ex: `--network-sizes 100 200 --replications 2 --seeds_base 123`) pour initialiser un seed de base déterministe, puis incrémentent en interne.
@@ -132,6 +139,12 @@ attendent des CSV **flat** (présence de `aggregated_results.csv` dans
 Si vous avez uniquement un format imbriqué, `make_all_plots.py` peut servir de
 **fallback d'agrégation** : il reconstitue les `aggregated_results.csv` flat à
 partir des sous-dossiers avant de lancer les figures.
+
+## Légendes IEEE‑ready
+
+- **Légende en haut** : positionner systématiquement la légende en partie haute de la figure.
+- **Marges réservées** : laisser une marge supérieure dédiée à la légende pour éviter le chevauchement avec le tracé.
+- **Toujours visible** : afficher la légende même si une métrique est constante (pas d'auto‑masquage).
 
 ## Figures disponibles
 
