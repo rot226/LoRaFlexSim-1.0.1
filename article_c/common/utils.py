@@ -204,6 +204,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Active les logs détaillés pour l'étape 2.",
     )
+    parser.add_argument(
+        "--formats",
+        type=str,
+        default="png,pdf,eps",
+        help="Formats d'export des figures (ex: png,pdf,eps).",
+    )
     return parser
 
 
