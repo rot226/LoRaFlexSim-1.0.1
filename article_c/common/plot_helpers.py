@@ -16,6 +16,7 @@ from matplotlib.lines import Line2D
 from article_c.common.plotting_style import (
     LEGEND_STYLE,
     SAVEFIG_STYLE,
+    legend_bbox_to_anchor,
     set_network_size_ticks,
 )
 from article_c.common.utils import ensure_dir
@@ -274,6 +275,11 @@ def _legend_style(legend_loc: str, label_count: int | None = None) -> dict[str, 
     legend_style = dict(LEGEND_STYLE)
     if label_count is not None and "ncol" in legend_style:
         legend_style["ncol"] = min(label_count, int(legend_style["ncol"]))
+    legend_rows = 1
+    if label_count is not None:
+        ncol = int(legend_style.get("ncol", label_count) or 1)
+        legend_rows = max(1, math.ceil(label_count / ncol))
+    legend_style["bbox_to_anchor"] = legend_bbox_to_anchor(legend_rows=legend_rows)
     return legend_style
 
 
@@ -382,13 +388,15 @@ def add_global_legend(
     if not handles:
         return
     legend_style = _legend_style(legend_loc, len(labels))
-    fig.legend(handles, labels, **legend_style)
+    legend = fig.legend(handles, labels, **legend_style)
     ncol = int(legend_style.get("ncol", len(labels)) or 1)
     legend_rows = max(1, math.ceil(len(labels) / ncol))
+    bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
+    legend.set_bbox_to_anchor(bbox_to_anchor)
     apply_figure_layout(
         fig,
         margins=_legend_margins(legend_loc, legend_rows=legend_rows),
-        bbox_to_anchor=legend_style.get("bbox_to_anchor"),
+        bbox_to_anchor=bbox_to_anchor,
         legend_rows=legend_rows,
     )
 
