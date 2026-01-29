@@ -259,11 +259,13 @@ def _compute_window_metrics(
     *,
     payload_bytes: int,
     effective_duration_s: float,
+    window_duration_s: float,
     airtime_s: float,
 ) -> WindowMetrics:
     success_rate = successes / traffic_sent if traffic_sent > 0 else 0.0
+    throughput_duration_s = window_duration_s if window_duration_s > 0 else effective_duration_s
     throughput_success = (
-        successes * payload_bytes / effective_duration_s if effective_duration_s > 0 else 0.0
+        successes * payload_bytes / throughput_duration_s if throughput_duration_s > 0 else 0.0
     )
     energy_per_success = airtime_s * traffic_sent / max(successes, 1)
     return WindowMetrics(
@@ -1249,6 +1251,7 @@ def run_simulation(
                     collision_norm,
                     payload_bytes=payload_bytes,
                     effective_duration_s=effective_duration_s,
+                    window_duration_s=window_duration_value,
                     airtime_s=airtime_s,
                 )
                 reward = _compute_reward(
@@ -1633,6 +1636,7 @@ def run_simulation(
                     collision_norm,
                     payload_bytes=payload_bytes,
                     effective_duration_s=effective_duration_s,
+                    window_duration_s=window_duration_value,
                     airtime_s=airtime_s,
                 )
                 reward = _compute_reward(
