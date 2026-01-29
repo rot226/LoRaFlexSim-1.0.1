@@ -148,9 +148,27 @@ partir des sous-dossiers avant de lancer les figures.
 
 ## Légendes IEEE‑ready
 
+### Tailles recommandées (IEEE)
+
+Pour éviter tout redimensionnement destructif lors de la mise en page IEEE, privilégier des tailles de figure proches des largeurs finales :
+
+- **Colonne simple** : ~**3.5 in** (≈ 8.9 cm) de large.
+- **Double colonne** : ~**7.16 in** (≈ 18.2 cm) de large.
+- **Hauteur** : typiquement **2.2–3.5 in** (≈ 5.6–8.9 cm) selon le contenu.
+
+Ces tailles permettent de conserver des polices lisibles et des épaisseurs de traits cohérentes dans le PDF final.
+
+### Gestion dynamique des légendes
+
 - **Légende en haut** : positionner systématiquement la légende en partie haute de la figure.
 - **Marges réservées** : laisser une marge supérieure dédiée à la légende pour éviter le chevauchement avec le tracé.
 - **Toujours visible** : afficher la légende même si une métrique est constante (pas d'auto‑masquage).
+- **Placement adaptatif** : ajuster automatiquement le nombre de colonnes et l'espacement pour conserver une légende lisible quand le nombre de séries varie.
+
+### Export EPS
+
+- **Format EPS** : activer l'export EPS pour les soumissions IEEE qui exigent des figures vectorielles.
+- **CLI** : utiliser `--formats png,pdf,eps` avec `make_all_plots.py`.
 
 ## Figures disponibles
 
