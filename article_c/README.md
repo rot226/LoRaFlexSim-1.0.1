@@ -45,26 +45,26 @@ pip install -r article_c/requirements.txt
 Exécuter toutes les étapes :
 
 ```powershell
-python article_c/run_all.py
+python -m article_c.run_all
 ```
 
 Exécuter toutes les étapes en sortie **flat** + générer les figures (exemple Windows 11) :
 
 ```powershell
-python article_c/run_all.py --flat-output
-python article_c/make_all_plots.py
+python -m article_c.run_all --flat-output
+python -m article_c.make_all_plots
 ```
 
 Exécuter toutes les étapes en sautant l'étape 1 :
 
 ```powershell
-python article_c/run_all.py --skip-step1
+python -m article_c.run_all --skip-step1
 ```
 
 Exécuter toutes les étapes en sautant l'étape 2 :
 
 ```powershell
-python article_c/run_all.py --skip-step2
+python -m article_c.run_all --skip-step2
 ```
 
 > Si l'étape 1 bloque, tester `--skip-step1` pour lancer directement l'étape 2.
@@ -73,7 +73,7 @@ python article_c/run_all.py --skip-step2
 Désactiver le fallback d'optimisation MixRA (option CLI de `run_all`) :
 
 ```powershell
-python article_c/run_all.py --mixra-opt-no-fallback
+python -m article_c.run_all --mixra-opt-no-fallback
 ```
 
 Exécuter uniquement l'étape 1 :
@@ -101,21 +101,26 @@ python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 
 Générer toutes les figures :
 
 ```powershell
-python article_c/make_all_plots.py
+python -m article_c.make_all_plots
 ```
 
 Contrôler les formats d'export (PNG/PDF/EPS) :
 
 ```powershell
-python article_c/make_all_plots.py --formats png,pdf,eps
+python -m article_c.make_all_plots --formats png,pdf,eps
 ```
 
 Régénérer toutes les figures (Windows 11) :
 
 ```powershell
 Remove-Item -Recurse -Force article_c/step1/plots/output, article_c/step2/plots/output
-python article_c/make_all_plots.py
+python -m article_c.make_all_plots
 ```
+
+> **Windows (py -m recommandé)** : si `article_c` n’est **pas** reconnu comme un package
+> (absence de `__init__.py` ou appel depuis un répertoire inadéquat), la commande
+> `python article_c/run_all.py` peut échouer. Préférez toujours l’appel en module
+> `python -m article_c.run_all` pour garantir la résolution correcte des imports.
 
 ## Seeds et réplications
 
