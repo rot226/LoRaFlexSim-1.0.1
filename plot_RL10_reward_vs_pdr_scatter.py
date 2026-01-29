@@ -13,6 +13,7 @@ from article_c.common.plot_helpers import (
     ALGO_COLORS,
     ALGO_MARKERS,
     algo_label,
+    apply_figure_layout,
     apply_plot_style,
     filter_rows_by_network_sizes,
     place_legend,
@@ -292,6 +293,7 @@ def _plot_scatter(points: list[dict[str, float | int | str]]) -> plt.Figure:
     ax.grid(True, linestyle=":", alpha=0.5)
     place_legend(ax)
     _add_size_legend(ax, size_values, sizes)
+    apply_figure_layout(fig, tight_layout=True)
     return fig
 
 
