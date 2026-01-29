@@ -119,12 +119,24 @@ def render_constant_metric(
     message: str = CONSTANT_METRIC_MESSAGE,
     legend_loc: str = "above",
     show_fallback_legend: bool = True,
+    legend_mode: str = "constante",
     legend_handles: tuple[list[Line2D], list[str]] | None = None,
 ) -> None:
     """Affiche un message centré lorsque la métrique est constante.
 
     legend_handles permet de fournir des handles/labels factices pour la légende.
+    legend_mode="constante" conserve une légende existante ou réutilise les handles.
     """
+    normalized_legend_mode = _normalize_legend_mode(legend_mode)
+    handles: list[Line2D] = []
+    labels: list[str] = []
+    if normalized_legend_mode == "constante":
+        if legend_handles is not None:
+            handles, labels = legend_handles
+        else:
+            handles, labels = _collect_legend_handles(axes)
+        if not handles and show_fallback_legend:
+            handles, labels = fallback_legend_handles()
     for ax in _flatten_axes(axes):
         ax.clear()
         ax.axis("off")
@@ -137,19 +149,26 @@ def render_constant_metric(
         fontsize=12,
         color="#444444",
     )
-    if show_fallback_legend and not _figure_has_legend(fig):
-        if legend_handles is None:
-            handles, labels = fallback_legend_handles()
-        else:
-            handles, labels = legend_handles
-        if handles:
-            legend_style = _legend_style(legend_loc, len(labels))
-            fig.legend(handles, labels, **legend_style)
-            apply_figure_layout(
-                fig,
-                margins=_legend_margins(legend_loc),
-                bbox_to_anchor=legend_style.get("bbox_to_anchor"),
-            )
+    if show_fallback_legend:
+        should_add_legend = not _figure_has_legend(fig)
+        if normalized_legend_mode == "constante":
+            should_add_legend = should_add_legend or bool(handles)
+        if should_add_legend:
+            if not handles:
+                if legend_handles is None:
+                    handles, labels = fallback_legend_handles()
+                else:
+                    handles, labels = legend_handles
+            if handles:
+                legend_style = _legend_style(legend_loc, len(labels))
+                fig.legend(handles, labels, **legend_style)
+                apply_figure_layout(
+                    fig,
+                    margins=_legend_margins(legend_loc),
+                    bbox_to_anchor=legend_style.get("bbox_to_anchor"),
+                )
+        elif normalized_legend_mode == "constante" and _figure_has_legend(fig):
+            apply_figure_layout(fig, margins=_legend_margins(legend_loc))
 
 
 def _metric_variance(
@@ -274,10 +293,27 @@ def _normalize_legend_loc(legend_loc: str) -> str:
     return normalized
 
 
+def _normalize_legend_mode(legend_mode: str) -> str:
+    normalized = str(legend_mode or "").strip().lower()
+    if normalized in {"constante", "constant", "persist"}:
+        return "constante"
+    return normalized or "fallback"
+
+
 def _figure_has_legend(fig: plt.Figure) -> bool:
     if fig.legends:
         return True
     return any(ax.get_legend() is not None for ax in fig.axes)
+
+
+def _collect_legend_handles(axes: object) -> tuple[list[Line2D], list[str]]:
+    handles: list[Line2D] = []
+    labels: list[str] = []
+    for ax in _flatten_axes(axes):
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            break
+    return handles, labels
 
 
 def legend_handles_for_algos_snir(
