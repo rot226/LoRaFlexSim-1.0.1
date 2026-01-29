@@ -126,11 +126,13 @@ def _default_reference_size() -> int:
     return max(1, int(round(median(sizes))))
 
 
-def _network_load_factor(network_size: int, reference_size: int) -> float:
+def _network_load_factor(
+    network_size: int, reference_size: int, clamp_min: float, clamp_max: float
+) -> float:
     if reference_size <= 0:
         return 1.0
     ratio = max(0.1, network_size / reference_size)
-    return _clamp_range(ratio**0.4, 0.6, 2.6)
+    return _clamp_range(ratio**0.4, clamp_min, clamp_max)
 
 
 def _traffic_coeff_size_factor(network_size: int, reference_size: int) -> float:
@@ -156,14 +158,53 @@ def _shadowing_sigma_size_factor(network_size: int, reference_size: int) -> floa
     return _clamp_range(ratio**0.25, 0.85, 1.4)
 
 
-def _collision_size_factor(network_size: int, reference_size: int) -> float:
+def _collision_size_factor(
+    network_size: int,
+    reference_size: int,
+    clamp_min: float,
+    clamp_under_max: float,
+    clamp_over_max: float,
+) -> float:
     if reference_size <= 0:
         return 1.0
     ratio = max(0.1, network_size / reference_size)
     if ratio <= 1.0:
-        return _clamp_range(ratio**0.4, 0.6, 1.0)
+        return _clamp_range(ratio**0.4, clamp_min, clamp_under_max)
     overload = ratio - 1.0
-    return _clamp_range(1.0 + 0.6 * (1.0 + overload) ** 0.45, 1.0, 2.4)
+    return _clamp_range(
+        1.0 + 0.6 * (1.0 + overload) ** 0.45, 1.0, clamp_over_max
+    )
+
+
+def _log_size_factor_comparison(
+    network_size: int,
+    reference_size: int,
+    *,
+    load_factor: float,
+    collision_size_factor: float,
+    legacy_load_factor: float,
+    legacy_collision_size_factor: float,
+    load_clamp_min: float,
+    load_clamp_max: float,
+    collision_clamp_min: float,
+    collision_clamp_under_max: float,
+    collision_clamp_over_max: float,
+) -> None:
+    logger.info(
+        "Taille %s (réf=%s) facteurs: charge=%.3f (avant=%.3f, clamp %.2f..%.2f) "
+        "collision=%.3f (avant=%.3f, clamp %.2f..%.2f/%.2f).",
+        network_size,
+        reference_size,
+        load_factor,
+        legacy_load_factor,
+        load_clamp_min,
+        load_clamp_max,
+        collision_size_factor,
+        legacy_collision_size_factor,
+        collision_clamp_min,
+        collision_clamp_under_max,
+        collision_clamp_over_max,
+    )
 
 
 def _cluster_traffic_factor(cluster: str, clusters: tuple[str, ...]) -> float:
@@ -811,7 +852,30 @@ def run_simulation(
         if reference_network_size is None
         else max(1, int(reference_network_size))
     )
-    load_factor = _network_load_factor(n_nodes, reference_size)
+    load_clamp_min_value = step2_defaults.network_load_min
+    load_clamp_max_value = step2_defaults.network_load_max
+    if load_clamp_min_value > load_clamp_max_value:
+        load_clamp_min_value, load_clamp_max_value = (
+            load_clamp_max_value,
+            load_clamp_min_value,
+        )
+    collision_clamp_min_value = step2_defaults.collision_size_min
+    collision_clamp_under_max_value = step2_defaults.collision_size_under_max
+    collision_clamp_over_max_value = step2_defaults.collision_size_over_max
+    if collision_clamp_min_value > collision_clamp_under_max_value:
+        collision_clamp_min_value, collision_clamp_under_max_value = (
+            collision_clamp_under_max_value,
+            collision_clamp_min_value,
+        )
+    if collision_clamp_under_max_value > collision_clamp_over_max_value:
+        collision_clamp_under_max_value, collision_clamp_over_max_value = (
+            collision_clamp_over_max_value,
+            collision_clamp_under_max_value,
+        )
+    load_factor = _network_load_factor(
+        n_nodes, reference_size, load_clamp_min_value, load_clamp_max_value
+    )
+    legacy_load_factor = _network_load_factor(n_nodes, reference_size, 0.6, 2.6)
     congestion_probability = _congestion_collision_probability(n_nodes, reference_size)
     qos_clusters = tuple(DEFAULT_CONFIG.qos.clusters)
     traffic_size_factor = _traffic_coeff_size_factor(n_nodes, reference_size)
@@ -882,7 +946,29 @@ def run_simulation(
     base_shadowing_sigma_db = _clamp_range(
         shadowing_sigma_base * shadowing_sigma_factor, 4.0, 12.0
     )
-    collision_size_factor = _collision_size_factor(n_nodes, reference_size)
+    collision_size_factor = _collision_size_factor(
+        n_nodes,
+        reference_size,
+        collision_clamp_min_value,
+        collision_clamp_under_max_value,
+        collision_clamp_over_max_value,
+    )
+    legacy_collision_size_factor = _collision_size_factor(
+        n_nodes, reference_size, 0.6, 1.0, 2.4
+    )
+    _log_size_factor_comparison(
+        n_nodes,
+        reference_size,
+        load_factor=load_factor,
+        collision_size_factor=collision_size_factor,
+        legacy_load_factor=legacy_load_factor,
+        legacy_collision_size_factor=legacy_collision_size_factor,
+        load_clamp_min=load_clamp_min_value,
+        load_clamp_max=load_clamp_max_value,
+        collision_clamp_min=collision_clamp_min_value,
+        collision_clamp_under_max=collision_clamp_under_max_value,
+        collision_clamp_over_max=collision_clamp_over_max_value,
+    )
     if lambda_collision is None:
         lambda_collision = _clip(0.15 + 0.45 * lambda_energy, 0.08, 0.7)
     else:
