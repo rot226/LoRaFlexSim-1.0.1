@@ -75,6 +75,11 @@ class Step2Config:
     traffic_coeff_enabled: bool = True
     window_delay_enabled: bool = True
     window_delay_range_s: float = 5.0
+    network_load_min: float = 0.6
+    network_load_max: float = 2.6
+    collision_size_min: float = 0.6
+    collision_size_under_max: float = 1.0
+    collision_size_over_max: float = 2.4
 
 
 @dataclass(frozen=True)
