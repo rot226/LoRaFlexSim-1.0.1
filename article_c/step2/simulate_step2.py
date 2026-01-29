@@ -84,7 +84,18 @@ def _compute_reward(
     reward = success_rate * weighted_quality - collision_penalty
     if reward <= 0.0 and success_rate > 0.0 and weights.exploration_floor > 0.0:
         reward = weights.exploration_floor
-    return _clip(reward, 0.0, 1.0)
+    clipped_reward = _clip(reward, 0.0, 1.0)
+    if clipped_reward == 0.0:
+        logger.info(
+            "Récompense nulle (success_rate=%.4f sf_norm=%.3f latency_norm=%.3f "
+            "energy_norm=%.3f collision_norm=%.3f).",
+            success_rate,
+            sf_norm,
+            latency_norm,
+            energy_norm,
+            collision_norm,
+        )
+    return clipped_reward
 
 
 def _clamp_range(value: float, min_value: float, max_value: float) -> float:
@@ -527,35 +538,49 @@ def _weights_for_algo(algorithm: str, n_arms: int) -> list[float]:
     return [weight / total for weight in weights]
 
 
-def _reward_weights_for_algo(algorithm: str) -> AlgoRewardWeights:
+def _reward_weights_for_algo(
+    algorithm: str, exploration_floor: float | None = None
+) -> AlgoRewardWeights:
+    default_floor = 0.0
     if algorithm == "adr":
-        return AlgoRewardWeights(
+        weights = AlgoRewardWeights(
             sf_weight=0.45,
             latency_weight=0.32,
             energy_weight=0.23,
             collision_weight=0.22,
         )
-    if algorithm == "mixra_h":
-        return AlgoRewardWeights(
+    elif algorithm == "mixra_h":
+        weights = AlgoRewardWeights(
             sf_weight=0.28,
             latency_weight=0.27,
             energy_weight=0.45,
             collision_weight=0.28,
         )
-    if algorithm == "mixra_opt":
-        return AlgoRewardWeights(
+    elif algorithm == "mixra_opt":
+        weights = AlgoRewardWeights(
             sf_weight=0.23,
             latency_weight=0.22,
             energy_weight=0.55,
             collision_weight=0.3,
         )
-    return AlgoRewardWeights(
-        sf_weight=0.38,
-        latency_weight=0.32,
-        energy_weight=0.3,
-        collision_weight=0.24,
-        exploration_floor=0.1,
-    )
+    else:
+        default_floor = 0.1
+        weights = AlgoRewardWeights(
+            sf_weight=0.38,
+            latency_weight=0.32,
+            energy_weight=0.3,
+            collision_weight=0.24,
+        )
+    selected_floor = default_floor if exploration_floor is None else exploration_floor
+    if selected_floor > 0.0:
+        return AlgoRewardWeights(
+            sf_weight=weights.sf_weight,
+            latency_weight=weights.latency_weight,
+            energy_weight=weights.energy_weight,
+            collision_weight=weights.collision_weight,
+            exploration_floor=selected_floor,
+        )
+    return weights
 
 
 def _compute_collision_norm(
@@ -710,6 +735,7 @@ def run_simulation(
     window_size: int = DEFAULT_CONFIG.rl.window_w,
     lambda_energy: float = DEFAULT_CONFIG.rl.lambda_energy,
     epsilon_greedy: float = 0.03,
+    exploration_floor: float | None = None,
     density: float | None = None,
     snir_mode: str = "snir_on",
     seed: int = 42,
@@ -855,7 +881,9 @@ def run_simulation(
     )
     collision_size_factor = _collision_size_factor(n_nodes, reference_size)
     lambda_collision = _clip(0.15 + 0.45 * lambda_energy, 0.08, 0.7)
-    reward_weights = _reward_weights_for_algo(algorithm)
+    reward_weights = _reward_weights_for_algo(
+        algorithm, exploration_floor=exploration_floor
+    )
     sf_norm_by_sf = {
         sf: _normalize(sf, min(sf_values), max(sf_values)) for sf in sf_values
     }
