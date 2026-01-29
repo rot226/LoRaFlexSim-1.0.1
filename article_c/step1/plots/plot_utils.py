@@ -6,7 +6,12 @@ from collections.abc import Iterable
 
 import matplotlib.pyplot as plt
 
-from article_c.common.plot_helpers import SUPTITLE_Y, apply_figure_layout, legend_margins
+from article_c.common.plot_helpers import (
+    SUPTITLE_Y,
+    apply_figure_layout,
+    fallback_legend_handles,
+    legend_margins,
+)
 from article_c.common.plotting_style import LEGEND_STYLE
 
 
@@ -47,6 +52,8 @@ def configure_figure(
             handles, labels = ax.get_legend_handles_labels()
             if handles:
                 break
+        if not handles:
+            handles, labels = fallback_legend_handles()
         if handles:
             if legend_loc == "above":
                 legend_style = {
@@ -54,7 +61,11 @@ def configure_figure(
                     "ncol": min(len(labels), LEGEND_STYLE.get("ncol", 3)),
                 }
                 fig.legend(handles, labels, **legend_style)
-                apply_figure_layout(fig, bbox_to_anchor=legend_style.get("bbox_to_anchor"))
+                apply_figure_layout(
+                    fig,
+                    bbox_to_anchor=legend_style.get("bbox_to_anchor"),
+                    margins=legend_margins("above"),
+                )
             else:
                 fig.legend(
                     handles,

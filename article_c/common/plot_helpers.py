@@ -373,6 +373,8 @@ def apply_figure_layout(
     reserved_top = 0.0
     if figsize is not None:
         fig.set_size_inches(*figsize, forward=True)
+    if margins is None and fig.legends:
+        margins = {"top": LEGEND_TOP_MARGIN}
     if margins:
         adjusted_margins = dict(margins)
         if extra_legend_rows and "top" in adjusted_margins:
