@@ -8,14 +8,12 @@ import warnings
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-from matplotlib.lines import Line2D
 import pandas as pd
 
 from article_c.common.plot_helpers import (
     ALGO_COLORS,
     ALGO_LABELS,
     ALGO_MARKERS,
-    SNIR_LABELS,
     SNIR_LINESTYLES,
     SNIR_MODES,
     apply_plot_style,
@@ -90,26 +88,6 @@ def _add_summary_plot(
     ax.set_ylabel("PDR\n(médiane ± min/max)")
     ax.set_ylim(0.0, 1.0)
     ax.set_title("Synthèse min/médiane/max")
-    legend_handles: list[Line2D] = []
-    for snir_mode in SNIR_MODES:
-        legend_handles.append(
-            Line2D(
-                [0],
-                [0],
-                color="#222222",
-                linestyle=SNIR_LINESTYLES.get(snir_mode, "solid"),
-                label=SNIR_LABELS[snir_mode],
-            )
-        )
-    ax.figure.legend(
-        handles=legend_handles,
-        title="SNIR",
-        ncol=2,
-        frameon=False,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.02),
-        bbox_transform=ax.figure.transFigure,
-    )
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
