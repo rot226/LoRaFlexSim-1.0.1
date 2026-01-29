@@ -16,6 +16,7 @@ from matplotlib.lines import Line2D
 from article_c.common.plotting_style import (
     LEGEND_STYLE,
     SAVEFIG_STYLE,
+    apply_output_fonttype,
     legend_bbox_to_anchor,
     set_network_size_ticks,
 )
@@ -456,6 +457,7 @@ def save_figure(
     Sur Windows, privilégier bbox_inches=None (valeur par défaut).
     """
     ensure_dir(output_dir)
+    apply_output_fonttype()
     if use_tight:
         fig.tight_layout()
     for ext in ("png", "pdf", "eps"):

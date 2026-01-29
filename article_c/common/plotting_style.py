@@ -21,6 +21,15 @@ SAVEFIG_STYLE = {
 LEGEND_ANCHOR_BASE_Y = 1.0
 LEGEND_ANCHOR_PADDING = 0.01
 LEGEND_ROW_HEIGHT = 0.045
+OUTPUT_FONT_TYPES = {
+    "ps.fonttype": 42,
+    "pdf.fonttype": 42,
+}
+
+
+def apply_output_fonttype() -> None:
+    """Force l'export en police TrueType pour PS/PDF."""
+    plt.rcParams.update(OUTPUT_FONT_TYPES)
 
 
 def _legend_height_in_figure(legend: Legend) -> float | None:
