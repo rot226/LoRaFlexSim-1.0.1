@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
 import warnings
 
@@ -17,16 +18,17 @@ from article_c.common.plot_helpers import (
     apply_figure_layout,
     ensure_network_size,
     filter_rows_by_network_sizes,
+    fallback_legend_handles,
     is_constant_metric,
     load_step2_aggregated,
     metric_values,
     normalize_network_size_rows,
     legend_margins,
-    place_legend,
     render_constant_metric,
     save_figure,
     suptitle_y_from_top,
 )
+from article_c.common.plotting_style import LEGEND_STYLE, legend_bbox_to_anchor
 
 ALGO_ALIASES = {
     "adr": "adr",
@@ -148,9 +150,7 @@ def _plot_metric(
     cluster_labels = _cluster_labels(clusters)
 
     fig, axes = plt.subplots(1, len(clusters), sharey=True)
-    apply_figure_layout(
-        fig, figsize=(5 * len(clusters), 6), margins=legend_margins("top")
-    )
+    apply_figure_layout(fig, figsize=(5 * len(clusters), 6))
     if len(clusters) == 1:
         axes = [axes]
 
@@ -191,7 +191,24 @@ def _plot_metric(
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     axes[0].set_ylabel("Outage probability")
-    place_legend(axes[-1], legend_loc="above")
+    handles, labels = axes[-1].get_legend_handles_labels()
+    if not handles:
+        handles, labels = fallback_legend_handles()
+    if handles:
+        legend_style = dict(LEGEND_STYLE)
+        if "ncol" in legend_style:
+            legend_style["ncol"] = min(len(labels), int(legend_style["ncol"]))
+        legend = fig.legend(handles, labels, **legend_style)
+        ncol = int(legend_style.get("ncol", len(labels)) or 1)
+        legend_rows = max(1, math.ceil(len(labels) / ncol))
+        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
+        legend.set_bbox_to_anchor(bbox_to_anchor)
+        apply_figure_layout(
+            fig,
+            margins=legend_margins("above", legend_rows=legend_rows),
+            bbox_to_anchor=bbox_to_anchor,
+            legend_rows=legend_rows,
+        )
     fig.suptitle(
         "Step 2 - Outage probability by Cluster (SNIR on)"
         f"{_title_suffix(network_sizes)}",
