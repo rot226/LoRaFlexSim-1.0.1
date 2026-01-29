@@ -7,10 +7,13 @@ import csv
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import pandas as pd
 
 from article_c.common.config import BASE_DIR
 from article_c.common.plot_helpers import (
+    ALGO_COLORS,
+    ALGO_MARKERS,
     algo_label,
     apply_plot_style,
     apply_figure_layout,
@@ -251,11 +254,32 @@ def _collect_points(
     return points
 
 
+def _legend_handles_for_algos(
+    algos: list[str],
+) -> tuple[list[Line2D], list[str]]:
+    handles: list[Line2D] = []
+    labels: list[str] = []
+    for algo in algos:
+        handles.append(
+            Line2D(
+                [0],
+                [0],
+                color=ALGO_COLORS.get(algo, "#333333"),
+                marker=ALGO_MARKERS.get(algo, "o"),
+                linestyle="none",
+                markersize=6.0,
+            )
+        )
+        labels.append(algo_label(algo))
+    return handles, labels
+
+
 def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
     fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     width, height = fig.get_size_inches()
+    legend_loc = "top"
     apply_figure_layout(
-        fig, figsize=(width, height + 2), margins=legend_margins("top")
+        fig, figsize=(width, height + 1.5), margins=legend_margins(legend_loc)
     )
     reward_values = [
         float(point["reward_mean"])
@@ -268,19 +292,31 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
         if isinstance(point.get("pdr_mean"), (int, float))
     ]
     if is_constant_metric(reward_values) or is_constant_metric(pdr_values):
-        render_constant_metric(fig, ax, legend_handles=None)
+        algos = [str(point["algo"]) for point in points]
+        render_constant_metric(
+            fig,
+            ax,
+            legend_loc=legend_loc,
+            legend_handles=_legend_handles_for_algos(algos),
+        )
         ax.set_title("Step 2 - Mean reward vs Aggregated PDR")
         return fig
     for point in points:
         algo = str(point["algo"])
-        ax.scatter(point["pdr_mean"], point["reward_mean"], label=algo_label(algo))
+        ax.scatter(
+            point["pdr_mean"],
+            point["reward_mean"],
+            label=algo_label(algo),
+            color=ALGO_COLORS.get(algo, "#333333"),
+            marker=ALGO_MARKERS.get(algo, "o"),
+        )
     ax.set_xlabel("Aggregated PDR (probability)")
     ax.set_ylabel("Mean window reward")
     ax.set_title("Step 2 - Mean reward vs Aggregated PDR")
     ax.set_xlim(0.0, 1.05)
     ax.set_ylim(0.0, 1.05)
     ax.grid(True, linestyle=":", alpha=0.5)
-    place_legend(ax, legend_loc="above")
+    place_legend(ax, legend_loc=legend_loc)
     return fig
 
 
