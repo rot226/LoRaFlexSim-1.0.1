@@ -789,6 +789,9 @@ def run_simulation(
     traffic_coeff_min: float | None = None,
     traffic_coeff_max: float | None = None,
     traffic_coeff_enabled: bool | None = None,
+    traffic_coeff_clamp_min: float | None = None,
+    traffic_coeff_clamp_max: float | None = None,
+    traffic_coeff_clamp_enabled: bool | None = None,
     window_delay_enabled: bool | None = None,
     window_delay_range_s: float | None = None,
     shadowing_sigma_db: float | None = None,
@@ -819,6 +822,26 @@ def run_simulation(
         step2_defaults.traffic_coeff_enabled
         if traffic_coeff_enabled is None
         else traffic_coeff_enabled
+    )
+    traffic_coeff_clamp_min_value = (
+        step2_defaults.traffic_coeff_clamp_min
+        if traffic_coeff_clamp_min is None
+        else traffic_coeff_clamp_min
+    )
+    traffic_coeff_clamp_max_value = (
+        step2_defaults.traffic_coeff_clamp_max
+        if traffic_coeff_clamp_max is None
+        else traffic_coeff_clamp_max
+    )
+    if traffic_coeff_clamp_min_value > traffic_coeff_clamp_max_value:
+        traffic_coeff_clamp_min_value, traffic_coeff_clamp_max_value = (
+            traffic_coeff_clamp_max_value,
+            traffic_coeff_clamp_min_value,
+        )
+    traffic_coeff_clamp_enabled_value = (
+        step2_defaults.traffic_coeff_clamp_enabled
+        if traffic_coeff_clamp_enabled is None
+        else traffic_coeff_clamp_enabled
     )
     window_delay_enabled_value = (
         step2_defaults.window_delay_enabled
@@ -893,22 +916,30 @@ def run_simulation(
             traffic_coeff_max_scaled,
             traffic_coeff_min_scaled,
         )
-    traffic_coeffs = [
-        _clamp_range(
-            (
-                rng.uniform(traffic_coeff_min_scaled, traffic_coeff_max_scaled)
-                if traffic_coeff_enabled_value
-                else 1.0
-            )
-            * (
-                traffic_size_factor
-                * _cluster_traffic_factor(node_clusters[node_id], qos_clusters)
-            ),
-            0.4,
-            2.5,
+    if debug_step2:
+        logger.info(
+            "Clamp traffic coeffs: enabled=%s min=%.3f max=%.3f",
+            traffic_coeff_clamp_enabled_value,
+            traffic_coeff_clamp_min_value,
+            traffic_coeff_clamp_max_value,
         )
-        for node_id in range(n_nodes)
-    ]
+    traffic_coeffs = []
+    for node_id in range(n_nodes):
+        traffic_value = (
+            rng.uniform(traffic_coeff_min_scaled, traffic_coeff_max_scaled)
+            if traffic_coeff_enabled_value
+            else 1.0
+        )
+        traffic_value *= (
+            traffic_size_factor * _cluster_traffic_factor(node_clusters[node_id], qos_clusters)
+        )
+        if traffic_coeff_clamp_enabled_value:
+            traffic_value = _clamp_range(
+                traffic_value,
+                traffic_coeff_clamp_min_value,
+                traffic_coeff_clamp_max_value,
+            )
+        traffic_coeffs.append(traffic_value)
     base_rate_multipliers = [rng.uniform(0.7, 1.3) for _ in range(n_nodes)]
 
     sf_values = list(SF_VALUES)

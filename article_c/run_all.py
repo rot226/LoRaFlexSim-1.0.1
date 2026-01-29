@@ -121,6 +121,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Active/désactive la variabilité de trafic par nœud.",
     )
     parser.add_argument(
+        "--traffic-coeff-clamp-min",
+        type=float,
+        default=None,
+        help="Borne minimale du clamp appliqué aux coefficients de trafic.",
+    )
+    parser.add_argument(
+        "--traffic-coeff-clamp-max",
+        type=float,
+        default=None,
+        help="Borne maximale du clamp appliqué aux coefficients de trafic.",
+    )
+    parser.add_argument(
+        "--traffic-coeff-clamp-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Active/désactive le clamp des coefficients de trafic (diagnostic).",
+    )
+    parser.add_argument(
         "--window-delay-enabled",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -366,6 +384,20 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
             "--traffic-coeff-enabled"
             if args.traffic_coeff_enabled
             else "--no-traffic-coeff-enabled"
+        )
+    if args.traffic_coeff_clamp_min is not None:
+        step2_args.extend(
+            ["--traffic-coeff-clamp-min", str(args.traffic_coeff_clamp_min)]
+        )
+    if args.traffic_coeff_clamp_max is not None:
+        step2_args.extend(
+            ["--traffic-coeff-clamp-max", str(args.traffic_coeff_clamp_max)]
+        )
+    if args.traffic_coeff_clamp_enabled is not None:
+        step2_args.append(
+            "--traffic-coeff-clamp-enabled"
+            if args.traffic_coeff_clamp_enabled
+            else "--no-traffic-coeff-clamp-enabled"
         )
     if args.window_delay_enabled is not None:
         step2_args.append(
