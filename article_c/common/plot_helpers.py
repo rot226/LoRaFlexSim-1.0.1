@@ -383,14 +383,14 @@ def save_figure(
     stem: str,
     use_tight: bool = False,
 ) -> None:
-    """Sauvegarde la figure en PNG et PDF dans le répertoire cible.
+    """Sauvegarde la figure en PNG, PDF et EPS dans le répertoire cible.
 
     Sur Windows, privilégier bbox_inches=None (valeur par défaut).
     """
     ensure_dir(output_dir)
     if use_tight:
         fig.tight_layout()
-    for ext in ("png", "pdf"):
+    for ext in ("png", "pdf", "eps"):
         fig.savefig(output_dir / f"{stem}.{ext}", dpi=BASE_DPI, **SAVEFIG_STYLE)
 
 

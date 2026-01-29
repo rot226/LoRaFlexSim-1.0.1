@@ -216,6 +216,63 @@ def _run_plot_module(
     module.main(network_sizes=network_sizes, allow_sample=allow_sample)
 
 
+def _validate_plot_modules_use_save_figure() -> bool:
+    missing: list[str] = []
+    plot_dirs = [
+        ARTICLE_DIR / "step1" / "plots",
+        ARTICLE_DIR / "step2" / "plots",
+    ]
+    for plot_dir in plot_dirs:
+        for source_path in sorted(plot_dir.glob("plot_*.py")):
+            try:
+                source = source_path.read_text(encoding="utf-8")
+            except OSError as exc:
+                missing.append(f"{source_path} ({exc})")
+                continue
+            if "save_figure(" not in source:
+                missing.append(str(source_path.relative_to(ARTICLE_DIR)))
+    if missing:
+        print(
+            "ERREUR: certains scripts de plot ne passent pas par save_figure:\n"
+            + "\n".join(f"- {item}" for item in missing)
+        )
+        return False
+    return True
+
+
+def _inspect_plot_outputs(output_dir: Path, label: str) -> None:
+    if not output_dir.exists():
+        print(
+            "AVERTISSEMENT: "
+            f"dossier de sortie absent pour {label}: {output_dir}"
+        )
+        return
+    png_files = sorted(output_dir.glob("*.png"))
+    if not png_files:
+        print(
+            "AVERTISSEMENT: "
+            f"aucun PNG trouvé pour {label} dans {output_dir}."
+        )
+        return
+    missing_variants: list[str] = []
+    for png_path in png_files:
+        stem = png_path.stem
+        for ext in ("pdf", "eps"):
+            candidate = output_dir / f"{stem}.{ext}"
+            if not candidate.exists():
+                missing_variants.append(str(candidate))
+    if missing_variants:
+        print(
+            "AVERTISSEMENT: sorties manquantes pour le test visuel (PDF/EPS):\n"
+            + "\n".join(f"- {path}" for path in missing_variants)
+        )
+    else:
+        print(
+            "Test visuel: fichiers PNG/PDF/EPS présents "
+            f"pour {label} dans {output_dir}."
+        )
+
+
 def _pick_column(fieldnames: list[str], candidates: tuple[str, ...]) -> str | None:
     for candidate in candidates:
         if candidate in fieldnames:
@@ -430,6 +487,8 @@ def _validate_plot_data(
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    if not _validate_plot_modules_use_save_figure():
+        return
     try:
         steps = _parse_steps(args.steps)
     except ValueError as exc:
@@ -627,6 +686,16 @@ def main(argv: list[str] | None = None) -> None:
                         f"ERREUR: échec du plot {module_path}: {exc}"
                     )
                     traceback.print_exc()
+    if "step1" in steps:
+        _inspect_plot_outputs(
+            ARTICLE_DIR / "step1" / "plots" / "output",
+            "Step1",
+        )
+    if "step2" in steps and not skip_step2_plots:
+        _inspect_plot_outputs(
+            ARTICLE_DIR / "step2" / "plots" / "output",
+            "Step2",
+        )
 
 
 if __name__ == "__main__":
