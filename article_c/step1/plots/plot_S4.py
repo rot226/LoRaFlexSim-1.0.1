@@ -108,8 +108,6 @@ def _add_summary_plot(
         ncol=2,
         frameon=False,
         loc="upper center",
-        bbox_to_anchor=(0.5, -0.35),
-        bbox_transform=ax.transAxes,
         fontsize=8,
         title_fontsize=8,
     )
