@@ -480,6 +480,29 @@ def _log_loss_breakdown(
     )
 
 
+def _log_success_chain(
+    *,
+    network_size: int,
+    algo_label: str,
+    round_id: int,
+    total_traffic_sent: int,
+    successes_after_collisions: int,
+    successes_after_congestion: int,
+    successes_after_link: int,
+) -> None:
+    logger.info(
+        "Chaîne succès - taille=%s algo=%s round=%s traffic_sent=%s "
+        "apres_collisions=%s apres_congestion=%s apres_link_quality=%s",
+        network_size,
+        algo_label,
+        round_id,
+        total_traffic_sent,
+        successes_after_collisions,
+        successes_after_congestion,
+        successes_after_link,
+    )
+
+
 def _sample_log_normal_shadowing(
     rng: random.Random, mean_db: float, sigma_db: float
 ) -> tuple[float, float]:
@@ -608,13 +631,10 @@ def _apply_congestion_and_link_quality(
         for _ in range(successes_after_congestion_total)
         if rng.random() < link_quality_weighted
     )
-    if (
-        successes_after_link_total == 0
-        and successes_after_congestion_total > 0
-        and congestion_probability == 0.0
-        and link_quality_weighted >= 0.2
-    ):
-        successes_after_link_total = 1
+    if successes_after_link_total == 0 and successes_after_congestion_total > 0:
+        if congestion_probability == 0.0 and link_quality_weighted >= 0.2:
+            expected = int(round(successes_after_congestion_total * link_quality_weighted))
+            successes_after_link_total = max(1, min(successes_after_congestion_total, expected))
 
     per_node_after_link: dict[int, int] = {
         int(node_window["node_id"]): 0 for node_window in node_windows
@@ -1006,6 +1026,15 @@ def run_simulation(
                     rng=rng,
                 )
             )
+            _log_success_chain(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                total_traffic_sent=total_traffic_sent,
+                successes_after_collisions=collision_success_total,
+                successes_after_congestion=loss_stats["successes_after_congestion"],
+                successes_after_link=loss_stats["successes_after_link"],
+            )
             if _should_debug_log(debug_step2, round_id):
                 _log_debug_stage(
                     stage="apres_congestion",
@@ -1380,6 +1409,15 @@ def run_simulation(
                     congestion_probability=congestion_probability,
                     rng=rng,
                 )
+            )
+            _log_success_chain(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                total_traffic_sent=total_traffic_sent,
+                successes_after_collisions=collision_success_total,
+                successes_after_congestion=loss_stats["successes_after_congestion"],
+                successes_after_link=loss_stats["successes_after_link"],
             )
             if _should_debug_log(debug_step2, round_id):
                 _log_debug_stage(
