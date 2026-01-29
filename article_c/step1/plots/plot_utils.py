@@ -38,6 +38,8 @@ def configure_figure(
     axes: object,
     title: str,
     legend_loc: str,
+    legend_handles: list[object] | None = None,
+    legend_labels: list[str] | None = None,
 ) -> None:
     """Configure le titre, la légende et les marges de la figure.
 
@@ -51,10 +53,17 @@ def configure_figure(
     if not fig.legends:
         handles: list[object] = []
         labels: list[str] = []
-        for ax in axes_list:
-            handles, labels = ax.get_legend_handles_labels()
-            if handles:
-                break
+        if legend_handles is not None:
+            handles = legend_handles
+            if legend_labels is not None:
+                labels = legend_labels
+            else:
+                labels = [handle.get_label() for handle in handles]
+        else:
+            for ax in axes_list:
+                handles, labels = ax.get_legend_handles_labels()
+                if handles:
+                    break
         if not handles:
             handles, labels = fallback_legend_handles()
         if handles:
