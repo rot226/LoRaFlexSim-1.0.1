@@ -124,6 +124,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Taille de la fenêtre (W) pour l'étape 2.",
     )
     parser.add_argument(
+        "--lambda-collision",
+        type=float,
+        default=DEFAULT_CONFIG.rl.lambda_collision,
+        help=(
+            "Poids de pénalisation des collisions (par défaut: dérivé de lambda_energy)."
+        ),
+    )
+    parser.add_argument(
         "--traffic-coeff-min",
         type=float,
         default=step2_defaults.traffic_coeff_min,
