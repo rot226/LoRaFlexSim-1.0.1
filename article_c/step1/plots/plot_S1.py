@@ -90,16 +90,17 @@ def _add_summary_plot(
     ax.set_ylabel("PDR\n(médiane ± min/max)")
     ax.set_ylim(0.0, 1.0)
     ax.set_title("Synthèse min/médiane/max")
-    legend_handles = [
-        Line2D(
-            [0],
-            [0],
-            color="#222222",
-            linestyle=SNIR_LINESTYLES.get(snir_mode, "solid"),
-            label=SNIR_LABELS[snir_mode],
+    legend_handles: list[Line2D] = []
+    for snir_mode in SNIR_MODES:
+        legend_handles.append(
+            Line2D(
+                [0],
+                [0],
+                color="#222222",
+                linestyle=SNIR_LINESTYLES.get(snir_mode, "solid"),
+                label=SNIR_LABELS[snir_mode],
+            )
         )
-        for snir_mode in SNIR_MODES
-    ]
     ax.figure.legend(
         handles=legend_handles,
         title="SNIR",
