@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 from matplotlib import ticker as mticker
 
 LEGEND_STYLE = {
-    "loc": "lower center",
-    "bbox_to_anchor": (0.5, 1.10),
+    "loc": "upper center",
+    "bbox_to_anchor": (0.5, 1.02),
     "ncol": 4,
     "frameon": False,
 }
