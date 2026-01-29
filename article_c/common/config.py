@@ -73,6 +73,9 @@ class Step2Config:
     traffic_coeff_min: float = 0.7
     traffic_coeff_max: float = 1.3
     traffic_coeff_enabled: bool = True
+    traffic_coeff_clamp_min: float = 0.4
+    traffic_coeff_clamp_max: float = 2.5
+    traffic_coeff_clamp_enabled: bool = True
     window_delay_enabled: bool = True
     window_delay_range_s: float = 5.0
     network_load_min: float = 0.6
