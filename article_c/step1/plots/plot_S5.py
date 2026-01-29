@@ -29,7 +29,7 @@ from article_c.common.plot_helpers import (
 )
 from article_c.common.plotting_style import LEGEND_STYLE
 from article_c.step1.plots.plot_utils import configure_figure
-from plot_defaults import DEFAULT_FIGSIZE_MULTI
+from plot_defaults import resolve_ieee_figsize
 
 TARGET_NETWORK_SIZE = 1280
 NETWORK_SIZE_COLUMNS = ("network_size", "density", "nodes", "num_nodes")
@@ -378,7 +378,7 @@ def _plot_pdr_distributions(
         if isinstance(value, (int, float))
     ]
     if is_constant_metric(all_values):
-        fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
+        fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(legend_handles)))
         apply_figure_layout(fig, figsize=(8, 5))
         render_constant_metric(
             fig,

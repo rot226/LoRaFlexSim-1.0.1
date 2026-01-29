@@ -24,7 +24,7 @@ from article_c.common.plot_helpers import (
     normalize_network_size_rows,
     save_figure,
 )
-from plot_defaults import DEFAULT_FIGSIZE_MULTI
+from plot_defaults import resolve_ieee_figsize
 
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
@@ -88,9 +88,9 @@ def _plot_distribution(
     rows: list[dict[str, object]],
     network_sizes: list[int],
 ) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
-    width, height = fig.get_size_inches()
     algorithms = sorted({row["algo"] for row in rows})
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
+    width, height = fig.get_size_inches()
     algo_colors = [ALGO_COLORS.get(str(algo), "#333333") for algo in algorithms]
     rewards_by_algo = [
         [row["reward"] for row in rows if row["algo"] == algo]
@@ -268,7 +268,7 @@ def _plot_constant_message(
     output_dir: Path,
     stem: str,
 ) -> None:
-    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(1))
     apply_figure_layout(fig, figsize=(8, 5))
     ax.axis("off")
     ax.set_title(title)

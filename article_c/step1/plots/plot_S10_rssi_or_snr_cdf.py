@@ -22,7 +22,7 @@ from article_c.common.plot_helpers import (
     render_constant_metric,
     save_figure,
 )
-from plot_defaults import DEFAULT_FIGSIZE_MULTI
+from plot_defaults import resolve_ieee_figsize
 from article_c.step1.plots.plot_utils import configure_figure
 
 DEFAULT_METRIC_COLUMNS = {
@@ -161,7 +161,7 @@ def plot_cdf_by_algo(
     if not values_by_group:
         raise ValueError("Aucune donnée RSSI/SNR compatible trouvée.")
 
-    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(values_by_group)))
     all_values = [value for values in values_by_group.values() for value in values]
     if is_constant_metric(all_values):
         render_constant_metric(fig, ax, legend_handles=None)

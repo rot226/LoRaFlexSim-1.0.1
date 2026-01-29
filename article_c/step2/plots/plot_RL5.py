@@ -22,7 +22,7 @@ from article_c.common.plot_helpers import (
     render_constant_metric,
     save_figure,
 )
-from plot_defaults import DEFAULT_FIGSIZE_MULTI
+from plot_defaults import resolve_ieee_figsize
 
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
@@ -51,7 +51,10 @@ def _plot_selection(
     rows: list[dict[str, object]],
     network_sizes: list[int],
 ) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
+    network_sizes = sorted(network_sizes)
+    sfs = sorted({row["sf"] for row in rows})
+    series_count = len(sfs) * len(network_sizes) if sfs and network_sizes else None
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
     apply_figure_layout(fig, figsize=(12, 9))
     selection_values = [
         float(row.get("selection_prob"))
@@ -65,8 +68,6 @@ def _plot_selection(
             f"{_title_suffix(sorted(network_sizes))}"
         )
         return fig
-    network_sizes = sorted(network_sizes)
-    sfs = sorted({row["sf"] for row in rows})
     for network_size in network_sizes:
         size_rows = [row for row in rows if row["network_size"] == network_size]
         for sf in sfs:

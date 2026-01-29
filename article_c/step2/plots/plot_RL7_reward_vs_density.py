@@ -29,7 +29,7 @@ from article_c.common.plot_helpers import (
     resolve_percentile_keys,
     save_figure,
 )
-from plot_defaults import DEFAULT_FIGSIZE_MULTI
+from plot_defaults import resolve_ieee_figsize
 
 ALGO_ALIASES = {
     "adr": "adr",
@@ -89,13 +89,19 @@ def _plot_metric(
     metric_key: str,
     network_sizes: list[int] | None,
 ) -> plt.Figure | None:
-    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
+    df = pd.DataFrame(rows)
+    algo_names = {
+        _canonical_algo(str(row.get("algo", ""))) or str(row.get("algo", ""))
+        for row in rows
+        if row.get("algo") is not None
+    }
+    series_count = len({name for name in algo_names if name}) or None
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
     width, height = fig.get_size_inches()
     apply_figure_layout(
         fig, figsize=(width, height + 2), margins=legend_margins("top")
     )
     ensure_network_size(rows)
-    df = pd.DataFrame(rows)
     if network_sizes is None:
         network_sizes = sorted(df["network_size"].unique())
     if _has_invalid_network_sizes(network_sizes):
@@ -267,7 +273,7 @@ def _plot_constant_message(
     output_dir: Path,
     stem: str,
 ) -> None:
-    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(1))
     apply_figure_layout(fig, figsize=(8, 5), margins=legend_margins("top"))
     render_constant_metric(fig, ax, message=message, legend_loc="above")
     ax.set_title(title)
