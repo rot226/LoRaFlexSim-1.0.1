@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from math import log2
 import argparse
+import math
+from math import log2
 from pathlib import Path
 import warnings
 
@@ -23,6 +24,7 @@ from article_c.common.plot_helpers import (
     render_constant_metric,
     save_figure,
 )
+from article_c.common.plotting_style import LEGEND_STYLE, legend_extra_height
 from plot_defaults import resolve_ieee_figsize
 
 
@@ -64,10 +66,20 @@ def _plot_entropy(
     network_sizes: list[int],
 ) -> plt.Figure:
     network_sizes = sorted(network_sizes)
+    series_count = len(network_sizes)
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(network_sizes)))
     width, height = fig.get_size_inches()
+    legend_rows = 1
+    if series_count:
+        legend_ncol = int(LEGEND_STYLE.get("ncol", series_count) or series_count)
+        ncol = min(series_count, legend_ncol) or 1
+        legend_rows = max(1, math.ceil(series_count / ncol))
+    extra_height = legend_extra_height(height, legend_rows)
     apply_figure_layout(
-        fig, figsize=(width, height + 2), margins=legend_margins("top")
+        fig,
+        figsize=(width, height + extra_height),
+        margins=legend_margins("top", legend_rows=legend_rows),
+        legend_rows=legend_rows,
     )
     all_entropy_values: list[float] = []
     for network_size in network_sizes:

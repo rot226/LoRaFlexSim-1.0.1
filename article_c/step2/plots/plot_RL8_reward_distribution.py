@@ -24,6 +24,7 @@ from article_c.common.plot_helpers import (
     normalize_network_size_rows,
     save_figure,
 )
+from article_c.common.plotting_style import legend_extra_height
 from plot_defaults import resolve_ieee_figsize
 
 
@@ -144,10 +145,11 @@ def _plot_distribution(
         legend_rows = max(1, math.ceil(len(handles) / legend_ncol))
     else:
         legend_rows = 1
+    extra_height = legend_extra_height(height, legend_rows)
     apply_figure_layout(
         fig,
-        figsize=(width, height + 2),
-        margins=legend_margins("top"),
+        figsize=(width, height + extra_height),
+        margins=legend_margins("top", legend_rows=legend_rows),
         legend_rows=legend_rows,
     )
     return fig

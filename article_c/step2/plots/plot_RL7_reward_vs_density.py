@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
 import warnings
 
@@ -29,6 +30,7 @@ from article_c.common.plot_helpers import (
     resolve_percentile_keys,
     save_figure,
 )
+from article_c.common.plotting_style import LEGEND_STYLE, legend_extra_height
 from plot_defaults import resolve_ieee_figsize
 
 ALGO_ALIASES = {
@@ -98,8 +100,17 @@ def _plot_metric(
     series_count = len({name for name in algo_names if name}) or None
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
     width, height = fig.get_size_inches()
+    legend_rows = 1
+    if series_count:
+        legend_ncol = int(LEGEND_STYLE.get("ncol", series_count) or series_count)
+        ncol = min(series_count, legend_ncol) or 1
+        legend_rows = max(1, math.ceil(series_count / ncol))
+    extra_height = legend_extra_height(height, legend_rows)
     apply_figure_layout(
-        fig, figsize=(width, height + 2), margins=legend_margins("top")
+        fig,
+        figsize=(width, height + extra_height),
+        margins=legend_margins("top", legend_rows=legend_rows),
+        legend_rows=legend_rows,
     )
     ensure_network_size(rows)
     if network_sizes is None:

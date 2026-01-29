@@ -40,6 +40,13 @@ def _legend_height_in_figure(legend: Legend) -> float | None:
     return legend_height_in / fig_height_in
 
 
+def legend_extra_height(fig_height_in: float, legend_rows: int) -> float:
+    """Calcule un supplément de hauteur (en pouces) selon le nombre de lignes de légende."""
+    if fig_height_in <= 0:
+        return 0.0
+    return fig_height_in * LEGEND_ROW_HEIGHT * max(1, legend_rows)
+
+
 def legend_bbox_to_anchor(
     *,
     legend: Legend | None = None,
