@@ -116,6 +116,8 @@ def _summarize_success_collision(
 ) -> dict[str, float]:
     success_rates: list[float] = []
     collision_norms: list[float] = []
+    reward_values: list[float] = []
+    throughput_success_values: list[float] = []
     for row in raw_rows:
         if str(row.get("cluster", "")) != "all":
             continue
@@ -123,10 +125,18 @@ def _summarize_success_collision(
             success_rates.append(float(row["success_rate"]))
         if "collision_norm" in row:
             collision_norms.append(float(row["collision_norm"]))
+        if "reward" in row:
+            reward_values.append(float(row["reward"]))
+        if "throughput_success" in row:
+            throughput_success_values.append(float(row["throughput_success"]))
     if not success_rates:
         success_rates = [0.0]
     if not collision_norms:
         collision_norms = [0.0]
+    if not reward_values:
+        reward_values = [0.0]
+    if not throughput_success_values:
+        throughput_success_values = [0.0]
     return {
         "success_min": min(success_rates),
         "success_max": max(success_rates),
@@ -134,6 +144,9 @@ def _summarize_success_collision(
         "collision_min": min(collision_norms),
         "collision_max": max(collision_norms),
         "collision_mean": sum(collision_norms) / len(collision_norms),
+        "reward_mean": sum(reward_values) / len(reward_values),
+        "throughput_success_mean": sum(throughput_success_values)
+        / len(throughput_success_values),
     }
 
 
@@ -236,17 +249,45 @@ def _log_size_diagnostics(density: int, metrics: dict[str, float]) -> None:
 def _verify_metric_variation(size_metrics: dict[int, dict[str, float]]) -> None:
     if len(size_metrics) < 2:
         return
-    success_means = {round(metrics["success_mean"], 6) for metrics in size_metrics.values()}
-    collision_means = {
-        round(metrics["collision_mean"], 6) for metrics in size_metrics.values()
-    }
-    if len(success_means) == 1:
+
+    def _has_variation(
+        values: list[float], rel_tol: float = 1e-6, abs_tol: float = 1e-9
+    ) -> bool:
+        if len(values) < 2:
+            return False
+        min_value = min(values)
+        max_value = max(values)
+        span = max_value - min_value
+        scale = max(abs(max_value), abs(min_value), abs_tol)
+        return span > max(abs_tol, scale * rel_tol)
+
+    success_means = [
+        metrics.get("success_mean", 0.0) for metrics in size_metrics.values()
+    ]
+    collision_means = [
+        metrics.get("collision_mean", 0.0) for metrics in size_metrics.values()
+    ]
+    reward_means = [
+        metrics.get("reward_mean", 0.0) for metrics in size_metrics.values()
+    ]
+    throughput_means = [
+        metrics.get("throughput_success_mean", 0.0) for metrics in size_metrics.values()
+    ]
+    if not _has_variation(success_means):
         print(
             "ERREUR: le success_rate moyen ne varie pas avec la taille du réseau."
         )
-    if len(collision_means) == 1:
+    if not _has_variation(collision_means):
         print(
             "ERREUR: les collisions moyennes ne varient pas avec la taille du réseau."
+        )
+    if not _has_variation(reward_means):
+        print(
+            "ERREUR: le reward_mean moyen ne varie pas avec la taille du réseau."
+        )
+    if not _has_variation(throughput_means):
+        print(
+            "ERREUR: le throughput_success_mean ne varie pas avec la taille du réseau."
         )
 
 
