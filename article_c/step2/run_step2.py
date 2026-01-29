@@ -117,6 +117,8 @@ def _summarize_success_collision(
     success_rates: list[float] = []
     collision_norms: list[float] = []
     for row in raw_rows:
+        if str(row.get("cluster", "")) != "all":
+            continue
         if "success_rate" in row:
             success_rates.append(float(row["success_rate"]))
         if "collision_norm" in row:
