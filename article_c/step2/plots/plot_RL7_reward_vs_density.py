@@ -160,6 +160,12 @@ def _warn_if_constant(series: pd.Series, label: str) -> bool:
     return False
 
 
+def _ensure_density(rows: list[dict[str, object]]) -> None:
+    for row in rows:
+        if row.get("density") in (None, "") and row.get("network_size") not in (None, ""):
+            row["density"] = row["network_size"]
+
+
 def _load_step2_raw_results(
     results_path: Path,
     *,
@@ -188,6 +194,8 @@ def _load_step2_raw_results(
     df["reward"] = pd.to_numeric(df["reward"], errors="coerce")
     if "density" in df.columns:
         df["density"] = pd.to_numeric(df["density"], errors="coerce")
+    elif "network_size" in df.columns:
+        df["density"] = pd.to_numeric(df["network_size"], errors="coerce")
     df["algo"] = df.get("algo", "")
     df["snir_mode"] = df.get("snir_mode", "")
     df["cluster"] = df.get("cluster", "all").fillna("all")
@@ -260,10 +268,9 @@ def _plot_constant_message(
     stem: str,
 ) -> None:
     fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
-    apply_figure_layout(fig, figsize=(8, 5))
-    ax.axis("off")
+    apply_figure_layout(fig, figsize=(8, 5), margins=legend_margins("top"))
+    render_constant_metric(fig, ax, message=message, legend_loc="above")
     ax.set_title(title)
-    ax.text(0.5, 0.5, message, ha="center", va="center", wrap=True)
     save_figure(fig, output_dir, stem, use_tight=True)
     plt.close(fig)
 
@@ -364,6 +371,7 @@ def main(
     rows = filter_cluster(rows, "all")
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
     normalize_network_size_rows(rows)
+    _ensure_density(rows)
     network_sizes_filter = _normalized_network_sizes(network_sizes)
     rows, _ = filter_rows_by_network_sizes(rows, network_sizes_filter)
     rows = _filter_algorithms(rows)
@@ -385,6 +393,7 @@ def main(
             raw_rows = filter_cluster(raw_rows, "all")
             raw_rows = [row for row in raw_rows if row.get("snir_mode") == "snir_on"]
             normalize_network_size_rows(raw_rows)
+            _ensure_density(raw_rows)
             raw_rows, _ = filter_rows_by_network_sizes(raw_rows, network_sizes_filter)
             raw_rows = _filter_algorithms(raw_rows)
             _diagnose_density(raw_rows)
