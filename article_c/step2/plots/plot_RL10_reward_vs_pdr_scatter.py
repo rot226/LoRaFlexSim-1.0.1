@@ -14,6 +14,7 @@ from article_c.common.config import BASE_DIR
 from article_c.common.plot_helpers import (
     ALGO_COLORS,
     ALGO_MARKERS,
+    MetricStatus,
     algo_label,
     apply_plot_style,
     apply_figure_layout,
@@ -25,7 +26,7 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     normalize_network_size_rows,
     place_legend,
-    render_constant_metric,
+    render_metric_status,
     save_figure,
 )
 from plot_defaults import resolve_ieee_figsize
@@ -291,11 +292,19 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
         for point in points
         if isinstance(point.get("pdr_mean"), (int, float))
     ]
-    if is_constant_metric(reward_values) or is_constant_metric(pdr_values):
+    reward_state = is_constant_metric(reward_values)
+    pdr_state = is_constant_metric(pdr_values)
+    if reward_state is not MetricStatus.OK or pdr_state is not MetricStatus.OK:
+        metric_state = (
+            MetricStatus.MISSING
+            if MetricStatus.MISSING in (reward_state, pdr_state)
+            else MetricStatus.CONSTANT
+        )
         algos = [str(point["algo"]) for point in points]
-        render_constant_metric(
+        render_metric_status(
             fig,
             ax,
+            metric_state,
             legend_loc=legend_loc,
             legend_handles=_legend_handles_for_algos(algos),
         )

@@ -18,6 +18,7 @@ from article_c.common.plot_helpers import (
     SNIR_LINESTYLES,
     SNIR_MODES,
     LEGEND_ABOVE_TIGHT_LAYOUT_TOP,
+    MetricStatus,
     apply_plot_style,
     apply_figure_layout,
     filter_mixra_opt_fallback,
@@ -26,7 +27,7 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     metric_values,
     filter_rows_by_network_sizes,
-    render_constant_metric,
+    render_metric_status,
     save_figure,
 )
 from article_c.common.plotting_style import LEGEND_STYLE
@@ -78,8 +79,9 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     if len(SNIR_MODES) == 1:
         axes = [axes]
 
-    if is_constant_metric(metric_values(rows, metric_key)):
-        render_constant_metric(fig, axes, legend_handles=None)
+    metric_state = is_constant_metric(metric_values(rows, metric_key))
+    if metric_state is not MetricStatus.OK:
+        render_metric_status(fig, axes, metric_state, legend_handles=None)
         configure_figure(
             fig,
             axes,

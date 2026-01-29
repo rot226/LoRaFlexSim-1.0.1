@@ -13,6 +13,7 @@ from matplotlib.lines import Line2D
 from article_c.common.plot_helpers import (
     ALGO_COLORS,
     ALGO_MARKERS,
+    MetricStatus,
     apply_plot_style,
     apply_figure_layout,
     algo_label,
@@ -20,7 +21,7 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     is_constant_metric,
     legend_margins,
-    render_constant_metric,
+    render_metric_status,
     save_figure,
 )
 from article_c.common.plotting_style import LEGEND_STYLE, legend_extra_height
@@ -206,10 +207,12 @@ def _plot_learning_curve(
         for row in rows
         if isinstance(row.get("avg_reward"), (int, float))
     ]
-    if is_constant_metric(reward_values):
-        render_constant_metric(
+    metric_state = is_constant_metric(reward_values)
+    if metric_state is not MetricStatus.OK:
+        render_metric_status(
             fig,
             ax,
+            metric_state,
             legend_loc=legend_loc,
             legend_handles=_legend_handles_for_algos(algorithms),
         )

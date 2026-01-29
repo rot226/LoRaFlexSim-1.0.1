@@ -16,6 +16,7 @@ from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     apply_figure_layout,
+    MetricStatus,
     ensure_network_size,
     filter_rows_by_network_sizes,
     fallback_legend_handles,
@@ -24,7 +25,7 @@ from article_c.common.plot_helpers import (
     metric_values,
     normalize_network_size_rows,
     legend_margins,
-    render_constant_metric,
+    render_metric_status,
     save_figure,
     suptitle_y_from_top,
 )
@@ -154,8 +155,9 @@ def _plot_metric(
     if len(clusters) == 1:
         axes = [axes]
 
-    if is_constant_metric(metric_values(rows, metric_key)):
-        render_constant_metric(fig, axes, legend_handles=None)
+    metric_state = is_constant_metric(metric_values(rows, metric_key))
+    if metric_state is not MetricStatus.OK:
+        render_metric_status(fig, axes, metric_state, legend_handles=None)
         fig.suptitle(
             "Step 2 - Outage probability by Cluster (SNIR on)"
             f"{_title_suffix(network_sizes)}",

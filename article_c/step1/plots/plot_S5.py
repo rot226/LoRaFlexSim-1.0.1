@@ -15,6 +15,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Patch
 from article_c.common.plot_helpers import (
     BASE_DPI,
+    MetricStatus,
     SNIR_LABELS,
     SNIR_MODES,
     algo_label,
@@ -26,7 +27,7 @@ from article_c.common.plot_helpers import (
     is_constant_metric,
     legend_margins,
     load_step1_aggregated,
-    render_constant_metric,
+    render_metric_status,
     select_received_metric_key,
     save_figure,
 )
@@ -382,14 +383,16 @@ def _plot_pdr_distributions(
         for value in values
         if isinstance(value, (int, float))
     ]
-    if is_constant_metric(all_values):
+    metric_state = is_constant_metric(all_values)
+    if metric_state is not MetricStatus.OK:
         fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(legend_handles)))
         legend_bbox = _legend_bbox(fig, legend_rows)
         legend_style = {**legend_style_base, "bbox_to_anchor": legend_bbox}
         apply_figure_layout(fig, figsize=(8, 5))
-        render_constant_metric(
+        render_metric_status(
             fig,
             ax,
+            metric_state,
             show_fallback_legend=False,
             legend_handles=(legend_handles, legend_labels),
         )

@@ -13,6 +13,7 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
+    MetricStatus,
     ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
@@ -21,7 +22,7 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     metric_values as get_metric_values,
     plot_metric_by_snir,
-    render_constant_metric,
+    render_metric_status,
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
@@ -40,8 +41,9 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
-    if is_constant_metric(get_metric_values(rows, metric_key)):
-        render_constant_metric(fig, ax, legend_handles=None)
+    metric_state = is_constant_metric(get_metric_values(rows, metric_key))
+    if metric_state is not MetricStatus.OK:
+        render_metric_status(fig, ax, metric_state, legend_handles=None)
         configure_figure(
             fig,
             ax,

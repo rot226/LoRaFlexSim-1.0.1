@@ -19,6 +19,7 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     filter_cluster,
     CONSTANT_METRIC_MESSAGE,
+    MetricStatus,
     is_constant_metric,
     load_step2_aggregated,
     metric_values,
@@ -27,6 +28,7 @@ from article_c.common.plot_helpers import (
     place_legend,
     plot_metric_by_algo,
     render_constant_metric,
+    render_metric_status,
     resolve_percentile_keys,
     save_figure,
 )
@@ -122,8 +124,9 @@ def _plot_metric(
             f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
             stacklevel=2,
         )
-    if is_constant_metric(metric_values(rows, metric_key)):
-        render_constant_metric(fig, ax, legend_handles=None)
+    metric_state = is_constant_metric(metric_values(rows, metric_key))
+    if metric_state is not MetricStatus.OK:
+        render_metric_status(fig, ax, metric_state, legend_handles=None)
         ax.set_title(
             "Step 2 - Global Median Reward vs Network size (adaptive algorithms)"
             f"{_title_suffix(network_sizes)}"
@@ -168,7 +171,8 @@ def _warn_if_constant(series: pd.Series, label: str) -> bool:
         warnings.warn(f"Aucune valeur disponible pour {label}.", stacklevel=2)
         return True
     values = [float(value) for value in series.dropna().tolist()]
-    if is_constant_metric(values):
+    metric_state = is_constant_metric(values)
+    if metric_state is MetricStatus.CONSTANT:
         warnings.warn(
             f"Valeurs constantes détectées pour {label} (variance faible).",
             stacklevel=2,
