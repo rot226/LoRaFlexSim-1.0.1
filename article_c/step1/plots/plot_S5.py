@@ -389,101 +389,92 @@ def _plot_pdr_distributions(
             show_fallback_legend=False,
             legend_handles=(legend_handles, legend_labels),
         )
-        fig.legend(handles=legend_handles, labels=legend_labels, **legend_style)
-        configure_figure(
-            fig,
-            ax,
-            "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)",
-            legend_loc="above",
-        )
-        apply_figure_layout(
-            fig,
-            margins=legend_margins("above"),
-            bbox_to_anchor=legend_bbox,
-            legend_rows=legend_rows,
-        )
-        return fig
-    if not network_sizes:
-        network_sizes = [TARGET_NETWORK_SIZE]
-    n_sizes = len(network_sizes)
-    algorithms: list[tuple[str, bool]] = []
-    for algo in ("adr", "mixra_h", "mixra_opt", "ucb1_sf"):
-        for fallback in (False, True):
-            if any(
-                key[0] == algo and key[1] == fallback
-                for size in network_sizes
-                for key in values_by_size.get(size, {})
-            ):
-                algorithms.append((algo, fallback))
-    if not algorithms:
-        algorithms = sorted(
-            {
-                (algo, fallback)
-                for size in network_sizes
-                for (algo, fallback, _), values in values_by_size.get(size, {}).items()
-                if values
-            }
-        )
-
-    ncols = 2
-    nrows = max(1, n_sizes * max(1, len(algorithms)))
-    fig, axes = plt.subplots(nrows, ncols, figsize=(6.2 * ncols, 2.4 * nrows), sharey=True)
-    legend_bbox = _legend_bbox(fig, legend_rows)
-    legend_style = {**legend_style_base, "bbox_to_anchor": legend_bbox}
-    apply_figure_layout(fig, figsize=(6.2 * ncols, 2.4 * nrows))
-    if nrows == 1 and ncols == 1:
-        axes = [[axes]]
-    elif nrows == 1:
-        axes = [axes]
-    elif ncols == 1:
-        axes = [[ax] for ax in axes]
-
-    for size_index, size in enumerate(network_sizes):
-        values_by_group = values_by_size.get(size, {})
-        for algo_index, (algo, fallback) in enumerate(algorithms):
-            row_index = size_index * len(algorithms) + algo_index
-            for col_index, snir_mode in enumerate(SNIR_MODES):
-                ax = axes[row_index][col_index]
-                _plot_pdr_distribution(
-                    ax,
-                    values=values_by_group.get((algo, fallback, snir_mode), []),
-                    snir_mode=snir_mode,
-                )
-                if col_index == 0:
-                    ax.set_ylabel(
-                        f"{algo_label(algo, fallback)}\nPDR (ratio 0–1)",
-                        fontsize=9,
-                    )
-                if row_index != nrows - 1:
-                    ax.set_xlabel("")
-            if size_index == 0 and algo_index == 0:
-                axes[row_index][0].set_title(SNIR_LABELS["snir_on"])
-                axes[row_index][1].set_title(SNIR_LABELS["snir_off"])
-            axes[row_index][0].annotate(
-                f"Taille réseau = {size} nœuds",
-                xy=(0.02, 1.02),
-                xycoords="axes fraction",
-                ha="left",
-                va="bottom",
-                fontsize=7,
-                color="#444444",
-                bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.0},
+        configure_axes = ax
+        layout_margins = legend_margins("above")
+    else:
+        if not network_sizes:
+            network_sizes = [TARGET_NETWORK_SIZE]
+        n_sizes = len(network_sizes)
+        algorithms: list[tuple[str, bool]] = []
+        for algo in ("adr", "mixra_h", "mixra_opt", "ucb1_sf"):
+            for fallback in (False, True):
+                if any(
+                    key[0] == algo and key[1] == fallback
+                    for size in network_sizes
+                    for key in values_by_size.get(size, {})
+                ):
+                    algorithms.append((algo, fallback))
+        if not algorithms:
+            algorithms = sorted(
+                {
+                    (algo, fallback)
+                    for size in network_sizes
+                    for (algo, fallback, _), values in values_by_size.get(size, {}).items()
+                    if values
+                }
             )
 
-    fig.legend(handles=legend_handles, **legend_style)
+        ncols = 2
+        nrows = max(1, n_sizes * max(1, len(algorithms)))
+        fig, axes = plt.subplots(nrows, ncols, figsize=(6.2 * ncols, 2.4 * nrows), sharey=True)
+        legend_bbox = _legend_bbox(fig, legend_rows)
+        legend_style = {**legend_style_base, "bbox_to_anchor": legend_bbox}
+        apply_figure_layout(fig, figsize=(6.2 * ncols, 2.4 * nrows))
+        if nrows == 1 and ncols == 1:
+            axes = [[axes]]
+        elif nrows == 1:
+            axes = [axes]
+        elif ncols == 1:
+            axes = [[ax] for ax in axes]
+
+        for size_index, size in enumerate(network_sizes):
+            values_by_group = values_by_size.get(size, {})
+            for algo_index, (algo, fallback) in enumerate(algorithms):
+                row_index = size_index * len(algorithms) + algo_index
+                for col_index, snir_mode in enumerate(SNIR_MODES):
+                    ax = axes[row_index][col_index]
+                    _plot_pdr_distribution(
+                        ax,
+                        values=values_by_group.get((algo, fallback, snir_mode), []),
+                        snir_mode=snir_mode,
+                    )
+                    if col_index == 0:
+                        ax.set_ylabel(
+                            f"{algo_label(algo, fallback)}\nPDR (ratio 0–1)",
+                            fontsize=9,
+                        )
+                    if row_index != nrows - 1:
+                        ax.set_xlabel("")
+                if size_index == 0 and algo_index == 0:
+                    axes[row_index][0].set_title(SNIR_LABELS["snir_on"])
+                    axes[row_index][1].set_title(SNIR_LABELS["snir_off"])
+                axes[row_index][0].annotate(
+                    f"Taille réseau = {size} nœuds",
+                    xy=(0.02, 1.02),
+                    xycoords="axes fraction",
+                    ha="left",
+                    va="bottom",
+                    fontsize=7,
+                    color="#444444",
+                    bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.0},
+                )
+
+        configure_axes = axes
+        layout_margins = {
+            **legend_margins("above"),
+            "hspace": 0.95,
+            "wspace": 0.25,
+        }
+    fig.legend(handles=legend_handles, labels=legend_labels, **legend_style)
     configure_figure(
         fig,
-        axes,
+        configure_axes,
         "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)",
         legend_loc="above",
     )
     apply_figure_layout(
         fig,
-        margins={
-            **legend_margins("above"),
-            "hspace": 0.95,
-            "wspace": 0.25,
-        },
+        margins=layout_margins,
         bbox_to_anchor=legend_bbox,
         legend_rows=legend_rows,
     )
