@@ -27,7 +27,8 @@ EXTRA_MEAN_KEYS = {"mean_toa_s", "mean_latency_s"}
 EXCLUDED_NUMERIC_KEYS = {"seed", "replication", "round", "node_id", "packet_id"}
 SUM_KEYS = {"success", "failure"}
 DERIVED_SUFFIXES = ("_mean", "_std", "_count", "_ci95", "_p10", "_p50", "_p90")
-EXPECTED_METRICS = ("reward", "success_rate")
+STEP1_EXPECTED_METRICS = ("sent", "received", "pdr")
+STEP2_EXPECTED_METRICS = ("reward", "success_rate")
 
 logger = logging.getLogger(__name__)
 
@@ -279,6 +280,9 @@ def _log_metric_summary(
 
 def aggregate_results(
     raw_rows: list[dict[str, object]],
+    *,
+    expected_metrics: tuple[str, ...],
+    step_label: str,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     """Agrège les résultats avec moyenne, écart-type et IC 95% par clés."""
     if "network_size" not in GROUP_KEYS:
@@ -304,17 +308,23 @@ def aggregate_results(
             raw_rows,
             GROUP_KEYS,
             include_base_means=True,
+            expected_metrics=expected_metrics,
+            step_label=step_label,
         )
         aggregated_rows = _aggregate_rows(
             intermediate_rows,
             BASE_GROUP_KEYS,
             include_base_means=False,
+            expected_metrics=expected_metrics,
+            step_label=step_label,
         )
         return aggregated_rows, intermediate_rows
     aggregated_rows = _aggregate_rows(
         raw_rows,
         BASE_GROUP_KEYS,
         include_base_means=False,
+        expected_metrics=expected_metrics,
+        step_label=step_label,
     )
     return aggregated_rows, []
 
@@ -324,15 +334,18 @@ def _aggregate_rows(
     group_keys: tuple[str, ...],
     *,
     include_base_means: bool,
+    expected_metrics: tuple[str, ...],
+    step_label: str,
 ) -> list[dict[str, object]]:
     groups: dict[tuple[object, ...], list[dict[str, object]]] = defaultdict(list)
     missing_expected_metrics = [
-        metric for metric in EXPECTED_METRICS if not any(metric in row for row in rows)
+        metric for metric in expected_metrics if not any(metric in row for row in rows)
     ]
     for metric in missing_expected_metrics:
         logger.warning(
-            "Métrique attendue absente des lignes raw: %s. "
+            "[%s] Métrique attendue absente des lignes raw: %s. "
             "Les percentiles associés ne seront pas calculés.",
+            step_label,
             metric,
         )
     numeric_keys = _collect_numeric_keys(rows, group_keys) - set(missing_expected_metrics)
@@ -455,16 +468,16 @@ def write_simulation_results(
         network_sizes_label = ", ".join(map(str, network_sizes))
         logger.info("network_size written: %s", network_sizes_label)
         print(f"network_size written = {network_sizes_label}")
-        _log_reward_min_max(raw_rows)
-        _log_metric_summary(
-            raw_rows,
-            (
-                "reward",
-                "success_rate",
-                "throughput_success",
-                "energy_per_success",
-            ),
-        )
+    _log_reward_min_max(raw_rows)
+    _log_metric_summary(
+        raw_rows,
+        (
+            "reward",
+            "success_rate",
+            "throughput_success",
+            "energy_per_success",
+        ),
+    )
 
     raw_header: list[str] = []
     seen: set[str] = set()
@@ -495,7 +508,11 @@ def write_simulation_results(
     )
 
     _log_control_table(raw_rows, "raw_results.csv")
-    aggregated_rows, intermediate_rows = aggregate_results(raw_rows)
+    aggregated_rows, intermediate_rows = aggregate_results(
+        raw_rows,
+        expected_metrics=STEP2_EXPECTED_METRICS,
+        step_label="Step2",
+    )
     _log_control_table(aggregated_rows, "aggregated_results.csv")
     for row in aggregated_rows:
         if row.get("network_size") in (None, "") and row.get("density") not in (None, ""):
@@ -591,14 +608,12 @@ def write_step1_results(
         network_sizes_label = ", ".join(map(str, network_sizes))
         logger.info("network_size written: %s", network_sizes_label)
         print(f"network_size written = {network_sizes_label}")
-        _log_reward_min_max(metric_rows)
         _log_metric_summary(
             metric_rows,
             (
-                "reward",
-                "success_rate",
-                "throughput_success",
-                "energy_per_success",
+                "sent",
+                "received",
+                "pdr",
             ),
         )
 
@@ -636,7 +651,11 @@ def write_step1_results(
 
     _log_control_table(packet_rows, "raw_packets.csv")
     _log_control_table(metric_rows, "raw_metrics.csv")
-    aggregated_rows, intermediate_rows = aggregate_results(metric_rows)
+    aggregated_rows, intermediate_rows = aggregate_results(
+        metric_rows,
+        expected_metrics=STEP1_EXPECTED_METRICS,
+        step_label="Step1",
+    )
     _log_control_table(aggregated_rows, "aggregated_results.csv")
     aggregated_header = (
         list(aggregated_rows[0].keys()) if aggregated_rows else list(BASE_GROUP_KEYS)
