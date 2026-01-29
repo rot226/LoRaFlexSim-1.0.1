@@ -10,7 +10,6 @@ import traceback
 from importlib.util import find_spec
 from pathlib import Path
 
-import pandas as pd
 
 if find_spec("article_c") is None:
     repo_root = Path(__file__).resolve().parents[1]
@@ -22,10 +21,6 @@ if find_spec("article_c") is None:
         )
 
 from article_c.common.csv_io import write_simulation_results, write_step1_results
-from article_c.common.plot_helpers import (
-    parse_export_formats,
-    set_default_export_formats,
-)
 
 ARTICLE_DIR = Path(__file__).resolve().parent
 STEP1_RESULTS_DIR = ARTICLE_DIR / "step1" / "results"
@@ -239,16 +234,17 @@ def _run_plot_module(
 
 def _validate_plot_modules_use_save_figure() -> bool:
     missing: list[str] = []
-    plot_dirs = [
-        ARTICLE_DIR / "step1" / "plots",
-        ARTICLE_DIR / "step2" / "plots",
-    ]
-    for plot_dir in plot_dirs:
-        for source_path in sorted(plot_dir.glob("plot_*.py")):
+    for module_paths in PLOT_MODULES.values():
+        for module_path in module_paths:
+            spec = find_spec(module_path)
+            if spec is None or spec.origin is None:
+                missing.append(f"{module_path} (introuvable)")
+                continue
+            source_path = Path(spec.origin)
             try:
                 source = source_path.read_text(encoding="utf-8")
             except OSError as exc:
-                missing.append(f"{source_path} ({exc})")
+                missing.append(f"{module_path} ({exc})")
                 continue
             if "save_figure(" not in source:
                 missing.append(str(source_path.relative_to(ARTICLE_DIR)))
@@ -354,6 +350,8 @@ def _load_csv_data(path: Path) -> tuple[list[str], list[dict[str, str]]]:
 
 
 def _load_network_sizes_from_csvs(paths: list[Path]) -> list[int]:
+    import pandas as pd
+
     sizes: set[int] = set()
     for path in paths:
         if not path.exists():
@@ -506,6 +504,11 @@ def _validate_plot_data(
 
 
 def main(argv: list[str] | None = None) -> None:
+    from article_c.common.plot_helpers import (
+        parse_export_formats,
+        set_default_export_formats,
+    )
+
     parser = build_arg_parser()
     args = parser.parse_args(argv)
     try:
