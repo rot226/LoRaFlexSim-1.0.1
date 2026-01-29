@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
 import warnings
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import pandas as pd
 
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     apply_figure_layout,
+    ALGO_COLORS,
     CONSTANT_METRIC_MESSAGE,
     filter_rows_by_network_sizes,
     filter_cluster,
@@ -87,16 +90,20 @@ def _plot_distribution(
 ) -> plt.Figure:
     fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     width, height = fig.get_size_inches()
-    apply_figure_layout(
-        fig, figsize=(width, height + 2), margins=legend_margins("top")
-    )
     algorithms = sorted({row["algo"] for row in rows})
+    algo_colors = [ALGO_COLORS.get(str(algo), "#333333") for algo in algorithms]
     rewards_by_algo = [
         [row["reward"] for row in rows if row["algo"] == algo]
         for algo in algorithms
     ]
     positions = list(range(1, len(algorithms) + 1))
-    ax.violinplot(rewards_by_algo, positions=positions, showmedians=True)
+    violin_parts = ax.violinplot(
+        rewards_by_algo, positions=positions, showmedians=True
+    )
+    for body, color in zip(violin_parts["bodies"], algo_colors):
+        body.set_facecolor(color)
+        body.set_edgecolor(color)
+        body.set_alpha(0.35)
     ax.boxplot(
         rewards_by_algo,
         positions=positions,
@@ -112,6 +119,36 @@ def _plot_distribution(
     ax.set_title(
         "Step 2 - Reward Distribution by Algorithm"
         f"{_title_suffix(network_sizes)}"
+    )
+    handles = [
+        Line2D(
+            [0],
+            [0],
+            marker="s",
+            linestyle="none",
+            markersize=7,
+            color=color,
+        )
+        for color in algo_colors
+    ]
+    labels = [algo_label(str(algo)) for algo in algorithms]
+    if handles:
+        legend_ncol = min(3, len(handles))
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            ncol=legend_ncol,
+            frameon=False,
+        )
+        legend_rows = max(1, math.ceil(len(handles) / legend_ncol))
+    else:
+        legend_rows = 1
+    apply_figure_layout(
+        fig,
+        figsize=(width, height + 2),
+        margins=legend_margins("top"),
+        legend_rows=legend_rows,
     )
     return fig
 
