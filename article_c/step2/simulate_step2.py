@@ -84,9 +84,12 @@ def _compute_reward(
     reward = success_rate * weighted_quality - collision_penalty
     if success_rate > 0.0:
         reward /= max(success_rate, 0.05)
-    if reward <= 0.0 and success_rate > 0.0 and weights.exploration_floor > 0.0:
-        reward = weights.exploration_floor
+    reward_floor = weights.exploration_floor
+    if success_rate > 0.0 and reward_floor > 0.0 and reward < reward_floor:
+        reward = reward_floor
     clipped_reward = _clip(reward, 0.0, 1.0)
+    if success_rate > 0.0 and reward_floor > 0.0 and clipped_reward < reward_floor:
+        clipped_reward = reward_floor
     if clipped_reward == 0.0:
         logger.info(
             "Récompense nulle (success_rate=%.4f sf_norm=%.3f latency_norm=%.3f "
@@ -464,6 +467,65 @@ def _log_reward_stats(
     )
 
 
+def _log_cluster_all_diagnostics(
+    *,
+    network_size: int,
+    algo_label: str,
+    round_id: int,
+    traffic_sent: list[int],
+    successes: list[int],
+    collision_norms: list[float],
+    link_qualities: list[float],
+    rewards: list[float],
+    lambda_collision: float,
+    congestion_probability: float,
+    collision_size_factor: float,
+) -> None:
+    traffic_total = sum(traffic_sent)
+    successes_total = sum(successes)
+    min_sent, median_sent, max_sent = _summarize_values(
+        [float(value) for value in traffic_sent]
+    )
+    min_success, median_success, max_success = _summarize_values(
+        [float(value) for value in successes]
+    )
+    min_collision, median_collision, max_collision = _summarize_values(collision_norms)
+    min_lq, median_lq, max_lq = _summarize_values(link_qualities)
+    min_reward, median_reward, max_reward = _summarize_values(rewards)
+    logger.info(
+        "Diag cluster=all - taille=%s algo=%s round=%s "
+        "traffic_sent[total/min/med/max]=%s/%.0f/%.1f/%.0f "
+        "successes[total/min/med/max]=%s/%.0f/%.1f/%.0f "
+        "collision_norm[min/med/max]=%.3f/%.3f/%.3f "
+        "link_quality[min/med/max]=%.3f/%.3f/%.3f "
+        "reward[min/med/max]=%.4f/%.4f/%.4f "
+        "(lambda_collision=%.3f congestion_probability=%.3f collision_size_factor=%.3f).",
+        network_size,
+        algo_label,
+        round_id,
+        traffic_total,
+        min_sent,
+        median_sent,
+        max_sent,
+        successes_total,
+        min_success,
+        median_success,
+        max_success,
+        min_collision,
+        median_collision,
+        max_collision,
+        min_lq,
+        median_lq,
+        max_lq,
+        min_reward,
+        median_reward,
+        max_reward,
+        lambda_collision,
+        congestion_probability,
+        collision_size_factor,
+    )
+
+
 def _log_pre_collision_stats(
     *,
     network_size: int,
@@ -601,7 +663,7 @@ def _weights_for_algo(algorithm: str, n_arms: int) -> list[float]:
 def _reward_weights_for_algo(
     algorithm: str, exploration_floor: float | None = None
 ) -> AlgoRewardWeights:
-    default_floor = 0.0
+    default_floor = 0.02
     if algorithm == "adr":
         weights = AlgoRewardWeights(
             sf_weight=0.45,
@@ -1254,6 +1316,8 @@ def run_simulation(
             round_collision_norms: list[float] = []
             round_throughput: list[float] = []
             round_energy_per_success: list[float] = []
+            round_traffic_sent: list[int] = []
+            round_successes: list[int] = []
             for node_window in node_windows:
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
@@ -1304,6 +1368,8 @@ def run_simulation(
                 round_collision_norms.append(metrics.collision_norm)
                 round_throughput.append(metrics.throughput_success)
                 round_energy_per_success.append(metrics.energy_per_success)
+                round_traffic_sent.append(traffic_sent)
+                round_successes.append(successes)
                 common_raw_row = {
                     "network_size": network_size_value,
                     "density": network_size_value,
@@ -1342,6 +1408,21 @@ def run_simulation(
                         "cluster": "all",
                     }
                 )
+            _log_cluster_all_diagnostics(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                traffic_sent=round_traffic_sent,
+                successes=round_successes,
+                collision_norms=round_collision_norms,
+                link_qualities=[
+                    float(node_window["link_quality"]) for node_window in node_windows
+                ],
+                rewards=round_rewards,
+                lambda_collision=lambda_collision,
+                congestion_probability=congestion_probability,
+                collision_size_factor=collision_size_factor,
+            )
             _log_loss_breakdown(
                 network_size=network_size_value,
                 algo_label=algo_label,
@@ -1643,6 +1724,8 @@ def run_simulation(
             round_collision_norms: list[float] = []
             round_throughput: list[float] = []
             round_energy_per_success: list[float] = []
+            round_traffic_sent: list[int] = []
+            round_successes: list[int] = []
             for node_window in node_windows:
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
@@ -1693,6 +1776,8 @@ def run_simulation(
                 round_collision_norms.append(metrics.collision_norm)
                 round_throughput.append(metrics.throughput_success)
                 round_energy_per_success.append(metrics.energy_per_success)
+                round_traffic_sent.append(traffic_sent)
+                round_successes.append(successes)
                 common_raw_row = {
                     "network_size": network_size_value,
                     "density": network_size_value,
@@ -1731,6 +1816,21 @@ def run_simulation(
                         "cluster": "all",
                     }
                 )
+            _log_cluster_all_diagnostics(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                traffic_sent=round_traffic_sent,
+                successes=round_successes,
+                collision_norms=round_collision_norms,
+                link_qualities=[
+                    float(node_window["link_quality"]) for node_window in node_windows
+                ],
+                rewards=round_rewards,
+                lambda_collision=lambda_collision,
+                congestion_probability=congestion_probability,
+                collision_size_factor=collision_size_factor,
+            )
             _log_loss_breakdown(
                 network_size=network_size_value,
                 algo_label=algo_label,
