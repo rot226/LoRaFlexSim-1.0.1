@@ -114,21 +114,30 @@ def _sample_learning_curve() -> list[dict[str, object]]:
     return rows
 
 
-def _aggregate_reward_by_round(
+def _aggregate_reward_by_group(
     rows: list[dict[str, object]],
-) -> dict[int, float]:
-    totals: dict[int, float] = {}
-    counts: dict[int, int] = {}
+) -> dict[tuple[str, int], dict[int, float]]:
+    totals: dict[tuple[str, int], dict[int, float]] = {}
+    counts: dict[tuple[str, int], dict[int, int]] = {}
     for row in rows:
+        algo = str(row.get("algo", "")).strip()
+        network_size = int(_to_float(row.get("network_size")))
         round_id = int(_to_float(row.get("round")))
         reward = _to_float(row.get("avg_reward"))
-        totals[round_id] = totals.get(round_id, 0.0) + reward
-        counts[round_id] = counts.get(round_id, 0) + 1
-    return {
-        round_id: totals[round_id] / counts[round_id]
-        for round_id in totals
-        if counts.get(round_id, 0) > 0
-    }
+        key = (algo, network_size)
+        totals.setdefault(key, {})
+        counts.setdefault(key, {})
+        totals[key][round_id] = totals[key].get(round_id, 0.0) + reward
+        counts[key][round_id] = counts[key].get(round_id, 0) + 1
+    aggregated: dict[tuple[str, int], dict[int, float]] = {}
+    for key, round_totals in totals.items():
+        round_counts = counts.get(key, {})
+        aggregated[key] = {
+            round_id: round_totals[round_id] / round_counts[round_id]
+            for round_id in round_totals
+            if round_counts.get(round_id, 0) > 0
+        }
+    return aggregated
 
 
 def _legend_handles_for_algos(
@@ -221,31 +230,33 @@ def _plot_learning_curve(
     network_sizes = sorted(
         {int(_to_float(row.get("network_size"))) for row in rows}
     )
+    grouped_points = _aggregate_reward_by_group(rows)
     if reference_size is not None or len(network_sizes) <= 1:
+        target_sizes = (
+            [reference_size]
+            if reference_size is not None
+            else network_sizes[:1]
+        )
         for algo in algorithms:
-            algo_rows = [
-                row
-                for row in rows
-                if row["algo"] == algo
-                and (reference_size is None or row["network_size"] == reference_size)
-            ]
-            points = _aggregate_reward_by_round(algo_rows)
-            if not points:
-                continue
-            rounds = sorted(points)
-            values = [points[round_id] for round_id in rounds]
-            ax.plot(rounds, values, marker="o", label=algo)
+            for network_size in target_sizes:
+                if network_size is None:
+                    continue
+                points = grouped_points.get((algo, network_size), {})
+                if not points:
+                    continue
+                rounds = sorted(points)
+                values = [points[round_id] for round_id in rounds]
+                ax.plot(rounds, values, marker="o", label=algo)
     else:
-        for network_size in network_sizes:
-            size_rows = [
-                row for row in rows if row.get("network_size") == network_size
-            ]
-            points = _aggregate_reward_by_round(size_rows)
-            if not points:
-                continue
-            rounds = sorted(points)
-            values = [points[round_id] for round_id in rounds]
-            ax.plot(rounds, values, marker="o", label=f"Taille {network_size}")
+        for algo in algorithms:
+            for network_size in network_sizes:
+                points = grouped_points.get((algo, network_size), {})
+                if not points:
+                    continue
+                rounds = sorted(points)
+                values = [points[round_id] for round_id in rounds]
+                label = f"{algo_label(algo)} - Taille {network_size}"
+                ax.plot(rounds, values, marker="o", label=label)
     ax.set_xlabel("Decision rounds")
     ax.set_ylabel("Average window reward")
     ax.set_title("Average window reward vs Decision rounds")
