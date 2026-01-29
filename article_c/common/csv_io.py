@@ -27,6 +27,7 @@ EXTRA_MEAN_KEYS = {"mean_toa_s", "mean_latency_s"}
 EXCLUDED_NUMERIC_KEYS = {"seed", "replication", "round", "node_id", "packet_id"}
 SUM_KEYS = {"success", "failure"}
 DERIVED_SUFFIXES = ("_mean", "_std", "_count", "_ci95", "_p10", "_p50", "_p90")
+EXPECTED_METRICS = ("reward", "success_rate")
 
 logger = logging.getLogger(__name__)
 
@@ -325,7 +326,16 @@ def _aggregate_rows(
     include_base_means: bool,
 ) -> list[dict[str, object]]:
     groups: dict[tuple[object, ...], list[dict[str, object]]] = defaultdict(list)
-    numeric_keys = _collect_numeric_keys(rows, group_keys)
+    missing_expected_metrics = [
+        metric for metric in EXPECTED_METRICS if not any(metric in row for row in rows)
+    ]
+    for metric in missing_expected_metrics:
+        logger.warning(
+            "Métrique attendue absente des lignes raw: %s. "
+            "Les percentiles associés ne seront pas calculés.",
+            metric,
+        )
+    numeric_keys = _collect_numeric_keys(rows, group_keys) - set(missing_expected_metrics)
     for row in rows:
         if row.get("network_size") in (None, "") and row.get("density") not in (None, ""):
             row["network_size"] = row["density"]
