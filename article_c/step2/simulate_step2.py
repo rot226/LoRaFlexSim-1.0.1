@@ -82,6 +82,8 @@ def _compute_reward(
         lambda_collision * weights.collision_weight * collision_norm * (0.7 + 0.3 * (1.0 - success_rate))
     )
     reward = success_rate * weighted_quality - collision_penalty
+    if success_rate > 0.0:
+        reward /= max(success_rate, 0.05)
     if reward <= 0.0 and success_rate > 0.0 and weights.exploration_floor > 0.0:
         reward = weights.exploration_floor
     clipped_reward = _clip(reward, 0.0, 1.0)
@@ -734,6 +736,7 @@ def run_simulation(
     n_arms: int | None = None,
     window_size: int = DEFAULT_CONFIG.rl.window_w,
     lambda_energy: float = DEFAULT_CONFIG.rl.lambda_energy,
+    lambda_collision: float | None = DEFAULT_CONFIG.rl.lambda_collision,
     epsilon_greedy: float = 0.03,
     exploration_floor: float | None = None,
     density: float | None = None,
@@ -880,7 +883,10 @@ def run_simulation(
         shadowing_sigma_base * shadowing_sigma_factor, 4.0, 12.0
     )
     collision_size_factor = _collision_size_factor(n_nodes, reference_size)
-    lambda_collision = _clip(0.15 + 0.45 * lambda_energy, 0.08, 0.7)
+    if lambda_collision is None:
+        lambda_collision = _clip(0.15 + 0.45 * lambda_energy, 0.08, 0.7)
+    else:
+        lambda_collision = _clip(lambda_collision, 0.0, 1.0)
     reward_weights = _reward_weights_for_algo(
         algorithm, exploration_floor=exploration_floor
     )

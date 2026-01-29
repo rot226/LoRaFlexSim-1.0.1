@@ -685,6 +685,11 @@ def _simulate_density(
                 jitter_range_s=jitter_range_s,
                 window_duration_s=float(config["window_duration_s"]),
                 window_size=int(config["window_size"]),
+                lambda_collision=(
+                    float(config["lambda_collision"])
+                    if config.get("lambda_collision") is not None
+                    else None
+                ),
                 traffic_coeff_min=float(config["traffic_coeff_min"]),
                 traffic_coeff_max=float(config["traffic_coeff_max"]),
                 traffic_coeff_enabled=bool(config["traffic_coeff_enabled"]),
@@ -791,6 +796,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "jitter_range_s": args.jitter_range_s,
         "window_duration_s": args.window_duration_s,
         "window_size": args.window_size,
+        "lambda_collision": args.lambda_collision,
         "traffic_coeff_min": args.traffic_coeff_min,
         "traffic_coeff_max": args.traffic_coeff_max,
         "traffic_coeff_enabled": args.traffic_coeff_enabled,

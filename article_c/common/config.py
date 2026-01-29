@@ -60,6 +60,7 @@ class RLConfig:
     window_w: int = 12
     warmup: int = 5
     lambda_energy: float = 0.2
+    lambda_collision: float | None = None
 
 
 @dataclass(frozen=True)
