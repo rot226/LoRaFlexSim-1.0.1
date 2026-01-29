@@ -739,12 +739,38 @@ def load_step2_aggregated(
 
 def _resolve_intermediate_step2_path(path: Path) -> Path | None:
     by_round = path.with_name("aggregated_results_by_round.csv")
-    if by_round.exists():
+    base_rows = _count_csv_data_rows(path) if path.exists() else 0
+    if by_round.exists() and _is_intermediate_complete(by_round, base_rows):
         return by_round
     by_replication = path.with_name("aggregated_results_by_replication.csv")
-    if by_replication.exists():
+    if by_replication.exists() and _is_intermediate_complete(
+        by_replication, base_rows
+    ):
         return by_replication
     return None
+
+
+def _count_csv_data_rows(path: Path) -> int:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            total_lines = sum(1 for _ in handle)
+    except OSError:
+        return 0
+    return max(0, total_lines - 1)
+
+
+def _is_intermediate_complete(path: Path, base_rows: int) -> bool:
+    try:
+        if path.stat().st_size == 0:
+            return False
+    except OSError:
+        return False
+    rows = _count_csv_data_rows(path)
+    if rows == 0:
+        return False
+    if base_rows and rows < base_rows:
+        return False
+    return True
 
 
 def _aggregate_step2_intermediate(
