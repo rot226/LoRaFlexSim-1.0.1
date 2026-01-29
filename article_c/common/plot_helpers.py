@@ -120,6 +120,7 @@ def render_constant_metric(
     axes: object,
     *,
     message: str = CONSTANT_METRIC_MESSAGE,
+    message_y: float | None = None,
     legend_loc: str = "above",
     show_fallback_legend: bool = True,
     legend_mode: str = "constante",
@@ -143,15 +144,9 @@ def render_constant_metric(
     for ax in _flatten_axes(axes):
         ax.clear()
         ax.axis("off")
-    fig.text(
-        0.5,
-        0.5,
-        message,
-        ha="center",
-        va="center",
-        fontsize=12,
-        color="#444444",
-    )
+    legend_style: dict[str, object] | None = None
+    legend_rows = 1
+    margins_for_layout: dict[str, float] | None = None
     if show_fallback_legend:
         should_add_legend = not _figure_has_legend(fig)
         if normalized_legend_mode == "constante":
@@ -164,12 +159,43 @@ def render_constant_metric(
                     handles, labels = legend_handles
             if handles:
                 legend_style = _legend_style(legend_loc, len(labels))
-                fig.legend(handles, labels, **legend_style)
                 ncol = int(legend_style.get("ncol", len(labels)) or 1)
                 legend_rows = max(1, math.ceil(len(labels) / ncol))
+                margins_for_layout = _legend_margins(legend_loc, legend_rows=legend_rows)
+        elif normalized_legend_mode == "constante" and _figure_has_legend(fig):
+            margins_for_layout = _legend_margins(legend_loc)
+    layout_rect = _layout_rect_from_margins(
+        margins_for_layout,
+        legend_rows=legend_rows,
+    )
+    message_x = (layout_rect[0] + layout_rect[2]) / 2
+    message_y = message_y if message_y is not None else (layout_rect[1] + layout_rect[3]) / 2
+    fig.text(
+        message_x,
+        message_y,
+        message,
+        ha="center",
+        va="center",
+        fontsize=12,
+        color="#444444",
+    )
+    if show_fallback_legend:
+        should_add_legend = not _figure_has_legend(fig)
+        if normalized_legend_mode == "constante":
+            should_add_legend = should_add_legend or bool(handles)
+        if should_add_legend:
+            if handles:
+                if legend_style is None:
+                    legend_style = _legend_style(legend_loc, len(labels))
+                fig.legend(handles, labels, **legend_style)
+                if margins_for_layout is None:
+                    margins_for_layout = _legend_margins(
+                        legend_loc,
+                        legend_rows=legend_rows,
+                    )
                 apply_figure_layout(
                     fig,
-                    margins=_legend_margins(legend_loc, legend_rows=legend_rows),
+                    margins=margins_for_layout,
                     bbox_to_anchor=legend_style.get("bbox_to_anchor"),
                     legend_rows=legend_rows,
                 )
@@ -497,6 +523,25 @@ def apply_figure_layout(
             fig.tight_layout()
     elif layout_rect is not None:
         fig.tight_layout(rect=layout_rect)
+
+
+def _layout_rect_from_margins(
+    margins: dict[str, float] | None,
+    *,
+    legend_rows: int = 1,
+) -> tuple[float, float, float, float]:
+    if not margins:
+        return (0.0, 0.0, 1.0, 1.0)
+    adjusted_margins = dict(margins)
+    reserved_top = 0.0
+    if "top" in adjusted_margins:
+        reserved_top = min(_legend_top_reserved(legend_rows), adjusted_margins["top"])
+    return (
+        adjusted_margins.get("left", 0.0),
+        adjusted_margins.get("bottom", 0.0),
+        adjusted_margins.get("right", 1.0),
+        max(0.0, adjusted_margins.get("top", 1.0) - reserved_top),
+    )
 
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
