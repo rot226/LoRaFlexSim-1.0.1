@@ -397,6 +397,15 @@ def _compute_successes_and_traffic(
         transmissions_by_sf, rng=rng
     )
     traffic_sent_by_node = _collect_traffic_sent(node_windows)
+    for node_id, successes in successes_by_node.items():
+        traffic_sent = traffic_sent_by_node.get(node_id, 0)
+        if successes > traffic_sent:
+            logger.warning(
+                "Succès > trafic après collisions (node_id=%s successes=%s traffic_sent=%s).",
+                node_id,
+                successes,
+                traffic_sent,
+            )
     return successes_by_node, traffic_sent_by_node, transmission_count, approx_mode
 
 
@@ -642,11 +651,26 @@ def _compute_collision_norm(
     successes: int,
     traffic_sent: int,
 ) -> float:
+    successes = min(successes, traffic_sent)
     success_ratio = successes / traffic_sent if traffic_sent > 0 else 0.0
     congestion_scale = 1.0 + 0.65 * congestion_probability
     size_scale = collision_size_factor**0.85
     base = airtime_norm * congestion_scale * size_scale
     return _clip(base * (1.0 - success_ratio) ** 0.85, 0.0, 1.0)
+
+
+def _clamp_successes_to_traffic(
+    *, node_id: int, successes: int, traffic_sent: int
+) -> int:
+    if successes > traffic_sent:
+        logger.warning(
+            "Clamp succès > trafic (node_id=%s successes=%s traffic_sent=%s).",
+            node_id,
+            successes,
+            traffic_sent,
+        )
+        return traffic_sent
+    return successes
 
 
 def _apply_cluster_bias(
@@ -1234,7 +1258,11 @@ def run_simulation(
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
                 traffic_sent = traffic_sent_by_node.get(node_id, 0)
-                successes = per_node_successes.get(node_id, 0)
+                successes = _clamp_successes_to_traffic(
+                    node_id=node_id,
+                    successes=per_node_successes.get(node_id, 0),
+                    traffic_sent=traffic_sent,
+                )
                 success_flag = 1 if successes > 0 else 0
                 failure_flag = 1 - success_flag
                 airtime_norm = energy_norm_by_sf[sf_value]
@@ -1619,7 +1647,11 @@ def run_simulation(
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
                 traffic_sent = traffic_sent_by_node.get(node_id, 0)
-                successes = per_node_successes.get(node_id, 0)
+                successes = _clamp_successes_to_traffic(
+                    node_id=node_id,
+                    successes=per_node_successes.get(node_id, 0),
+                    traffic_sent=traffic_sent,
+                )
                 success_flag = 1 if successes > 0 else 0
                 failure_flag = 1 - success_flag
                 airtime_norm = energy_norm_by_sf[sf_value]
