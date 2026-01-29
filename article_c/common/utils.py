@@ -150,6 +150,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Active/désactive la variabilité de trafic par nœud.",
     )
     parser.add_argument(
+        "--traffic-coeff-scale",
+        type=float,
+        default=1.0,
+        help=(
+            "Facteur global appliqué à la charge de trafic (ex: 0.7 pour diminuer)."
+        ),
+    )
+    parser.add_argument(
         "--traffic-coeff-clamp-min",
         type=float,
         default=step2_defaults.traffic_coeff_clamp_min,

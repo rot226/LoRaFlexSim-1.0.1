@@ -107,6 +107,22 @@ def _clamp_range(value: float, min_value: float, max_value: float) -> float:
     return max(min_value, min(max_value, value))
 
 
+def _apply_phase_offset(
+    traffic_times: list[float],
+    *,
+    rng: random.Random,
+    window_duration_s: float,
+    base_period_s: float,
+) -> list[float]:
+    if not traffic_times or window_duration_s <= 0.0:
+        return traffic_times
+    max_offset = min(base_period_s, window_duration_s)
+    if max_offset <= 0.0:
+        return traffic_times
+    phase_offset = rng.uniform(0.0, max_offset)
+    return sorted(((time + phase_offset) % window_duration_s) for time in traffic_times)
+
+
 def _effective_window_duration(
     tx_starts: list[float],
     airtime_s: float,
@@ -883,6 +899,7 @@ def run_simulation(
     traffic_coeff_min: float | None = None,
     traffic_coeff_max: float | None = None,
     traffic_coeff_enabled: bool | None = None,
+    traffic_coeff_scale: float | None = None,
     traffic_coeff_clamp_min: float | None = None,
     traffic_coeff_clamp_max: float | None = None,
     traffic_coeff_clamp_enabled: bool | None = None,
@@ -901,17 +918,31 @@ def run_simulation(
     window_duration_value = (
         step2_defaults.window_duration_s if window_duration_s is None else window_duration_s
     )
+    if window_size <= 0:
+        raise ValueError("window_size doit être strictement positif.")
+    if window_duration_value <= 0.0:
+        raise ValueError("window_duration_s doit être strictement positif.")
+    if jitter_range_value is not None and jitter_range_value < 0:
+        logger.warning("jitter_range_s négatif (%.3f), forcé à 0.", jitter_range_value)
+        jitter_range_value = 0.0
     traffic_coeff_min_value = (
         step2_defaults.traffic_coeff_min if traffic_coeff_min is None else traffic_coeff_min
     )
     traffic_coeff_max_value = (
         step2_defaults.traffic_coeff_max if traffic_coeff_max is None else traffic_coeff_max
     )
+    if traffic_coeff_min_value <= 0.0 or traffic_coeff_max_value <= 0.0:
+        raise ValueError("traffic_coeff_min/max doivent être strictement positifs.")
     if traffic_coeff_min_value > traffic_coeff_max_value:
         traffic_coeff_min_value, traffic_coeff_max_value = (
             traffic_coeff_max_value,
             traffic_coeff_min_value,
         )
+    traffic_coeff_scale_value = (
+        1.0 if traffic_coeff_scale is None else float(traffic_coeff_scale)
+    )
+    if traffic_coeff_scale_value <= 0.0:
+        raise ValueError("traffic_coeff_scale doit être strictement positif.")
     traffic_coeff_enabled_value = (
         step2_defaults.traffic_coeff_enabled
         if traffic_coeff_enabled is None
@@ -1139,6 +1170,7 @@ def run_simulation(
                             * traffic_coeffs[node_id]
                             * rate_multiplier
                             * load_factor
+                            * traffic_coeff_scale_value
                         )
                     ),
                 )
@@ -1155,6 +1187,13 @@ def run_simulation(
                     jitter_range_s=jitter_range_node_s,
                     rng=rng,
                 )
+                if jitter_range_node_s <= 0.0:
+                    traffic_times = _apply_phase_offset(
+                        traffic_times,
+                        rng=rng,
+                        window_duration_s=window_duration_value,
+                        base_period_s=base_period_s,
+                    )
                 shadowing_sigma_db_node = _clamp_range(
                     base_shadowing_sigma_db
                     * _cluster_shadowing_sigma_factor(cluster, qos_clusters),
@@ -1531,6 +1570,7 @@ def run_simulation(
                             * traffic_coeffs[node_id]
                             * rate_multiplier
                             * load_factor
+                            * traffic_coeff_scale_value
                         )
                     ),
                 )
@@ -1547,6 +1587,13 @@ def run_simulation(
                     jitter_range_s=jitter_range_node_s,
                     rng=rng,
                 )
+                if jitter_range_node_s <= 0.0:
+                    traffic_times = _apply_phase_offset(
+                        traffic_times,
+                        rng=rng,
+                        window_duration_s=window_duration_value,
+                        base_period_s=base_period_s,
+                    )
                 shadowing_sigma_db_node = _clamp_range(
                     base_shadowing_sigma_db
                     * _cluster_shadowing_sigma_factor(cluster, qos_clusters),
