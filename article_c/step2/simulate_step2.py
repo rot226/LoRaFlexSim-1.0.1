@@ -334,13 +334,19 @@ def _compute_collision_successes(
             per_node_total[node_id] = per_node_total.get(node_id, 0) + 1
         sample_probability = 1.0
         sampled_events = events
-        if approx_mode and len(events) > approx_sample_size:
-            sample_probability = approx_sample_size / len(events)
-            sampled_events = [
-                event for event in events if rng.random() < sample_probability
-            ]
-            if not sampled_events:
-                sampled_events = [rng.choice(events)]
+        if approx_mode:
+            scaled_sample_size = max(
+                1,
+                int(round(approx_sample_size * len(events) / total_transmissions)),
+            )
+            scaled_sample_size = min(scaled_sample_size, len(events))
+            if len(events) > scaled_sample_size:
+                sample_probability = scaled_sample_size / len(events)
+                sampled_events = [
+                    event for event in events if rng.random() < sample_probability
+                ]
+                if not sampled_events:
+                    sampled_events = [rng.choice(events)]
         collided = _compute_collisions(
             sampled_events,
             rng=rng,
