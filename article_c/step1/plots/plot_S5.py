@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 from pathlib import Path
 from random import Random
 from typing import Iterable
@@ -363,12 +364,12 @@ def _plot_pdr_distributions(
         Patch(facecolor="#f58518", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_off"]),
     ]
     legend_labels = [handle.get_label() for handle in legend_handles]
-    legend_bbox = (0.5, 1.14)
-    legend_style = {
+    legend_ncol = 2
+    legend_rows = max(1, math.ceil(len(legend_handles) / legend_ncol))
+    legend_style_base = {
         **LEGEND_STYLE,
-        "ncol": 2,
+        "ncol": legend_ncol,
         "loc": "lower center",
-        "bbox_to_anchor": legend_bbox,
     }
     all_values = [
         float(value)
@@ -379,6 +380,8 @@ def _plot_pdr_distributions(
     ]
     if is_constant_metric(all_values):
         fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(legend_handles)))
+        legend_bbox = _legend_bbox(fig, legend_rows)
+        legend_style = {**legend_style_base, "bbox_to_anchor": legend_bbox}
         apply_figure_layout(fig, figsize=(8, 5))
         render_constant_metric(
             fig,
@@ -393,7 +396,12 @@ def _plot_pdr_distributions(
             "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)",
             legend_loc="above",
         )
-        apply_figure_layout(fig, margins=legend_margins("above"), bbox_to_anchor=legend_bbox)
+        apply_figure_layout(
+            fig,
+            margins=legend_margins("above"),
+            bbox_to_anchor=legend_bbox,
+            legend_rows=legend_rows,
+        )
         return fig
     if not network_sizes:
         network_sizes = [TARGET_NETWORK_SIZE]
@@ -420,6 +428,8 @@ def _plot_pdr_distributions(
     ncols = 2
     nrows = max(1, n_sizes * max(1, len(algorithms)))
     fig, axes = plt.subplots(nrows, ncols, figsize=(6.2 * ncols, 2.4 * nrows), sharey=True)
+    legend_bbox = _legend_bbox(fig, legend_rows)
+    legend_style = {**legend_style_base, "bbox_to_anchor": legend_bbox}
     apply_figure_layout(fig, figsize=(6.2 * ncols, 2.4 * nrows))
     if nrows == 1 and ncols == 1:
         axes = [[axes]]
@@ -475,8 +485,18 @@ def _plot_pdr_distributions(
             "wspace": 0.25,
         },
         bbox_to_anchor=legend_bbox,
+        legend_rows=legend_rows,
     )
     return fig
+
+
+def _legend_bbox(fig: plt.Figure, legend_rows: int, anchor_x: float = 0.5) -> tuple[float, float]:
+    fig_height = fig.get_size_inches()[1]
+    base_y = 1.02
+    row_offset = 0.01 * max(0, legend_rows - 1)
+    height_adjust = max(0.0, min(0.02, (10.0 - fig_height) * 0.003))
+    y_position = min(1.05, max(base_y, base_y + row_offset + height_adjust))
+    return (anchor_x, y_position)
 
 
 def _resolve_step1_intermediate_path(base_path: Path) -> Path | None:
