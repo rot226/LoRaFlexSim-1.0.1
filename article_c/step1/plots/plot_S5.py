@@ -11,8 +11,10 @@ from typing import Iterable
 import warnings
 
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Patch
 from article_c.common.plot_helpers import (
+    BASE_DPI,
     SNIR_LABELS,
     SNIR_MODES,
     algo_label,
@@ -28,11 +30,13 @@ from article_c.common.plot_helpers import (
     select_received_metric_key,
     save_figure,
 )
-from article_c.common.plotting_style import LEGEND_STYLE
+from article_c.common.plotting_style import LEGEND_STYLE, SAVEFIG_STYLE
+from article_c.common.utils import ensure_dir
 from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import resolve_ieee_figsize
 
 TARGET_NETWORK_SIZE = 1280
+MAX_ROWS_PER_PAGE = 6
 NETWORK_SIZE_COLUMNS = ("network_size", "density", "nodes", "num_nodes")
 PDR_COLUMNS = ("pdr",)
 PDR_AGGREGATED_COLUMNS = ("aggregated_pdr",)
@@ -358,7 +362,7 @@ def _plot_pdr_distribution(
 def _plot_pdr_distributions(
     values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]],
     network_sizes: list[int],
-) -> plt.Figure:
+) -> list[plt.Figure]:
     legend_handles = [
         Patch(facecolor="#4c78a8", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_on"]),
         Patch(facecolor="#f58518", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_off"]),
@@ -391,85 +395,135 @@ def _plot_pdr_distributions(
         )
         configure_axes = ax
         layout_margins = legend_margins("above")
-    else:
-        if not network_sizes:
-            network_sizes = [TARGET_NETWORK_SIZE]
-        n_sizes = len(network_sizes)
-        algorithms: list[tuple[str, bool]] = []
-        for algo in ("adr", "mixra_h", "mixra_opt", "ucb1_sf"):
-            for fallback in (False, True):
-                if any(
-                    key[0] == algo and key[1] == fallback
-                    for size in network_sizes
-                    for key in values_by_size.get(size, {})
-                ):
-                    algorithms.append((algo, fallback))
-        if not algorithms:
-            algorithms = sorted(
-                {
-                    (algo, fallback)
-                    for size in network_sizes
-                    for (algo, fallback, _), values in values_by_size.get(size, {}).items()
-                    if values
-                }
+        fig.legend(handles=legend_handles, labels=legend_labels, **legend_style)
+        configure_figure(
+            fig,
+            configure_axes,
+            "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)",
+            legend_loc="above",
+        )
+        apply_figure_layout(
+            fig,
+            margins=layout_margins,
+            bbox_to_anchor=legend_bbox,
+            legend_rows=legend_rows,
+        )
+        return [fig]
+
+    if not network_sizes:
+        network_sizes = [TARGET_NETWORK_SIZE]
+    algorithms: list[tuple[str, bool]] = []
+    for algo in ("adr", "mixra_h", "mixra_opt", "ucb1_sf"):
+        for fallback in (False, True):
+            if any(
+                key[0] == algo and key[1] == fallback
+                for size in network_sizes
+                for key in values_by_size.get(size, {})
+            ):
+                algorithms.append((algo, fallback))
+    if not algorithms:
+        algorithms = sorted(
+            {
+                (algo, fallback)
+                for size in network_sizes
+                for (algo, fallback, _), values in values_by_size.get(size, {}).items()
+                if values
+            }
+        )
+
+    row_specs: list[tuple[int, str, bool]] = [
+        (size, algo, fallback)
+        for size in network_sizes
+        for (algo, fallback) in algorithms
+    ]
+    max_rows_per_page = max(1, MAX_ROWS_PER_PAGE)
+    total_pages = max(1, math.ceil(len(row_specs) / max_rows_per_page))
+    figures: list[plt.Figure] = []
+    for page_index in range(total_pages):
+        page_rows = row_specs[
+            page_index * max_rows_per_page : (page_index + 1) * max_rows_per_page
+        ]
+        title_suffix = (
+            f"page {page_index + 1}/{total_pages}" if total_pages > 1 else ""
+        )
+        fig = _plot_pdr_distribution_page(
+            values_by_size,
+            page_rows,
+            legend_handles=legend_handles,
+            legend_labels=legend_labels,
+            legend_style_base=legend_style_base,
+            legend_rows=legend_rows,
+            title_suffix=title_suffix,
+        )
+        figures.append(fig)
+    return figures
+
+
+def _plot_pdr_distribution_page(
+    values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]],
+    row_specs: list[tuple[int, str, bool]],
+    *,
+    legend_handles: list[Patch],
+    legend_labels: list[str],
+    legend_style_base: dict[str, object],
+    legend_rows: int,
+    title_suffix: str,
+) -> plt.Figure:
+    ncols = 2
+    nrows = max(1, len(row_specs))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(6.2 * ncols, 2.4 * nrows), sharey=True)
+    legend_bbox = _legend_bbox(fig, legend_rows)
+    legend_style = {**legend_style_base, "bbox_to_anchor": legend_bbox}
+    apply_figure_layout(fig, figsize=(6.2 * ncols, 2.4 * nrows))
+    if nrows == 1 and ncols == 1:
+        axes = [[axes]]
+    elif nrows == 1:
+        axes = [axes]
+    elif ncols == 1:
+        axes = [[ax] for ax in axes]
+
+    for row_index, (size, algo, fallback) in enumerate(row_specs):
+        values_by_group = values_by_size.get(size, {})
+        for col_index, snir_mode in enumerate(SNIR_MODES):
+            ax = axes[row_index][col_index]
+            _plot_pdr_distribution(
+                ax,
+                values=values_by_group.get((algo, fallback, snir_mode), []),
+                snir_mode=snir_mode,
             )
-
-        ncols = 2
-        nrows = max(1, n_sizes * max(1, len(algorithms)))
-        fig, axes = plt.subplots(nrows, ncols, figsize=(6.2 * ncols, 2.4 * nrows), sharey=True)
-        legend_bbox = _legend_bbox(fig, legend_rows)
-        legend_style = {**legend_style_base, "bbox_to_anchor": legend_bbox}
-        apply_figure_layout(fig, figsize=(6.2 * ncols, 2.4 * nrows))
-        if nrows == 1 and ncols == 1:
-            axes = [[axes]]
-        elif nrows == 1:
-            axes = [axes]
-        elif ncols == 1:
-            axes = [[ax] for ax in axes]
-
-        for size_index, size in enumerate(network_sizes):
-            values_by_group = values_by_size.get(size, {})
-            for algo_index, (algo, fallback) in enumerate(algorithms):
-                row_index = size_index * len(algorithms) + algo_index
-                for col_index, snir_mode in enumerate(SNIR_MODES):
-                    ax = axes[row_index][col_index]
-                    _plot_pdr_distribution(
-                        ax,
-                        values=values_by_group.get((algo, fallback, snir_mode), []),
-                        snir_mode=snir_mode,
-                    )
-                    if col_index == 0:
-                        ax.set_ylabel(
-                            f"{algo_label(algo, fallback)}\nPDR (ratio 0–1)",
-                            fontsize=9,
-                        )
-                    if row_index != nrows - 1:
-                        ax.set_xlabel("")
-                if size_index == 0 and algo_index == 0:
-                    axes[row_index][0].set_title(SNIR_LABELS["snir_on"])
-                    axes[row_index][1].set_title(SNIR_LABELS["snir_off"])
-                axes[row_index][0].annotate(
-                    f"Taille réseau = {size} nœuds",
-                    xy=(0.02, 1.02),
-                    xycoords="axes fraction",
-                    ha="left",
-                    va="bottom",
-                    fontsize=7,
-                    color="#444444",
-                    bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.0},
+            if col_index == 0:
+                ax.set_ylabel(
+                    f"{algo_label(algo, fallback)}\nPDR (ratio 0–1)",
+                    fontsize=9,
                 )
+            if row_index != nrows - 1:
+                ax.set_xlabel("")
+        if row_index == 0:
+            axes[row_index][0].set_title(SNIR_LABELS["snir_on"])
+            axes[row_index][1].set_title(SNIR_LABELS["snir_off"])
+        axes[row_index][0].annotate(
+            f"Taille réseau = {size} nœuds",
+            xy=(0.02, 1.02),
+            xycoords="axes fraction",
+            ha="left",
+            va="bottom",
+            fontsize=7,
+            color="#444444",
+            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.0},
+        )
 
-        configure_axes = axes
-        layout_margins = {
-            **legend_margins("above"),
-            "hspace": 0.95,
-            "wspace": 0.25,
-        }
+    layout_margins = {
+        **legend_margins("above"),
+        "hspace": 0.95,
+        "wspace": 0.25,
+    }
     fig.legend(handles=legend_handles, labels=legend_labels, **legend_style)
+    base_title = "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)"
+    title = f"{base_title} ({title_suffix})" if title_suffix else base_title
     configure_figure(
         fig,
-        configure_axes,
-        "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)",
+        axes,
+        title,
         legend_loc="above",
     )
     apply_figure_layout(
@@ -479,6 +533,22 @@ def _plot_pdr_distributions(
         legend_rows=legend_rows,
     )
     return fig
+
+
+def _save_multipage_figures(
+    figures: list[plt.Figure],
+    output_dir: Path,
+    stem: str,
+) -> None:
+    ensure_dir(output_dir)
+    pdf_path = output_dir / f"{stem}.pdf"
+    with PdfPages(pdf_path) as pdf:
+        for fig in figures:
+            fig.savefig(pdf, format="pdf", dpi=BASE_DPI, **SAVEFIG_STYLE)
+    for index, fig in enumerate(figures, start=1):
+        page_stem = f"{stem}_page{index}"
+        for ext in ("png", "eps"):
+            fig.savefig(output_dir / f"{page_stem}.{ext}", dpi=BASE_DPI, **SAVEFIG_STYLE)
 
 
 def _legend_bbox(fig: plt.Figure, legend_rows: int, anchor_x: float = 0.5) -> tuple[float, float]:
@@ -562,10 +632,14 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     if len(network_sizes) < 2:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
 
-    fig = _plot_pdr_distributions(values_by_size, network_sizes)
+    figures = _plot_pdr_distributions(values_by_size, network_sizes)
     output_dir = step_dir / "plots" / "output"
-    save_figure(fig, output_dir, "plot_S5", use_tight=False)
-    plt.close(fig)
+    if len(figures) == 1:
+        save_figure(figures[0], output_dir, "plot_S5", use_tight=False)
+    else:
+        _save_multipage_figures(figures, output_dir, "plot_S5")
+    for fig in figures:
+        plt.close(fig)
 
 
 if __name__ == "__main__":
