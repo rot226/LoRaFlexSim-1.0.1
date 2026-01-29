@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 
 import matplotlib.pyplot as plt
@@ -13,6 +14,7 @@ from article_c.common.plot_helpers import (
     legend_margins,
 )
 from article_c.common.plotting_style import LEGEND_STYLE
+from article_c.common.plotting_style import legend_bbox_to_anchor
 
 
 def _flatten_axes(axes: object) -> list[plt.Axes]:
@@ -60,11 +62,19 @@ def configure_figure(
                     **LEGEND_STYLE,
                     "ncol": min(len(labels), LEGEND_STYLE.get("ncol", 3)),
                 }
-                fig.legend(handles, labels, **legend_style)
+                legend = fig.legend(handles, labels, **legend_style)
+                ncol = int(legend_style.get("ncol", len(labels)) or 1)
+                legend_rows = max(1, math.ceil(len(labels) / ncol))
+                bbox_to_anchor = legend_bbox_to_anchor(
+                    legend=legend,
+                    legend_rows=legend_rows,
+                )
+                legend.set_bbox_to_anchor(bbox_to_anchor)
                 apply_figure_layout(
                     fig,
-                    bbox_to_anchor=legend_style.get("bbox_to_anchor"),
-                    margins=legend_margins("above"),
+                    bbox_to_anchor=bbox_to_anchor,
+                    margins=legend_margins("above", legend_rows=legend_rows),
+                    legend_rows=legend_rows,
                 )
             else:
                 fig.legend(
