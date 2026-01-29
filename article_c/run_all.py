@@ -3,7 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from importlib.util import find_spec
 from pathlib import Path
+
+if find_spec("article_c") is None:
+    repo_root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(repo_root))
+    if find_spec("article_c") is None:
+        raise ModuleNotFoundError(
+            "Impossible d'importer 'article_c'. "
+            "Ajoutez la racine du dépôt au PYTHONPATH."
+        )
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.utils import parse_network_size_list
