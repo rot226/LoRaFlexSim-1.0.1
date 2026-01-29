@@ -8,12 +8,17 @@ from pathlib import Path
 import warnings
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from article_c.common.plot_helpers import (
+    ALGO_COLORS,
+    ALGO_MARKERS,
     apply_plot_style,
     apply_figure_layout,
+    algo_label,
+    add_global_legend,
     filter_rows_by_network_sizes,
     is_constant_metric,
-    place_legend,
+    legend_margins,
     render_constant_metric,
     save_figure,
 )
@@ -123,6 +128,54 @@ def _aggregate_reward_by_round(
     }
 
 
+def _legend_handles_for_algos(
+    algos: list[str],
+) -> tuple[list[Line2D], list[str]]:
+    handles: list[Line2D] = []
+    labels: list[str] = []
+    for algo in algos:
+        normalized_algo = _normalize_algo_name(algo)
+        handles.append(
+            Line2D(
+                [0],
+                [0],
+                color=ALGO_COLORS.get(normalized_algo, "#333333"),
+                marker=ALGO_MARKERS.get(normalized_algo, "o"),
+                linestyle="none",
+                markersize=6.0,
+            )
+        )
+        labels.append(algo_label(algo))
+    return handles, labels
+
+
+def _available_algorithms(rows: list[dict[str, object]]) -> list[str]:
+    available = {
+        str(row.get("algo", "")).strip() for row in rows if row.get("algo") is not None
+    }
+    available = {algo for algo in available if algo}
+    return sorted(available)
+
+
+def _normalize_algo_name(algo: object) -> str:
+    return str(algo or "").strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _select_algorithms(
+    preferred: list[str],
+    available: list[str],
+) -> list[str]:
+    if not available:
+        return preferred
+    normalized_lookup = {_normalize_algo_name(algo): algo for algo in available}
+    selected: list[str] = []
+    for algo in preferred:
+        normalized = _normalize_algo_name(algo)
+        if normalized in normalized_lookup:
+            selected.append(normalized_lookup[normalized])
+    return selected or available
+
+
 def _plot_learning_curve(
     rows: list[dict[str, object]],
     *,
@@ -130,21 +183,29 @@ def _plot_learning_curve(
 ) -> plt.Figure:
     fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     width, height = fig.get_size_inches()
-    apply_figure_layout(fig, figsize=(width, height + 2))
+    legend_loc = "top"
+    apply_figure_layout(
+        fig,
+        figsize=(width, height + 2),
+        margins=legend_margins(legend_loc),
+    )
+    preferred_algos = ["ADR", "UCB1-SF"]
+    available = _available_algorithms(rows)
+    algorithms = _select_algorithms(preferred_algos, available)
     reward_values = [
         float(row.get("avg_reward"))
         for row in rows
         if isinstance(row.get("avg_reward"), (int, float))
     ]
     if is_constant_metric(reward_values):
-        render_constant_metric(fig, ax, legend_handles=None)
+        render_constant_metric(
+            fig,
+            ax,
+            legend_loc=legend_loc,
+            legend_handles=_legend_handles_for_algos(algorithms),
+        )
         ax.set_title("Average window reward vs Decision rounds")
         return fig
-    preferred_algos = ["ADR", "UCB1-SF"]
-    available = {row["algo"] for row in rows}
-    algorithms = [algo for algo in preferred_algos if algo in available]
-    if not algorithms:
-        algorithms = sorted(available)
     network_sizes = sorted(
         {int(_to_float(row.get("network_size"))) for row in rows}
     )
@@ -176,7 +237,7 @@ def _plot_learning_curve(
     ax.set_xlabel("Decision rounds")
     ax.set_ylabel("Average window reward")
     ax.set_title("Average window reward vs Decision rounds")
-    place_legend(ax, legend_loc="above")
+    add_global_legend(fig, ax, legend_loc=legend_loc)
     return fig
 
 
