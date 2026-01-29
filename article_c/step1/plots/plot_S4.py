@@ -35,7 +35,6 @@ from article_c.common.plot_helpers import (
     resolve_percentile_keys,
     save_figure,
 )
-from article_c.common.plotting_style import LEGEND_STYLE
 from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import resolve_ieee_figsize
 
@@ -158,12 +157,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         existing_legend = ax.get_legend()
         if existing_legend is not None:
             existing_legend.remove()
-        legend_style = {
-            **LEGEND_STYLE,
-            "ncol": min(len(labels), LEGEND_STYLE.get("ncol", 3)),
-        }
-        fig.legend(handles, labels, **legend_style)
-        apply_figure_layout(fig, bbox_to_anchor=legend_style.get("bbox_to_anchor"))
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Sent Frames (budget saturant, median, p10-p90)")
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
@@ -176,6 +169,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         "Step 1 - Sent Frames (budget saturant) vs Network size (number of nodes) "
         "(SNIR on/off)",
         legend_loc="above",
+        legend_handles=handles if handles else None,
+        legend_labels=labels if handles else None,
     )
     _add_summary_plot(ax_summary, rows, metric_key)
     apply_figure_layout(
