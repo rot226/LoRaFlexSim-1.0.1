@@ -8,10 +8,10 @@ from collections.abc import Iterable
 import matplotlib.pyplot as plt
 
 from article_c.common.plot_helpers import (
-    SUPTITLE_Y,
     apply_figure_layout,
     fallback_legend_handles,
     legend_margins,
+    suptitle_y_from_top,
 )
 from article_c.common.plotting_style import LEGEND_STYLE
 from article_c.common.plotting_style import legend_bbox_to_anchor
@@ -47,6 +47,7 @@ def configure_figure(
         raise ValueError("legend_loc doit valoir 'above' ou 'right'.")
 
     axes_list = _flatten_axes(axes)
+    legend_rows = 1
     if not fig.legends:
         handles: list[object] = []
         labels: list[str] = []
@@ -85,13 +86,13 @@ def configure_figure(
                 )
                 apply_figure_layout(fig, bbox_to_anchor=(1.02, 0.5))
 
-    fig.suptitle(title, y=SUPTITLE_Y)
     if legend_loc == "above":
-        above_margins = {"top": legend_margins("above")["top"]}
+        above_margins = {"top": legend_margins("above", legend_rows=legend_rows)["top"]}
         apply_figure_layout(
             fig,
             margins=above_margins,
             tight_layout={"rect": (0, 0, 1, above_margins["top"])},
+            legend_rows=legend_rows,
         )
     else:
         apply_figure_layout(
@@ -99,3 +100,4 @@ def configure_figure(
             margins={"top": 0.88, "right": 0.80},
             tight_layout={"rect": (0, 0, 0.80, 1)},
         )
+    fig.suptitle(title, y=suptitle_y_from_top(fig))

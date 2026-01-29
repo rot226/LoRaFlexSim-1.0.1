@@ -67,6 +67,7 @@ BASE_DPI = 300
 BASE_GRID_ENABLED = True
 AXES_TITLE_Y = 1.02
 SUPTITLE_Y = 0.965
+SUPTITLE_TOP_RATIO = 0.85
 FIGURE_SUBPLOT_TOP = 0.78
 LEGEND_TOP_MARGIN = 0.74
 LEGEND_TOP_RESERVED = 0.02
@@ -304,6 +305,23 @@ def _legend_margins(legend_loc: str, *, legend_rows: int = 1) -> dict[str, float
 def legend_margins(legend_loc: str, *, legend_rows: int = 1) -> dict[str, float]:
     """Expose les marges recommandées pour une légende donnée."""
     return _legend_margins(legend_loc, legend_rows=legend_rows)
+
+
+def suptitle_y_from_top(
+    fig: plt.Figure,
+    *,
+    fallback: float = SUPTITLE_Y,
+    ratio: float = SUPTITLE_TOP_RATIO,
+) -> float:
+    """Calcule la position verticale du suptitle selon la marge supérieure réelle."""
+    try:
+        top = float(fig.subplotpars.top)
+    except (AttributeError, TypeError, ValueError):
+        return fallback
+    top = max(0.0, min(1.0, top))
+    if top >= 1.0:
+        return fallback
+    return min(0.99, top + (1.0 - top) * ratio)
 
 
 def _normalize_legend_loc(legend_loc: str) -> str:
