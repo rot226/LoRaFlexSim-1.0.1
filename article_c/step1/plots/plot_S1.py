@@ -34,7 +34,7 @@ from article_c.common.plot_helpers import (
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
-from plot_defaults import DEFAULT_FIGSIZE_MULTI
+from plot_defaults import resolve_ieee_figsize
 
 
 def _algo_sort_key(algo: object) -> int:
@@ -113,14 +113,16 @@ def _add_summary_plot(
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
+    ensure_network_size(rows)
+    df = pd.DataFrame(rows)
+    algos = sorted(df["algo"].dropna().unique(), key=_algo_sort_key)
+    num_series = len(algos) * len(SNIR_MODES) if algos else None
     fig, (ax, ax_summary) = plt.subplots(
         2,
         1,
-        figsize=DEFAULT_FIGSIZE_MULTI,
+        figsize=resolve_ieee_figsize(num_series),
         gridspec_kw={"height_ratios": [4.0, 1.4]},
     )
-    ensure_network_size(rows)
-    df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)

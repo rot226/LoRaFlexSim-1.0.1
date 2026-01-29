@@ -23,7 +23,7 @@ from article_c.common.plot_helpers import (
     render_constant_metric,
     save_figure,
 )
-from plot_defaults import DEFAULT_FIGSIZE_MULTI
+from plot_defaults import resolve_ieee_figsize
 
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
@@ -63,12 +63,12 @@ def _plot_entropy(
     rows: list[dict[str, object]],
     network_sizes: list[int],
 ) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
+    network_sizes = sorted(network_sizes)
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(network_sizes)))
     width, height = fig.get_size_inches()
     apply_figure_layout(
         fig, figsize=(width, height + 2), margins=legend_margins("top")
     )
-    network_sizes = sorted(network_sizes)
     all_entropy_values: list[float] = []
     for network_size in network_sizes:
         size_rows = [row for row in rows if row["network_size"] == network_size]

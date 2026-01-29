@@ -27,7 +27,7 @@ from article_c.common.plot_helpers import (
     render_constant_metric,
     save_figure,
 )
-from plot_defaults import DEFAULT_FIGSIZE_MULTI
+from plot_defaults import resolve_ieee_figsize
 
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
@@ -57,13 +57,20 @@ def _plot_metric(
     metric_key: str,
     network_sizes: list[int] | None,
 ) -> plt.Figure | None:
-    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
+    df = pd.DataFrame(rows)
+    if "algo" in df.columns:
+        algo_col = "algo"
+    elif "algorithm" in df.columns:
+        algo_col = "algorithm"
+    else:
+        algo_col = None
+    series_count = len(df[algo_col].dropna().unique()) if algo_col else None
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
     width, height = fig.get_size_inches()
     apply_figure_layout(
         fig, figsize=(width, height + 2), margins=legend_margins("top")
     )
     ensure_network_size(rows)
-    df = pd.DataFrame(rows)
     if network_sizes is None:
         network_sizes = sorted(df["network_size"].unique())
     if _has_invalid_network_sizes(network_sizes):

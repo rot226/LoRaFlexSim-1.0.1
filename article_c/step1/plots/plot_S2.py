@@ -25,13 +25,18 @@ from article_c.common.plot_helpers import (
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
-from plot_defaults import DEFAULT_FIGSIZE_MULTI
+from plot_defaults import resolve_ieee_figsize
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
+    series_count = (
+        df[["algo", "snir_mode"]].dropna().drop_duplicates().shape[0]
+        if {"algo", "snir_mode"}.issubset(df.columns)
+        else len(df.dropna().drop_duplicates())
+    )
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
