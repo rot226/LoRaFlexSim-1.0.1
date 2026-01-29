@@ -19,9 +19,11 @@ from article_c.common.plot_helpers import (
     filter_cluster,
     filter_mixra_opt_fallback,
     load_step1_aggregated,
+    parse_export_formats,
     place_legend,
     plot_metric_by_snir,
     save_figure,
+    set_default_export_formats,
 )
 from plot_defaults import DEFAULT_FIGSIZE_MULTI
 from article_c.common.utils import (
@@ -256,6 +258,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=float,
         default=snir_defaults.snir_threshold_db,
         help="Seuil SNIR (dB).",
+    )
+    parser.add_argument(
+        "--formats",
+        type=str,
+        default="png,pdf,eps",
+        help="Formats d'export des figures (ex: png,pdf,eps).",
     )
     parser.add_argument(
         "--noise-floor-dbm",
@@ -834,6 +842,11 @@ def _check_pdr_consistency(output_dir: Path) -> None:
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    try:
+        export_formats = parse_export_formats(args.formats)
+    except ValueError as exc:
+        parser.error(str(exc))
+    set_default_export_formats(export_formats)
 
     # Compat: "density" est déprécié, utiliser "network_size".
     network_sizes = parse_network_size_list(args.network_sizes)

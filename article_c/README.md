@@ -104,6 +104,12 @@ Générer toutes les figures :
 python article_c/make_all_plots.py
 ```
 
+Contrôler les formats d'export (PNG/PDF/EPS) :
+
+```powershell
+python article_c/make_all_plots.py --formats png,pdf,eps
+```
+
 Régénérer toutes les figures (Windows 11) :
 
 ```powershell

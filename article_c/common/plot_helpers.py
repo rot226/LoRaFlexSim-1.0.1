@@ -89,6 +89,8 @@ LEGEND_RIGHT_MARGIN = 0.78
 CONSTANT_METRIC_VARIANCE_THRESHOLD = 1e-6
 CONSTANT_METRIC_MESSAGE = "métrique constante – à investiguer"
 MISSING_METRIC_MESSAGE = "données manquantes"
+DEFAULT_EXPORT_FORMATS = ("png", "pdf", "eps")
+_EXPORT_FORMATS = DEFAULT_EXPORT_FORMATS
 
 
 class MetricStatus(str, Enum):
@@ -124,6 +126,32 @@ def apply_plot_style() -> None:
             "savefig.dpi": BASE_DPI,
         }
     )
+
+
+def _normalize_export_formats(formats: Iterable[str]) -> tuple[str, ...]:
+    normalized: list[str] = []
+    for fmt in formats:
+        cleaned = str(fmt).strip().lstrip(".").lower()
+        if cleaned:
+            normalized.append(cleaned)
+    if not normalized:
+        raise ValueError("La liste des formats d'export est vide.")
+    return tuple(dict.fromkeys(normalized))
+
+
+def parse_export_formats(value: str | None) -> tuple[str, ...]:
+    """Parse la valeur CLI --formats en liste normalisée."""
+    if value is None:
+        return DEFAULT_EXPORT_FORMATS
+    parts = [part.strip() for part in value.split(",")]
+    return _normalize_export_formats(parts)
+
+
+def set_default_export_formats(formats: Iterable[str]) -> tuple[str, ...]:
+    """Définit la liste globale des formats d'export."""
+    global _EXPORT_FORMATS
+    _EXPORT_FORMATS = _normalize_export_formats(formats)
+    return _EXPORT_FORMATS
     plt.subplots_adjust(top=FIGURE_SUBPLOT_TOP)
 
 
@@ -518,8 +546,9 @@ def save_figure(
     output_dir: Path,
     stem: str,
     use_tight: bool = False,
+    formats: Iterable[str] | None = None,
 ) -> None:
-    """Sauvegarde la figure en PNG, PDF et EPS dans le répertoire cible.
+    """Sauvegarde la figure dans les formats demandés.
 
     Sur Windows, privilégier bbox_inches=None (valeur par défaut).
     """
@@ -527,7 +556,12 @@ def save_figure(
     apply_output_fonttype()
     if use_tight:
         fig.tight_layout()
-    for ext in ("png", "pdf", "eps"):
+    selected_formats = (
+        _EXPORT_FORMATS
+        if formats is None
+        else _normalize_export_formats(formats)
+    )
+    for ext in selected_formats:
         fig.savefig(output_dir / f"{stem}.{ext}", dpi=BASE_DPI, **SAVEFIG_STYLE)
 
 

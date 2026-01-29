@@ -11,7 +11,13 @@ from statistics import median
 from typing import Sequence
 
 from article_c.common.csv_io import write_rows, write_simulation_results
-from article_c.common.plot_helpers import apply_plot_style, place_legend, save_figure
+from article_c.common.plot_helpers import (
+    apply_plot_style,
+    parse_export_formats,
+    place_legend,
+    save_figure,
+    set_default_export_formats,
+)
 from article_c.common.utils import (
     ensure_dir,
     parse_cli_args,
@@ -756,6 +762,11 @@ def _simulate_density(
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_cli_args(argv)
+    try:
+        export_formats = parse_export_formats(args.formats)
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+    set_default_export_formats(export_formats)
     if args.debug_step2:
         logging.basicConfig(
             level=logging.INFO,

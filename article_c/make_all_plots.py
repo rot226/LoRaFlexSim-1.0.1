@@ -11,6 +11,10 @@ from pathlib import Path
 import pandas as pd
 
 from article_c.common.csv_io import write_simulation_results, write_step1_results
+from article_c.common.plot_helpers import (
+    parse_export_formats,
+    set_default_export_formats,
+)
 
 ARTICLE_DIR = Path(__file__).resolve().parent
 STEP1_RESULTS_DIR = ARTICLE_DIR / "step1" / "results"
@@ -189,6 +193,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         nargs="+",
         default=None,
         help="Tailles de réseau attendues (ex: 50 100 150).",
+    )
+    parser.add_argument(
+        "--formats",
+        type=str,
+        default="png,pdf,eps",
+        help="Formats d'export des figures (ex: png,pdf,eps).",
     )
     return parser
 
@@ -487,6 +497,11 @@ def _validate_plot_data(
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    try:
+        export_formats = parse_export_formats(args.formats)
+    except ValueError as exc:
+        parser.error(str(exc))
+    set_default_export_formats(export_formats)
     if not _validate_plot_modules_use_save_figure():
         return
     try:
