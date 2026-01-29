@@ -88,6 +88,18 @@ Exécuter uniquement l'étape 2 :
 python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 --seeds_base 1000
 ```
 
+### Diagnostic d'import (package `article_c`)
+
+Si vous avez un doute sur la résolution du package `article_c`, vous pouvez lancer
+le script de diagnostic suivant pour vérifier l'import et afficher le chemin résolu :
+
+```powershell
+python article_c/diagnose_import.py
+```
+
+Le script affiche également un extrait de `sys.path` pour aider à comprendre
+la résolution des modules sur Windows 11.
+
 ### Jitter (décalage temporel)
 
 Le **jitter** ajoute un décalage aléatoire (uniforme) à chaque instant de transmission généré. L'amplitude est contrôlée par `--jitter-range-s` (secondes) et s'applique aux modèles de trafic périodique ou poisson, en conservant uniquement les transmissions qui restent dans la fenêtre de simulation. La valeur par défaut est **30 s**.
