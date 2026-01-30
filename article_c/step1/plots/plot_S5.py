@@ -52,6 +52,24 @@ CLUSTER_COLUMNS = ("cluster",)
 MIXRA_FALLBACK_COLUMNS = ("mixra_opt_fallback", "mixra_fallback", "fallback")
 
 
+def _clear_axes_legends(axes: object) -> None:
+    axes_list: list[plt.Axes] = []
+    if isinstance(axes, plt.Axes):
+        axes_list = [axes]
+    elif hasattr(axes, "flat"):
+        axes_list = [ax for ax in axes.flat if isinstance(ax, plt.Axes)]
+    elif isinstance(axes, list):
+        for item in axes:
+            if isinstance(item, plt.Axes):
+                axes_list.append(item)
+            elif isinstance(item, list):
+                axes_list.extend([ax for ax in item if isinstance(ax, plt.Axes)])
+    for ax in axes_list:
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.remove()
+
+
 def _read_rows(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         return []
@@ -391,7 +409,8 @@ def _plot_pdr_distributions(
             legend_handles=(legend_handles, legend_labels),
         )
         configure_axes = ax
-        layout_margins = legend_margins("above")
+        layout_margins = legend_margins("above", legend_rows=legend_rows)
+        _clear_axes_legends(configure_axes)
         configure_figure(
             fig,
             configure_axes,
@@ -510,12 +529,13 @@ def _plot_pdr_distribution_page(
         )
 
     layout_margins = {
-        **legend_margins("above"),
+        **legend_margins("above", legend_rows=legend_rows),
         "hspace": 0.95,
         "wspace": 0.25,
     }
     base_title = "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)"
     title = f"{base_title} ({title_suffix})" if title_suffix else base_title
+    _clear_axes_legends(axes)
     configure_figure(
         fig,
         axes,
