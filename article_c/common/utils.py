@@ -197,6 +197,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Amplitude du délai aléatoire entre fenêtres (secondes).",
     )
     parser.add_argument(
+        "--reward-floor",
+        type=float,
+        default=step2_defaults.reward_floor,
+        help=(
+            "Plancher de récompense appliqué dès que success_rate > 0 "
+            "(par défaut: plancher implicite selon l'algorithme)."
+        ),
+    )
+    parser.add_argument(
         "--workers",
         type=int,
         default=1,

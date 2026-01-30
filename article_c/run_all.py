@@ -114,6 +114,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Durée d'une fenêtre de simulation (secondes).",
     )
     parser.add_argument(
+        "--reward-floor",
+        type=float,
+        default=None,
+        help=(
+            "Plancher de récompense appliqué dès que success_rate > 0 "
+            "(étape 2)."
+        ),
+    )
+    parser.add_argument(
         "--traffic-coeff-min",
         type=float,
         default=None,
@@ -418,6 +427,8 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         )
     if args.window_delay_range_s is not None:
         step2_args.extend(["--window-delay-range-s", str(args.window_delay_range_s)])
+    if args.reward_floor is not None:
+        step2_args.extend(["--reward-floor", str(args.reward_floor)])
     if args.flat_output is not None:
         step2_args.append("--flat-output" if args.flat_output else "--no-flat-output")
     return step2_args

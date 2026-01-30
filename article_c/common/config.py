@@ -85,6 +85,7 @@ class Step2Config:
     collision_size_under_max: float = 1.0
     collision_size_over_max: float = 2.4
     collision_size_factor: float | None = None
+    reward_floor: float | None = None
 
 
 @dataclass(frozen=True)

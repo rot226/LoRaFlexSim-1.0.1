@@ -742,6 +742,11 @@ def _simulate_density(
                 window_delay_enabled=bool(config["window_delay_enabled"]),
                 window_delay_range_s=float(config["window_delay_range_s"]),
                 reference_network_size=int(config["reference_network_size"]),
+                reward_floor=(
+                    float(config["reward_floor"])
+                    if config.get("reward_floor") is not None
+                    else None
+                ),
                 debug_step2=bool(config.get("debug_step2", False)),
             )
             for row in result.raw_rows:
@@ -861,6 +866,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "window_delay_enabled": args.window_delay_enabled,
         "window_delay_range_s": args.window_delay_range_s,
         "reference_network_size": max(1, reference_network_size),
+        "reward_floor": args.reward_floor,
         "debug_step2": args.debug_step2,
     }
 
