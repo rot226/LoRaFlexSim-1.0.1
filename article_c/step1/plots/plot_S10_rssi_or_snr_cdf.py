@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     MetricStatus,
     algo_label,
     apply_plot_style,
+    assert_legend_present,
     ensure_network_size,
     filter_rows_by_network_sizes,
     is_constant_metric,
@@ -174,6 +175,7 @@ def plot_cdf_by_algo(
             legend_loc="above",
         )
         save_figure(fig, output_dir, "plot_S10_rssi_or_snr_cdf")
+        assert_legend_present(fig, "plot_S10_rssi_or_snr_cdf")
         plt.close(fig)
         return
     algo_keys = sorted({(algo, fallback) for algo, fallback, _ in values_by_group})
@@ -204,6 +206,7 @@ def plot_cdf_by_algo(
     )
 
     save_figure(fig, output_dir, "plot_S10_rssi_or_snr_cdf")
+    assert_legend_present(fig, "plot_S10_rssi_or_snr_cdf")
     plt.close(fig)
 
 

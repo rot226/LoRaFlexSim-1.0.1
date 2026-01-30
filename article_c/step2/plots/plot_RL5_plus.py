@@ -12,6 +12,7 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
+    assert_legend_present,
     MetricStatus,
     fallback_legend_handles,
     filter_rows_by_network_sizes,
@@ -206,6 +207,7 @@ def main(
     fig = _plot_selection(rows, network_sizes, lite=lite)
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_RL5_plus", use_tight=False)
+    assert_legend_present(fig, "plot_RL5_plus")
     plt.close(fig)
 
 

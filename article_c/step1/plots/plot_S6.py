@@ -15,6 +15,7 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
     add_global_legend,
+    assert_legend_present,
     MetricStatus,
     ensure_network_size,
     filter_mixra_opt_fallback,
@@ -114,6 +115,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     fig = _plot_metric(rows, "pdr_mean")
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_S6", use_tight=False)
+    assert_legend_present(fig, "plot_S6")
     plt.close(fig)
 
 

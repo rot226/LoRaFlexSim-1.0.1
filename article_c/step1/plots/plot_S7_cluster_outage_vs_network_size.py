@@ -20,6 +20,7 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
     add_global_legend,
+    assert_legend_present,
     collect_legend_entries,
     deduplicate_legend_entries,
     filter_mixra_opt_fallback,
@@ -189,6 +190,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     fig = _plot_metric(rows, "outage_prob")
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_S7_cluster_outage_vs_network_size", use_tight=False)
+    assert_legend_present(fig, "plot_S7_cluster_outage_vs_network_size")
     plt.close(fig)
 
 

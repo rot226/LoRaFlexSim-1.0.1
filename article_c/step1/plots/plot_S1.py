@@ -22,6 +22,7 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
     algo_label,
+    assert_legend_present,
     ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
@@ -209,6 +210,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     fig = _plot_metric(rows, "pdr_mean")
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_S1", use_tight=False)
+    assert_legend_present(fig, "plot_S1")
     plt.close(fig)
 
 

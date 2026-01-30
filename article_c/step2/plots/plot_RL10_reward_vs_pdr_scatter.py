@@ -19,6 +19,7 @@ from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     apply_figure_layout,
+    assert_legend_present,
     filter_cluster,
     filter_rows_by_network_sizes,
     is_constant_metric,
@@ -416,6 +417,7 @@ def main(
     fig = _plot_scatter(points)
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_RL10_reward_vs_pdr_scatter", use_tight=False)
+    assert_legend_present(fig, "plot_RL10_reward_vs_pdr_scatter")
     plt.close(fig)
 
 

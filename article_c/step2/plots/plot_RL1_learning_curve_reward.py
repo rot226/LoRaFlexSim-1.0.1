@@ -18,6 +18,7 @@ from article_c.common.plot_helpers import (
     apply_figure_layout,
     algo_label,
     add_global_legend,
+    assert_legend_present,
     filter_rows_by_network_sizes,
     is_constant_metric,
     render_metric_status,
@@ -330,6 +331,7 @@ def main(
     fig = _plot_learning_curve(rows, reference_size=reference_size)
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_RL1_learning_curve_reward", use_tight=False)
+    assert_legend_present(fig, "plot_RL1_learning_curve_reward")
     plt.close(fig)
 
 

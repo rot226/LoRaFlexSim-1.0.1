@@ -16,6 +16,7 @@ from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     apply_figure_layout,
+    assert_legend_present,
     collect_legend_entries,
     MetricStatus,
     deduplicate_legend_entries,
@@ -443,6 +444,7 @@ def main(
         return
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_RL6_cluster_outage_vs_density", use_tight=False)
+    assert_legend_present(fig, "plot_RL6_cluster_outage_vs_density")
     plt.close(fig)
 
     if args.debug_raw:
@@ -469,6 +471,7 @@ def main(
             "plot_RL6_cluster_outage_raw_by_replication",
             use_tight=False,
         )
+        assert_legend_present(raw_fig, "plot_RL6_cluster_outage_raw_by_replication")
         plt.close(raw_fig)
 
 

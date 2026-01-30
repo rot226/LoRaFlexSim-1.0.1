@@ -21,6 +21,7 @@ from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     apply_figure_layout,
+    assert_legend_present,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
@@ -659,8 +660,11 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     output_dir = step_dir / "plots" / "output"
     if len(figures) == 1:
         save_figure(figures[0], output_dir, "plot_S5", use_tight=False)
+        assert_legend_present(figures[0], "plot_S5")
     else:
         _save_multipage_figures(figures, output_dir, "plot_S5")
+        for index, fig in enumerate(figures, start=1):
+            assert_legend_present(fig, f"plot_S5_page{index}")
     for fig in figures:
         plt.close(fig)
 
