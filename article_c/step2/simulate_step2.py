@@ -215,8 +215,8 @@ def _link_quality_min_variation(network_size: int, reference_size: int) -> float
     ratio = max(0.2, network_size / reference_size)
     if ratio <= 1.0:
         return 0.02
-    growth = (ratio - 1.0) ** 0.6
-    return _clamp_range(0.02 + 0.03 * growth, 0.02, 0.08)
+    growth = (ratio - 1.0) ** 0.75
+    return _clamp_range(0.02 + 0.045 * growth, 0.02, 0.1)
 
 
 def _collision_size_factor(
@@ -735,6 +735,25 @@ def _sample_log_normal_shadowing(
     return shadowing_db, 10 ** (-shadowing_db / 10.0)
 
 
+def _log_link_quality_summary(
+    *,
+    network_size: int,
+    algo_label: str,
+    round_id: int,
+    link_qualities: list[float],
+) -> None:
+    min_lq, median_lq, max_lq = _summarize_values(link_qualities)
+    logger.debug(
+        "Résumé link_quality - taille=%s algo=%s round=%s link_quality[min/med/max]=%.3f/%.3f/%.3f",
+        network_size,
+        algo_label,
+        round_id,
+        min_lq,
+        median_lq,
+        max_lq,
+    )
+
+
 def _apply_link_quality_variation(
     rng: random.Random,
     link_quality: float,
@@ -744,6 +763,9 @@ def _apply_link_quality_variation(
 ) -> float:
     variation = rng.gauss(1.0, 0.12)
     min_variation = _link_quality_min_variation(network_size, reference_size)
+    variation_floor = 0.2
+    if variation < variation_floor:
+        variation = variation_floor
     deviation = variation - 1.0
     if abs(deviation) < min_variation:
         if deviation == 0.0:
@@ -1477,6 +1499,12 @@ def run_simulation(
                 link_qualities = [
                     float(node_window["link_quality"]) for node_window in node_windows
                 ]
+                _log_link_quality_summary(
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    link_qualities=link_qualities,
+                )
                 min_lq, median_lq, max_lq = _summarize_values(link_qualities)
                 _log_debug_stage(
                     stage="avant_collisions",
@@ -1943,6 +1971,12 @@ def run_simulation(
                 link_qualities = [
                     float(node_window["link_quality"]) for node_window in node_windows
                 ]
+                _log_link_quality_summary(
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    link_qualities=link_qualities,
+                )
                 min_lq, median_lq, max_lq = _summarize_values(link_qualities)
                 _log_debug_stage(
                     stage="avant_collisions",
