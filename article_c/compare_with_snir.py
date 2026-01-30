@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import csv
 import logging
+import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -138,10 +139,71 @@ def _load_author_curves(path: Path) -> list[AuthorCurve]:
     return curves
 
 
+def _float_or_none(value: object) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _matches_optional(value: float | None, target: float | None) -> bool:
+    if target is None:
+        return True
+    if value is None:
+        return False
+    return math.isclose(value, target, abs_tol=1e-6)
+
+
+def _filter_by_snir_threshold(
+    rows: list[dict[str, object]],
+    *,
+    snir_threshold_db: float | None,
+    snir_threshold_min_db: float | None,
+    snir_threshold_max_db: float | None,
+) -> list[dict[str, object]]:
+    if (
+        snir_threshold_db is None
+        and snir_threshold_min_db is None
+        and snir_threshold_max_db is None
+    ):
+        return rows
+    has_thresholds = any(
+        "snir_threshold_db" in row
+        or "snir_threshold_min_db" in row
+        or "snir_threshold_max_db" in row
+        for row in rows
+    )
+    if not has_thresholds:
+        LOGGER.warning(
+            "Filtre SNIR ignoré (colonnes snir_threshold_* absentes dans les CSV)."
+        )
+        return rows
+    filtered: list[dict[str, object]] = []
+    for row in rows:
+        if not _matches_optional(
+            _float_or_none(row.get("snir_threshold_db")), snir_threshold_db
+        ):
+            continue
+        if not _matches_optional(
+            _float_or_none(row.get("snir_threshold_min_db")), snir_threshold_min_db
+        ):
+            continue
+        if not _matches_optional(
+            _float_or_none(row.get("snir_threshold_max_db")), snir_threshold_max_db
+        ):
+            continue
+        filtered.append(row)
+    return filtered
+
+
 def _filter_rows(
     rows: list[dict[str, object]],
     snir_modes: Iterable[str],
     cluster: str,
+    *,
+    snir_threshold_db: float | None = None,
+    snir_threshold_min_db: float | None = None,
+    snir_threshold_max_db: float | None = None,
 ) -> list[dict[str, object]]:
     ensure_network_size(rows)
     normalized_cluster = cluster.strip().lower()
@@ -155,7 +217,13 @@ def _filter_rows(
             continue
         row["snir_mode"] = snir_mode
         filtered.append(row)
-    return filter_mixra_opt_fallback(filtered)
+    filtered = filter_mixra_opt_fallback(filtered)
+    return _filter_by_snir_threshold(
+        filtered,
+        snir_threshold_db=snir_threshold_db,
+        snir_threshold_min_db=snir_threshold_min_db,
+        snir_threshold_max_db=snir_threshold_max_db,
+    )
 
 
 def _resolve_metric_key(
@@ -309,6 +377,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Liste de modes SNIR (ex: snir_on,snir_off).",
     )
     parser.add_argument(
+        "--snir-threshold-db",
+        type=float,
+        default=None,
+        help="Filtre les lignes sur un seuil SNIR précis (dB).",
+    )
+    parser.add_argument(
+        "--snir-threshold-min-db",
+        type=float,
+        default=None,
+        help="Filtre les lignes sur la borne basse de clamp SNIR (dB).",
+    )
+    parser.add_argument(
+        "--snir-threshold-max-db",
+        type=float,
+        default=None,
+        help="Filtre les lignes sur la borne haute de clamp SNIR (dB).",
+    )
+    parser.add_argument(
         "--cluster",
         default="all",
         help="Filtre les lignes sur ce cluster (défaut: all).",
@@ -334,8 +420,22 @@ def main() -> None:
     step2_rows = load_step2_aggregated(args.step2_csv)
 
     snir_modes = args.snir_modes
-    step1_rows = _filter_rows(step1_rows, snir_modes, args.cluster)
-    step2_rows = _filter_rows(step2_rows, snir_modes, args.cluster)
+    step1_rows = _filter_rows(
+        step1_rows,
+        snir_modes,
+        args.cluster,
+        snir_threshold_db=args.snir_threshold_db,
+        snir_threshold_min_db=args.snir_threshold_min_db,
+        snir_threshold_max_db=args.snir_threshold_max_db,
+    )
+    step2_rows = _filter_rows(
+        step2_rows,
+        snir_modes,
+        args.cluster,
+        snir_threshold_db=args.snir_threshold_db,
+        snir_threshold_min_db=args.snir_threshold_min_db,
+        snir_threshold_max_db=args.snir_threshold_max_db,
+    )
 
     author_curves = _load_author_curves(args.author_curves)
 

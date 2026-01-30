@@ -1047,6 +1047,9 @@ def run_simulation(
     floor_on_zero_success: bool | None = None,
     density: float | None = None,
     snir_mode: str = "snir_on",
+    snir_threshold_db: float | None = None,
+    snir_threshold_min_db: float | None = None,
+    snir_threshold_max_db: float | None = None,
     seed: int = 42,
     traffic_mode: str | None = None,
     jitter_range_s: float | None = None,
@@ -1076,10 +1079,36 @@ def run_simulation(
     """Exécute une simulation proxy de l'étape 2."""
     rng = random.Random(seed)
     step2_defaults = DEFAULT_CONFIG.step2
+    snir_defaults = DEFAULT_CONFIG.snir
     traffic_mode_value = "poisson" if traffic_mode is None else traffic_mode
     reward_alert_level_value = (
         logging.WARNING if str(reward_alert_level).upper() != "INFO" else logging.INFO
     )
+    snir_threshold_value = (
+        snir_defaults.snir_threshold_db
+        if snir_threshold_db is None
+        else float(snir_threshold_db)
+    )
+    snir_threshold_min_value = (
+        snir_defaults.snir_threshold_min_db
+        if snir_threshold_min_db is None
+        else float(snir_threshold_min_db)
+    )
+    snir_threshold_max_value = (
+        snir_defaults.snir_threshold_max_db
+        if snir_threshold_max_db is None
+        else float(snir_threshold_max_db)
+    )
+    if snir_threshold_min_value > snir_threshold_max_value:
+        snir_threshold_min_value, snir_threshold_max_value = (
+            snir_threshold_max_value,
+            snir_threshold_min_value,
+        )
+    snir_meta = {
+        "snir_threshold_db": snir_threshold_value,
+        "snir_threshold_min_db": snir_threshold_min_value,
+        "snir_threshold_max_db": snir_threshold_max_value,
+    }
     jitter_range_value = jitter_range_s
     window_duration_value = (
         step2_defaults.window_duration_s if window_duration_s is None else window_duration_s
@@ -1726,6 +1755,7 @@ def run_simulation(
                     "throughput_success": metrics.throughput_success,
                     "energy_per_success": metrics.energy_per_success,
                     "reward": reward,
+                    **snir_meta,
                 }
                 raw_rows.append(
                     {
@@ -2205,6 +2235,7 @@ def run_simulation(
                     "throughput_success": metrics.throughput_success,
                     "energy_per_success": metrics.energy_per_success,
                     "reward": reward,
+                    **snir_meta,
                 }
                 raw_rows.append(
                     {

@@ -76,6 +76,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Seuil SNIR (dB).",
     )
     parser.add_argument(
+        "--snir-threshold-min-db",
+        type=float,
+        default=None,
+        help="Borne basse de clamp du seuil SNIR (dB).",
+    )
+    parser.add_argument(
+        "--snir-threshold-max-db",
+        type=float,
+        default=None,
+        help="Borne haute de clamp du seuil SNIR (dB).",
+    )
+    parser.add_argument(
         "--noise-floor-dbm",
         type=float,
         default=None,
@@ -368,6 +380,14 @@ def _build_step1_args(args: argparse.Namespace) -> list[str]:
         step1_args.extend(["--snir_modes", args.snir_modes])
     if args.snir_threshold_db is not None:
         step1_args.extend(["--snir-threshold-db", str(args.snir_threshold_db)])
+    if args.snir_threshold_min_db is not None:
+        step1_args.extend(
+            ["--snir-threshold-min-db", str(args.snir_threshold_min_db)]
+        )
+    if args.snir_threshold_max_db is not None:
+        step1_args.extend(
+            ["--snir-threshold-max-db", str(args.snir_threshold_max_db)]
+        )
     if args.noise_floor_dbm is not None:
         step1_args.extend(["--noise-floor-dbm", str(args.noise_floor_dbm)])
     if args.traffic_mode is not None:
@@ -445,6 +465,14 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         step2_args.append("--safe-profile")
     if args.snir_threshold_db is not None:
         step2_args.extend(["--snir-threshold-db", str(args.snir_threshold_db)])
+    if args.snir_threshold_min_db is not None:
+        step2_args.extend(
+            ["--snir-threshold-min-db", str(args.snir_threshold_min_db)]
+        )
+    if args.snir_threshold_max_db is not None:
+        step2_args.extend(
+            ["--snir-threshold-max-db", str(args.snir_threshold_max_db)]
+        )
     if args.noise_floor_dbm is not None:
         step2_args.extend(["--noise-floor-dbm", str(args.noise_floor_dbm)])
     if args.traffic_mode is not None:

@@ -10,6 +10,7 @@ import math
 import random
 from collections import defaultdict
 
+from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.propagation import sample_fading_db
 
 
@@ -236,7 +237,9 @@ def evaluate_reception(
     *,
     sensitivity_dbm: float,
     snir_enabled: bool = True,
-    snir_threshold_db: float = 5.0,
+    snir_threshold_db: float | None = None,
+    snir_threshold_min_db: float | None = None,
+    snir_threshold_max_db: float | None = None,
     noise_floor_dbm: float = -174.0,
     bandwidth_hz: float | None = 125_000.0,
 ) -> InterferenceOutcome:
@@ -252,7 +255,31 @@ def evaluate_reception(
     interference_dbm = aggregate_interference(interferer_powers_dbm)
     thermal_noise_dbm = compute_thermal_noise_dbm(noise_floor_dbm, bandwidth_hz)
     rssi_ok = target.rssi_dbm >= sensitivity_dbm
-    effective_snir_threshold_db = min(max(snir_threshold_db, 3.0), 6.0)
+    snir_defaults = DEFAULT_CONFIG.snir
+    snir_threshold_value = (
+        snir_defaults.snir_threshold_db
+        if snir_threshold_db is None
+        else float(snir_threshold_db)
+    )
+    snir_threshold_min_value = (
+        snir_defaults.snir_threshold_min_db
+        if snir_threshold_min_db is None
+        else float(snir_threshold_min_db)
+    )
+    snir_threshold_max_value = (
+        snir_defaults.snir_threshold_max_db
+        if snir_threshold_max_db is None
+        else float(snir_threshold_max_db)
+    )
+    if snir_threshold_min_value > snir_threshold_max_value:
+        snir_threshold_min_value, snir_threshold_max_value = (
+            snir_threshold_max_value,
+            snir_threshold_min_value,
+        )
+    effective_snir_threshold_db = min(
+        max(snir_threshold_value, snir_threshold_min_value),
+        snir_threshold_max_value,
+    )
 
     snir_db = None
     snir_ok = True

@@ -260,6 +260,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Seuil SNIR (dB).",
     )
     parser.add_argument(
+        "--snir-threshold-min-db",
+        type=float,
+        default=snir_defaults.snir_threshold_min_db,
+        help="Borne basse de clamp du seuil SNIR (dB).",
+    )
+    parser.add_argument(
+        "--snir-threshold-max-db",
+        type=float,
+        default=snir_defaults.snir_threshold_max_db,
+        help="Borne haute de clamp du seuil SNIR (dB).",
+    )
+    parser.add_argument(
         "--formats",
         type=str,
         default="png,pdf,eps",
@@ -434,6 +446,21 @@ def _simulate_density(
     timing_totals = {"sf_assignment_s": 0.0, "interference_s": 0.0, "metrics_s": 0.0}
     timing_runs = 0
     jitter_range_s = float(config.get("jitter_range_s", 30.0))
+    snir_meta = {
+        "snir_threshold_db": float(
+            config.get("snir_threshold_db", DEFAULT_CONFIG.snir.snir_threshold_db)
+        ),
+        "snir_threshold_min_db": float(
+            config.get(
+                "snir_threshold_min_db", DEFAULT_CONFIG.snir.snir_threshold_min_db
+            )
+        ),
+        "snir_threshold_max_db": float(
+            config.get(
+                "snir_threshold_max_db", DEFAULT_CONFIG.snir.snir_threshold_max_db
+            )
+        ),
+    }
     print(f"Jitter range utilisé (s): {jitter_range_s}")
     runs_per_size = len(ALGORITHMS) * len(snir_modes) * len(replications)
     mixra_opt_budget = (
@@ -512,6 +539,7 @@ def _simulate_density(
                         "node_id": node_id,
                         "packet_id": packet_id,
                         "sf_selected": sf_selected,
+                        **snir_meta,
                     }
                     raw_rows.append(packet_row)
                     packet_rows.append(packet_row)
@@ -558,6 +586,7 @@ def _simulate_density(
                         "received": received_cluster,
                         "pdr": pdr_cluster,
                         "mean_toa_s": mean_toa_s,
+                        **snir_meta,
                     }
                     raw_rows.append(metric_row)
                     metric_rows.append(metric_row)
@@ -591,6 +620,7 @@ def _simulate_density(
                     "received": received_all,
                     "pdr": pdr_all,
                     "mean_toa_s": mean_toa_all,
+                    **snir_meta,
                 }
                 raw_rows.append(summary_row)
                 metric_rows.append(summary_row)
@@ -876,6 +906,9 @@ def main(argv: list[str] | None = None) -> None:
         "duration_s": args.duration_s,
         "traffic_mode": args.traffic_mode,
         "jitter_range_s": args.jitter_range_s,
+        "snir_threshold_db": args.snir_threshold_db,
+        "snir_threshold_min_db": args.snir_threshold_min_db,
+        "snir_threshold_max_db": args.snir_threshold_max_db,
         "mixra_opt_max_iterations": args.mixra_opt_max_iterations,
         "mixra_opt_candidate_subset_size": args.mixra_opt_candidate_subset_size,
         "mixra_opt_epsilon": args.mixra_opt_epsilon,

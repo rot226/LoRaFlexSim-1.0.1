@@ -90,6 +90,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Seuil SNIR (dB).",
     )
     parser.add_argument(
+        "--snir-threshold-min-db",
+        type=float,
+        default=snir_defaults.snir_threshold_min_db,
+        help="Borne basse de clamp du seuil SNIR (dB).",
+    )
+    parser.add_argument(
+        "--snir-threshold-max-db",
+        type=float,
+        default=snir_defaults.snir_threshold_max_db,
+        help="Borne haute de clamp du seuil SNIR (dB).",
+    )
+    parser.add_argument(
         "--noise-floor-dbm",
         type=float,
         default=snir_defaults.noise_floor_dbm,
