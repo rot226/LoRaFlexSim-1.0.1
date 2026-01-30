@@ -190,7 +190,11 @@ def _traffic_coeff_size_factor(network_size: int, reference_size: int) -> float:
     if reference_size <= 0:
         return 1.0
     ratio = max(0.1, network_size / reference_size)
-    return max(0.7, ratio**0.35)
+    if ratio <= 1.0:
+        return max(0.7, ratio**0.35)
+    overload = ratio - 1.0
+    softened_growth = 1.0 + 0.22 * math.log1p(overload)
+    return _clamp_range(softened_growth, 1.0, 1.45)
 
 
 def _traffic_coeff_variance_factor(network_size: int, reference_size: int) -> float:
@@ -539,6 +543,43 @@ def _log_reward_stats(
         median_reward,
         max_reward,
     )
+
+
+def _log_collision_stability(
+    *,
+    network_size: int,
+    algo_label: str,
+    round_id: int,
+    collision_norms: list[float],
+    approx_collision_mode: bool,
+    sensitivity_threshold: float = 0.6,
+) -> None:
+    if not collision_norms:
+        return
+    min_collision, median_collision, max_collision = _summarize_values(collision_norms)
+    spread_ratio = 0.0
+    if max_collision > 0.0:
+        spread_ratio = (max_collision - min_collision) / max_collision
+    logger.debug(
+        "Sensibilité collisions - taille=%s algo=%s round=%s "
+        "ratio=%.3f min/med/max=%.3f/%.3f/%.3f approx=%s",
+        network_size,
+        algo_label,
+        round_id,
+        spread_ratio,
+        min_collision,
+        median_collision,
+        max_collision,
+        approx_collision_mode,
+    )
+    if spread_ratio >= sensitivity_threshold:
+        logger.info(
+            "Stabilité collisions à surveiller (taille=%s algo=%s round=%s ratio=%.3f).",
+            network_size,
+            algo_label,
+            round_id,
+            spread_ratio,
+        )
 
 
 def _log_round_traffic_debug(
@@ -1713,6 +1754,13 @@ def run_simulation(
                 congestion_probability=congestion_probability,
                 collision_size_factor=collision_size_factor_value,
             )
+            _log_collision_stability(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                collision_norms=round_collision_norms,
+                approx_collision_mode=approx_collision_mode,
+            )
             _log_loss_breakdown(
                 network_size=network_size_value,
                 algo_label=algo_label,
@@ -2184,6 +2232,13 @@ def run_simulation(
                 lambda_collision=lambda_collision,
                 congestion_probability=congestion_probability,
                 collision_size_factor=collision_size_factor_value,
+            )
+            _log_collision_stability(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                collision_norms=round_collision_norms,
+                approx_collision_mode=approx_collision_mode,
             )
             _log_loss_breakdown(
                 network_size=network_size_value,
