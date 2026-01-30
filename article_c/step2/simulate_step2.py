@@ -188,6 +188,16 @@ def _shadowing_sigma_size_factor(network_size: int, reference_size: int) -> floa
     return _clamp_range(ratio**0.25, 0.85, 1.4)
 
 
+def _link_quality_min_variation(network_size: int, reference_size: int) -> float:
+    if reference_size <= 0:
+        return 0.02
+    ratio = max(0.2, network_size / reference_size)
+    if ratio <= 1.0:
+        return 0.02
+    growth = (ratio - 1.0) ** 0.6
+    return _clamp_range(0.02 + 0.03 * growth, 0.02, 0.08)
+
+
 def _collision_size_factor(
     network_size: int,
     reference_size: int,
@@ -688,8 +698,22 @@ def _sample_log_normal_shadowing(
     return shadowing_db, 10 ** (-shadowing_db / 10.0)
 
 
-def _apply_link_quality_variation(rng: random.Random, link_quality: float) -> float:
+def _apply_link_quality_variation(
+    rng: random.Random,
+    link_quality: float,
+    *,
+    network_size: int,
+    reference_size: int,
+) -> float:
     variation = rng.gauss(1.0, 0.12)
+    min_variation = _link_quality_min_variation(network_size, reference_size)
+    deviation = variation - 1.0
+    if abs(deviation) < min_variation:
+        if deviation == 0.0:
+            deviation = min_variation if rng.random() < 0.5 else -min_variation
+        else:
+            deviation = math.copysign(min_variation, deviation)
+        variation = 1.0 + deviation
     return _clip(link_quality * variation, 0.0, 1.0)
 
 
@@ -1249,7 +1273,10 @@ def run_simulation(
                     sigma_db=shadowing_sigma_db_node,
                 )
                 link_quality = _apply_link_quality_variation(
-                    rng, _clip(shadowing_linear, 0.0, 1.0)
+                    rng,
+                    _clip(shadowing_linear, 0.0, 1.0),
+                    network_size=network_size_value,
+                    reference_size=reference_size,
                 )
                 node_offset_s = (
                     rng.uniform(0.0, window_delay_range_value)
@@ -1657,7 +1684,10 @@ def run_simulation(
                     sigma_db=shadowing_sigma_db_node,
                 )
                 link_quality = _apply_link_quality_variation(
-                    rng, _clip(shadowing_linear, 0.0, 1.0)
+                    rng,
+                    _clip(shadowing_linear, 0.0, 1.0),
+                    network_size=network_size_value,
+                    reference_size=reference_size,
                 )
                 if algorithm == "adr":
                     arm_index = _select_adr_arm(
