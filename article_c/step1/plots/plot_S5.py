@@ -31,7 +31,7 @@ from article_c.common.plot_helpers import (
     select_received_metric_key,
     save_figure,
 )
-from article_c.common.plotting_style import LEGEND_STYLE, SAVEFIG_STYLE
+from article_c.common.plotting_style import SAVEFIG_STYLE
 from article_c.common.utils import ensure_dir
 from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import resolve_ieee_figsize
@@ -371,11 +371,6 @@ def _plot_pdr_distributions(
     legend_labels = [handle.get_label() for handle in legend_handles]
     legend_ncol = 2
     legend_rows = max(1, math.ceil(len(legend_handles) / legend_ncol))
-    legend_style_base = {
-        **LEGEND_STYLE,
-        "ncol": legend_ncol,
-        "loc": "lower center",
-    }
     all_values = [
         float(value)
         for groups in values_by_size.values()
@@ -387,7 +382,6 @@ def _plot_pdr_distributions(
     if metric_state is not MetricStatus.OK:
         fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(legend_handles)))
         legend_bbox = _legend_bbox(fig, legend_rows)
-        legend_style = {**legend_style_base, "bbox_to_anchor": legend_bbox}
         apply_figure_layout(fig, figsize=(8, 5))
         render_metric_status(
             fig,
@@ -398,13 +392,16 @@ def _plot_pdr_distributions(
         )
         configure_axes = ax
         layout_margins = legend_margins("above")
-        fig.legend(handles=legend_handles, labels=legend_labels, **legend_style)
         configure_figure(
             fig,
             configure_axes,
             "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)",
             legend_loc="above",
+            legend_handles=legend_handles,
+            legend_labels=legend_labels,
         )
+        if fig.legends:
+            fig.legends[0].set_bbox_to_anchor(legend_bbox)
         apply_figure_layout(
             fig,
             margins=layout_margins,
@@ -454,7 +451,6 @@ def _plot_pdr_distributions(
             page_rows,
             legend_handles=legend_handles,
             legend_labels=legend_labels,
-            legend_style_base=legend_style_base,
             legend_rows=legend_rows,
             title_suffix=title_suffix,
         )
@@ -468,7 +464,6 @@ def _plot_pdr_distribution_page(
     *,
     legend_handles: list[Patch],
     legend_labels: list[str],
-    legend_style_base: dict[str, object],
     legend_rows: int,
     title_suffix: str,
 ) -> plt.Figure:
@@ -476,7 +471,6 @@ def _plot_pdr_distribution_page(
     nrows = max(1, len(row_specs))
     fig, axes = plt.subplots(nrows, ncols, figsize=(6.2 * ncols, 2.4 * nrows), sharey=True)
     legend_bbox = _legend_bbox(fig, legend_rows)
-    legend_style = {**legend_style_base, "bbox_to_anchor": legend_bbox}
     apply_figure_layout(fig, figsize=(6.2 * ncols, 2.4 * nrows))
     if nrows == 1 and ncols == 1:
         axes = [[axes]]
@@ -520,7 +514,6 @@ def _plot_pdr_distribution_page(
         "hspace": 0.95,
         "wspace": 0.25,
     }
-    fig.legend(handles=legend_handles, labels=legend_labels, **legend_style)
     base_title = "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)"
     title = f"{base_title} ({title_suffix})" if title_suffix else base_title
     configure_figure(
@@ -528,7 +521,11 @@ def _plot_pdr_distribution_page(
         axes,
         title,
         legend_loc="above",
+        legend_handles=legend_handles,
+        legend_labels=legend_labels,
     )
+    if fig.legends:
+        fig.legends[0].set_bbox_to_anchor(legend_bbox)
     apply_figure_layout(
         fig,
         margins=layout_margins,

@@ -125,6 +125,9 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         marker_size=6.5,
         percentile_line_width=1.4,
     )
+    existing_legend = ax.get_legend()
+    if existing_legend is not None:
+        existing_legend.remove()
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Packet Delivery Ratio")
     ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.2f}"))
