@@ -8,11 +8,9 @@ from pathlib import Path
 import warnings
 
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 import pandas as pd
 
 from article_c.common.plot_helpers import (
-    add_global_legend,
     algo_label,
     apply_plot_style,
     apply_figure_layout,
@@ -23,6 +21,7 @@ from article_c.common.plot_helpers import (
     filter_cluster,
     is_constant_metric,
     normalize_network_size_rows,
+    place_legend,
     save_figure,
 )
 from article_c.common.plotting_style import legend_extra_height
@@ -102,11 +101,12 @@ def _plot_distribution(
     violin_parts = ax.violinplot(
         rewards_by_algo, positions=positions, showmedians=True
     )
-    for body, color in zip(violin_parts["bodies"], algo_colors):
+    for body, color in zip(violin_parts["bodies"], algo_colors, strict=False):
         body.set_facecolor(color)
         body.set_edgecolor(color)
         body.set_alpha(0.35)
-    ax.boxplot(
+        body.set_label("_nolegend_")
+    boxplot_parts = ax.boxplot(
         rewards_by_algo,
         positions=positions,
         widths=0.2,
@@ -114,6 +114,8 @@ def _plot_distribution(
         boxprops={"facecolor": "white", "alpha": 0.6},
         medianprops={"color": "black"},
     )
+    for patch, algo in zip(boxplot_parts.get("boxes", []), algorithms, strict=False):
+        patch.set_label(algo_label(str(algo)))
     ax.set_xticks(positions)
     ax.set_xticklabels([algo_label(str(algo)) for algo in algorithms])
     ax.set_xlabel("Algorithm")
@@ -122,22 +124,14 @@ def _plot_distribution(
         "Step 2 - Reward Distribution by Algorithm"
         f"{_title_suffix(network_sizes)}"
     )
-    handles = [
-        Line2D(
-            [0],
-            [0],
-            marker="s",
-            linestyle="none",
-            markersize=7,
-            color=color,
-        )
-        for color in algo_colors
-    ]
-    labels = [algo_label(str(algo)) for algo in algorithms]
-    legend_rows = max(1, math.ceil(len(handles) / min(3, len(handles)))) if handles else 1
+    legend_rows = (
+        max(1, math.ceil(len(algorithms) / min(3, len(algorithms))))
+        if algorithms
+        else 1
+    )
     extra_height = legend_extra_height(height, legend_rows)
     apply_figure_layout(fig, figsize=(width, height + extra_height))
-    add_global_legend(fig, ax, legend_loc="above", handles=handles, labels=labels)
+    place_legend(ax, legend_loc="above")
     return fig
 
 
@@ -187,13 +181,25 @@ def _plot_diagnostics(
     axes = axes.flatten()
 
     network_sizes = pd.to_numeric(df.get("network_size"), errors="coerce").dropna()
-    axes[0].hist(network_sizes, bins="auto", color="#4c78a8", alpha=0.8)
+    axes[0].hist(
+        network_sizes,
+        bins="auto",
+        color="#4c78a8",
+        alpha=0.8,
+        label="Network size",
+    )
     axes[0].set_title("Histogramme des tailles de réseau")
     axes[0].set_xlabel("Network size")
 
     if "density" in df.columns:
         density = pd.to_numeric(df["density"], errors="coerce").dropna()
-        axes[1].hist(density, bins="auto", color="#f58518", alpha=0.8)
+        axes[1].hist(
+            density,
+            bins="auto",
+            color="#f58518",
+            alpha=0.8,
+            label="Density",
+        )
         axes[1].set_title("Histogramme des densités")
         axes[1].set_xlabel("Density")
     else:
@@ -201,7 +207,13 @@ def _plot_diagnostics(
         axes[1].text(0.5, 0.5, "Density absente", ha="center", va="center")
 
     rewards = pd.to_numeric(df.get("reward"), errors="coerce").dropna()
-    axes[2].hist(rewards, bins="auto", color="#54a24b", alpha=0.8)
+    axes[2].hist(
+        rewards,
+        bins="auto",
+        color="#54a24b",
+        alpha=0.8,
+        label="Reward",
+    )
     axes[2].set_title("Histogramme des récompenses")
     axes[2].set_xlabel("Reward")
 
@@ -215,7 +227,13 @@ def _plot_diagnostics(
             ]
             for algo in algos
         ]
-        axes[3].boxplot(rewards_by_algo, labels=[algo_label(str(a)) for a in algos])
+        boxplot_parts = axes[3].boxplot(
+            rewards_by_algo,
+            labels=[algo_label(str(a)) for a in algos],
+            patch_artist=True,
+        )
+        for patch, algo in zip(boxplot_parts.get("boxes", []), algos, strict=False):
+            patch.set_label(algo_label(str(algo)))
         axes[3].set_title("Boxplot des récompenses par algo")
         axes[3].set_ylabel("Reward")
     else:

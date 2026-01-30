@@ -22,8 +22,8 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     metric_values,
     normalize_network_size_rows,
-    add_global_legend,
     legend_handles_for_algos_snir,
+    place_legend,
     plot_metric_by_algo,
     render_metric_status,
     save_figure,
@@ -112,7 +112,7 @@ def _plot_metric(
         "Step 2 - Median Reward by QoS Cluster "
         f"({cluster_label} vs network size){_title_suffix(network_sizes)}"
     )
-    add_global_legend(fig, ax, legend_loc="above")
+    place_legend(ax, legend_loc="above")
     return fig
 
 
