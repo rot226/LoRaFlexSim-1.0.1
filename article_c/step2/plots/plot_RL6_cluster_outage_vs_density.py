@@ -16,11 +16,14 @@ from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     apply_figure_layout,
+    collect_legend_entries,
     MetricStatus,
+    deduplicate_legend_entries,
     ensure_network_size,
     filter_rows_by_network_sizes,
     fallback_legend_handles,
     is_constant_metric,
+    legend_margins,
     load_step2_aggregated,
     metric_values,
     normalize_network_size_rows,
@@ -214,7 +217,8 @@ def _plot_metric(
     for ax in axes:
         if ax.get_legend() is not None:
             ax.get_legend().remove()
-    handles, labels = axes[-1].get_legend_handles_labels()
+    handles, labels = collect_legend_entries(axes)
+    handles, labels = deduplicate_legend_entries(handles, labels)
     if not handles:
         handles, labels = fallback_legend_handles()
     if handles:
@@ -225,6 +229,7 @@ def _plot_metric(
             handles=handles,
             labels=labels,
         )
+        apply_figure_layout(fig, margins=legend_margins("above"))
     fig.suptitle(
         "Step 2 - Outage probability by Cluster (SNIR on)"
         f"{_title_suffix(network_sizes)}",
@@ -374,7 +379,8 @@ def _plot_raw_metric(
     for ax in axes:
         if ax.get_legend() is not None:
             ax.get_legend().remove()
-    handles, labels = axes[-1].get_legend_handles_labels()
+    handles, labels = collect_legend_entries(axes)
+    handles, labels = deduplicate_legend_entries(handles, labels)
     if not handles:
         handles, labels = fallback_legend_handles()
     if handles:
@@ -385,6 +391,7 @@ def _plot_raw_metric(
             handles=handles,
             labels=labels,
         )
+        apply_figure_layout(fig, margins=legend_margins("above"))
     fig.suptitle(
         "Step 2 - Outage probability brut par cluster et réplication (SNIR on)"
         f"{_title_suffix(network_sizes)}",

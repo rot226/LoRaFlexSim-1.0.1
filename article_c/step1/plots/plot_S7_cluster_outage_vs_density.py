@@ -15,7 +15,9 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
     add_global_legend,
+    collect_legend_entries,
     MetricStatus,
+    deduplicate_legend_entries,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
@@ -104,7 +106,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.set_xticks(network_sizes)
     axes[0].set_ylabel("Outage probability")
-    handles, labels = axes[0].get_legend_handles_labels()
+    handles, labels = collect_legend_entries(axes)
+    handles, labels = deduplicate_legend_entries(handles, labels)
     for ax in axes:
         legend = ax.get_legend()
         if legend is not None:
@@ -112,7 +115,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     if handles:
         add_global_legend(
             fig,
-            axes[0],
+            axes[-1],
             legend_loc="above",
             handles=handles,
             labels=labels,
