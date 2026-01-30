@@ -211,15 +211,22 @@ def render_constant_metric(
                 else:
                     handles, labels = legend_handles
             if handles:
-                legend_style = _legend_style(legend_loc, len(labels))
-                ncol = int(legend_style.get("ncol", len(labels)) or 1)
-                legend_rows = max(1, math.ceil(len(labels) / ncol))
-                margins_for_layout = _legend_margins(legend_loc, legend_rows=legend_rows)
+                legend_style, legend_rows = _legend_style(
+                    legend_loc,
+                    len(labels),
+                    fig=fig,
+                )
+                margins_for_layout = _legend_margins(
+                    legend_loc,
+                    legend_rows=legend_rows,
+                    fig=fig,
+                )
         elif normalized_legend_mode == "constante" and _figure_has_legend(fig):
-            margins_for_layout = _legend_margins(legend_loc)
+            margins_for_layout = _legend_margins(legend_loc, fig=fig)
     layout_rect = _layout_rect_from_margins(
         margins_for_layout,
         legend_rows=legend_rows,
+        fig=fig,
     )
     message_x = (layout_rect[0] + layout_rect[2]) / 2
     message_y = message_y if message_y is not None else (layout_rect[1] + layout_rect[3]) / 2
@@ -239,12 +246,17 @@ def render_constant_metric(
         if should_add_legend:
             if handles:
                 if legend_style is None:
-                    legend_style = _legend_style(legend_loc, len(labels))
+                    legend_style, legend_rows = _legend_style(
+                        legend_loc,
+                        len(labels),
+                        fig=fig,
+                    )
                 fig.legend(handles, labels, **legend_style)
                 if margins_for_layout is None:
                     margins_for_layout = _legend_margins(
                         legend_loc,
                         legend_rows=legend_rows,
+                        fig=fig,
                     )
                 apply_figure_layout(
                     fig,
@@ -253,7 +265,7 @@ def render_constant_metric(
                     legend_rows=legend_rows,
                 )
         elif normalized_legend_mode == "constante" and _figure_has_legend(fig):
-            apply_figure_layout(fig, margins=_legend_margins(legend_loc))
+            apply_figure_layout(fig, margins=_legend_margins(legend_loc, fig=fig))
 
 
 def _metric_variance(
@@ -374,19 +386,25 @@ def place_legend(ax: plt.Axes, *, legend_loc: str = "above") -> None:
         handles, labels = fallback_legend_handles()
     if not handles:
         return
-    legend_style = _legend_style(legend_loc, len(labels))
+    legend_style, legend_rows = _legend_style(
+        legend_loc,
+        len(labels),
+        fig=ax.figure,
+    )
     ax.figure.legend(handles, labels, **legend_style)
-    ncol = int(legend_style.get("ncol", len(labels)) or 1)
-    legend_rows = max(1, math.ceil(len(labels) / ncol))
     apply_figure_layout(
         ax.figure,
-        margins=_legend_margins(legend_loc, legend_rows=legend_rows),
+        margins=_legend_margins(legend_loc, legend_rows=legend_rows, fig=ax.figure),
         bbox_to_anchor=legend_style.get("bbox_to_anchor"),
         legend_rows=legend_rows,
     )
 
 
-def _legend_style(legend_loc: str, label_count: int | None = None) -> dict[str, object]:
+def _legend_style(
+    legend_loc: str,
+    label_count: int | None = None,
+    fig: plt.Figure | None = None,
+) -> tuple[dict[str, object], int]:
     normalized = _normalize_legend_loc(legend_loc)
     if normalized == "right":
         return {
@@ -394,33 +412,79 @@ def _legend_style(legend_loc: str, label_count: int | None = None) -> dict[str, 
             "bbox_to_anchor": (1.02, 0.5),
             "ncol": 1,
             "frameon": False,
-        }
+        }, 1
     legend_style = dict(LEGEND_STYLE)
-    if label_count is not None and "ncol" in legend_style:
-        legend_style["ncol"] = min(label_count, int(legend_style["ncol"]))
     legend_rows = 1
     if label_count is not None:
         ncol = int(legend_style.get("ncol", label_count) or 1)
-        legend_rows = max(1, math.ceil(label_count / ncol))
+        ncol = min(label_count, max(1, ncol))
+        ncol, legend_rows = _legend_layout_from_fig(fig, label_count, ncol)
+        legend_style["ncol"] = ncol
     legend_style["bbox_to_anchor"] = legend_bbox_to_anchor(legend_rows=legend_rows)
-    return legend_style
+    return legend_style, legend_rows
 
 
-def _legend_top_margin(legend_rows: int) -> float:
+def _figure_size(fig: plt.Figure | None) -> tuple[float, float]:
+    if fig is None:
+        return BASE_FIGSIZE
+    try:
+        width, height = fig.get_size_inches()
+    except (AttributeError, TypeError, ValueError):
+        return BASE_FIGSIZE
+    if not width or not height:
+        return BASE_FIGSIZE
+    return float(width), float(height)
+
+
+def _scale_margin_from_base(value: float, fig: plt.Figure | None) -> float:
+    _, fig_height = _figure_size(fig)
+    base_height = BASE_FIGSIZE[1]
+    if fig_height <= 0 or base_height <= 0:
+        return value
+    return max(0.0, min(1.0, value * base_height / fig_height))
+
+
+def _legend_layout_from_fig(
+    fig: plt.Figure | None,
+    label_count: int,
+    ncol: int,
+) -> tuple[int, int]:
+    if label_count <= 0:
+        return max(1, ncol), 1
+    fig_width, _ = _figure_size(fig)
+    base_width = BASE_FIGSIZE[0]
+    if base_width <= 0:
+        width_ratio = 1.0
+    else:
+        width_ratio = fig_width / base_width
+    width_ratio = max(0.5, width_ratio)
+    effective_ncol = max(1, min(label_count, int(math.floor(ncol * width_ratio))))
+    legend_rows = max(1, math.ceil(label_count / effective_ncol))
+    return effective_ncol, legend_rows
+
+
+def _legend_top_margin(fig: plt.Figure | None, legend_rows: int) -> float:
     extra_rows = max(0, legend_rows - 1)
-    return max(0.0, LEGEND_TOP_MARGIN - LEGEND_ROW_EXTRA_MARGIN * extra_rows)
+    base_margin = max(0.0, LEGEND_TOP_MARGIN - LEGEND_ROW_EXTRA_MARGIN * extra_rows)
+    return _scale_margin_from_base(base_margin, fig)
 
 
-def _legend_top_reserved(legend_rows: int) -> float:
-    return LEGEND_TOP_RESERVED * max(1, legend_rows)
+def _legend_top_reserved(fig: plt.Figure | None, legend_rows: int) -> float:
+    base_reserved = LEGEND_TOP_RESERVED * max(1, legend_rows)
+    return _scale_margin_from_base(base_reserved, fig)
 
 
-def _legend_margins(legend_loc: str, *, legend_rows: int = 1) -> dict[str, float]:
+def _legend_margins(
+    legend_loc: str,
+    *,
+    legend_rows: int = 1,
+    fig: plt.Figure | None = None,
+) -> dict[str, float]:
     normalized = _normalize_legend_loc(legend_loc)
     if normalized == "right":
         return {"top": FIGURE_SUBPLOT_TOP, "right": LEGEND_RIGHT_MARGIN}
     if normalized == "above":
-        return {"top": _legend_top_margin(legend_rows)}
+        return {"top": _legend_top_margin(fig, legend_rows)}
     return {"top": FIGURE_SUBPLOT_TOP}
 
 
@@ -527,15 +591,17 @@ def add_global_legend(
         handles, labels = fallback_legend_handles()
     if not handles:
         return
-    legend_style = _legend_style(legend_loc, len(labels))
+    legend_style, legend_rows = _legend_style(
+        legend_loc,
+        len(labels),
+        fig=fig,
+    )
     legend = fig.legend(handles, labels, **legend_style)
-    ncol = int(legend_style.get("ncol", len(labels)) or 1)
-    legend_rows = max(1, math.ceil(len(labels) / ncol))
     bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
     legend.set_bbox_to_anchor(bbox_to_anchor)
     apply_figure_layout(
         fig,
-        margins=_legend_margins(legend_loc, legend_rows=legend_rows),
+        margins=_legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
         bbox_to_anchor=bbox_to_anchor,
         legend_rows=legend_rows,
     )
@@ -581,11 +647,14 @@ def apply_figure_layout(
     if figsize is not None:
         fig.set_size_inches(*figsize, forward=True)
     if margins is None and fig.legends:
-        margins = {"top": _legend_top_margin(legend_rows)}
+        margins = {"top": _legend_top_margin(fig, legend_rows)}
     if margins:
         adjusted_margins = dict(margins)
         if "top" in adjusted_margins:
-            reserved_top = min(_legend_top_reserved(legend_rows), adjusted_margins["top"])
+            reserved_top = min(
+                _legend_top_reserved(fig, legend_rows),
+                adjusted_margins["top"],
+            )
         fig.subplots_adjust(**adjusted_margins)
         layout_rect = (
             adjusted_margins.get("left", 0.0),
@@ -611,7 +680,14 @@ def apply_figure_layout(
                     left,
                     bottom,
                     right,
-                    max(0.0, top - LEGEND_ROW_EXTRA_MARGIN * extra_legend_rows),
+                    max(
+                        0.0,
+                        top
+                        - _scale_margin_from_base(
+                            LEGEND_ROW_EXTRA_MARGIN * extra_legend_rows,
+                            fig,
+                        ),
+                    ),
                 )
             if reserved_top and adjusted_tight.get("rect"):
                 left, bottom, right, top = adjusted_tight["rect"]
@@ -632,13 +708,17 @@ def _layout_rect_from_margins(
     margins: dict[str, float] | None,
     *,
     legend_rows: int = 1,
+    fig: plt.Figure | None = None,
 ) -> tuple[float, float, float, float]:
     if not margins:
         return (0.0, 0.0, 1.0, 1.0)
     adjusted_margins = dict(margins)
     reserved_top = 0.0
     if "top" in adjusted_margins:
-        reserved_top = min(_legend_top_reserved(legend_rows), adjusted_margins["top"])
+        reserved_top = min(
+            _legend_top_reserved(fig, legend_rows),
+            adjusted_margins["top"],
+        )
     return (
         adjusted_margins.get("left", 0.0),
         adjusted_margins.get("bottom", 0.0),
