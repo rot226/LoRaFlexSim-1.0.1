@@ -73,6 +73,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Ajoute un timestamp dans les sorties.",
     )
     parser.add_argument(
+        "--safe-profile",
+        action="store_true",
+        help="Active le profil sécurisé pour l'étape 2.",
+    )
+    parser.add_argument(
         "--plot-summary",
         action=argparse.BooleanOptionalAction,
         default=True,

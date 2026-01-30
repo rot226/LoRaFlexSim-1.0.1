@@ -10,6 +10,7 @@ from pathlib import Path
 from statistics import median
 from typing import Sequence
 
+from article_c.common.config import STEP2_SAFE_CONFIG
 from article_c.common.csv_io import write_rows, write_simulation_results
 from article_c.common.plot_helpers import (
     apply_plot_style,
@@ -53,6 +54,16 @@ def _aggregate_selection_probs(
             }
         )
     return aggregated
+
+
+def _apply_safe_profile(args: object) -> None:
+    args.safe_profile = True
+    args.traffic_coeff_clamp_enabled = STEP2_SAFE_CONFIG.traffic_coeff_clamp_enabled
+    args.traffic_coeff_clamp_min = STEP2_SAFE_CONFIG.traffic_coeff_clamp_min
+    args.traffic_coeff_clamp_max = STEP2_SAFE_CONFIG.traffic_coeff_clamp_max
+    args.reward_floor = STEP2_SAFE_CONFIG.reward_floor
+    args.max_penalty_ratio = STEP2_SAFE_CONFIG.max_penalty_ratio
+    args.shadowing_sigma_db = STEP2_SAFE_CONFIG.shadowing_sigma_db
 
 
 def _aggregate_learning_curve(
@@ -758,11 +769,21 @@ def _simulate_density(
                     if config.get("collision_size_factor") is not None
                     else None
                 ),
+                max_penalty_ratio=(
+                    float(config["max_penalty_ratio"])
+                    if config.get("max_penalty_ratio") is not None
+                    else None
+                ),
                 traffic_coeff_clamp_min=float(config["traffic_coeff_clamp_min"]),
                 traffic_coeff_clamp_max=float(config["traffic_coeff_clamp_max"]),
                 traffic_coeff_clamp_enabled=bool(config["traffic_coeff_clamp_enabled"]),
                 window_delay_enabled=bool(config["window_delay_enabled"]),
                 window_delay_range_s=float(config["window_delay_range_s"]),
+                shadowing_sigma_db=(
+                    float(config["shadowing_sigma_db"])
+                    if config.get("shadowing_sigma_db") is not None
+                    else None
+                ),
                 reference_network_size=int(config["reference_network_size"]),
                 reward_floor=(
                     float(config["reward_floor"])
@@ -830,6 +851,8 @@ def _simulate_density(
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_cli_args(argv)
+    if getattr(args, "safe_profile", False):
+        _apply_safe_profile(args)
     try:
         export_formats = parse_export_formats(args.formats)
     except ValueError as exc:
@@ -889,6 +912,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "congestion_coeff_growth": args.congestion_coeff_growth,
         "congestion_coeff_max": args.congestion_coeff_max,
         "collision_size_factor": args.collision_size_factor,
+        "max_penalty_ratio": getattr(args, "max_penalty_ratio", None),
         "traffic_coeff_clamp_min": args.traffic_coeff_clamp_min,
         "traffic_coeff_clamp_max": args.traffic_coeff_clamp_max,
         "traffic_coeff_clamp_enabled": args.traffic_coeff_clamp_enabled,
@@ -897,6 +921,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "reference_network_size": max(1, reference_network_size),
         "reward_floor": args.reward_floor,
         "floor_on_zero_success": args.floor_on_zero_success,
+        "shadowing_sigma_db": getattr(args, "shadowing_sigma_db", None),
         "debug_step2": args.debug_step2,
         "reward_alert_level": args.reward_alert_level,
     }
