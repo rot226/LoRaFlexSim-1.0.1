@@ -206,6 +206,78 @@ Si vous avez uniquement un format imbriqué, `make_all_plots.py` peut servir de
 **fallback d'agrégation** : il reconstitue les `aggregated_results.csv` flat à
 partir des sous-dossiers avant de lancer les figures.
 
+## Reproduction article QoS / Comparaison SNIR
+
+Cette section documente les scripts dédiés à la reproduction des figures QoS et
+à la comparaison SNIR. Ils reposent **exclusivement** sur des CSV agrégés en
+format **flat** dans `article_c/step*/results/`.
+
+### Entrées attendues (CSV agrégés flat)
+
+- `article_c/step1/results/aggregated_results.csv`
+- `article_c/step2/results/aggregated_results.csv`
+- (optionnel) `article_c/common/data/author_curves.csv` pour les courbes auteurs QoS.
+- (optionnel) `article_c/common/data/author_curves_snir.csv` pour la comparaison SNIR.
+
+### Sorties générées (PNG/EPS/PDF)
+
+Les scripts produisent des fichiers dans les répertoires ci‑dessous, avec les
+extensions demandées (par défaut PNG). Pour un rendu IEEE, privilégier l'EPS via
+`--formats`.
+
+- `article_c/plots/output/` :
+  - `fig4_der_by_cluster.*`
+  - `fig5_der_by_load.*`
+  - `fig7_traffic_sacrifice.*`
+  - `fig8_throughput_clusters.*`
+- `article_c/plots/output/compare_with_snir/` :
+  - `compare_pdr_snir.*`
+  - `compare_der_snir.*`
+  - `compare_throughput_snir.*`
+- `article_c/plots/output/` :
+  - `plot_cluster_der.*`
+
+### Commandes Windows 11
+
+> Toutes les commandes ci‑dessous utilisent `python -m` pour garantir la
+> résolution correcte des imports sous Windows 11.
+
+Reproduire les figures QoS (figures 4/5/7/8) :
+
+```powershell
+python -m article_c.reproduce_author_results --formats png,eps
+```
+
+Comparer SNIR ON/OFF (PDR/DER/Throughput) :
+
+```powershell
+python -m article_c.compare_with_snir --formats png,eps
+```
+
+Tracer le DER par cluster :
+
+```powershell
+python -m article_c.plot_cluster_der --formats png,eps
+```
+
+### Style IEEE et option `--formats`
+
+- **Taille/Légende** : les scripts appliquent les recommandations IEEE
+  (dimensions et légende en haut) via les helpers de style.
+- **Export EPS** : pour une soumission IEEE, ajouter `--formats png,eps` (ou
+  `--formats eps`) afin de produire des figures vectorielles.
+- **Formats multiples** : `--formats` accepte une liste séparée par des virgules
+  (ex. `png,pdf,eps`).
+
+### Script d'orchestration (optionnel)
+
+Si un script d'orchestration est ajouté (ex. `all_plot_compare.py`), documentez
+ici :
+
+- **Commande Windows 11** (ex. `python -m article_c.all_plot_compare --formats png,eps`).
+- **Entrées attendues** (CSV agrégés flat dans `article_c/step*/results/`).
+- **Sorties** (liste des fichiers générés et répertoires de sortie).
+
 ## Légendes IEEE‑ready
 
 ### Tailles recommandées (IEEE)
