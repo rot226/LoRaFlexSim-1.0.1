@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     ALGO_COLORS,
     CONSTANT_METRIC_MESSAGE,
     MetricStatus,
+    assert_legend_present,
     filter_rows_by_network_sizes,
     filter_cluster,
     is_constant_metric,
@@ -241,6 +242,7 @@ def _plot_diagnostics(
         axes[3].text(0.5, 0.5, "Données algo absentes", ha="center", va="center")
 
     save_figure(fig, output_dir, f"{suffix}_diagnostics", use_tight=False)
+    assert_legend_present(fig, f"{suffix}_diagnostics")
     plt.close(fig)
 
 
@@ -283,6 +285,7 @@ def _plot_constant_message(
     ax.set_title(title)
     ax.text(0.5, 0.5, message, ha="center", va="center", wrap=True)
     save_figure(fig, output_dir, stem, use_tight=False)
+    assert_legend_present(fig, stem)
     plt.close(fig)
 
 
@@ -347,6 +350,7 @@ def main(
         return
     fig = _plot_distribution(rows, network_sizes)
     save_figure(fig, output_dir, "plot_RL8_reward_distribution", use_tight=False)
+    assert_legend_present(fig, "plot_RL8_reward_distribution")
     plt.close(fig)
 
 

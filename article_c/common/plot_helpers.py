@@ -585,6 +585,14 @@ def _figure_has_legend(fig: plt.Figure) -> bool:
     return any(ax.get_legend() is not None for ax in fig.axes)
 
 
+def assert_legend_present(fig: plt.Figure, context: str) -> None:
+    """Émet un warning si aucune légende n'est détectée."""
+    if _figure_has_legend(fig):
+        return
+    context_label = str(context or "").strip() or "figure inconnue"
+    LOGGER.warning("Aucune légende détectée pour %s.", context_label)
+
+
 def _collect_legend_handles(axes: object) -> tuple[list[Line2D], list[str]]:
     handles: list[Line2D] = []
     labels: list[str] = []

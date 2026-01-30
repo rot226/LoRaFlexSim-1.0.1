@@ -13,6 +13,7 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
+    assert_legend_present,
     MetricStatus,
     ensure_network_size,
     filter_rows_by_network_sizes,
@@ -95,6 +96,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     fig = _plot_metric(rows, METRIC_KEY, METRIC_LABEL)
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_S9", use_tight=False)
+    assert_legend_present(fig, "plot_S9")
     plt.close(fig)
 
 

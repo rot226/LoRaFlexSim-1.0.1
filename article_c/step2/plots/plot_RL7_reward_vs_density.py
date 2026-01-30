@@ -15,6 +15,7 @@ from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     apply_figure_layout,
+    assert_legend_present,
     ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
@@ -315,6 +316,7 @@ def _plot_constant_message(
     )
     ax.set_title(title)
     save_figure(fig, output_dir, stem, use_tight=False)
+    assert_legend_present(fig, stem)
     plt.close(fig)
 
 
@@ -410,6 +412,7 @@ def _plot_diagnostics(
         axes[3].text(0.5, 0.5, "Données algo absentes", ha="center", va="center")
 
     save_figure(fig, output_dir, f"{suffix}_diagnostics", use_tight=False)
+    assert_legend_present(fig, f"{suffix}_diagnostics")
     plt.close(fig)
 
 
@@ -504,6 +507,7 @@ def main(
     if fig is None:
         return
     save_figure(fig, output_dir, "plot_RL7_reward_vs_density", use_tight=False)
+    assert_legend_present(fig, "plot_RL7_reward_vs_density")
     plt.close(fig)
 
 
