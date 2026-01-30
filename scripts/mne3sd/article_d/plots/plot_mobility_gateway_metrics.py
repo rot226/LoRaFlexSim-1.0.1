@@ -22,14 +22,9 @@ from scripts.mne3sd.common import (  # noqa: E402
 )
 from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
 
-RESULTS_PATH = (
-    ROOT
-    / "results"
-    / "mne3sd"
-    / "article_d"
-    / "mobility_gateway_metrics.csv"
-)
 ARTICLE = "article_d"
+RESULTS_DIR = ROOT / "results" / "mne3sd" / ARTICLE
+RESULTS_PATH = RESULTS_DIR / "mobility_gateway_metrics.csv"
 SCENARIO = "mobility_gateway"
 
 
@@ -58,7 +53,21 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Display the figures instead of running in batch mode",
     )
+    parser.add_argument(
+        "--export-eps",
+        action="store_true",
+        help="Export EPS files in addition to the default PNG output",
+    )
     return parser.parse_args()
+
+
+def resolve_export_formats(export_eps: bool) -> tuple[str, ...]:
+    """Return the output formats for figure exports."""
+
+    formats = ["png"]
+    if export_eps:
+        formats.append("eps")
+    return tuple(formats)
 
 
 def parse_gateway_distribution(value: object) -> dict[str, float]:
@@ -131,7 +140,10 @@ def ordered_gateway_ids(distributions: Iterable[dict[str, float]]) -> list[str]:
         return sorted(ids)
 
 
-def plot_pdr_distribution_by_gateway(df: pd.DataFrame) -> None:
+def plot_pdr_distribution_by_gateway(
+    df: pd.DataFrame,
+    formats: tuple[str, ...],
+) -> None:
     """Plot the share of uplink deliveries handled by each gateway."""
 
     entries: list[dict[str, object]] = []
@@ -178,10 +190,13 @@ def plot_pdr_distribution_by_gateway(df: pd.DataFrame) -> None:
         scenario=SCENARIO,
         metric="pdr_distribution_by_gateway",
     )
-    save_figure(fig, "pdr_distribution_by_gateway", output_dir)
+    save_figure(fig, "pdr_distribution_by_gateway", output_dir, formats=formats)
 
 
-def plot_downlink_delay_vs_gateways(df: pd.DataFrame) -> None:
+def plot_downlink_delay_vs_gateways(
+    df: pd.DataFrame,
+    formats: tuple[str, ...],
+) -> None:
     """Plot the average downlink delay versus the number of gateways."""
 
     fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
@@ -213,10 +228,13 @@ def plot_downlink_delay_vs_gateways(df: pd.DataFrame) -> None:
         scenario=SCENARIO,
         metric="downlink_delay_vs_gateways",
     )
-    save_figure(fig, "average_downlink_delay_vs_gateways", output_dir)
+    save_figure(fig, "average_downlink_delay_vs_gateways", output_dir, formats=formats)
 
 
-def plot_model_comparison(df: pd.DataFrame) -> None:
+def plot_model_comparison(
+    df: pd.DataFrame,
+    formats: tuple[str, ...],
+) -> None:
     """Plot a scatter chart comparing mobility models on PDR and downlink delay."""
 
     fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
@@ -256,7 +274,7 @@ def plot_model_comparison(df: pd.DataFrame) -> None:
         scenario=SCENARIO,
         metric="model_comparison",
     )
-    save_figure(fig, "pdr_vs_delay_model_comparison", output_dir)
+    save_figure(fig, "pdr_vs_delay_model_comparison", output_dir, formats=formats)
 
 
 def main() -> None:  # pragma: no cover - CLI entry point
@@ -268,9 +286,11 @@ def main() -> None:  # pragma: no cover - CLI entry point
 
     metrics = load_metrics(args.results)
 
-    plot_pdr_distribution_by_gateway(metrics)
-    plot_downlink_delay_vs_gateways(metrics)
-    plot_model_comparison(metrics)
+    export_formats = resolve_export_formats(args.export_eps)
+
+    plot_pdr_distribution_by_gateway(metrics, export_formats)
+    plot_downlink_delay_vs_gateways(metrics, export_formats)
+    plot_model_comparison(metrics, export_formats)
 
     if args.show:
         plt.show()
