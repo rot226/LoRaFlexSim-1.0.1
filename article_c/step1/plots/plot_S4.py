@@ -15,6 +15,7 @@ from article_c.common.plot_helpers import (
     ALGO_LABELS,
     ALGO_MARKERS,
     MetricStatus,
+    SNIR_LABELS,
     SNIR_LINESTYLES,
     SNIR_MODES,
     apply_plot_style,
@@ -75,6 +76,7 @@ def _add_summary_plot(
             normalized_algo = _normalize_algo(algo)
             color = ALGO_COLORS.get(normalized_algo, "#4c4c4c")
             marker = ALGO_MARKERS.get(normalized_algo, "o")
+            label = f"{algo_label(str(algo))} ({SNIR_LABELS[snir_mode]})"
             ax.errorbar(
                 index + offsets[snir_mode],
                 median,
@@ -85,6 +87,7 @@ def _add_summary_plot(
                 linestyle=SNIR_LINESTYLES.get(snir_mode, "solid"),
                 capsize=3,
                 markersize=5,
+                label=label,
             )
     ax.set_xticks(range(len(algos)))
     ax.set_xticklabels([algo_label(str(algo)) for algo in algos])
