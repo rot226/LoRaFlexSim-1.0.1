@@ -305,7 +305,14 @@ def _plot_constant_message(
 ) -> None:
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(1))
     apply_figure_layout(fig, figsize=(8, 5))
-    render_constant_metric(fig, ax, message=message, legend_loc="above")
+    render_constant_metric(
+        fig,
+        ax,
+        message=message,
+        legend_loc="above",
+        show_fallback_legend=True,
+        legend_handles=fallback_legend_handles(),
+    )
     ax.set_title(title)
     save_figure(fig, output_dir, stem, use_tight=True)
     plt.close(fig)
