@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
 import warnings
 
@@ -23,6 +24,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     save_figure,
 )
+from article_c.common.plotting_style import legend_bbox_to_anchor
 from plot_defaults import resolve_ieee_figsize
 
 
@@ -64,7 +66,14 @@ def _plot_selection(
     ]
     metric_state = is_constant_metric(selection_values)
     if metric_state is not MetricStatus.OK:
-        render_metric_status(fig, ax, metric_state, legend_handles=None)
+        render_metric_status(
+            fig,
+            ax,
+            metric_state,
+            legend_loc="above",
+            show_fallback_legend=True,
+            legend_handles=fallback_legend_handles(),
+        )
         ax.set_title(
             "Step 2 - UCB1-SF Selection Probability"
             f"{_title_suffix(sorted(network_sizes))}"
@@ -93,18 +102,23 @@ def _plot_selection(
         handles, labels = fallback_legend_handles()
     if handles:
         ncol = min(4, max(1, len(labels)))
-        fig.legend(
+        legend = fig.legend(
             handles,
             labels,
             loc="upper center",
-            bbox_to_anchor=(0.5, 1.12),
             ncol=ncol,
             frameon=False,
         )
+        legend_rows = max(1, math.ceil(len(labels) / ncol))
+        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
+        legend.set_bbox_to_anchor(bbox_to_anchor)
+    else:
+        legend_rows = 1
     apply_figure_layout(
         fig,
-        bbox_to_anchor=(0.5, 1.12),
-        margins=legend_margins("top"),
+        bbox_to_anchor=bbox_to_anchor if handles else None,
+        margins=legend_margins("above", legend_rows=legend_rows),
+        legend_rows=legend_rows,
     )
     return fig
 

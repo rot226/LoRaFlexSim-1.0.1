@@ -25,7 +25,7 @@ from article_c.common.plot_helpers import (
     normalize_network_size_rows,
     save_figure,
 )
-from article_c.common.plotting_style import legend_extra_height
+from article_c.common.plotting_style import legend_bbox_to_anchor, legend_extra_height
 from plot_defaults import resolve_ieee_figsize
 
 
@@ -136,7 +136,7 @@ def _plot_distribution(
     labels = [algo_label(str(algo)) for algo in algorithms]
     if handles:
         legend_ncol = min(3, len(handles))
-        fig.legend(
+        legend = fig.legend(
             handles,
             labels,
             loc="upper center",
@@ -144,14 +144,18 @@ def _plot_distribution(
             frameon=False,
         )
         legend_rows = max(1, math.ceil(len(handles) / legend_ncol))
+        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
+        legend.set_bbox_to_anchor(bbox_to_anchor)
     else:
         legend_rows = 1
+        bbox_to_anchor = None
     extra_height = legend_extra_height(height, legend_rows)
     apply_figure_layout(
         fig,
         figsize=(width, height + extra_height),
-        margins=legend_margins("top", legend_rows=legend_rows),
+        margins=legend_margins("above", legend_rows=legend_rows),
         legend_rows=legend_rows,
+        bbox_to_anchor=bbox_to_anchor,
     )
     return fig
 

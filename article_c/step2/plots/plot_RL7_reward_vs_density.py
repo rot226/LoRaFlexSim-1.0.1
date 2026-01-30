@@ -20,6 +20,7 @@ from article_c.common.plot_helpers import (
     filter_cluster,
     CONSTANT_METRIC_MESSAGE,
     MetricStatus,
+    fallback_legend_handles,
     is_constant_metric,
     load_step2_aggregated,
     metric_values,
@@ -140,7 +141,13 @@ def _plot_metric(
         )
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
-        render_metric_status(fig, ax, metric_state, legend_handles=None)
+        render_metric_status(
+            fig,
+            ax,
+            metric_state,
+            show_fallback_legend=True,
+            legend_handles=fallback_legend_handles(),
+        )
         ax.set_title(
             "Step 2 - Global Median Reward vs Network size (adaptive algorithms)"
             f"{_title_suffix(network_sizes)}"
