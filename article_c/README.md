@@ -126,6 +126,16 @@ Exemple CLI avec ajustement des coefficients :
 python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 --seeds_base 1000 --capture-probability 0.12 --congestion-coeff-base 0.32 --congestion-coeff-growth 0.35 --congestion-coeff-max 0.35
 ```
 
+### Plancher de récompense en absence de succès (étape 2)
+
+Quand les conditions sont extrêmes (ex. congestion forte), `success_rate` peut tomber à **0** et produire des rewards uniformes. L'option `--floor-on-zero-success` applique alors un plancher minimal (basé sur le `reward_floor` effectif) avant le clip afin de préserver un signal d'exploration.
+
+Exemple CLI :
+
+```powershell
+python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 --seeds_base 1000 --floor-on-zero-success
+```
+
 Générer toutes les figures :
 
 ```powershell

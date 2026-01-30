@@ -230,6 +230,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--floor-on-zero-success",
+        action=argparse.BooleanOptionalAction,
+        default=step2_defaults.floor_on_zero_success,
+        help=(
+            "Applique un plancher minimal même si success_rate == 0 "
+            "(utile pour éviter des rewards uniformes en conditions extrêmes)."
+        ),
+    )
+    parser.add_argument(
         "--workers",
         type=int,
         default=1,

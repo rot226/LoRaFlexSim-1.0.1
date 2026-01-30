@@ -123,6 +123,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--floor-on-zero-success",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Applique un plancher minimal si success_rate == 0 "
+            "(utile pour éviter des rewards uniformes en conditions extrêmes)."
+        ),
+    )
+    parser.add_argument(
         "--traffic-coeff-min",
         type=float,
         default=None,
@@ -463,6 +472,12 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         step2_args.extend(["--window-delay-range-s", str(args.window_delay_range_s)])
     if args.reward_floor is not None:
         step2_args.extend(["--reward-floor", str(args.reward_floor)])
+    if args.floor_on_zero_success is not None:
+        step2_args.append(
+            "--floor-on-zero-success"
+            if args.floor_on_zero_success
+            else "--no-floor-on-zero-success"
+        )
     if args.flat_output is not None:
         step2_args.append("--flat-output" if args.flat_output else "--no-flat-output")
     return step2_args
