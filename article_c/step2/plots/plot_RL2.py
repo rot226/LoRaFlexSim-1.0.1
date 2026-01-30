@@ -98,6 +98,7 @@ def _plot_metric(
             fig,
             ax,
             metric_state,
+            show_fallback_legend=True,
             legend_handles=legend_handles_for_algos_snir(["snir_on"]),
         )
         ax.set_title(

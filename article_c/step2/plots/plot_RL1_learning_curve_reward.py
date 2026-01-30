@@ -223,6 +223,7 @@ def _plot_learning_curve(
             ax,
             metric_state,
             legend_loc=legend_loc,
+            show_fallback_legend=True,
             legend_handles=_legend_handles_for_algos(algorithms),
         )
         ax.set_title("Average window reward vs Decision rounds")

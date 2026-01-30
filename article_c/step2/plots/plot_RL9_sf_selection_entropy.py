@@ -15,6 +15,7 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
     MetricStatus,
+    fallback_legend_handles,
     filter_rows_by_network_sizes,
     is_constant_metric,
     load_step2_aggregated,
@@ -98,7 +99,13 @@ def _plot_entropy(
         ax.plot(rounds, entropy_values, marker="o", label=f"N={network_size}")
     metric_state = is_constant_metric(all_entropy_values)
     if metric_state is not MetricStatus.OK:
-        render_metric_status(fig, ax, metric_state, legend_handles=None)
+        render_metric_status(
+            fig,
+            ax,
+            metric_state,
+            show_fallback_legend=True,
+            legend_handles=fallback_legend_handles(),
+        )
         ax.set_title(
             "Step 2 - SF Selection Entropy vs Round"
             f"{_title_suffix(network_sizes)}"

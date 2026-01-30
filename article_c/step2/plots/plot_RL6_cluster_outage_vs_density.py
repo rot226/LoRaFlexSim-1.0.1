@@ -171,7 +171,13 @@ def _plot_metric(
 
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
-        render_metric_status(fig, axes, metric_state, legend_handles=None)
+        render_metric_status(
+            fig,
+            axes,
+            metric_state,
+            show_fallback_legend=True,
+            legend_handles=fallback_legend_handles(),
+        )
         fig.suptitle(
             "Step 2 - Outage probability by Cluster (SNIR on)"
             f"{_title_suffix(network_sizes)}",

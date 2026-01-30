@@ -318,6 +318,7 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
             ax,
             metric_state,
             legend_loc=legend_loc,
+            show_fallback_legend=True,
             legend_handles=_legend_handles_for_algos(algos),
         )
         ax.set_title("Step 2 - Mean reward vs Aggregated PDR")
