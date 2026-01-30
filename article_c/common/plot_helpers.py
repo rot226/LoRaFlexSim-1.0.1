@@ -30,6 +30,8 @@ from article_c.common.config import DEFAULT_CONFIG
 
 ALGO_LABELS = {
     "adr": "ADR",
+    "apra": "APRA",
+    "aimi": "Aimi",
     "loba": "LoBa",
     "mixra_h": "MixRA-H",
     "mixra_opt": "MixRA-Opt",
@@ -37,6 +39,8 @@ ALGO_LABELS = {
 }
 ALGO_COLORS = {
     "adr": "#1f77b4",
+    "apra": "#8c564b",
+    "aimi": "#17becf",
     "loba": "#9467bd",
     "mixra_h": "#ff7f0e",
     "mixra_opt": "#2ca02c",
@@ -44,12 +48,16 @@ ALGO_COLORS = {
 }
 ALGO_MARKERS = {
     "adr": "o",
+    "apra": "P",
+    "aimi": "X",
     "loba": "v",
     "mixra_h": "s",
     "mixra_opt": "^",
     "ucb1_sf": "D",
 }
 ALGO_ALIASES = {
+    "apra_like": "apra",
+    "aimi_like": "aimi",
     "loba": "loba",
     "lo_ba": "loba",
     "lora_baseline": "loba",
