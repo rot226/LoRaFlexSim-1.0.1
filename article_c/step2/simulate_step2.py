@@ -1312,24 +1312,29 @@ def run_simulation(
                         )
                     ),
                 )
+                if _should_debug_log(debug_step2, round_id):
+                    logger.debug(
+                        "Traffic attendu avant plafonnement node=%s (sf=%s) expected_sent=%s.",
+                        node_id,
+                        sf_value,
+                        expected_sent_raw,
+                    )
                 max_tx = expected_sent_raw
-                if airtime_s > 0.0:
+                if airtime_s > 0.0 and n_channels > 0:
                     max_tx = max(
                         1,
                         int(
-                            window_duration_value
-                            / airtime_s
-                            / n_channels
-                            * load_factor
+                            math.floor(
+                                window_duration_value / (airtime_s * n_channels)
+                            )
                         ),
                     )
                 expected_sent = min(expected_sent_raw, max_tx)
                 if _should_debug_log(debug_step2, round_id):
                     logger.debug(
-                        "Plafonnement traffic node=%s (sf=%s) expected_sent=%s -> %s (max_tx=%s).",
+                        "Traffic attendu après plafonnement node=%s (sf=%s) expected_sent=%s (max_tx=%s).",
                         node_id,
                         sf_value,
-                        expected_sent_raw,
                         expected_sent,
                         max_tx,
                     )
@@ -1754,24 +1759,29 @@ def run_simulation(
                         )
                     ),
                 )
+                if _should_debug_log(debug_step2, round_id):
+                    logger.debug(
+                        "Traffic attendu avant plafonnement node=%s expected_sent=%s.",
+                        node_id,
+                        expected_sent_raw,
+                    )
                 airtime_reference_s = max(airtime_by_sf.values())
                 max_tx = expected_sent_raw
-                if airtime_reference_s > 0.0:
+                if airtime_reference_s > 0.0 and n_channels > 0:
                     max_tx = max(
                         1,
                         int(
-                            window_duration_value
-                            / airtime_reference_s
-                            / n_channels
-                            * load_factor
+                            math.floor(
+                                window_duration_value
+                                / (airtime_reference_s * n_channels)
+                            )
                         ),
                     )
                 expected_sent = min(expected_sent_raw, max_tx)
                 if _should_debug_log(debug_step2, round_id):
                     logger.debug(
-                        "Plafonnement traffic node=%s expected_sent=%s -> %s (max_tx=%s).",
+                        "Traffic attendu après plafonnement node=%s expected_sent=%s (max_tx=%s).",
                         node_id,
-                        expected_sent_raw,
                         expected_sent,
                         max_tx,
                     )
