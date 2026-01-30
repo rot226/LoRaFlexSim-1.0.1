@@ -370,6 +370,12 @@ def render_metric_status(
 ) -> None:
     if status is MetricStatus.OK:
         return
+    if (
+        show_fallback_legend
+        and legend_handles is None
+        and not _collect_legend_handles(axes)[0]
+    ):
+        legend_handles = fallback_legend_handles()
     render_constant_metric(
         fig,
         axes,
