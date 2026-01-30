@@ -18,6 +18,11 @@ Example usage::
     python scripts/mne3sd/article_d/scenarios/run_mobility_range_sweep.py \
         --nodes 200 --packets 50 --replicates 10 --seed 42 \
         --results results/mne3sd/article_d/mobility_range_metrics_custom.csv
+
+Pour exécuter la variante UCB1 sans ADR, utilisez ``--algorithm ucb1``::
+
+    python scripts/mne3sd/article_d/scenarios/run_mobility_range_sweep.py \
+        --algorithm ucb1 --nodes 200 --packets 50 --replicates 10
 """
 
 from __future__ import annotations
@@ -38,6 +43,7 @@ sys.path.insert(
 )
 
 from loraflexsim.launcher import RandomWaypoint, Simulator, SmoothMobility  # noqa: E402
+from loraflexsim.learning import LoRaSFSelectorUCB1  # noqa: E402
 from scripts.mne3sd.common import (
     add_execution_profile_argument,
     add_worker_argument,
@@ -169,6 +175,16 @@ def aggregate_sf_distribution(rows: list[dict[str, object]]) -> dict[str, float]
     return {key: totals[key] / total_packets for key in sorted(totals)}
 
 
+def apply_ucb1_algorithm(sim: Simulator) -> None:
+    """Force l'algorithme UCB1 sur chaque nœud du simulateur."""
+
+    for node in sim.nodes:
+        node.adr = False
+        node.learning_method = "ucb1"
+        if getattr(node, "sf_selector", None) is None:
+            node.sf_selector = LoRaSFSelectorUCB1()
+
+
 def _run_range_replicate(task: dict[str, object]) -> dict[str, object]:
     """Execute a single mobility range replicate and return its metrics."""
 
@@ -181,6 +197,7 @@ def _run_range_replicate(task: dict[str, object]) -> dict[str, object]:
     nodes = int(task["nodes"])
     packets = int(task["packets"])
     interval = float(task["interval"])
+    algorithm = str(task.get("algorithm", "adr")).lower()
     adr_node = bool(task["adr_node"])
     adr_server = bool(task["adr_server"])
 
@@ -197,6 +214,8 @@ def _run_range_replicate(task: dict[str, object]) -> dict[str, object]:
         adr_node=adr_node,
         adr_server=adr_server,
     )
+    if algorithm == "ucb1":
+        apply_ucb1_algorithm(sim)
     sim.run()
     metrics = sim.get_metrics()
 
@@ -255,6 +274,12 @@ def main() -> None:  # noqa: D401 - CLI entry point
         type=positive_float,
         default=300.0,
         help="Mean packet interval in seconds",
+    )
+    parser.add_argument(
+        "--algorithm",
+        choices=("adr", "ucb1"),
+        default="adr",
+        help="Spreading factor algorithm to apply (default: %(default)s)",
     )
     parser.add_argument("--adr-node", action="store_true", help="Enable ADR on the devices")
     parser.add_argument("--adr-server", action="store_true", help="Enable ADR on the server")
@@ -317,6 +342,13 @@ def main() -> None:  # noqa: D401 - CLI entry point
         replicates = args.replicates
     workers = resolve_worker_count(args.workers, replicates)
 
+    if args.algorithm == "ucb1":
+        adr_node = False
+        adr_server = False
+    else:
+        adr_node = args.adr_node
+        adr_server = args.adr_server
+
     models = [
         ("random_waypoint", RandomWaypoint),
         ("smooth", SmoothMobility),
@@ -345,8 +377,9 @@ def main() -> None:  # noqa: D401 - CLI entry point
                         "nodes": nodes,
                         "packets": packets,
                         "interval": args.interval,
-                        "adr_node": args.adr_node,
-                        "adr_server": args.adr_server,
+                        "adr_node": adr_node,
+                        "adr_server": adr_server,
+                        "algorithm": args.algorithm,
                     }
                     for replicate in range(1, replicates + 1)
                 ]
