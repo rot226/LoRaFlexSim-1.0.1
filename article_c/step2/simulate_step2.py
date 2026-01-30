@@ -79,8 +79,19 @@ def _compute_reward(
         + energy_weight * energy_score
     ) / total_weight
     collision_penalty = (
-        lambda_collision * weights.collision_weight * collision_norm * (0.7 + 0.3 * (1.0 - success_rate))
+        lambda_collision
+        * weights.collision_weight
+        * collision_norm
+        * (0.7 + 0.3 * (1.0 - success_rate))
+        * math.sqrt(max(success_rate, 0.0))
     )
+    if collision_penalty > success_rate * weighted_quality:
+        logger.info(
+            "Pénalité de collision dominante (collision_penalty=%.4f success_rate=%.4f weighted_quality=%.4f).",
+            collision_penalty,
+            success_rate,
+            weighted_quality,
+        )
     reward = success_rate * weighted_quality - collision_penalty
     if success_rate > 0.0:
         reward /= max(success_rate, 0.05)
