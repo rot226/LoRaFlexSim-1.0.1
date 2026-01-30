@@ -62,6 +62,8 @@ def _compute_reward(
     weights: AlgoRewardWeights,
     lambda_energy: float,
     lambda_collision: float,
+    *,
+    floor_on_zero_success: bool = False,
 ) -> float:
     latency_norm = _clip(latency_norm**1.35 * 1.08, 0.0, 1.0)
     energy_norm = _clip(energy_norm**1.35 * 1.08, 0.0, 1.0)
@@ -96,11 +98,13 @@ def _compute_reward(
     if success_rate > 0.0:
         reward /= max(success_rate, 0.05)
     reward_floor = weights.exploration_floor
-    if success_rate > 0.0 and reward_floor > 0.0 and reward < reward_floor:
-        reward = reward_floor
+    if reward_floor > 0.0 and reward < reward_floor:
+        if success_rate > 0.0 or (floor_on_zero_success and success_rate <= 0.0):
+            reward = reward_floor
     clipped_reward = _clip(reward, 0.0, 1.0)
-    if success_rate > 0.0 and reward_floor > 0.0 and clipped_reward < reward_floor:
-        clipped_reward = reward_floor
+    if reward_floor > 0.0 and clipped_reward < reward_floor:
+        if success_rate > 0.0 or (floor_on_zero_success and success_rate <= 0.0):
+            clipped_reward = reward_floor
     if clipped_reward == 0.0:
         logger.info(
             "Récompense nulle (success_rate=%.4f sf_norm=%.3f latency_norm=%.3f "
@@ -949,6 +953,7 @@ def run_simulation(
     lambda_collision: float | None = DEFAULT_CONFIG.rl.lambda_collision,
     epsilon_greedy: float = 0.03,
     reward_floor: float | None = None,
+    floor_on_zero_success: bool | None = None,
     density: float | None = None,
     snir_mode: str = "snir_on",
     seed: int = 42,
@@ -1033,6 +1038,11 @@ def run_simulation(
         step2_defaults.traffic_coeff_clamp_enabled
         if traffic_coeff_clamp_enabled is None
         else traffic_coeff_clamp_enabled
+    )
+    floor_on_zero_success_value = (
+        step2_defaults.floor_on_zero_success
+        if floor_on_zero_success is None
+        else floor_on_zero_success
     )
     window_delay_enabled_value = (
         step2_defaults.window_delay_enabled
@@ -1553,6 +1563,7 @@ def run_simulation(
                     reward_weights,
                     lambda_energy,
                     lambda_collision,
+                    floor_on_zero_success=floor_on_zero_success_value,
                 )
                 window_rewards.append(reward)
                 round_success_rates.append(metrics.success_rate)
@@ -2010,6 +2021,7 @@ def run_simulation(
                     reward_weights,
                     lambda_energy,
                     lambda_collision,
+                    floor_on_zero_success=floor_on_zero_success_value,
                 )
                 window_rewards.append(reward)
                 round_success_rates.append(metrics.success_rate)
