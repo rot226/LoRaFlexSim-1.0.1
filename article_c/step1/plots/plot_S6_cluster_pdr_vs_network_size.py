@@ -92,6 +92,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
 
     cluster_handles: list[plt.Line2D] = []
     legend_labels: list[str] = []
+    seen_labels: set[str] = set()
     for ax, snir_mode in zip(axes, SNIR_MODES, strict=False):
         snir_rows = [row for row in rows if row["snir_mode"] == snir_mode]
         for cluster in clusters:
@@ -105,18 +106,21 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             values = [points.get(size, float("nan")) for size in network_sizes]
             target = cluster_targets.get(cluster)
             target_label = f" (target {target:.2f})" if target is not None else ""
-            label = f"Cluster {cluster_labels.get(cluster, cluster)}{target_label}"
-            show_label = snir_mode == SNIR_MODES[0]
+            label = (
+                f"Cluster {cluster_labels.get(cluster, cluster)}"
+                f"{target_label} ({SNIR_LABELS[snir_mode]})"
+            )
             (line,) = ax.plot(
                 network_sizes,
                 values,
                 marker="o",
                 linestyle=SNIR_LINESTYLES[snir_mode],
-                label=label if show_label else "_nolegend_",
+                label=label,
             )
-            if show_label:
+            if label not in seen_labels:
                 cluster_handles.append(line)
                 legend_labels.append(label)
+                seen_labels.add(label)
         ax.set_title(SNIR_LABELS[snir_mode])
         ax.set_xlabel("Network size (number of nodes)")
         ax.set_ylabel("Packet Delivery Ratio")
