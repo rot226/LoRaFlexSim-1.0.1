@@ -14,6 +14,7 @@ from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
+    add_global_legend,
     MetricStatus,
     ensure_network_size,
     filter_mixra_opt_fallback,
@@ -26,10 +27,8 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     save_figure,
 )
-from article_c.common.plotting_style import LEGEND_STYLE
 from article_c.step1.plots.plot_utils import configure_figure
 
-LEGEND_BBOX = (0.5, 1.18)
 LAYOUT_MARGINS = legend_margins("above")
 LAYOUT_RECT = (0, 0, 1, 0.78)
 
@@ -93,7 +92,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             fig,
             tight_layout={"rect": LAYOUT_RECT},
             margins=LAYOUT_MARGINS,
-            bbox_to_anchor=LEGEND_BBOX,
         )
         return fig
 
@@ -107,15 +105,17 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_xticks(network_sizes)
     axes[0].set_ylabel("Outage probability")
     handles, labels = axes[0].get_legend_handles_labels()
+    for ax in axes:
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.remove()
     if handles:
-        fig.legend(
-            handles,
-            labels,
-            **{
-                **LEGEND_STYLE,
-                "bbox_to_anchor": LEGEND_BBOX,
-                "ncol": min(len(labels), 4),
-            },
+        add_global_legend(
+            fig,
+            axes[0],
+            legend_loc="above",
+            handles=handles,
+            labels=labels,
         )
     configure_figure(
         fig,
@@ -127,7 +127,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         fig,
         tight_layout={"rect": LAYOUT_RECT},
         margins=LAYOUT_MARGINS,
-        bbox_to_anchor=LEGEND_BBOX,
     )
     return fig
 

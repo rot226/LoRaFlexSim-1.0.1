@@ -14,11 +14,13 @@ from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
+    add_global_legend,
     MetricStatus,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     is_constant_metric,
+    legend_margins,
     load_step1_aggregated,
     metric_values,
     plot_metric_by_snir,
@@ -54,7 +56,11 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             "Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)",
             legend_loc="above",
         )
-        apply_figure_layout(fig, tight_layout={"rect": (0, 0, 1, 0.86)})
+        apply_figure_layout(
+            fig,
+            margins=legend_margins("above"),
+            tight_layout={"rect": (0, 0, 1, 0.86)},
+        )
         return fig
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
@@ -66,14 +72,17 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_xticks(network_sizes)
     axes[0].set_ylabel("Packet Delivery Ratio")
     handles, labels = axes[0].get_legend_handles_labels()
+    for ax in axes:
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.remove()
     if handles:
-        fig.legend(
-            handles,
-            labels,
-            loc="upper center",
-            bbox_to_anchor=(0.5, 1.12),
-            ncol=min(len(labels), 4),
-            frameon=False,
+        add_global_legend(
+            fig,
+            axes[0],
+            legend_loc="above",
+            handles=handles,
+            labels=labels,
         )
     configure_figure(
         fig,
@@ -81,7 +90,11 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         "Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)",
         legend_loc="above",
     )
-    apply_figure_layout(fig, tight_layout={"rect": (0, 0, 1, 0.86)})
+    apply_figure_layout(
+        fig,
+        margins=legend_margins("above"),
+        tight_layout={"rect": (0, 0, 1, 0.86)},
+    )
     return fig
 
 

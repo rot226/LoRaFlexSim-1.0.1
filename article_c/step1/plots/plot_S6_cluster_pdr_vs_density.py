@@ -19,10 +19,12 @@ from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
     apply_figure_layout,
+    add_global_legend,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     is_constant_metric,
+    legend_margins,
     load_step1_aggregated,
     metric_values,
     render_metric_status,
@@ -92,6 +94,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             "Step 1 - PDR by Cluster (SNIR on/off, per algorithm)",
             legend_loc="above",
         )
+        apply_figure_layout(fig, margins=legend_margins("above"))
         return fig
 
     for algo_idx, (algo, fallback) in enumerate(algorithms):
@@ -127,22 +130,26 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
     handles, labels = axes[0][0].get_legend_handles_labels()
+    for row in axes:
+        for ax in row:
+            legend = ax.get_legend()
+            if legend is not None:
+                legend.remove()
     if handles:
-        fig.legend(
-            handles,
-            labels,
-            loc="upper center",
-            bbox_to_anchor=(0.5, 1.02),
-            ncol=3,
-            frameon=False,
+        add_global_legend(
+            fig,
+            axes[0][0],
+            legend_loc="above",
+            handles=handles,
+            labels=labels,
         )
-        apply_figure_layout(fig, bbox_to_anchor=(0.5, 1.02))
     configure_figure(
         fig,
         axes,
         "Step 1 - PDR by Cluster (SNIR on/off, per algorithm)",
         legend_loc="above",
     )
+    apply_figure_layout(fig, margins=legend_margins("above"))
     return fig
 
 

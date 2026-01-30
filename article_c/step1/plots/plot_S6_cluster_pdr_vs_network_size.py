@@ -9,7 +9,6 @@ import warnings
 
 import matplotlib.pyplot as plt
 from matplotlib import ticker as mticker
-from matplotlib.lines import Line2D
 import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
@@ -21,6 +20,7 @@ from article_c.common.plot_helpers import (
     MetricStatus,
     apply_plot_style,
     apply_figure_layout,
+    add_global_legend,
     filter_mixra_opt_fallback,
     is_constant_metric,
     legend_margins,
@@ -30,7 +30,6 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     save_figure,
 )
-from article_c.common.plotting_style import LEGEND_STYLE
 from article_c.step1.plots.plot_utils import configure_figure
 
 PDR_TARGETS = (0.90, 0.80, 0.70)
@@ -88,6 +87,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             "Step 1 - PDR by Cluster (network size)",
             legend_loc="above",
         )
+        apply_figure_layout(fig, margins=legend_margins("above"))
         return fig
 
     cluster_handles: list[plt.Line2D] = []
@@ -125,39 +125,20 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
-    snir_handles = [
-        Line2D(
-            [0],
-            [0],
-            color="black",
-            linestyle=SNIR_LINESTYLES[snir_mode],
-            marker=None,
-            label=SNIR_LABELS[snir_mode],
+    for ax in axes:
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.remove()
+    if cluster_handles:
+        add_global_legend(
+            fig,
+            axes[0],
+            legend_loc="above",
+            handles=cluster_handles,
+            labels=legend_labels,
         )
-        for snir_mode in SNIR_MODES
-    ]
-    cluster_legend = fig.legend(
-        cluster_handles,
-        legend_labels,
-        title="Clusters",
-        **{
-            **LEGEND_STYLE,
-            "bbox_to_anchor": (0.5, 1.14),
-            "ncol": 3,
-        },
-    )
-    fig.add_artist(cluster_legend)
-    snir_labels = [handle.get_label() for handle in snir_handles]
-    fig.legend(
-        snir_handles,
-        snir_labels,
-        title="SNIR",
-        **{
-            **LEGEND_STYLE,
-            "bbox_to_anchor": (0.5, 1.06),
-            "ncol": min(len(snir_labels), 3),
-        },
-    )
+        if fig.legends:
+            fig.legends[-1].set_title("Clusters")
     configure_figure(
         fig,
         axes,
@@ -174,7 +155,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         tight_layout={
             "rect": (0, 0, 1, max(0.8, LEGEND_ABOVE_TIGHT_LAYOUT_TOP)),
         },
-        legend_rows=2,
     )
     return fig
 
