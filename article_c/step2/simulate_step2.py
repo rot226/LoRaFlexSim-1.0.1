@@ -695,7 +695,7 @@ def _weights_for_algo(algorithm: str, n_arms: int) -> list[float]:
 
 
 def _reward_weights_for_algo(
-    algorithm: str, exploration_floor: float | None = None
+    algorithm: str, reward_floor: float | None = None
 ) -> AlgoRewardWeights:
     default_floor = 0.02
     if algorithm == "adr":
@@ -727,7 +727,7 @@ def _reward_weights_for_algo(
             energy_weight=0.3,
             collision_weight=0.24,
         )
-    selected_floor = default_floor if exploration_floor is None else exploration_floor
+    selected_floor = default_floor if reward_floor is None else reward_floor
     if selected_floor > 0.0:
         return AlgoRewardWeights(
             sf_weight=weights.sf_weight,
@@ -907,7 +907,7 @@ def run_simulation(
     lambda_energy: float = DEFAULT_CONFIG.rl.lambda_energy,
     lambda_collision: float | None = DEFAULT_CONFIG.rl.lambda_collision,
     epsilon_greedy: float = 0.03,
-    exploration_floor: float | None = None,
+    reward_floor: float | None = None,
     density: float | None = None,
     snir_mode: str = "snir_on",
     seed: int = 42,
@@ -1162,7 +1162,7 @@ def run_simulation(
     else:
         lambda_collision = _clip(lambda_collision, 0.0, 1.0)
     reward_weights = _reward_weights_for_algo(
-        algorithm, exploration_floor=exploration_floor
+        algorithm, reward_floor=reward_floor
     )
     sf_norm_by_sf = {
         sf: _normalize(sf, min(sf_values), max(sf_values)) for sf in sf_values
