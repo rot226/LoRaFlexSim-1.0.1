@@ -13,7 +13,7 @@ from article_c.common.plot_helpers import (
     legend_margins,
     suptitle_y_from_top,
 )
-from article_c.common.plotting_style import LEGEND_STYLE
+from article_c.common.plotting_style import FIGURE_MARGINS, LEGEND_STYLE
 from article_c.common.plotting_style import legend_bbox_to_anchor
 
 
@@ -96,17 +96,33 @@ def configure_figure(
                 apply_figure_layout(fig, bbox_to_anchor=(1.02, 0.5))
 
     if legend_loc == "above":
-        above_margins = {"top": legend_margins("above", legend_rows=legend_rows)["top"]}
+        above_margins = {
+            "top": legend_margins("above", legend_rows=legend_rows)["top"],
+            "bottom": FIGURE_MARGINS["bottom"],
+        }
         apply_figure_layout(
             fig,
             margins=above_margins,
-            tight_layout={"rect": (0, 0, 1, above_margins["top"])},
+            tight_layout={
+                "rect": (0, above_margins["bottom"], 1, above_margins["top"])
+            },
             legend_rows=legend_rows,
         )
     else:
         apply_figure_layout(
             fig,
-            margins={"top": 0.88, "right": 0.80},
-            tight_layout={"rect": (0, 0, 0.80, 1)},
+            margins={
+                "top": FIGURE_MARGINS["top"],
+                "bottom": FIGURE_MARGINS["bottom"],
+                "right": 0.80,
+            },
+            tight_layout={
+                "rect": (
+                    0,
+                    FIGURE_MARGINS["bottom"],
+                    0.80,
+                    FIGURE_MARGINS["top"],
+                )
+            },
         )
     fig.suptitle(title, y=suptitle_y_from_top(fig))
