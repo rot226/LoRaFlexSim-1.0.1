@@ -93,6 +93,7 @@ class Step2Config:
     reward_floor: float | None = None
     floor_on_zero_success: bool = False
     max_penalty_ratio: float = 1.0
+    shadowing_sigma_db: float | None = None
 
 
 @dataclass(frozen=True)
@@ -111,3 +112,12 @@ class AppConfig:
 
 
 DEFAULT_CONFIG = AppConfig()
+
+STEP2_SAFE_CONFIG = Step2Config(
+    traffic_coeff_clamp_min=0.7,
+    traffic_coeff_clamp_max=1.3,
+    traffic_coeff_clamp_enabled=True,
+    reward_floor=0.02,
+    max_penalty_ratio=0.6,
+    shadowing_sigma_db=8.0,
+)

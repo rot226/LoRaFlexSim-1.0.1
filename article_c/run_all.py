@@ -87,6 +87,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Ajoute un timestamp dans les sorties de l'étape 2.",
     )
     parser.add_argument(
+        "--safe-profile",
+        action="store_true",
+        help="Active le profil sécurisé pour l'étape 2.",
+    )
+    parser.add_argument(
         "--traffic-mode",
         type=str,
         default=None,
@@ -436,6 +441,8 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         step2_args.extend(["--seeds_base", str(args.seeds_base)])
     if args.timestamp:
         step2_args.append("--timestamp")
+    if args.safe_profile:
+        step2_args.append("--safe-profile")
     if args.snir_threshold_db is not None:
         step2_args.extend(["--snir-threshold-db", str(args.snir_threshold_db)])
     if args.noise_floor_dbm is not None:
