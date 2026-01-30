@@ -20,6 +20,11 @@ Example usage::
     python scripts/mne3sd/article_d/scenarios/run_mobility_gateway_sweep.py \
         --gateways-list 1,2,4 --nodes 200 --replicates 10 --seed 42 \
         --results results/mne3sd/article_d/mobility_gateway_metrics_custom.csv
+
+Pour exécuter la sélection UCB1 sans ADR, ajoutez ``--algorithm ucb1``::
+
+    python scripts/mne3sd/article_d/scenarios/run_mobility_gateway_sweep.py \
+        --algorithm ucb1 --gateways-list 1,2 --nodes 200
 """
 
 from __future__ import annotations
@@ -47,6 +52,7 @@ from loraflexsim.launcher import (  # noqa: E402
     Simulator,
     SmoothMobility,
 )
+from loraflexsim.learning import LoRaSFSelectorUCB1  # noqa: E402
 from scripts.mne3sd.common import (
     add_execution_profile_argument,
     add_worker_argument,
@@ -209,6 +215,16 @@ def aggregate_gateway_distribution(rows: list[dict[str, object]]) -> dict[str, f
     return {key: totals[key] / count for key in sorted(totals)}
 
 
+def apply_ucb1_algorithm(sim: Simulator) -> None:
+    """Force l'algorithme UCB1 sur chaque nœud du simulateur."""
+
+    for node in sim.nodes:
+        node.adr = False
+        node.learning_method = "ucb1"
+        if getattr(node, "sf_selector", None) is None:
+            node.sf_selector = LoRaSFSelectorUCB1()
+
+
 class DownlinkDelayTracker:
     """Context manager recording downlink delays from a scheduler instance."""
 
@@ -271,6 +287,7 @@ def _run_gateway_replicate(task: dict[str, object]) -> dict[str, object]:
     nodes = int(task["nodes"])
     packets = int(task["packets"])
     interval = float(task["interval"])
+    algorithm = str(task.get("algorithm", "adr")).lower()
     adr_node = bool(task["adr_node"])
     adr_server = bool(task["adr_server"])
     replicate = int(task["replicate"])
@@ -290,6 +307,8 @@ def _run_gateway_replicate(task: dict[str, object]) -> dict[str, object]:
         adr_server=adr_server,
         channels=MultiChannel(channel_plan),
     )
+    if algorithm == "ucb1":
+        apply_ucb1_algorithm(sim)
 
     with DownlinkDelayTracker(sim.network_server.scheduler) as tracker:
         sim.run()
@@ -375,6 +394,12 @@ def main() -> None:  # noqa: D401 - CLI entry point
         default=300.0,
         help="Mean packet interval in seconds",
     )
+    parser.add_argument(
+        "--algorithm",
+        choices=("adr", "ucb1"),
+        default="adr",
+        help="Spreading factor algorithm to apply (default: %(default)s)",
+    )
     parser.add_argument("--adr-node", action="store_true", help="Enable ADR on the devices")
     parser.add_argument("--adr-server", action="store_true", help="Enable ADR on the server")
     parser.add_argument(
@@ -444,6 +469,13 @@ def main() -> None:  # noqa: D401 - CLI entry point
         replicates = args.replicates
     workers = resolve_worker_count(args.workers, replicates)
 
+    if args.algorithm == "ucb1":
+        adr_node = False
+        adr_server = False
+    else:
+        adr_node = args.adr_node
+        adr_server = args.adr_server
+
     models = [
         ("random_waypoint", RandomWaypoint),
         ("smooth", SmoothMobility),
@@ -471,8 +503,9 @@ def main() -> None:  # noqa: D401 - CLI entry point
                         "nodes": nodes,
                         "packets": packets,
                         "interval": args.interval,
-                        "adr_node": args.adr_node,
-                        "adr_server": args.adr_server,
+                        "adr_node": adr_node,
+                        "adr_server": adr_server,
+                        "algorithm": args.algorithm,
                         "replicate": replicate,
                         "seed": base_seed + replicate - 1,
                     }
