@@ -1072,6 +1072,7 @@ def run_simulation(
         n_nodes, reference_size, load_clamp_min_value, load_clamp_max_value
     )
     legacy_load_factor = _network_load_factor(n_nodes, reference_size, 0.6, 2.6)
+    n_channels = max(1, len(DEFAULT_CONFIG.radio.channels_hz))
     congestion_probability = _congestion_collision_probability(n_nodes, reference_size)
     qos_clusters = tuple(DEFAULT_CONFIG.qos.clusters)
     traffic_size_factor = _traffic_coeff_size_factor(n_nodes, reference_size)
@@ -1219,9 +1220,10 @@ def run_simulation(
             node_windows: list[dict[str, object]] = []
             for node_id in range(n_nodes):
                 sf_value = sf_values[arm_index]
+                airtime_s = airtime_by_sf[sf_value]
                 rate_multiplier = base_rate_multipliers[node_id]
                 cluster = node_clusters[node_id]
-                expected_sent = max(
+                expected_sent_raw = max(
                     1,
                     int(
                         round(
@@ -1233,6 +1235,27 @@ def run_simulation(
                         )
                     ),
                 )
+                max_tx = expected_sent_raw
+                if airtime_s > 0.0:
+                    max_tx = max(
+                        1,
+                        int(
+                            window_duration_value
+                            / airtime_s
+                            / n_channels
+                            * load_factor
+                        ),
+                    )
+                expected_sent = min(expected_sent_raw, max_tx)
+                if _should_debug_log(debug_step2, round_id):
+                    logger.debug(
+                        "Plafonnement traffic node=%s (sf=%s) expected_sent=%s -> %s (max_tx=%s).",
+                        node_id,
+                        sf_value,
+                        expected_sent_raw,
+                        expected_sent,
+                        max_tx,
+                    )
                 base_period_s = window_duration_value / expected_sent
                 jitter_range_node_s = (
                     0.5 * base_period_s
@@ -1276,7 +1299,6 @@ def run_simulation(
                     else 0.0
                 )
                 tx_starts = [window_start_s + node_offset_s + t for t in traffic_times]
-                airtime_s = airtime_by_sf[sf_value]
                 effective_duration_s = _effective_window_duration(
                     tx_starts,
                     airtime_s,
@@ -1636,7 +1658,7 @@ def run_simulation(
             for node_id in range(n_nodes):
                 rate_multiplier = base_rate_multipliers[node_id]
                 cluster = node_clusters[node_id]
-                expected_sent = max(
+                expected_sent_raw = max(
                     1,
                     int(
                         round(
@@ -1648,6 +1670,27 @@ def run_simulation(
                         )
                     ),
                 )
+                airtime_reference_s = max(airtime_by_sf.values())
+                max_tx = expected_sent_raw
+                if airtime_reference_s > 0.0:
+                    max_tx = max(
+                        1,
+                        int(
+                            window_duration_value
+                            / airtime_reference_s
+                            / n_channels
+                            * load_factor
+                        ),
+                    )
+                expected_sent = min(expected_sent_raw, max_tx)
+                if _should_debug_log(debug_step2, round_id):
+                    logger.debug(
+                        "Plafonnement traffic node=%s expected_sent=%s -> %s (max_tx=%s).",
+                        node_id,
+                        expected_sent_raw,
+                        expected_sent,
+                        max_tx,
+                    )
                 base_period_s = window_duration_value / expected_sent
                 jitter_range_node_s = (
                     0.5 * base_period_s
@@ -1701,13 +1744,13 @@ def run_simulation(
                     )
                     arm_index = rng.choices(range(n_arms), weights=cluster_weights, k=1)[0]
                 sf_value = sf_values[arm_index]
+                airtime_s = airtime_by_sf[sf_value]
                 node_offset_s = (
                     rng.uniform(0.0, window_delay_range_value)
                     if window_delay_enabled_value and window_delay_range_value > 0
                     else 0.0
                 )
                 tx_starts = [window_start_s + node_offset_s + t for t in traffic_times]
-                airtime_s = airtime_by_sf[sf_value]
                 effective_duration_s = _effective_window_duration(
                     tx_starts,
                     airtime_s,
