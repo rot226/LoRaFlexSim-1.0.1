@@ -5,14 +5,42 @@ from __future__ import annotations
 from typing import Iterable
 
 import matplotlib.pyplot as plt
-from matplotlib.legend import Legend
 from matplotlib import ticker as mticker
+from matplotlib.legend import Legend
 
-LEGEND_STYLE = {
+IEEE_STYLE = True
+
+BASE_FIGURE_SIZE = (7.2, 4.2)
+IEEE_FIGURE_SIZE = (6.6, 3.6)
+
+BASE_LEGEND_STYLE = {
     "loc": "upper center",
     "ncol": 4,
     "frameon": False,
 }
+IEEE_LEGEND_STYLE = {
+    "loc": "upper center",
+    "ncol": 3,
+    "frameon": False,
+    "columnspacing": 1.1,
+}
+
+BASE_FIGURE_MARGINS = {
+    "top": 0.88,
+    "bottom": 0.12,
+}
+IEEE_FIGURE_MARGINS = {
+    "top": 0.84,
+    "bottom": 0.14,
+}
+
+BASE_SUPTITLE_Y = 0.965
+IEEE_SUPTITLE_Y = 0.945
+
+FIGURE_SIZE = IEEE_FIGURE_SIZE if IEEE_STYLE else BASE_FIGURE_SIZE
+LEGEND_STYLE = IEEE_LEGEND_STYLE if IEEE_STYLE else BASE_LEGEND_STYLE
+FIGURE_MARGINS = IEEE_FIGURE_MARGINS if IEEE_STYLE else BASE_FIGURE_MARGINS
+SUPTITLE_Y = IEEE_SUPTITLE_Y if IEEE_STYLE else BASE_SUPTITLE_Y
 
 SAVEFIG_STYLE = {
     "bbox_inches": None,

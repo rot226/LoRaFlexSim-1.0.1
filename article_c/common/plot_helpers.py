@@ -16,8 +16,11 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 from article_c.common.plotting_style import (
+    FIGURE_MARGINS,
+    FIGURE_SIZE,
     LEGEND_STYLE,
     SAVEFIG_STYLE,
+    SUPTITLE_Y,
     apply_output_fonttype,
     legend_bbox_to_anchor,
     set_network_size_ticks,
@@ -67,7 +70,6 @@ DERIVED_SUFFIXES = ("_mean", "_std", "_count", "_ci95", "_p10", "_p50", "_p90")
 RECEIVED_MEAN_KEY = "received_mean"
 RECEIVED_ALGO_MEAN_KEY = "received_algo_mean"
 RECEIVED_ALGO_TOL = 1e-6
-BASE_FIGSIZE = (7.2, 4.2)
 BASE_FONT_FAMILY = "sans-serif"
 BASE_FONT_SANS = ["DejaVu Sans", "Arial", "Liberation Sans"]
 BASE_FONT_SIZE = 10
@@ -78,9 +80,9 @@ BASE_GRID_LINEWIDTH = 0.8
 BASE_DPI = 300
 BASE_GRID_ENABLED = True
 AXES_TITLE_Y = 1.02
-SUPTITLE_Y = 0.965
 SUPTITLE_TOP_RATIO = 0.85
-FIGURE_SUBPLOT_TOP = 0.78
+FIGURE_SUBPLOT_TOP = FIGURE_MARGINS["top"]
+FIGURE_SUBPLOT_BOTTOM = FIGURE_MARGINS["bottom"]
 LEGEND_TOP_MARGIN = 0.74
 LEGEND_TOP_RESERVED = 0.02
 LEGEND_ROW_EXTRA_MARGIN = 0.05
@@ -109,8 +111,9 @@ def apply_plot_style() -> None:
     """Applique un style homogène pour les figures Step1/Step2."""
     plt.rcParams.update(
         {
-            "figure.figsize": BASE_FIGSIZE,
+            "figure.figsize": FIGURE_SIZE,
             "figure.subplot.top": FIGURE_SUBPLOT_TOP,
+            "figure.subplot.bottom": FIGURE_SUBPLOT_BOTTOM,
             "figure.dpi": BASE_DPI,
             "axes.grid": BASE_GRID_ENABLED,
             "axes.titlesize": 12,
@@ -426,19 +429,19 @@ def _legend_style(
 
 def _figure_size(fig: plt.Figure | None) -> tuple[float, float]:
     if fig is None:
-        return BASE_FIGSIZE
+        return FIGURE_SIZE
     try:
         width, height = fig.get_size_inches()
     except (AttributeError, TypeError, ValueError):
-        return BASE_FIGSIZE
+        return FIGURE_SIZE
     if not width or not height:
-        return BASE_FIGSIZE
+        return FIGURE_SIZE
     return float(width), float(height)
 
 
 def _scale_margin_from_base(value: float, fig: plt.Figure | None) -> float:
     _, fig_height = _figure_size(fig)
-    base_height = BASE_FIGSIZE[1]
+    base_height = FIGURE_SIZE[1]
     if fig_height <= 0 or base_height <= 0:
         return value
     return max(0.0, min(1.0, value * base_height / fig_height))
@@ -452,7 +455,7 @@ def _legend_layout_from_fig(
     if label_count <= 0:
         return max(1, ncol), 1
     fig_width, _ = _figure_size(fig)
-    base_width = BASE_FIGSIZE[0]
+    base_width = FIGURE_SIZE[0]
     if base_width <= 0:
         width_ratio = 1.0
     else:
