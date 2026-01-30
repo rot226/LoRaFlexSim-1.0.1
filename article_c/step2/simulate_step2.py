@@ -483,6 +483,24 @@ def _log_reward_stats(
     )
 
 
+def _log_round_traffic_debug(
+    *,
+    network_size: int,
+    algo_label: str,
+    round_id: int,
+    traffic_sent_total: int,
+    successes_total: int,
+) -> None:
+    logger.info(
+        "Debug step2 trafic - taille=%s algo=%s round=%s traffic_sent=%s successes=%s",
+        network_size,
+        algo_label,
+        round_id,
+        traffic_sent_total,
+        successes_total,
+    )
+
+
 def _log_cluster_all_diagnostics(
     *,
     network_size: int,
@@ -900,6 +918,7 @@ def run_simulation(
     traffic_coeff_max: float | None = None,
     traffic_coeff_enabled: bool | None = None,
     traffic_coeff_scale: float | None = None,
+    collision_size_factor: float | None = None,
     traffic_coeff_clamp_min: float | None = None,
     traffic_coeff_clamp_max: float | None = None,
     traffic_coeff_clamp_enabled: bool | None = None,
@@ -939,7 +958,9 @@ def run_simulation(
             traffic_coeff_min_value,
         )
     traffic_coeff_scale_value = (
-        1.0 if traffic_coeff_scale is None else float(traffic_coeff_scale)
+        step2_defaults.traffic_coeff_scale
+        if traffic_coeff_scale is None
+        else float(traffic_coeff_scale)
     )
     if traffic_coeff_scale_value <= 0.0:
         raise ValueError("traffic_coeff_scale doit être strictement positif.")
@@ -1102,13 +1123,24 @@ def run_simulation(
     base_shadowing_sigma_db = _clamp_range(
         shadowing_sigma_base * shadowing_sigma_factor, 4.0, 12.0
     )
-    collision_size_factor = _collision_size_factor(
+    collision_size_factor_value = _collision_size_factor(
         n_nodes,
         reference_size,
         collision_clamp_min_value,
         collision_clamp_under_max_value,
         collision_clamp_over_max_value,
     )
+    if collision_size_factor is not None:
+        collision_size_factor_override = float(collision_size_factor)
+        if collision_size_factor_override <= 0.0:
+            raise ValueError("collision_size_factor doit être strictement positif.")
+        if debug_step2:
+            logger.info(
+                "Override collision_size_factor: base=%.3f override=%.3f",
+                collision_size_factor_value,
+                collision_size_factor_override,
+            )
+        collision_size_factor_value = collision_size_factor_override
     legacy_collision_size_factor = _collision_size_factor(
         n_nodes, reference_size, 0.6, 1.0, 2.4
     )
@@ -1116,7 +1148,7 @@ def run_simulation(
         n_nodes,
         reference_size,
         load_factor=load_factor,
-        collision_size_factor=collision_size_factor,
+        collision_size_factor=collision_size_factor_value,
         legacy_load_factor=legacy_load_factor,
         legacy_collision_size_factor=legacy_collision_size_factor,
         load_clamp_min=load_clamp_min_value,
@@ -1350,6 +1382,14 @@ def run_simulation(
             final_success_total = loss_stats["successes_after_link"]
             losses_congestion = loss_stats["losses_congestion"]
             losses_link_quality = loss_stats["losses_link_quality"]
+            if debug_step2:
+                _log_round_traffic_debug(
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    traffic_sent_total=total_traffic_sent,
+                    successes_total=final_success_total,
+                )
             round_success_rates: list[float] = []
             round_rewards: list[float] = []
             round_collision_norms: list[float] = []
@@ -1376,7 +1416,7 @@ def run_simulation(
                 collision_norm = _compute_collision_norm(
                     airtime_norm=airtime_norm,
                     congestion_probability=congestion_probability,
-                    collision_size_factor=collision_size_factor,
+                    collision_size_factor=collision_size_factor_value,
                     successes=successes,
                     traffic_sent=traffic_sent,
                 )
@@ -1460,7 +1500,7 @@ def run_simulation(
                 rewards=round_rewards,
                 lambda_collision=lambda_collision,
                 congestion_probability=congestion_probability,
-                collision_size_factor=collision_size_factor,
+                collision_size_factor=collision_size_factor_value,
             )
             _log_loss_breakdown(
                 network_size=network_size_value,
@@ -1766,6 +1806,14 @@ def run_simulation(
             final_success_total = loss_stats["successes_after_link"]
             losses_congestion = loss_stats["losses_congestion"]
             losses_link_quality = loss_stats["losses_link_quality"]
+            if debug_step2:
+                _log_round_traffic_debug(
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    traffic_sent_total=total_traffic_sent,
+                    successes_total=final_success_total,
+                )
             round_success_rates: list[float] = []
             round_rewards: list[float] = []
             round_collision_norms: list[float] = []
@@ -1792,7 +1840,7 @@ def run_simulation(
                 collision_norm = _compute_collision_norm(
                     airtime_norm=airtime_norm,
                     congestion_probability=congestion_probability,
-                    collision_size_factor=collision_size_factor,
+                    collision_size_factor=collision_size_factor_value,
                     successes=successes,
                     traffic_sent=traffic_sent,
                 )
@@ -1876,7 +1924,7 @@ def run_simulation(
                 rewards=round_rewards,
                 lambda_collision=lambda_collision,
                 congestion_probability=congestion_probability,
-                collision_size_factor=collision_size_factor,
+                collision_size_factor=collision_size_factor_value,
             )
             _log_loss_breakdown(
                 network_size=network_size_value,

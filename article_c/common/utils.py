@@ -152,9 +152,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--traffic-coeff-scale",
         type=float,
-        default=1.0,
+        default=step2_defaults.traffic_coeff_scale,
         help=(
             "Facteur global appliqué à la charge de trafic (ex: 0.7 pour diminuer)."
+        ),
+    )
+    parser.add_argument(
+        "--collision-size-factor",
+        type=float,
+        default=step2_defaults.collision_size_factor,
+        help=(
+            "Facteur de taille appliqué aux collisions (override du calcul "
+            "par taille de réseau si fourni)."
         ),
     )
     parser.add_argument(
