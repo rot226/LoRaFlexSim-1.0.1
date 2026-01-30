@@ -9,6 +9,7 @@ import warnings
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
+from matplotlib.lines import Line2D
 
 from article_c.common.plot_helpers import (
     ALGO_COLORS,
@@ -94,6 +95,42 @@ def _add_summary_plot(
     ax.set_ylabel("Trames\n(médiane ± min/max)")
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
     ax.set_title("Synthèse min/médiane/max")
+    summary_handles = [
+        Line2D(
+            [],
+            [],
+            marker="o",
+            linestyle="None",
+            color="#333333",
+            markersize=5,
+            label="médiane",
+        ),
+        Line2D(
+            [],
+            [],
+            marker="_",
+            linestyle="None",
+            color="#333333",
+            markersize=10,
+            label="min",
+        ),
+        Line2D(
+            [],
+            [],
+            marker="_",
+            linestyle="None",
+            color="#333333",
+            markersize=10,
+            label="max",
+        ),
+    ]
+    ax.legend(
+        handles=summary_handles,
+        loc="upper right",
+        fontsize=8,
+        frameon=False,
+        title="Synthèse",
+    )
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
