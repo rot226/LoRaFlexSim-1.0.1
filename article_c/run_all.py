@@ -156,6 +156,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Probabilité de capture lors d'une collision (0 à 1).",
     )
     parser.add_argument(
+        "--congestion-coeff",
+        type=float,
+        default=None,
+        help=(
+            "Coefficient multiplicatif appliqué à la probabilité de congestion "
+            "(1.0 pour garder la valeur calculée)."
+        ),
+    )
+    parser.add_argument(
         "--congestion-coeff-base",
         type=float,
         default=None,
@@ -172,6 +181,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         help="Plafond de probabilité de congestion (0 à 1).",
+    )
+    parser.add_argument(
+        "--collision-size-factor",
+        type=float,
+        default=None,
+        help=(
+            "Facteur de taille appliqué aux collisions (override du calcul "
+            "par taille de réseau si fourni)."
+        ),
     )
     parser.add_argument(
         "--traffic-coeff-clamp-min",
@@ -440,6 +458,8 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         )
     if args.capture_probability is not None:
         step2_args.extend(["--capture-probability", str(args.capture_probability)])
+    if args.congestion_coeff is not None:
+        step2_args.extend(["--congestion-coeff", str(args.congestion_coeff)])
     if args.congestion_coeff_base is not None:
         step2_args.extend(["--congestion-coeff-base", str(args.congestion_coeff_base)])
     if args.congestion_coeff_growth is not None:
@@ -448,6 +468,8 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         )
     if args.congestion_coeff_max is not None:
         step2_args.extend(["--congestion-coeff-max", str(args.congestion_coeff_max)])
+    if args.collision_size_factor is not None:
+        step2_args.extend(["--collision-size-factor", str(args.collision_size_factor)])
     if args.traffic_coeff_clamp_min is not None:
         step2_args.extend(
             ["--traffic-coeff-clamp-min", str(args.traffic_coeff_clamp_min)]

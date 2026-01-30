@@ -976,6 +976,7 @@ def run_simulation(
     traffic_coeff_enabled: bool | None = None,
     traffic_coeff_scale: float | None = None,
     capture_probability: float | None = None,
+    congestion_coeff: float | None = None,
     congestion_coeff_base: float | None = None,
     congestion_coeff_growth: float | None = None,
     congestion_coeff_max: float | None = None,
@@ -1075,6 +1076,13 @@ def run_simulation(
         else float(capture_probability)
     )
     capture_probability_value = _clip(capture_probability_value, 0.0, 1.0)
+    congestion_coeff_value = (
+        step2_defaults.congestion_coeff
+        if congestion_coeff is None
+        else float(congestion_coeff)
+    )
+    if congestion_coeff_value < 0.0:
+        raise ValueError("congestion_coeff doit être positif.")
     congestion_coeff_base_value = (
         step2_defaults.congestion_coeff_base
         if congestion_coeff_base is None
@@ -1151,6 +1159,10 @@ def run_simulation(
         growth_coeff=congestion_coeff_growth_value,
         max_probability=congestion_coeff_max_value,
     )
+    if congestion_coeff_value != 1.0:
+        congestion_probability = _clip(
+            congestion_probability * congestion_coeff_value, 0.0, 1.0
+        )
     qos_clusters = tuple(DEFAULT_CONFIG.qos.clusters)
     traffic_size_factor = _traffic_coeff_size_factor(n_nodes, reference_size)
     traffic_variance_factor = _traffic_coeff_variance_factor(n_nodes, reference_size)

@@ -67,6 +67,12 @@ Exécuter toutes les étapes en sautant l'étape 2 :
 python -m article_c.run_all --skip-step2
 ```
 
+Exécuter toutes les étapes en ajustant collisions/congestion :
+
+```powershell
+python -m article_c.run_all --capture-probability 0.12 --congestion-coeff 1.0 --collision-size-factor 1.1
+```
+
 > Si l'étape 1 bloque, tester `--skip-step1` pour lancer directement l'étape 2.
 > **Note** : `make_all_plots` nécessite les résultats de l'étape 1 ; utiliser `--skip-step1` empêchera donc la génération des figures.
 
@@ -124,6 +130,7 @@ python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 
 Ces options permettent d'ajuster finement les pertes dues aux collisions/congestion :
 
 - `--capture-probability` : probabilité qu'une collision laisse un émetteur survivre. Valeur conseillée **0.08–0.15** (défaut 0.12).
+- `--congestion-coeff` : coefficient multiplicatif appliqué à la probabilité de congestion. Valeur conseillée **0.8–1.2** (défaut 1.0).
 - `--congestion-coeff-base` : coefficient de base de la probabilité de congestion. Valeur conseillée **0.25–0.40** (défaut 0.32).
 - `--congestion-coeff-growth` : vitesse de croissance avec la surcharge. Valeur conseillée **0.25–0.50** (défaut 0.35).
 - `--congestion-coeff-max` : plafond de la probabilité de congestion. Valeur conseillée **0.25–0.40** (défaut 0.35).
@@ -132,7 +139,7 @@ Ces options permettent d'ajuster finement les pertes dues aux collisions/congest
 Exemple CLI avec ajustement des coefficients :
 
 ```powershell
-python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 --seeds_base 1000 --capture-probability 0.12 --congestion-coeff-base 0.32 --congestion-coeff-growth 0.35 --congestion-coeff-max 0.35
+python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 --seeds_base 1000 --capture-probability 0.12 --congestion-coeff 1.0 --congestion-coeff-base 0.32 --congestion-coeff-growth 0.35 --congestion-coeff-max 0.35 --collision-size-factor 1.1
 ```
 
 ### Plancher de récompense en absence de succès (étape 2)

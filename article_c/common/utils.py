@@ -164,6 +164,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Probabilité de capture lors d'une collision (0 à 1).",
     )
     parser.add_argument(
+        "--congestion-coeff",
+        type=float,
+        default=step2_defaults.congestion_coeff,
+        help=(
+            "Coefficient multiplicatif appliqué à la probabilité de congestion "
+            "(1.0 pour garder la valeur calculée)."
+        ),
+    )
+    parser.add_argument(
         "--congestion-coeff-base",
         type=float,
         default=step2_defaults.congestion_coeff_base,
