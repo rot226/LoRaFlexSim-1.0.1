@@ -144,7 +144,7 @@ python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 
 
 ### Plancher de récompense en absence de succès (étape 2)
 
-Quand les conditions sont extrêmes (ex. congestion forte), `success_rate` peut tomber à **0** et produire des rewards uniformes. L'option `--floor-on-zero-success` applique alors un plancher minimal (basé sur le `reward_floor` effectif) avant le clip afin de préserver un signal d'exploration.
+Quand les conditions sont extrêmes (ex. congestion forte), `success_rate` peut tomber à **0** et produire des rewards uniformes. L'option `--floor-on-zero-success` (config Step2 `floor_on_zero_success`) force l'application du plancher d'exploration (`reward_floor` effectif) **avant** le clip lorsque `success_rate == 0`, afin de préserver un signal d'exploration.
 
 Exemple CLI :
 
