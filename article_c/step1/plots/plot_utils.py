@@ -87,9 +87,6 @@ def configure_figure(
         apply_figure_layout(
             fig,
             margins=above_margins,
-            tight_layout={
-                "rect": (0, above_margins["bottom"], 1, above_margins["top"])
-            },
             legend_rows=legend_rows,
         )
     else:
@@ -99,14 +96,6 @@ def configure_figure(
                 "top": FIGURE_MARGINS["top"],
                 "bottom": FIGURE_MARGINS["bottom"],
                 "right": 0.80,
-            },
-            tight_layout={
-                "rect": (
-                    0,
-                    FIGURE_MARGINS["bottom"],
-                    0.80,
-                    FIGURE_MARGINS["top"],
-                )
             },
         )
     fig.suptitle(title, y=suptitle_y_from_top(fig))

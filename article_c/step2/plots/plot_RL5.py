@@ -56,7 +56,7 @@ def _plot_selection(
     sfs = sorted({row["sf"] for row in rows})
     series_count = len(sfs) * len(network_sizes) if sfs and network_sizes else None
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
-    apply_figure_layout(fig, figsize=(12, 9))
+    apply_figure_layout(fig)
     selection_values = [
         float(row.get("selection_prob"))
         for row in rows

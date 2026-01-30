@@ -304,7 +304,7 @@ def _plot_constant_message(
     stem: str,
 ) -> None:
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(1))
-    apply_figure_layout(fig, figsize=(8, 5))
+    apply_figure_layout(fig)
     render_constant_metric(
         fig,
         ax,
@@ -314,7 +314,7 @@ def _plot_constant_message(
         legend_handles=fallback_legend_handles(),
     )
     ax.set_title(title)
-    save_figure(fig, output_dir, stem, use_tight=True)
+    save_figure(fig, output_dir, stem, use_tight=False)
     plt.close(fig)
 
 
@@ -344,8 +344,10 @@ def _plot_diagnostics(
     if df.empty:
         return
     metric_values, metric_label = _extract_metric_values(rows, metric_key)
-    fig, axes = plt.subplots(2, 2)
-    apply_figure_layout(fig, figsize=(10, 10))
+    base_width, base_height = resolve_ieee_figsize(2)
+    figsize = (base_width, base_height * 2)
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    apply_figure_layout(fig, figsize=figsize)
     axes = axes.flatten()
 
     network_sizes = pd.to_numeric(df.get("network_size"), errors="coerce").dropna()
@@ -383,7 +385,7 @@ def _plot_diagnostics(
         axes[3].axis("off")
         axes[3].text(0.5, 0.5, "Données algo absentes", ha="center", va="center")
 
-    save_figure(fig, output_dir, f"{suffix}_diagnostics", use_tight=True)
+    save_figure(fig, output_dir, f"{suffix}_diagnostics", use_tight=False)
     plt.close(fig)
 
 

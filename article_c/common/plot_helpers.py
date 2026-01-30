@@ -694,13 +694,17 @@ def apply_figure_layout(
     legend_rows: int = 1,
 ) -> None:
     """Applique taille, marges, légendes et tight_layout sur une figure."""
-    layout_rect: tuple[float, float, float, float] | None = None
     extra_legend_rows = max(0, legend_rows - 1)
     reserved_top = 0.0
     if figsize is not None:
         fig.set_size_inches(*figsize, forward=True)
-    if margins is None and fig.legends:
-        margins = {"top": _legend_top_margin(fig, legend_rows)}
+    if margins is None:
+        margins = dict(FIGURE_MARGINS)
+        if fig.legends:
+            margins["top"] = max(
+                margins.get("top", FIGURE_MARGINS["top"]),
+                _legend_top_margin(fig, legend_rows),
+            )
     if margins:
         adjusted_margins = dict(margins)
         if "top" in adjusted_margins:
@@ -709,12 +713,6 @@ def apply_figure_layout(
                 adjusted_margins["top"],
             )
         fig.subplots_adjust(**adjusted_margins)
-        layout_rect = (
-            adjusted_margins.get("left", 0.0),
-            adjusted_margins.get("bottom", 0.0),
-            adjusted_margins.get("right", 1.0),
-            max(0.0, adjusted_margins.get("top", 1.0) - reserved_top),
-        )
     if bbox_to_anchor is not None:
         legends = list(fig.legends)
         for ax in fig.axes:
@@ -753,8 +751,6 @@ def apply_figure_layout(
             fig.tight_layout(**adjusted_tight)
         else:
             fig.tight_layout()
-    elif layout_rect is not None:
-        fig.tight_layout(rect=layout_rect)
 
 
 def _layout_rect_from_margins(

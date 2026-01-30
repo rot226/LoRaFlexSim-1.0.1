@@ -29,6 +29,7 @@ from article_c.common.plot_helpers import (
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
+from plot_defaults import resolve_ieee_figsize
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
@@ -44,7 +45,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     if not clusters:
         clusters = list(DEFAULT_CONFIG.qos.clusters)
     fig, axes = plt.subplots(1, len(clusters), sharey=True)
-    apply_figure_layout(fig, figsize=(5 * len(clusters), 8))
+    apply_figure_layout(fig, figsize=resolve_ieee_figsize(len(clusters)))
     if len(clusters) == 1:
         axes = [axes]
     metric_state = is_constant_metric(metric_values(rows, metric_key))
@@ -56,11 +57,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             "Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)",
             legend_loc="above",
         )
-        apply_figure_layout(
-            fig,
-            margins=legend_margins("above"),
-            tight_layout={"rect": (0, 0, 1, 0.86)},
-        )
+        apply_figure_layout(fig, margins=legend_margins("above"))
         return fig
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
@@ -90,11 +87,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         "Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)",
         legend_loc="above",
     )
-    apply_figure_layout(
-        fig,
-        margins=legend_margins("above"),
-        tight_layout={"rect": (0, 0, 1, 0.86)},
-    )
+    apply_figure_layout(fig, margins=legend_margins("above"))
     return fig
 
 

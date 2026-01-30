@@ -33,6 +33,7 @@ from article_c.common.plot_helpers import (
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
+from plot_defaults import resolve_ieee_figsize
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
@@ -69,17 +70,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
 
     algorithms = sorted({_algo_key(row) for row in rows})
 
+    base_width, base_height = resolve_ieee_figsize(len(clusters))
+    figsize = (base_width, base_height * max(1, len(algorithms)))
     fig, axes = plt.subplots(
         len(algorithms),
         len(clusters),
-        figsize=(4.2 * len(clusters), 3.4 * len(algorithms) + 2),
+        figsize=figsize,
         sharex=True,
         sharey=True,
     )
-    apply_figure_layout(
-        fig,
-        figsize=(4.2 * len(clusters), 3.4 * len(algorithms) + 2),
-    )
+    apply_figure_layout(fig, figsize=figsize)
     if len(algorithms) == 1 and len(clusters) == 1:
         axes = [[axes]]
     elif len(algorithms) == 1:
