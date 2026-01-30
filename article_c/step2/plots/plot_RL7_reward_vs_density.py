@@ -351,20 +351,38 @@ def _plot_diagnostics(
     axes = axes.flatten()
 
     network_sizes = pd.to_numeric(df.get("network_size"), errors="coerce").dropna()
-    axes[0].hist(network_sizes, bins="auto", color="#4c78a8", alpha=0.8)
+    axes[0].hist(
+        network_sizes,
+        bins="auto",
+        color="#4c78a8",
+        alpha=0.8,
+        label="Network size",
+    )
     axes[0].set_title("Histogramme des tailles de réseau")
     axes[0].set_xlabel("Network size")
 
     if "density" in df.columns:
         density = pd.to_numeric(df["density"], errors="coerce").dropna()
-        axes[1].hist(density, bins="auto", color="#f58518", alpha=0.8)
+        axes[1].hist(
+            density,
+            bins="auto",
+            color="#f58518",
+            alpha=0.8,
+            label="Density",
+        )
         axes[1].set_title("Histogramme des densités")
         axes[1].set_xlabel("Density")
     else:
         axes[1].axis("off")
         axes[1].text(0.5, 0.5, "Density absente", ha="center", va="center")
 
-    axes[2].hist(metric_values, bins="auto", color="#54a24b", alpha=0.8)
+    axes[2].hist(
+        metric_values,
+        bins="auto",
+        color="#54a24b",
+        alpha=0.8,
+        label=metric_label,
+    )
     axes[2].set_title(f"Histogramme {metric_label}")
     axes[2].set_xlabel(metric_label)
 
@@ -378,7 +396,13 @@ def _plot_diagnostics(
             ]
             for algo in algos
         ]
-        axes[3].boxplot(rewards_by_algo, labels=[_label_for_algo(str(a)) for a in algos])
+        boxplot_parts = axes[3].boxplot(
+            rewards_by_algo,
+            labels=[_label_for_algo(str(a)) for a in algos],
+            patch_artist=True,
+        )
+        for patch, algo in zip(boxplot_parts.get("boxes", []), algos, strict=False):
+            patch.set_label(_label_for_algo(str(algo)))
         axes[3].set_title("Boxplot des récompenses par algo")
         axes[3].set_ylabel(metric_label)
     else:
