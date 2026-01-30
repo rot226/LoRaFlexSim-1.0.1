@@ -356,8 +356,10 @@ def select_received_metric_key(
     """Retourne la clé de métrique à utiliser pour les métriques de réception.
 
     Source officielle: la valeur "received" est dérivée de sent_mean * pdr_mean.
-    On calcule donc received_algo_mean à partir de ces champs pour éviter toute
-    divergence future entre valeurs agrégées et dérivées par algorithme.
+    La moyenne agrégée "received_mean" peut s'écarter de cette valeur (moyenne
+    d'un produit ≠ produit des moyennes). On calcule donc received_algo_mean à
+    partir de ces champs et on documente l'écart si besoin avant d'utiliser
+    systématiquement la valeur dérivée.
     """
     if metric_key != RECEIVED_MEAN_KEY:
         return metric_key
@@ -375,7 +377,8 @@ def select_received_metric_key(
             row[derived_key] = row.get(metric_key, 0.0)
     if differences and max(differences) > tolerance:
         warnings.warn(
-            "received_mean ne correspond pas partout à sent_mean*pdr_mean; "
+            "received_mean ne correspond pas partout à sent_mean*pdr_mean "
+            f"(écart max={max(differences):.6g}); "
             "utilisation de received_algo_mean dérivé.",
             stacklevel=2,
         )

@@ -144,6 +144,39 @@ def _check_received_formula(
     tracker.add_packet_level_rows(packet_level_rows)
 
 
+def _use_received_algo_mean(
+    rows: list[dict[str, object]],
+    sent_key: str,
+    pdr_key: str,
+    received_key: str,
+    tolerance: float,
+    label: str,
+    tracker: AnomalyTracker,
+) -> str:
+    if sent_key != "sent_mean" or pdr_key != "pdr_mean" or received_key != "received_mean":
+        return received_key
+    derived_key = "received_algo_mean"
+    for idx, row in enumerate(rows, start=1):
+        sent = _parse_float(row.get(sent_key))
+        pdr = _parse_float(row.get(pdr_key))
+        if sent is None or pdr is None:
+            continue
+        derived_value = sent * pdr
+        row[derived_key] = derived_value
+        received = _parse_float(row.get(received_key))
+        if received is None:
+            continue
+        diff = abs(received - derived_value)
+        limit = max(1.0, abs(derived_value)) * tolerance
+        if diff > limit:
+            tracker.add(
+                f"{label}: received_mean diverge de sent_mean*pdr_mean "
+                f"ligne {idx} (received={received:.6f}, "
+                f"derived={derived_value:.6f}, diff={diff:.6f})."
+            )
+    return derived_key
+
+
 def _validate_pdr_file(
     path: Path,
     pdr_key: str,
@@ -178,6 +211,15 @@ def _validate_pdr_file(
         f"{label} ({pdr_key})",
         tracker,
         const_tolerance,
+    )
+    received_key = _use_received_algo_mean(
+        rows,
+        sent_key,
+        pdr_key,
+        received_key,
+        tolerance,
+        label,
+        tracker,
     )
     _check_received_formula(
         rows,
