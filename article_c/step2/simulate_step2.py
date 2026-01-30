@@ -849,9 +849,15 @@ def _apply_congestion_and_link_quality(
         if rng.random() < link_quality_weighted
     )
     if successes_after_link_total == 0 and successes_after_congestion_total > 0:
-        if congestion_probability == 0.0 and link_quality_weighted >= 0.2:
+        if link_quality_weighted >= 0.2:
             expected = int(round(successes_after_congestion_total * link_quality_weighted))
             successes_after_link_total = max(1, min(successes_after_congestion_total, expected))
+    logger.info(
+        "Diag congestion/lien - successes_after_congestion_total=%s link_quality_weighted=%.3f successes_after_link_total=%s",
+        successes_after_congestion_total,
+        link_quality_weighted,
+        successes_after_link_total,
+    )
 
     per_node_after_link: dict[int, int] = {
         int(node_window["node_id"]): 0 for node_window in node_windows
