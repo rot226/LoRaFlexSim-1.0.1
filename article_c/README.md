@@ -88,6 +88,15 @@ Exécuter uniquement l'étape 2 :
 python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 --seeds_base 1000
 ```
 
+### Réduire la verbosité des alertes (étape 2)
+
+L'alerte "reward uniforme" peut être émise fréquemment selon les scénarios. Utilisez
+`--reward-alert-level` pour la basculer en `INFO` et réduire la verbosité.
+
+```powershell
+python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 --seeds_base 1000 --reward-alert-level INFO
+```
+
 ### Diagnostic d'import (package `article_c`)
 
 Si vous avez un doute sur la résolution du package `article_c`, vous pouvez lancer

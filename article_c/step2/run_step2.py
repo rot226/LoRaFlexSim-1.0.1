@@ -753,6 +753,7 @@ def _simulate_density(
                 ),
                 floor_on_zero_success=bool(config["floor_on_zero_success"]),
                 debug_step2=bool(config.get("debug_step2", False)),
+                reward_alert_level=str(config.get("reward_alert_level", "WARNING")),
             )
             for row in result.raw_rows:
                 row["replication"] = replication
@@ -878,6 +879,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "reward_floor": args.reward_floor,
         "floor_on_zero_success": args.floor_on_zero_success,
         "debug_step2": args.debug_step2,
+        "reward_alert_level": args.reward_alert_level,
     }
 
     if flat_output:
