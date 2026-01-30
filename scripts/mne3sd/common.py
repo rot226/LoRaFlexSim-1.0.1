@@ -145,14 +145,41 @@ def save_figure(
     output_dir: str | Path,
     *,
     dpi: int = 300,
-) -> tuple[Path, Path]:
-    """Save ``fig`` as PNG and EPS files inside ``output_dir``."""
+    formats: Sequence[str] | None = None,
+) -> tuple[Path, Path | None]:
+    """Save ``fig`` as PNG and optionally EPS inside ``output_dir``."""
 
     output_base = ensure_directory(output_dir) / Path(basename)
-    png_path = output_base.with_suffix(".png")
-    fig.savefig(png_path, dpi=dpi, bbox_inches="tight")
-    eps_path = output_base.with_suffix(".eps")
-    fig.savefig(eps_path, dpi=dpi, format="eps", bbox_inches="tight")
+    normalized_formats: list[str] = []
+    if formats is None:
+        normalized_formats = ["png", "eps"]
+    else:
+        for fmt in formats:
+            if not fmt:
+                continue
+            normalized_formats.append(str(fmt).lower())
+        if "png" not in normalized_formats:
+            normalized_formats.insert(0, "png")
+
+    png_path: Path | None = None
+    eps_path: Path | None = None
+
+    for fmt in normalized_formats:
+        suffix = f".{fmt}"
+        output_path = output_base.with_suffix(suffix)
+        if fmt == "png":
+            fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
+            png_path = output_path
+        elif fmt == "eps":
+            fig.savefig(output_path, dpi=dpi, format="eps", bbox_inches="tight")
+            eps_path = output_path
+        else:
+            fig.savefig(output_path, dpi=dpi, format=fmt, bbox_inches="tight")
+
+    if png_path is None:  # pragma: no cover - defensive fallback
+        png_path = output_base.with_suffix(".png")
+        fig.savefig(png_path, dpi=dpi, bbox_inches="tight")
+
     return png_path, eps_path
 
 
@@ -323,4 +350,3 @@ def resolve_execution_profile(
         stacklevel=2,
     )
     return "full"
-

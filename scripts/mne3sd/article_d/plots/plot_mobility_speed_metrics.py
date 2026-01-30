@@ -21,8 +21,9 @@ from scripts.mne3sd.common import (
     save_figure,
 )
 
-RESULTS_PATH = ROOT / "results" / "mne3sd" / "article_d" / "mobility_speed_metrics.csv"
 ARTICLE = "article_d"
+RESULTS_DIR = ROOT / "results" / "mne3sd" / ARTICLE
+RESULTS_PATH = RESULTS_DIR / "mobility_speed_metrics.csv"
 SCENARIO = "mobility_speed"
 
 
@@ -57,7 +58,21 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Display the figures instead of running in batch mode",
     )
+    parser.add_argument(
+        "--export-eps",
+        action="store_true",
+        help="Export EPS files in addition to the default PNG output",
+    )
     return parser.parse_args()
+
+
+def resolve_export_formats(export_eps: bool) -> tuple[str, ...]:
+    """Return the output formats for figure exports."""
+
+    formats = ["png"]
+    if export_eps:
+        formats.append("eps")
+    return tuple(formats)
 
 
 def _coerce_numeric(df: pd.DataFrame, columns: Iterable[str]) -> None:
@@ -184,6 +199,7 @@ def plot_grouped_bars(
     ylabel: str,
     output_name: str,
     dpi: int,
+    formats: tuple[str, ...],
     value_format: str,
     ylim: tuple[float, float] | None = None,
 ) -> None:
@@ -234,11 +250,15 @@ def plot_grouped_bars(
         scenario=SCENARIO,
         metric=output_name,
     )
-    save_figure(fig, output_name, output_dir, dpi=dpi)
+    save_figure(fig, output_name, output_dir, dpi=dpi, formats=formats)
     plt.close(fig)
 
 
-def plot_jitter_by_speed_profile(df: pd.DataFrame, dpi: int) -> None:
+def plot_jitter_by_speed_profile(
+    df: pd.DataFrame,
+    dpi: int,
+    formats: tuple[str, ...],
+) -> None:
     """Plot latency jitter versus speed profile with error bars per mobility model."""
 
     jitter_mean_column = next(
@@ -329,7 +349,13 @@ def plot_jitter_by_speed_profile(df: pd.DataFrame, dpi: int) -> None:
         scenario=SCENARIO,
         metric="latency_jitter_by_speed_profile",
     )
-    save_figure(fig, "latency_jitter_by_speed_profile", output_dir, dpi=dpi)
+    save_figure(
+        fig,
+        "latency_jitter_by_speed_profile",
+        output_dir,
+        dpi=dpi,
+        formats=formats,
+    )
     plt.close(fig)
 
 
@@ -358,7 +384,11 @@ def _resolve_energy_columns(df: pd.DataFrame) -> tuple[str | None, str | None]:
     return energy_mean_column, energy_std_column
 
 
-def plot_energy_by_speed_profile(df: pd.DataFrame, dpi: int) -> None:
+def plot_energy_by_speed_profile(
+    df: pd.DataFrame,
+    dpi: int,
+    formats: tuple[str, ...],
+) -> None:
     """Plot average energy per node versus speed profile with error bars."""
 
     energy_mean_column, energy_std_column = _resolve_energy_columns(df)
@@ -433,11 +463,15 @@ def plot_energy_by_speed_profile(df: pd.DataFrame, dpi: int) -> None:
         scenario=SCENARIO,
         metric="energy_by_speed_profile",
     )
-    save_figure(fig, "energy_by_speed_profile", output_dir, dpi=dpi)
+    save_figure(fig, "energy_by_speed_profile", output_dir, dpi=dpi, formats=formats)
     plt.close(fig)
 
 
-def plot_energy_stack_by_speed_profile(df: pd.DataFrame, dpi: int) -> None:
+def plot_energy_stack_by_speed_profile(
+    df: pd.DataFrame,
+    dpi: int,
+    formats: tuple[str, ...],
+) -> None:
     """Plot a stacked area chart of energy per node grouped by speed profile."""
 
     energy_mean_column, _ = _resolve_energy_columns(df)
@@ -486,11 +520,22 @@ def plot_energy_stack_by_speed_profile(df: pd.DataFrame, dpi: int) -> None:
         scenario=SCENARIO,
         metric="energy_stack_by_speed_profile",
     )
-    save_figure(fig, "energy_stack_by_speed_profile", output_dir, dpi=dpi)
+    save_figure(
+        fig,
+        "energy_stack_by_speed_profile",
+        output_dir,
+        dpi=dpi,
+        formats=formats,
+    )
     plt.close(fig)
 
 
-def plot_heatmap(df: pd.DataFrame, output_name: str, dpi: int) -> None:
+def plot_heatmap(
+    df: pd.DataFrame,
+    output_name: str,
+    dpi: int,
+    formats: tuple[str, ...],
+) -> None:
     """Plot a heatmap of PDR versus communication range when available."""
 
     if "range_km" not in df.columns:
@@ -542,7 +587,7 @@ def plot_heatmap(df: pd.DataFrame, output_name: str, dpi: int) -> None:
         scenario=SCENARIO,
         metric=output_name,
     )
-    save_figure(fig, output_name, output_dir, dpi=dpi)
+    save_figure(fig, output_name, output_dir, dpi=dpi, formats=formats)
     plt.close(fig)
 
 
@@ -560,12 +605,15 @@ def main() -> None:  # pragma: no cover - CLI entry point
 
     pdr_format = "{:.1f}" if pdr_ylim else "{:.3f}"
 
+    export_formats = resolve_export_formats(args.export_eps)
+
     plot_grouped_bars(
         metrics,
         "pdr_percent",
         f"{pdr_label} by speed profile",
         "pdr_by_speed_profile",
         args.dpi,
+        export_formats,
         pdr_format,
         ylim=pdr_ylim,
     )
@@ -576,18 +624,20 @@ def main() -> None:  # pragma: no cover - CLI entry point
         "Average delay (s) by speed profile",
         "average_delay_by_speed_profile",
         args.dpi,
+        export_formats,
         "{:.2f}",
     )
 
-    plot_energy_by_speed_profile(metrics, args.dpi)
-    plot_energy_stack_by_speed_profile(metrics, args.dpi)
+    plot_energy_by_speed_profile(metrics, args.dpi, export_formats)
+    plot_energy_stack_by_speed_profile(metrics, args.dpi, export_formats)
 
-    plot_jitter_by_speed_profile(metrics, args.dpi)
+    plot_jitter_by_speed_profile(metrics, args.dpi, export_formats)
 
     plot_heatmap(
         metrics,
         "pdr_heatmap_speed_profile_range",
         args.dpi,
+        export_formats,
     )
 
     if args.show:
