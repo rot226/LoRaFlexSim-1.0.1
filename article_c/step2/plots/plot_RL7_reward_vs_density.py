@@ -25,7 +25,6 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     metric_values,
     normalize_network_size_rows,
-    legend_margins,
     place_legend,
     plot_metric_by_algo,
     render_constant_metric,
@@ -123,12 +122,7 @@ def _plot_metric(
         ncol = min(series_count, legend_ncol) or 1
         legend_rows = max(1, math.ceil(series_count / ncol))
     extra_height = legend_extra_height(height, legend_rows)
-    apply_figure_layout(
-        fig,
-        figsize=(width, height + extra_height),
-        margins=legend_margins("top", legend_rows=legend_rows),
-        legend_rows=legend_rows,
-    )
+    apply_figure_layout(fig, figsize=(width, height + extra_height))
     ensure_network_size(rows)
     if network_sizes is None:
         network_sizes = sorted(df["network_size"].unique())
@@ -310,7 +304,7 @@ def _plot_constant_message(
     stem: str,
 ) -> None:
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(1))
-    apply_figure_layout(fig, figsize=(8, 5), margins=legend_margins("top"))
+    apply_figure_layout(fig, figsize=(8, 5))
     render_constant_metric(fig, ax, message=message, legend_loc="above")
     ax.set_title(title)
     save_figure(fig, output_dir, stem, use_tight=True)

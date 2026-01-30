@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import math
 from pathlib import Path
 import warnings
 
@@ -13,6 +12,7 @@ import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
+    add_global_legend,
     algo_label,
     apply_plot_style,
     apply_figure_layout,
@@ -24,12 +24,10 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     metric_values,
     normalize_network_size_rows,
-    legend_margins,
     render_metric_status,
     save_figure,
     suptitle_y_from_top,
 )
-from article_c.common.plotting_style import LEGEND_STYLE, legend_bbox_to_anchor
 
 ALGO_ALIASES = {
     "adr": "adr",
@@ -220,19 +218,12 @@ def _plot_metric(
     if not handles:
         handles, labels = fallback_legend_handles()
     if handles:
-        legend_style = dict(LEGEND_STYLE)
-        if "ncol" in legend_style:
-            legend_style["ncol"] = min(len(labels), int(legend_style["ncol"]))
-        legend = fig.legend(handles, labels, **legend_style)
-        ncol = int(legend_style.get("ncol", len(labels)) or 1)
-        legend_rows = max(1, math.ceil(len(labels) / ncol))
-        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
-        legend.set_bbox_to_anchor(bbox_to_anchor)
-        apply_figure_layout(
+        add_global_legend(
             fig,
-            margins=legend_margins("above", legend_rows=legend_rows),
-            bbox_to_anchor=bbox_to_anchor,
-            legend_rows=legend_rows,
+            axes[-1],
+            legend_loc="above",
+            handles=handles,
+            labels=labels,
         )
     fig.suptitle(
         "Step 2 - Outage probability by Cluster (SNIR on)"
@@ -387,19 +378,12 @@ def _plot_raw_metric(
     if not handles:
         handles, labels = fallback_legend_handles()
     if handles:
-        legend_style = dict(LEGEND_STYLE)
-        if "ncol" in legend_style:
-            legend_style["ncol"] = min(len(labels), int(legend_style["ncol"]))
-        legend = fig.legend(handles, labels, **legend_style)
-        ncol = int(legend_style.get("ncol", len(labels)) or 1)
-        legend_rows = max(1, math.ceil(len(labels) / ncol))
-        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
-        legend.set_bbox_to_anchor(bbox_to_anchor)
-        apply_figure_layout(
+        add_global_legend(
             fig,
-            margins=legend_margins("above", legend_rows=legend_rows),
-            bbox_to_anchor=bbox_to_anchor,
-            legend_rows=legend_rows,
+            axes[-1],
+            legend_loc="above",
+            handles=handles,
+            labels=labels,
         )
     fig.suptitle(
         "Step 2 - Outage probability brut par cluster et réplication (SNIR on)"

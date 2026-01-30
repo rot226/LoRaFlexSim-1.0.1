@@ -12,6 +12,7 @@ from matplotlib.lines import Line2D
 import pandas as pd
 
 from article_c.common.plot_helpers import (
+    add_global_legend,
     algo_label,
     apply_plot_style,
     apply_figure_layout,
@@ -21,11 +22,10 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     filter_cluster,
     is_constant_metric,
-    legend_margins,
     normalize_network_size_rows,
     save_figure,
 )
-from article_c.common.plotting_style import legend_bbox_to_anchor, legend_extra_height
+from article_c.common.plotting_style import legend_extra_height
 from plot_defaults import resolve_ieee_figsize
 
 
@@ -134,29 +134,10 @@ def _plot_distribution(
         for color in algo_colors
     ]
     labels = [algo_label(str(algo)) for algo in algorithms]
-    if handles:
-        legend_ncol = min(3, len(handles))
-        legend = fig.legend(
-            handles,
-            labels,
-            loc="upper center",
-            ncol=legend_ncol,
-            frameon=False,
-        )
-        legend_rows = max(1, math.ceil(len(handles) / legend_ncol))
-        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
-        legend.set_bbox_to_anchor(bbox_to_anchor)
-    else:
-        legend_rows = 1
-        bbox_to_anchor = None
+    legend_rows = max(1, math.ceil(len(handles) / min(3, len(handles)))) if handles else 1
     extra_height = legend_extra_height(height, legend_rows)
-    apply_figure_layout(
-        fig,
-        figsize=(width, height + extra_height),
-        margins=legend_margins("above", legend_rows=legend_rows),
-        legend_rows=legend_rows,
-        bbox_to_anchor=bbox_to_anchor,
-    )
+    apply_figure_layout(fig, figsize=(width, height + extra_height))
+    add_global_legend(fig, ax, legend_loc="above", handles=handles, labels=labels)
     return fig
 
 

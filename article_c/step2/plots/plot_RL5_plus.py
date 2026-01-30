@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import math
 from pathlib import Path
 import warnings
 
@@ -11,20 +10,19 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from article_c.common.plot_helpers import (
+    add_global_legend,
     apply_plot_style,
     apply_figure_layout,
     MetricStatus,
     fallback_legend_handles,
     filter_rows_by_network_sizes,
     is_constant_metric,
-    legend_margins,
     load_step2_aggregated,
     load_step2_selection_probs,
     normalize_network_size_rows,
     render_metric_status,
     save_figure,
 )
-from article_c.common.plotting_style import legend_bbox_to_anchor
 from plot_defaults import resolve_ieee_figsize
 
 
@@ -112,26 +110,7 @@ def _plot_selection(
     handles, labels = ax.get_legend_handles_labels()
     if not handles:
         handles, labels = fallback_legend_handles()
-    if handles:
-        ncol = min(4, max(1, len(labels)))
-        legend = fig.legend(
-            handles,
-            labels,
-            loc="upper center",
-            ncol=ncol,
-            frameon=False,
-        )
-        legend_rows = max(1, math.ceil(len(labels) / ncol))
-        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
-        legend.set_bbox_to_anchor(bbox_to_anchor)
-    else:
-        legend_rows = 1
-    apply_figure_layout(
-        fig,
-        bbox_to_anchor=bbox_to_anchor if handles else None,
-        margins=legend_margins("above", legend_rows=legend_rows),
-        legend_rows=legend_rows,
-    )
+    add_global_legend(fig, ax, legend_loc="above", handles=handles, labels=labels)
     return fig
 
 
