@@ -497,6 +497,7 @@ def _compose_post_simulation_report(
                     "AVERTISSEMENT: plus de 95% des fenêtres ont un success_rate "
                     "nul. Vérifiez la configuration (trafic, SNIR, collisions)."
                 ),
+                "Simulation invalide : success_rate trop faible.",
             ]
         )
     if per_size_diagnostics:
@@ -587,6 +588,22 @@ def _compose_post_simulation_report(
         lines.append("- conclusion: aucun reward nul détecté.")
 
     return "\n".join(lines)
+
+
+def _assert_success_rate_threshold(
+    per_size_stats: dict[int, dict[str, object]], threshold: float = 0.95
+) -> None:
+    overall_success_count = sum(
+        int(stats.get("success_count", 0)) for stats in per_size_stats.values()
+    )
+    overall_success_zero_count = sum(
+        int(stats.get("success_zero_count", 0)) for stats in per_size_stats.values()
+    )
+    if overall_success_count <= 0:
+        return
+    zero_ratio = overall_success_zero_count / overall_success_count
+    if zero_ratio > threshold:
+        raise RuntimeError("Simulation invalide : success_rate trop faible.")
 
 
 def _write_post_simulation_report(
@@ -946,6 +963,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         _assert_flat_output_sizes(base_results_dir, simulated_sizes)
     _verify_metric_variation(size_diagnostics)
     _write_post_simulation_report(base_results_dir, size_post_stats, size_diagnostics)
+    _assert_success_rate_threshold(size_post_stats)
 
     if selection_rows:
         rl5_rows = _aggregate_selection_probs(selection_rows)
