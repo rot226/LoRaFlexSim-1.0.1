@@ -264,6 +264,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Active les logs détaillés pour l'étape 2.",
     )
     parser.add_argument(
+        "--reward-alert-level",
+        type=str.upper,
+        default="WARNING",
+        choices=("INFO", "WARNING"),
+        help=(
+            "Niveau de log pour l'alerte de rewards uniformes (INFO ou WARNING). "
+            "Utiliser INFO pour réduire la verbosité."
+        ),
+    )
+    parser.add_argument(
         "--formats",
         type=str,
         default="png,pdf,eps",

@@ -501,10 +501,12 @@ def _log_reward_stats(
     algo_label: str,
     round_id: int,
     rewards: list[float],
+    reward_alert_level: int,
 ) -> None:
     min_reward, median_reward, max_reward = _summarize_values(rewards)
     if math.isclose(min_reward, max_reward, abs_tol=1e-6):
-        logger.warning(
+        logger.log(
+            reward_alert_level,
             "Alerte reward uniforme (taille=%s algo=%s round=%s reward=%.4f).",
             network_size,
             algo_label,
@@ -978,11 +980,15 @@ def run_simulation(
     reference_network_size: int | None = None,
     output_dir: Path | None = None,
     debug_step2: bool = False,
+    reward_alert_level: str = "WARNING",
 ) -> Step2Result:
     """Exécute une simulation proxy de l'étape 2."""
     rng = random.Random(seed)
     step2_defaults = DEFAULT_CONFIG.step2
     traffic_mode_value = "poisson" if traffic_mode is None else traffic_mode
+    reward_alert_level_value = (
+        logging.WARNING if str(reward_alert_level).upper() != "INFO" else logging.INFO
+    )
     jitter_range_value = jitter_range_s
     window_duration_value = (
         step2_defaults.window_duration_s if window_duration_s is None else window_duration_s
@@ -1681,6 +1687,7 @@ def run_simulation(
                 algo_label=algo_label,
                 round_id=round_id,
                 rewards=window_rewards,
+                reward_alert_level=reward_alert_level_value,
             )
             logger.info(
                 "Round %s - %s : récompense moyenne = %.4f",
@@ -2139,6 +2146,7 @@ def run_simulation(
                 algo_label=algo_label,
                 round_id=round_id,
                 rewards=window_rewards,
+                reward_alert_level=reward_alert_level_value,
             )
             logger.info(
                 "Round %s - %s : récompense moyenne = %.4f",
