@@ -171,6 +171,42 @@ def _flatten_axes(axes: object) -> list[plt.Axes]:
     return []
 
 
+def flatten_axes(axes: object) -> list[plt.Axes]:
+    """Retourne une liste aplatie d'axes Matplotlib."""
+    return _flatten_axes(axes)
+
+
+def collect_legend_entries(axes: object) -> tuple[list[Line2D], list[str]]:
+    """Collecte toutes les entrées de légende depuis un ensemble d'axes."""
+    handles: list[Line2D] = []
+    labels: list[str] = []
+    for ax in _flatten_axes(axes):
+        axis_handles, axis_labels = ax.get_legend_handles_labels()
+        handles.extend(axis_handles)
+        labels.extend(axis_labels)
+    return handles, labels
+
+
+def deduplicate_legend_entries(
+    handles: list[Line2D],
+    labels: list[str],
+) -> tuple[list[Line2D], list[str]]:
+    """Déduplique les entrées de légende en conservant le premier handle."""
+    seen: set[str] = set()
+    dedup_handles: list[Line2D] = []
+    dedup_labels: list[str] = []
+    for handle, label in zip(handles, labels, strict=False):
+        normalized_label = str(label).strip()
+        if not normalized_label or normalized_label == "_nolegend_":
+            continue
+        if normalized_label in seen:
+            continue
+        seen.add(normalized_label)
+        dedup_handles.append(handle)
+        dedup_labels.append(normalized_label)
+    return dedup_handles, dedup_labels
+
+
 def render_constant_metric(
     fig: plt.Figure,
     axes: object,
