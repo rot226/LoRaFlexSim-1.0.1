@@ -180,8 +180,10 @@ def _plot_diagnostics(
     df = pd.DataFrame(rows)
     if df.empty:
         return
-    fig, axes = plt.subplots(2, 2)
-    apply_figure_layout(fig, figsize=(10, 10))
+    base_width, base_height = resolve_ieee_figsize(2)
+    figsize = (base_width, base_height * 2)
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    apply_figure_layout(fig, figsize=figsize)
     axes = axes.flatten()
 
     network_sizes = pd.to_numeric(df.get("network_size"), errors="coerce").dropna()
@@ -220,7 +222,7 @@ def _plot_diagnostics(
         axes[3].axis("off")
         axes[3].text(0.5, 0.5, "Données algo absentes", ha="center", va="center")
 
-    save_figure(fig, output_dir, f"{suffix}_diagnostics", use_tight=True)
+    save_figure(fig, output_dir, f"{suffix}_diagnostics", use_tight=False)
     plt.close(fig)
 
 
@@ -258,11 +260,11 @@ def _plot_constant_message(
     stem: str,
 ) -> None:
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(1))
-    apply_figure_layout(fig, figsize=(8, 5))
+    apply_figure_layout(fig)
     ax.axis("off")
     ax.set_title(title)
     ax.text(0.5, 0.5, message, ha="center", va="center", wrap=True)
-    save_figure(fig, output_dir, stem, use_tight=True)
+    save_figure(fig, output_dir, stem, use_tight=False)
     plt.close(fig)
 
 

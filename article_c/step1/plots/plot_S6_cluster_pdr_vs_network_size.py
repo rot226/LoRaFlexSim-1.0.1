@@ -16,7 +16,6 @@ from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_LINESTYLES,
     SNIR_MODES,
-    LEGEND_ABOVE_TIGHT_LAYOUT_TOP,
     MetricStatus,
     apply_plot_style,
     apply_figure_layout,
@@ -31,6 +30,7 @@ from article_c.common.plot_helpers import (
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
+from plot_defaults import resolve_ieee_figsize
 
 PDR_TARGETS = (0.90, 0.80, 0.70)
 
@@ -74,7 +74,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     cluster_targets = _cluster_targets(clusters)
 
     fig, axes = plt.subplots(1, len(SNIR_MODES), sharey=True)
-    apply_figure_layout(fig, figsize=(10, 6))
+    apply_figure_layout(fig, figsize=resolve_ieee_figsize(len(SNIR_MODES)))
     if len(SNIR_MODES) == 1:
         axes = [axes]
 
@@ -155,9 +155,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         margins={
             **layout_margins,
             "top": max(0.7, layout_margins.get("top", 0.0)),
-        },
-        tight_layout={
-            "rect": (0, 0, 1, max(0.8, LEGEND_ABOVE_TIGHT_LAYOUT_TOP)),
         },
     )
     return fig

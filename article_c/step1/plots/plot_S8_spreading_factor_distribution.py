@@ -17,7 +17,6 @@ from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_LINESTYLES,
     SNIR_MODES,
-    LEGEND_ABOVE_TIGHT_LAYOUT_TOP,
     MetricStatus,
     algo_labels,
     apply_plot_style,
@@ -34,6 +33,7 @@ from article_c.common.plot_helpers import (
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
+from plot_defaults import resolve_ieee_figsize
 
 
 def _sf_key_candidates(sf: int) -> list[str]:
@@ -227,7 +227,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
     distribution_by_group = _aggregate_distributions(rows, sf_values)
 
     fig, axes = plt.subplots(1, len(snir_modes), sharey=True)
-    apply_figure_layout(fig, figsize=(6 * len(snir_modes), 8))
+    apply_figure_layout(fig, figsize=resolve_ieee_figsize(len(snir_modes)))
     if len(snir_modes) == 1:
         axes = [axes]
 
@@ -270,11 +270,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
             "Step 1 - Spreading Factor Distribution (SNIR on/off)",
             legend_loc="above",
         )
-        apply_figure_layout(
-            fig,
-            margins=legend_margins("above"),
-            tight_layout={"rect": (0, 0, 1, LEGEND_ABOVE_TIGHT_LAYOUT_TOP)},
-        )
+        apply_figure_layout(fig, margins=legend_margins("above"))
         return fig
 
     colors = [plt.get_cmap("viridis")(idx / max(1, len(sf_values) - 1)) for idx in range(len(sf_values))]
@@ -320,11 +316,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         "Step 1 - Spreading Factor Distribution (SNIR on/off)",
         legend_loc="above",
     )
-    apply_figure_layout(
-        fig,
-        margins=legend_margins("above"),
-        tight_layout={"rect": (0, 0, 1, LEGEND_ABOVE_TIGHT_LAYOUT_TOP)},
-    )
+    apply_figure_layout(fig, margins=legend_margins("above"))
     return fig
 
 

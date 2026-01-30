@@ -30,9 +30,9 @@ from article_c.common.plot_helpers import (
     save_figure,
 )
 from article_c.step1.plots.plot_utils import configure_figure
+from plot_defaults import resolve_ieee_figsize
 
 LAYOUT_MARGINS = legend_margins("above")
-LAYOUT_RECT = (0, 0, 1, 0.78)
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
@@ -77,7 +77,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     cluster_labels = _cluster_labels(clusters)
 
     fig, axes = plt.subplots(1, len(clusters), sharey=True)
-    apply_figure_layout(fig, figsize=(5 * len(clusters), 8.5))
+    apply_figure_layout(fig, figsize=resolve_ieee_figsize(len(clusters)))
     if len(clusters) == 1:
         axes = [axes]
 
@@ -90,11 +90,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             "Step 1 - Outage probability by Cluster (SNIR on/off)",
             legend_loc="above",
         )
-        apply_figure_layout(
-            fig,
-            tight_layout={"rect": LAYOUT_RECT},
-            margins=LAYOUT_MARGINS,
-        )
+        apply_figure_layout(fig, margins=LAYOUT_MARGINS)
         return fig
 
     for ax, cluster in zip(axes, clusters, strict=False):
@@ -126,11 +122,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         "Step 1 - Outage probability by Cluster (SNIR on/off)",
         legend_loc="above",
     )
-    apply_figure_layout(
-        fig,
-        tight_layout={"rect": LAYOUT_RECT},
-        margins=LAYOUT_MARGINS,
-    )
+    apply_figure_layout(fig, margins=LAYOUT_MARGINS)
     return fig
 
 

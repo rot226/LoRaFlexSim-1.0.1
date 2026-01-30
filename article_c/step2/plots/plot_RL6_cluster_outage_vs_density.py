@@ -31,6 +31,7 @@ from article_c.common.plot_helpers import (
     save_figure,
     suptitle_y_from_top,
 )
+from plot_defaults import resolve_ieee_figsize
 
 ALGO_ALIASES = {
     "adr": "adr",
@@ -166,7 +167,7 @@ def _plot_metric(
     cluster_labels = _cluster_labels(clusters)
 
     fig, axes = plt.subplots(1, len(clusters), sharey=True)
-    apply_figure_layout(fig, figsize=(5 * len(clusters), 6))
+    apply_figure_layout(fig, figsize=resolve_ieee_figsize(len(clusters)))
     if len(clusters) == 1:
         axes = [axes]
 
@@ -339,7 +340,7 @@ def _plot_raw_metric(
         return None
     cluster_labels = _cluster_labels(clusters)
     fig, axes = plt.subplots(1, len(clusters), sharey=True)
-    apply_figure_layout(fig, figsize=(5 * len(clusters), 6))
+    apply_figure_layout(fig, figsize=resolve_ieee_figsize(len(clusters)))
     if len(clusters) == 1:
         axes = [axes]
     algorithms = sorted({row["algo"] for row in rows})
