@@ -55,6 +55,7 @@ def _clip(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float
 
 def _compute_reward(
     success_rate: float,
+    traffic_sent: int,
     sf_norm: float,
     latency_norm: float,
     energy_norm: float,
@@ -62,6 +63,7 @@ def _compute_reward(
     weights: AlgoRewardWeights,
     lambda_energy: float,
     lambda_collision: float,
+    max_penalty_ratio: float,
     *,
     floor_on_zero_success: bool = False,
 ) -> float:
@@ -80,13 +82,26 @@ def _compute_reward(
         + weights.latency_weight * latency_score
         + energy_weight * energy_score
     ) / total_weight
+    traffic_factor = 0.0
+    if traffic_sent > 0:
+        traffic_factor = _clip(traffic_sent / (traffic_sent + 4.0), 0.0, 1.0)
     collision_penalty = (
         lambda_collision
         * weights.collision_weight
         * collision_norm
         * (0.7 + 0.3 * (1.0 - success_rate))
         * math.sqrt(max(success_rate, 0.0))
+        * traffic_factor
     )
+    if max_penalty_ratio >= 0.0:
+        penalty_cap = max_penalty_ratio * success_rate * weighted_quality
+        if collision_penalty > penalty_cap:
+            logger.info(
+                "collision_penalty capped (collision_penalty=%.4f cap=%.4f).",
+                collision_penalty,
+                penalty_cap,
+            )
+            collision_penalty = penalty_cap
     if collision_penalty > success_rate * weighted_quality:
         logger.info(
             "Pénalité de collision dominante (collision_penalty=%.4f success_rate=%.4f weighted_quality=%.4f).",
@@ -983,6 +998,7 @@ def run_simulation(
     congestion_coeff_growth: float | None = None,
     congestion_coeff_max: float | None = None,
     collision_size_factor: float | None = None,
+    max_penalty_ratio: float | None = None,
     traffic_coeff_clamp_min: float | None = None,
     traffic_coeff_clamp_max: float | None = None,
     traffic_coeff_clamp_enabled: bool | None = None,
@@ -1280,6 +1296,13 @@ def run_simulation(
         lambda_collision = _clip(0.15 + 0.45 * lambda_energy, 0.08, 0.7)
     else:
         lambda_collision = _clip(lambda_collision, 0.0, 1.0)
+    max_penalty_ratio_value = (
+        step2_defaults.max_penalty_ratio
+        if max_penalty_ratio is None
+        else float(max_penalty_ratio)
+    )
+    if max_penalty_ratio_value < 0.0:
+        raise ValueError("max_penalty_ratio doit être positif ou nul.")
     reward_weights = _reward_weights_for_algo(
         algorithm, reward_floor=reward_floor
     )
@@ -1590,6 +1613,7 @@ def run_simulation(
                 )
                 reward = _compute_reward(
                     metrics.success_rate,
+                    traffic_sent,
                     sf_norm_by_sf[sf_value],
                     latency_norm_by_sf[sf_value],
                     metrics.energy_norm,
@@ -1597,6 +1621,7 @@ def run_simulation(
                     reward_weights,
                     lambda_energy,
                     lambda_collision,
+                    max_penalty_ratio_value,
                     floor_on_zero_success=floor_on_zero_success_value,
                 )
                 window_rewards.append(reward)
@@ -2054,6 +2079,7 @@ def run_simulation(
                 )
                 reward = _compute_reward(
                     metrics.success_rate,
+                    traffic_sent,
                     sf_norm_by_sf[sf_value],
                     latency_norm_by_sf[sf_value],
                     metrics.energy_norm,
@@ -2061,6 +2087,7 @@ def run_simulation(
                     reward_weights,
                     lambda_energy,
                     lambda_collision,
+                    max_penalty_ratio_value,
                     floor_on_zero_success=floor_on_zero_success_value,
                 )
                 window_rewards.append(reward)
