@@ -318,6 +318,9 @@ def aggregate_results(
             expected_metrics=expected_metrics,
             step_label=step_label,
         )
+        if "received" in expected_metrics:
+            _rewrite_received_mean(intermediate_rows)
+            _rewrite_received_mean(aggregated_rows)
         return aggregated_rows, intermediate_rows
     aggregated_rows = _aggregate_rows(
         raw_rows,
@@ -326,6 +329,8 @@ def aggregate_results(
         expected_metrics=expected_metrics,
         step_label=step_label,
     )
+    if "received" in expected_metrics:
+        _rewrite_received_mean(aggregated_rows)
     return aggregated_rows, []
 
 
@@ -393,6 +398,14 @@ def _aggregate_rows(
                 aggregated_row[key] = mean_value
         aggregated.append(aggregated_row)
     return aggregated
+
+
+def _rewrite_received_mean(rows: list[dict[str, object]]) -> None:
+    for row in rows:
+        sent = row.get("sent_mean")
+        pdr = row.get("pdr_mean")
+        if isinstance(sent, (int, float)) and isinstance(pdr, (int, float)):
+            row["received_mean"] = sent * pdr
 
 
 def _collect_numeric_keys(
