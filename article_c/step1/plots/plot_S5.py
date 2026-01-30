@@ -370,6 +370,7 @@ def _plot_pdr_distribution(
                 color=color,
                 alpha=0.6,
                 zorder=3,
+                label=f"Échantillons PDR ({SNIR_LABELS[snir_mode]})",
             )
 
     ax.set_xlim(-0.6, 0.6)
