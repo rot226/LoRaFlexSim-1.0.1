@@ -790,20 +790,6 @@ def _compute_collision_norm(
     return _clip(base * (1.0 - success_ratio) ** 0.85, 0.0, 1.0)
 
 
-def _clamp_successes_to_traffic(
-    *, node_id: int, successes: int, traffic_sent: int
-) -> int:
-    if successes > traffic_sent:
-        logger.warning(
-            "Clamp succès > trafic (node_id=%s successes=%s traffic_sent=%s).",
-            node_id,
-            successes,
-            traffic_sent,
-        )
-        return traffic_sent
-    return successes
-
-
 def _apply_cluster_bias(
     weights: list[float], cluster: str, clusters: tuple[str, ...], strength: float
 ) -> list[float]:
@@ -1439,11 +1425,15 @@ def run_simulation(
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
                 traffic_sent = traffic_sent_by_node.get(node_id, 0)
-                successes = _clamp_successes_to_traffic(
-                    node_id=node_id,
-                    successes=per_node_successes.get(node_id, 0),
-                    traffic_sent=traffic_sent,
-                )
+                successes = per_node_successes.get(node_id, 0)
+                if successes > traffic_sent:
+                    logger.warning(
+                        "Clamp succès > trafic (node_id=%s successes=%s traffic_sent=%s).",
+                        node_id,
+                        successes,
+                        traffic_sent,
+                    )
+                successes = min(successes, traffic_sent)
                 success_flag = 1 if successes > 0 else 0
                 failure_flag = 1 - success_flag
                 airtime_norm = energy_norm_by_sf[sf_value]
@@ -1866,11 +1856,15 @@ def run_simulation(
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
                 traffic_sent = traffic_sent_by_node.get(node_id, 0)
-                successes = _clamp_successes_to_traffic(
-                    node_id=node_id,
-                    successes=per_node_successes.get(node_id, 0),
-                    traffic_sent=traffic_sent,
-                )
+                successes = per_node_successes.get(node_id, 0)
+                if successes > traffic_sent:
+                    logger.warning(
+                        "Clamp succès > trafic (node_id=%s successes=%s traffic_sent=%s).",
+                        node_id,
+                        successes,
+                        traffic_sent,
+                    )
+                successes = min(successes, traffic_sent)
                 success_flag = 1 if successes > 0 else 0
                 failure_flag = 1 - success_flag
                 airtime_norm = energy_norm_by_sf[sf_value]
