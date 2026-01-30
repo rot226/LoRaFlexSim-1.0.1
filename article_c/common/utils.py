@@ -158,6 +158,30 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--capture-probability",
+        type=float,
+        default=step2_defaults.capture_probability,
+        help="Probabilité de capture lors d'une collision (0 à 1).",
+    )
+    parser.add_argument(
+        "--congestion-coeff-base",
+        type=float,
+        default=step2_defaults.congestion_coeff_base,
+        help="Coefficient de base de la probabilité de congestion (0 à 1).",
+    )
+    parser.add_argument(
+        "--congestion-coeff-growth",
+        type=float,
+        default=step2_defaults.congestion_coeff_growth,
+        help="Coefficient de croissance de la probabilité de congestion.",
+    )
+    parser.add_argument(
+        "--congestion-coeff-max",
+        type=float,
+        default=step2_defaults.congestion_coeff_max,
+        help="Plafond de probabilité de congestion (0 à 1).",
+    )
+    parser.add_argument(
         "--collision-size-factor",
         type=float,
         default=step2_defaults.collision_size_factor,

@@ -731,6 +731,10 @@ def _simulate_density(
                 traffic_coeff_max=float(config["traffic_coeff_max"]),
                 traffic_coeff_enabled=bool(config["traffic_coeff_enabled"]),
                 traffic_coeff_scale=float(config["traffic_coeff_scale"]),
+                capture_probability=float(config["capture_probability"]),
+                congestion_coeff_base=float(config["congestion_coeff_base"]),
+                congestion_coeff_growth=float(config["congestion_coeff_growth"]),
+                congestion_coeff_max=float(config["congestion_coeff_max"]),
                 collision_size_factor=(
                     float(config["collision_size_factor"])
                     if config.get("collision_size_factor") is not None
@@ -859,6 +863,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         "traffic_coeff_max": args.traffic_coeff_max,
         "traffic_coeff_enabled": args.traffic_coeff_enabled,
         "traffic_coeff_scale": args.traffic_coeff_scale,
+        "capture_probability": args.capture_probability,
+        "congestion_coeff_base": args.congestion_coeff_base,
+        "congestion_coeff_growth": args.congestion_coeff_growth,
+        "congestion_coeff_max": args.congestion_coeff_max,
         "collision_size_factor": args.collision_size_factor,
         "traffic_coeff_clamp_min": args.traffic_coeff_clamp_min,
         "traffic_coeff_clamp_max": args.traffic_coeff_clamp_max,

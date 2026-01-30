@@ -283,11 +283,22 @@ def _mixra_cluster_qos_factor(cluster: str, clusters: tuple[str, ...]) -> float:
     return 0.85 + 0.35 * (1.0 - cluster_scale)
 
 
-def _congestion_collision_probability(network_size: int, reference_size: int) -> float:
+def _congestion_collision_probability(
+    network_size: int,
+    reference_size: int,
+    *,
+    base_coeff: float,
+    growth_coeff: float,
+    max_probability: float,
+) -> float:
     if reference_size <= 0:
         return 0.0
     overload = max(0.0, (network_size / reference_size) - 1.0)
-    return _clip(0.32 * (1.0 - math.exp(-0.35 * overload)), 0.0, 0.35)
+    return _clip(
+        base_coeff * (1.0 - math.exp(-growth_coeff * overload)),
+        0.0,
+        max_probability,
+    )
 
 
 def _compute_window_metrics(
@@ -424,6 +435,7 @@ def _compute_successes_and_traffic(
     airtime_by_sf: dict[int, float],
     *,
     rng: random.Random,
+    capture_probability: float,
 ) -> tuple[dict[int, int], dict[int, int], int, bool]:
     transmissions_by_sf: dict[int, list[tuple[float, float, int]]] = {}
     for node_window in node_windows:
@@ -434,7 +446,9 @@ def _compute_successes_and_traffic(
                 (start_time, start_time + airtime, int(node_window["node_id"]))
             )
     successes_by_node, transmission_count, approx_mode = _compute_collision_successes(
-        transmissions_by_sf, rng=rng
+        transmissions_by_sf,
+        rng=rng,
+        capture_probability=capture_probability,
     )
     traffic_sent_by_node = _collect_traffic_sent(node_windows)
     for node_id, successes in successes_by_node.items():
@@ -945,6 +959,10 @@ def run_simulation(
     traffic_coeff_max: float | None = None,
     traffic_coeff_enabled: bool | None = None,
     traffic_coeff_scale: float | None = None,
+    capture_probability: float | None = None,
+    congestion_coeff_base: float | None = None,
+    congestion_coeff_growth: float | None = None,
+    congestion_coeff_max: float | None = None,
     collision_size_factor: float | None = None,
     traffic_coeff_clamp_min: float | None = None,
     traffic_coeff_clamp_max: float | None = None,
@@ -1026,6 +1044,34 @@ def run_simulation(
         if window_delay_range_s is None
         else window_delay_range_s
     )
+    capture_probability_value = (
+        step2_defaults.capture_probability
+        if capture_probability is None
+        else float(capture_probability)
+    )
+    capture_probability_value = _clip(capture_probability_value, 0.0, 1.0)
+    congestion_coeff_base_value = (
+        step2_defaults.congestion_coeff_base
+        if congestion_coeff_base is None
+        else float(congestion_coeff_base)
+    )
+    congestion_coeff_growth_value = (
+        step2_defaults.congestion_coeff_growth
+        if congestion_coeff_growth is None
+        else float(congestion_coeff_growth)
+    )
+    congestion_coeff_max_value = (
+        step2_defaults.congestion_coeff_max
+        if congestion_coeff_max is None
+        else float(congestion_coeff_max)
+    )
+    if congestion_coeff_base_value < 0.0:
+        raise ValueError("congestion_coeff_base doit être positif.")
+    if congestion_coeff_growth_value <= 0.0:
+        raise ValueError("congestion_coeff_growth doit être strictement positif.")
+    if congestion_coeff_max_value < 0.0:
+        raise ValueError("congestion_coeff_max doit être positif.")
+    congestion_coeff_max_value = _clip(congestion_coeff_max_value, 0.0, 1.0)
     epsilon_greedy = _clip(epsilon_greedy, 0.0, 1.0)
     if density is not None:
         if int(density) != n_nodes:
@@ -1073,7 +1119,13 @@ def run_simulation(
     )
     legacy_load_factor = _network_load_factor(n_nodes, reference_size, 0.6, 2.6)
     n_channels = max(1, len(DEFAULT_CONFIG.radio.channels_hz))
-    congestion_probability = _congestion_collision_probability(n_nodes, reference_size)
+    congestion_probability = _congestion_collision_probability(
+        n_nodes,
+        reference_size,
+        base_coeff=congestion_coeff_base_value,
+        growth_coeff=congestion_coeff_growth_value,
+        max_probability=congestion_coeff_max_value,
+    )
     qos_clusters = tuple(DEFAULT_CONFIG.qos.clusters)
     traffic_size_factor = _traffic_coeff_size_factor(n_nodes, reference_size)
     traffic_variance_factor = _traffic_coeff_variance_factor(n_nodes, reference_size)
@@ -1325,7 +1377,12 @@ def run_simulation(
                 traffic_sent_by_node,
                 transmission_count,
                 approx_collision_mode,
-            ) = _compute_successes_and_traffic(node_windows, airtime_by_sf, rng=rng)
+            ) = _compute_successes_and_traffic(
+                node_windows,
+                airtime_by_sf,
+                rng=rng,
+                capture_probability=capture_probability_value,
+            )
             _log_pre_collision_stats(
                 network_size=network_size_value,
                 algo_label=algo_label,
@@ -1777,7 +1834,12 @@ def run_simulation(
                 traffic_sent_by_node,
                 transmission_count,
                 approx_collision_mode,
-            ) = _compute_successes_and_traffic(node_windows, airtime_by_sf, rng=rng)
+            ) = _compute_successes_and_traffic(
+                node_windows,
+                airtime_by_sf,
+                rng=rng,
+                capture_probability=capture_probability_value,
+            )
             _log_pre_collision_stats(
                 network_size=network_size_value,
                 algo_label=algo_label,
