@@ -29,6 +29,23 @@ Tous les scénarios simulent des liens LoRaWAN de bout en bout avec des paramèt
 
 Chaque script de scénario stocke les paramètres dérivés (exposant de propagation, backoff de retransmission, etc.) dans des constantes de module afin de concentrer l'interface CLI sur des entrées reproductibles.
 
+## Scénarios D1–D10
+
+Les scénarios D1–D10 structurent l'Article D autour d'une grille d'expériences cohérente. Chaque scénario définit un objectif précis et les paramètres clés à surveiller.
+
+| Scénario | Nom | Objectif | Paramètres clés |
+| --- | --- | --- | --- |
+| D1 | `mobility_range_baseline` | Établir la référence de portée moyenne avec mobilité piétonne. | `distance-min`, `distance-max`, `runs`, `profile` |
+| D2 | `mobility_range_stress` | Tester la robustesse en portée maximale avec bruit de canal accru. | `distance-max`, `shadowing-db`, `seed` |
+| D3 | `mobility_speed_baseline` | Quantifier l'impact d'une vitesse nominale sur le PDR. | `speed-min`, `speed-max`, `runs` |
+| D4 | `mobility_speed_extremes` | Explorer les vitesses extrêmes (piéton ↔ véhicule rapide). | `speed-min`, `speed-max`, `duration` |
+| D5 | `mobility_gateway_baseline` | Mesurer la distribution du trafic par passerelle. | `gateways`, `profile`, `runs` |
+| D6 | `mobility_gateway_density` | Évaluer le gain marginal d'ajout de passerelles. | `gateways`, `range-km`, `workers` |
+| D7 | `mobility_model_comparison` | Comparer les modèles de mobilité (RandomWaypoint/Smooth). | `mobility-model`, `runs`, `seed` |
+| D8 | `mobility_interference_load` | Étudier l'effet d'une charge radio accrue. | `traffic-load`, `duty-cycle`, `runs` |
+| D9 | `mobility_reliability_ci` | Générer un jeu rapide pour validations CI. | `profile ci`, `runs`, `workers` |
+| D10 | `mobility_full_campaign` | Lancer la campagne complète Article D. | `profile full`, `runs`, `workers` |
+
 ## Paramètres de simulation
 
 Les points d'entrée des scénarios proposent les options suivantes :
@@ -49,7 +66,7 @@ Les modules de tracé sont de fines surcouches qui agrègent les CSV produits pa
 
 - `--input` : un ou plusieurs fichiers CSV générés par les scripts de scénario. Répétez l'option pour traiter plusieurs jeux de données.
 - `--figures-dir` : répertoire de destination des figures exportées. Valeur par défaut : `figures/mne3sd/article_d/`.
-- `--format` : format de sortie (`png`, `pdf`, `svg`, …). Par défaut : `pdf`.
+- `--format` : format de sortie (`png`, `pdf`, `svg`, …). Par défaut : `png` (EPS optionnel au besoin).
 - `--style` : feuille de style Matplotlib optionnelle appliquée avant le rendu (par défaut `figures/matplotlib-paper.mplstyle` lorsqu'elle est disponible).
 
 ## Figures
@@ -104,7 +121,7 @@ Chaque CSV doit contenir au minimum les colonnes suivantes pour alimenter la cha
 - `latency_s`, `delivery_ratio` : indicateurs clés utilisés dans les figures de l'Article D.
 
 ### Artefacts graphiques
-Exportez les figures dans `figures/mne3sd/article_d/`, en gardant des noms alignés sur la numérotation du manuscrit (ex. `figure_3_latency_vs_speed.pdf`). Placez les graphiques temporaires de débogage dans un sous-dossier dédié tel que `figures/mne3sd/article_d/debug/` pour ne pas les mélanger aux figures finales.
+Exportez les figures dans `figures/mne3sd/article_d/`, en gardant des noms alignés sur la numérotation du manuscrit (ex. `figure_3_latency_vs_speed.png`). Les figures sont en PNG par défaut et l'EPS reste optionnel si une version vectorielle est nécessaire. Placez les graphiques temporaires de débogage dans un sous-dossier dédié tel que `figures/mne3sd/article_d/debug/` pour ne pas les mélanger aux figures finales.
 
 ## Exécution de la chaîne
 
@@ -124,6 +141,14 @@ python -m scripts.mne3sd.article_d.scenarios.run_mobility_range_sweep \
     --results results/mne3sd/article_d/mobility_range_custom.csv
 ```
 
+Exemples de commandes pour les scénarios Article D :
+
+```
+python -m scripts.mne3sd.article_d.scenarios.run_mobility_range_sweep --algorithm ucb1 ...
+python -m scripts.mne3sd.article_d.scenarios.run_mobility_speed_sweep --algorithm ucb1 ...
+python -m scripts.mne3sd.article_d.scenarios.run_mobility_gateway_sweep --algorithm ucb1 ...
+```
+
 Pour balayer différentes plages de distance ou de vitesse, utilisez `--distance-min`, `--distance-max`, `--speed-min` et `--speed-max`. Les modules de scénario peuvent proposer des options additionnelles (par exemple `--handover-threshold` dans `rural_highway`). Consultez la docstring pour les détails.
 
 ### Générer les figures
@@ -132,7 +157,7 @@ Pour balayer différentes plages de distance ou de vitesse, utilisez `--distance
 python -m scripts.mne3sd.article_d.plots.<figure_module> \
     --input results/mne3sd/article_d/<scenario_name>.csv \
     --figures-dir figures/mne3sd/article_d/ \
-    --format pdf
+    --format png
 ```
 
 Répétez l'option `--input` pour combiner plusieurs jeux de données dans une seule figure. Utilisez `--style` afin d'assurer une mise en page homogène entre les figures.
