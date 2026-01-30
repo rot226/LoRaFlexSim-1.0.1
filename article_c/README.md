@@ -16,6 +16,7 @@ Ce dossier contient une structure minimale pour les scripts de l'article C.
 - **Modèle d'interférences** : le calcul considère les transmissions **co‑SF** sur le **même canal**; l'interférence agrégée est la somme des puissances reçues des transmissions simultanées, à laquelle on ajoute le bruit thermique pour former le dénominateur du SNIR. Il n'y a pas d'interférences inter‑SF ni de canaux adjacents dans ce proxy.
 - **SNIR OFF** : la réception est validée uniquement si le RSSI est au-dessus du seuil de sensibilité (pas d'impact des interférences dans la décision).
 - **SNIR ON** : le SNIR est calculé à partir de la somme des interférences co‑SF sur le même canal (interférence + bruit) et la réception dépend à la fois du RSSI et du seuil de capture SNIR.
+- **Assouplissement SNIR** : le seuil effectif est **clampé** entre une borne basse et une borne haute (par défaut **3–6 dB**). Pour un réglage “doux” recommandé, utilisez par exemple `--snir-threshold-db 4.0` et ajustez les bornes si besoin via `--snir-threshold-min-db` / `--snir-threshold-max-db`.
 
 ## UCB1 et fonction de récompense
 

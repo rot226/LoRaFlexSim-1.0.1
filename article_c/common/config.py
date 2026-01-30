@@ -42,6 +42,8 @@ class SNIRConfig:
 
     enabled: bool = True
     snir_threshold_db: float = 5.0
+    snir_threshold_min_db: float = 3.0
+    snir_threshold_max_db: float = 6.0
     noise_floor_dbm: float = -174.0
 
 
