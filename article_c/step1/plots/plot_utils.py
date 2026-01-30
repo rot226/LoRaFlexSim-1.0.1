@@ -8,6 +8,7 @@ from collections.abc import Iterable
 import matplotlib.pyplot as plt
 
 from article_c.common.plot_helpers import (
+    add_global_legend,
     apply_figure_layout,
     fallback_legend_handles,
     legend_margins,
@@ -68,36 +69,19 @@ def configure_figure(
             handles, labels = fallback_legend_handles()
         if handles:
             if legend_loc == "above":
-                legend_style = {
-                    **LEGEND_STYLE,
-                    "ncol": min(len(labels), LEGEND_STYLE.get("ncol", 3)),
-                }
-                legend = fig.legend(handles, labels, **legend_style)
-                ncol = int(legend_style.get("ncol", len(labels)) or 1)
-                legend_rows = max(1, math.ceil(len(labels) / ncol))
-                bbox_to_anchor = legend_bbox_to_anchor(
-                    legend=legend,
-                    legend_rows=legend_rows,
-                )
-                legend.set_bbox_to_anchor(bbox_to_anchor)
-                apply_figure_layout(
-                    fig,
-                    bbox_to_anchor=bbox_to_anchor,
-                    margins=legend_margins("above", legend_rows=legend_rows),
-                    legend_rows=legend_rows,
-                )
-            else:
-                fig.legend(
-                    handles,
-                    labels,
-                    loc="center left",
-                    frameon=False,
-                )
-                apply_figure_layout(fig, bbox_to_anchor=(1.02, 0.5))
+                ncol = min(len(labels), int(LEGEND_STYLE.get("ncol", len(labels)) or 1))
+                legend_rows = max(1, math.ceil(len(labels) / max(1, ncol)))
+            add_global_legend(
+                fig,
+                axes_list[0],
+                legend_loc=legend_loc,
+                handles=handles,
+                labels=labels,
+            )
 
     if legend_loc == "above":
         above_margins = {
-            "top": legend_margins("above", legend_rows=legend_rows)["top"],
+            **legend_margins("above", legend_rows=legend_rows),
             "bottom": FIGURE_MARGINS["bottom"],
         }
         apply_figure_layout(
