@@ -219,13 +219,13 @@ def render_constant_metric(
                     len(labels),
                     fig=fig,
                 )
-                margins_for_layout = _legend_margins(
+                margins_for_layout = legend_margins(
                     legend_loc,
                     legend_rows=legend_rows,
                     fig=fig,
                 )
         elif normalized_legend_mode == "constante" and _figure_has_legend(fig):
-            margins_for_layout = _legend_margins(legend_loc, fig=fig)
+            margins_for_layout = legend_margins(legend_loc, fig=fig)
     layout_rect = _layout_rect_from_margins(
         margins_for_layout,
         legend_rows=legend_rows,
@@ -256,7 +256,7 @@ def render_constant_metric(
                     )
                 fig.legend(handles, labels, **legend_style)
                 if margins_for_layout is None:
-                    margins_for_layout = _legend_margins(
+                    margins_for_layout = legend_margins(
                         legend_loc,
                         legend_rows=legend_rows,
                         fig=fig,
@@ -268,7 +268,7 @@ def render_constant_metric(
                     legend_rows=legend_rows,
                 )
         elif normalized_legend_mode == "constante" and _figure_has_legend(fig):
-            apply_figure_layout(fig, margins=_legend_margins(legend_loc, fig=fig))
+            apply_figure_layout(fig, margins=legend_margins(legend_loc, fig=fig))
 
 
 def _metric_variance(
@@ -400,7 +400,7 @@ def place_legend(ax: plt.Axes, *, legend_loc: str = "above") -> None:
     ax.figure.legend(handles, labels, **legend_style)
     apply_figure_layout(
         ax.figure,
-        margins=_legend_margins(legend_loc, legend_rows=legend_rows, fig=ax.figure),
+        margins=legend_margins(legend_loc, legend_rows=legend_rows, fig=ax.figure),
         bbox_to_anchor=legend_style.get("bbox_to_anchor"),
         legend_rows=legend_rows,
     )
@@ -494,9 +494,14 @@ def _legend_margins(
     return {"top": FIGURE_SUBPLOT_TOP}
 
 
-def legend_margins(legend_loc: str, *, legend_rows: int = 1) -> dict[str, float]:
+def legend_margins(
+    legend_loc: str,
+    *,
+    legend_rows: int = 1,
+    fig: plt.Figure | None = None,
+) -> dict[str, float]:
     """Expose les marges recommandées pour une légende donnée."""
-    return _legend_margins(legend_loc, legend_rows=legend_rows)
+    return _legend_margins(legend_loc, legend_rows=legend_rows, fig=fig)
 
 
 def suptitle_y_from_top(
@@ -607,7 +612,7 @@ def add_global_legend(
     legend.set_bbox_to_anchor(bbox_to_anchor)
     apply_figure_layout(
         fig,
-        margins=_legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
+        margins=legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
         bbox_to_anchor=bbox_to_anchor,
         legend_rows=legend_rows,
     )

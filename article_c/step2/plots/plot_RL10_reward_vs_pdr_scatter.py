@@ -22,7 +22,6 @@ from article_c.common.plot_helpers import (
     filter_cluster,
     filter_rows_by_network_sizes,
     is_constant_metric,
-    legend_margins,
     load_step1_aggregated,
     load_step2_aggregated,
     normalize_network_size_rows,
@@ -280,7 +279,7 @@ def _legend_handles_for_algos(
 def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(points)))
     width, height = fig.get_size_inches()
-    legend_loc = "top"
+    legend_loc = "above"
     legend_rows = 1
     series_count = len(points)
     if series_count:
@@ -288,12 +287,7 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
         ncol = min(series_count, legend_ncol) or 1
         legend_rows = max(1, math.ceil(series_count / ncol))
     extra_height = legend_extra_height(height, legend_rows)
-    apply_figure_layout(
-        fig,
-        figsize=(width, height + extra_height),
-        margins=legend_margins(legend_loc, legend_rows=legend_rows),
-        legend_rows=legend_rows,
-    )
+    apply_figure_layout(fig, figsize=(width, height + extra_height))
     reward_values = [
         float(point["reward_mean"])
         for point in points

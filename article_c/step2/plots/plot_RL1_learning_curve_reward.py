@@ -20,7 +20,6 @@ from article_c.common.plot_helpers import (
     add_global_legend,
     filter_rows_by_network_sizes,
     is_constant_metric,
-    legend_margins,
     render_metric_status,
     save_figure,
 )
@@ -198,19 +197,14 @@ def _plot_learning_curve(
     algorithms = _select_algorithms(preferred_algos, available)
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
     width, height = fig.get_size_inches()
-    legend_loc = "top"
+    legend_loc = "above"
     legend_rows = 1
     if algorithms:
         legend_ncol = int(LEGEND_STYLE.get("ncol", len(algorithms)) or len(algorithms))
         ncol = min(len(algorithms), legend_ncol) or 1
         legend_rows = max(1, math.ceil(len(algorithms) / ncol))
     extra_height = legend_extra_height(height, legend_rows)
-    apply_figure_layout(
-        fig,
-        figsize=(width, height + extra_height),
-        margins=legend_margins(legend_loc, legend_rows=legend_rows),
-        legend_rows=legend_rows,
-    )
+    apply_figure_layout(fig, figsize=(width, height + extra_height))
     reward_values = [
         float(row.get("avg_reward"))
         for row in rows

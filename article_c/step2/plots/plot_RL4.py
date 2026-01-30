@@ -22,7 +22,6 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     metric_values,
     normalize_network_size_rows,
-    legend_margins,
     add_global_legend,
     legend_handles_for_algos_snir,
     plot_metric_by_algo,
@@ -76,12 +75,7 @@ def _plot_metric(
         ncol = min(series_count, legend_ncol) or 1
         legend_rows = max(1, math.ceil(series_count / ncol))
     extra_height = legend_extra_height(height, legend_rows)
-    apply_figure_layout(
-        fig,
-        figsize=(width, height + extra_height),
-        margins=legend_margins("top", legend_rows=legend_rows),
-        legend_rows=legend_rows,
-    )
+    apply_figure_layout(fig, figsize=(width, height + extra_height))
     ensure_network_size(rows)
     if network_sizes is None:
         network_sizes = sorted(df["network_size"].unique())
