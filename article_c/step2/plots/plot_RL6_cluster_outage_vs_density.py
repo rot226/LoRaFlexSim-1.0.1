@@ -207,6 +207,9 @@ def _plot_metric(
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     axes[0].set_ylabel("Outage probability")
+    for ax in axes:
+        if ax.get_legend() is not None:
+            ax.get_legend().remove()
     handles, labels = axes[-1].get_legend_handles_labels()
     if not handles:
         handles, labels = fallback_legend_handles()
@@ -371,7 +374,27 @@ def _plot_raw_metric(
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     axes[0].set_ylabel("Outage probability (raw)")
-    place_legend(axes[-1], legend_loc="above")
+    for ax in axes:
+        if ax.get_legend() is not None:
+            ax.get_legend().remove()
+    handles, labels = axes[-1].get_legend_handles_labels()
+    if not handles:
+        handles, labels = fallback_legend_handles()
+    if handles:
+        legend_style = dict(LEGEND_STYLE)
+        if "ncol" in legend_style:
+            legend_style["ncol"] = min(len(labels), int(legend_style["ncol"]))
+        legend = fig.legend(handles, labels, **legend_style)
+        ncol = int(legend_style.get("ncol", len(labels)) or 1)
+        legend_rows = max(1, math.ceil(len(labels) / ncol))
+        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
+        legend.set_bbox_to_anchor(bbox_to_anchor)
+        apply_figure_layout(
+            fig,
+            margins=legend_margins("above", legend_rows=legend_rows),
+            bbox_to_anchor=bbox_to_anchor,
+            legend_rows=legend_rows,
+        )
     fig.suptitle(
         "Step 2 - Outage probability brut par cluster et réplication (SNIR on)"
         f"{_title_suffix(network_sizes)}",
