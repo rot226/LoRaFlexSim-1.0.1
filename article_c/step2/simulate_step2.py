@@ -871,7 +871,16 @@ def _apply_congestion_and_link_quality(
     if successes_after_link_total == 0 and successes_after_congestion_total > 0:
         if link_quality_weighted >= 0.2:
             expected = int(round(successes_after_congestion_total * link_quality_weighted))
-            successes_after_link_total = max(1, min(successes_after_congestion_total, expected))
+            successes_after_link_total = max(
+                1,
+                min(successes_after_congestion_total, expected),
+            )
+    logger.debug(
+        "Diag congestion/lien (debug) - link_quality_weighted=%.3f successes_after_congestion_total=%s successes_after_link_total=%s",
+        link_quality_weighted,
+        successes_after_congestion_total,
+        successes_after_link_total,
+    )
     logger.info(
         "Diag congestion/lien - successes_after_congestion_total=%s link_quality_weighted=%.3f successes_after_link_total=%s",
         successes_after_congestion_total,
