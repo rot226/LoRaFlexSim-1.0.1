@@ -141,6 +141,30 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Active/désactive la variabilité de trafic par nœud.",
     )
     parser.add_argument(
+        "--capture-probability",
+        type=float,
+        default=None,
+        help="Probabilité de capture lors d'une collision (0 à 1).",
+    )
+    parser.add_argument(
+        "--congestion-coeff-base",
+        type=float,
+        default=None,
+        help="Coefficient de base de la probabilité de congestion (0 à 1).",
+    )
+    parser.add_argument(
+        "--congestion-coeff-growth",
+        type=float,
+        default=None,
+        help="Coefficient de croissance de la probabilité de congestion.",
+    )
+    parser.add_argument(
+        "--congestion-coeff-max",
+        type=float,
+        default=None,
+        help="Plafond de probabilité de congestion (0 à 1).",
+    )
+    parser.add_argument(
         "--traffic-coeff-clamp-min",
         type=float,
         default=None,
@@ -405,6 +429,16 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
             if args.traffic_coeff_enabled
             else "--no-traffic-coeff-enabled"
         )
+    if args.capture_probability is not None:
+        step2_args.extend(["--capture-probability", str(args.capture_probability)])
+    if args.congestion_coeff_base is not None:
+        step2_args.extend(["--congestion-coeff-base", str(args.congestion_coeff_base)])
+    if args.congestion_coeff_growth is not None:
+        step2_args.extend(
+            ["--congestion-coeff-growth", str(args.congestion_coeff_growth)]
+        )
+    if args.congestion_coeff_max is not None:
+        step2_args.extend(["--congestion-coeff-max", str(args.congestion_coeff_max)])
     if args.traffic_coeff_clamp_min is not None:
         step2_args.extend(
             ["--traffic-coeff-clamp-min", str(args.traffic_coeff_clamp_min)]

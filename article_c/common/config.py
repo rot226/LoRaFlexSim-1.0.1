@@ -79,6 +79,10 @@ class Step2Config:
     traffic_coeff_clamp_enabled: bool = True
     window_delay_enabled: bool = True
     window_delay_range_s: float = 5.0
+    capture_probability: float = 0.12
+    congestion_coeff_base: float = 0.32
+    congestion_coeff_growth: float = 0.35
+    congestion_coeff_max: float = 0.35
     network_load_min: float = 0.6
     network_load_max: float = 2.6
     collision_size_min: float = 0.6
