@@ -47,6 +47,14 @@ Cette cible `make` enchaîne les suites de tests par domaine (`-k channel`,
 qu'aucune régression n'a été introduite. Sur Windows, exécutez cette commande
 depuis un terminal disposant de `make` (Git Bash, WSL ou équivalent).
 
+## 🪵 Journalisation Step 2
+
+Les statistiques de récompense émises par `article_c/step2/simulate_step2.py`
+(`_log_reward_stats`) sont désormais journalisées au niveau **INFO** par
+défaut et **dédupliquées par algo/round** pour éviter le spam. Pour retrouver
+le niveau précédent, passez explicitement `reward_alert_level="WARNING"` lors
+de l'appel à `simulate_step2`.
+
 ## 🚀 Commandes de lancement recommandées
 
 ### Tableau de bord Panel
