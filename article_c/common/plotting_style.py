@@ -11,7 +11,7 @@ from matplotlib.legend import Legend
 IEEE_STYLE = True
 
 BASE_FIGURE_SIZE = (7.2, 4.2)
-IEEE_FIGURE_SIZE = (6.6, 3.6)
+IEEE_FIGURE_SIZE = (7.16, 4.77)
 
 BASE_LEGEND_STYLE = {
     "loc": "upper center",
