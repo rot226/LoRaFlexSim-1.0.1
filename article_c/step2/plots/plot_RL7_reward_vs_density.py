@@ -411,6 +411,24 @@ def _plot_diagnostics(
         axes[3].axis("off")
         axes[3].text(0.5, 0.5, "Données algo absentes", ha="center", va="center")
 
+    handles: list[object] = []
+    labels: list[str] = []
+    for ax in axes:
+        subplot_handles, subplot_labels = ax.get_legend_handles_labels()
+        for handle, label in zip(subplot_handles, subplot_labels, strict=False):
+            if label in labels:
+                continue
+            handles.append(handle)
+            labels.append(label)
+    if handles:
+        add_global_legend(
+            fig,
+            axes[0],
+            legend_loc="above",
+            handles=handles,
+            labels=labels,
+            use_fallback=False,
+        )
     save_figure(fig, output_dir, f"{suffix}_diagnostics", use_tight=False)
     assert_legend_present(fig, f"{suffix}_diagnostics")
     plt.close(fig)
