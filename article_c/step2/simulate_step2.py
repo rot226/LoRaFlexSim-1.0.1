@@ -360,7 +360,7 @@ def _compute_collision_successes(
     rng: random.Random | None = None,
     approx_threshold: int = 5000,
     approx_sample_size: int = 2500,
-    capture_probability: float = 0.12,
+    capture_probability: float = DEFAULT_CONFIG.step2.capture_probability,
 ) -> tuple[dict[int, int], int, bool]:
     def _compute_collisions(
         events: list[tuple[float, float, int]],

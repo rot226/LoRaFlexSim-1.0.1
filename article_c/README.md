@@ -137,6 +137,8 @@ Ces options permettent d'ajuster finement les pertes dues aux collisions/congest
 - `--congestion-coeff-max` : plafond de la probabilité de congestion. Valeur conseillée **0.25–0.40** (défaut 0.35).
 - `--collision-size-factor` : facteur de taille appliqué aux collisions (si non défini, calcul automatique). Valeur conseillée **0.8–1.6** selon la densité.
 
+Ces options sont disponibles via `article_c/step2/run_step2.py` et `article_c/run_all.py`.
+
 Exemple CLI avec ajustement des coefficients :
 
 ```powershell
