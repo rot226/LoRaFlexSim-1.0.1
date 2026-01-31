@@ -61,6 +61,11 @@ def _apply_safe_profile(args: object) -> None:
     args.traffic_coeff_clamp_enabled = STEP2_SAFE_CONFIG.traffic_coeff_clamp_enabled
     args.traffic_coeff_clamp_min = STEP2_SAFE_CONFIG.traffic_coeff_clamp_min
     args.traffic_coeff_clamp_max = STEP2_SAFE_CONFIG.traffic_coeff_clamp_max
+    args.network_load_min = STEP2_SAFE_CONFIG.network_load_min
+    args.network_load_max = STEP2_SAFE_CONFIG.network_load_max
+    args.collision_size_min = STEP2_SAFE_CONFIG.collision_size_min
+    args.collision_size_under_max = STEP2_SAFE_CONFIG.collision_size_under_max
+    args.collision_size_over_max = STEP2_SAFE_CONFIG.collision_size_over_max
     args.reward_floor = STEP2_SAFE_CONFIG.reward_floor
     args.max_penalty_ratio = STEP2_SAFE_CONFIG.max_penalty_ratio
     args.shadowing_sigma_db = STEP2_SAFE_CONFIG.shadowing_sigma_db
@@ -767,6 +772,11 @@ def _simulate_density(
                 congestion_coeff_base=float(config["congestion_coeff_base"]),
                 congestion_coeff_growth=float(config["congestion_coeff_growth"]),
                 congestion_coeff_max=float(config["congestion_coeff_max"]),
+                network_load_min=float(config["network_load_min"]),
+                network_load_max=float(config["network_load_max"]),
+                collision_size_min=float(config["collision_size_min"]),
+                collision_size_under_max=float(config["collision_size_under_max"]),
+                collision_size_over_max=float(config["collision_size_over_max"]),
                 collision_size_factor=(
                     float(config["collision_size_factor"])
                     if config.get("collision_size_factor") is not None
@@ -917,6 +927,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         "congestion_coeff_base": args.congestion_coeff_base,
         "congestion_coeff_growth": args.congestion_coeff_growth,
         "congestion_coeff_max": args.congestion_coeff_max,
+        "network_load_min": args.network_load_min,
+        "network_load_max": args.network_load_max,
+        "collision_size_min": args.collision_size_min,
+        "collision_size_under_max": args.collision_size_under_max,
+        "collision_size_over_max": args.collision_size_over_max,
         "collision_size_factor": args.collision_size_factor,
         "max_penalty_ratio": getattr(args, "max_penalty_ratio", None),
         "traffic_coeff_clamp_min": args.traffic_coeff_clamp_min,

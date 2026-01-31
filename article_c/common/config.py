@@ -119,7 +119,12 @@ STEP2_SAFE_CONFIG = Step2Config(
     traffic_coeff_clamp_min=0.7,
     traffic_coeff_clamp_max=1.3,
     traffic_coeff_clamp_enabled=True,
-    reward_floor=0.02,
+    network_load_min=0.8,
+    network_load_max=1.6,
+    collision_size_min=0.8,
+    collision_size_under_max=1.2,
+    collision_size_over_max=1.6,
+    reward_floor=0.03,
     max_penalty_ratio=0.6,
     shadowing_sigma_db=8.0,
 )

@@ -95,6 +95,24 @@ Exécuter uniquement l'étape 2 :
 python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 --seeds_base 1000
 ```
 
+### Mode sécurisé (--safe-profile)
+
+Le flag `--safe-profile` active un **preset modéré** pour l'étape 2, pensé pour
+stabiliser la charge, les collisions et le plancher de récompense. Il applique
+automatiquement des valeurs plus douces :
+
+- **Charge** (clamp du facteur de charge réseau) : `network_load_min=0.8` et `network_load_max=1.6`.
+- **Collisions** (bornes du facteur de taille) : `collision_size_min=0.8`,
+  `collision_size_under_max=1.2`, `collision_size_over_max=1.6`.
+- **Reward floor** : `reward_floor=0.03` (plancher appliqué dès que `success_rate > 0`).
+
+Exemples :
+
+```powershell
+python article_c/step2/run_step2.py --safe-profile --network-sizes 50 100 150 --replications 5 --seeds_base 1000
+python -m article_c.run_all --safe-profile
+```
+
 ### Réduire la verbosité des alertes (étape 2)
 
 L'alerte "reward uniforme" peut être émise fréquemment selon les scénarios. Utilisez
@@ -135,6 +153,8 @@ Ces options permettent d'ajuster finement les pertes dues aux collisions/congest
 - `--congestion-coeff-base` : coefficient de base de la probabilité de congestion. Valeur conseillée **0.25–0.40** (défaut 0.32).
 - `--congestion-coeff-growth` : vitesse de croissance avec la surcharge. Valeur conseillée **0.25–0.50** (défaut 0.35).
 - `--congestion-coeff-max` : plafond de la probabilité de congestion. Valeur conseillée **0.25–0.40** (défaut 0.35).
+- `--network-load-min` / `--network-load-max` : bornes du facteur de charge réseau (clamp).
+- `--collision-size-min` / `--collision-size-under-max` / `--collision-size-over-max` : bornes du facteur de taille des collisions.
 - `--collision-size-factor` : facteur de taille appliqué aux collisions (si non défini, calcul automatique). Valeur conseillée **0.8–1.6** selon la densité.
 
 Ces options sont disponibles via `article_c/step2/run_step2.py` et `article_c/run_all.py`.
