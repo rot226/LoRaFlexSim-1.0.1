@@ -8,6 +8,7 @@ est traité une seule fois afin d'éviter les duplications.
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 from typing import Iterable, List, Mapping, Sequence
@@ -115,6 +116,7 @@ def _plot_distribution(
             for patch in boxplot["boxes"]:
                 patch.set_facecolor(_snir_color(state))
                 patch.set_alpha(0.5)
+                patch.set_label(f"{_snir_label(state)} (boxplot)")
         else:
             box_ax.text(
                 0.5,
@@ -137,6 +139,7 @@ def _plot_distribution(
                 body.set_facecolor(_snir_color(state))
                 body.set_edgecolor("#333333")
                 body.set_alpha(0.6)
+                body.set_label(f"{_snir_label(state)} (violon)")
         else:
             violin_ax.text(
                 0.5,
@@ -161,7 +164,26 @@ def _plot_distribution(
     figures_dir.mkdir(parents=True, exist_ok=True)
     safe_algorithm = algorithm.replace(" ", "_")
     output = figures_dir / f"step1_distribution_{metric}_{safe_algorithm}.png"
-    plt.subplots_adjust(top=0.80)
+    handles: list[object] = []
+    labels: list[str] = []
+    for ax in axes.flatten():
+        subplot_handles, subplot_labels = ax.get_legend_handles_labels()
+        for handle, legend_label in zip(subplot_handles, subplot_labels, strict=False):
+            if legend_label in labels:
+                continue
+            handles.append(handle)
+            labels.append(legend_label)
+    if handles:
+        ncol = min(2, len(labels)) or 1
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            ncol=ncol,
+            frameon=False,
+        )
+    legend_rows = max(1, math.ceil(len(labels) / (min(2, len(labels)) or 1)))
+    plt.subplots_adjust(top=0.82 - 0.04 * max(0, legend_rows - 1))
     fig.savefig(output, dpi=300)
     plt.close(fig)
 

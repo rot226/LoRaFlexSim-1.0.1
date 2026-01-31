@@ -340,7 +340,7 @@ def _plot_pdr_distribution(
         body.set_edgecolor("none")
         body.set_alpha(0.25)
 
-    ax.boxplot(
+    boxplot_parts = ax.boxplot(
         data,
         positions=positions,
         widths=0.18,
@@ -351,6 +351,8 @@ def _plot_pdr_distribution(
         whiskerprops={"color": color, "linewidth": 1.1},
         capprops={"color": color, "linewidth": 1.1},
     )
+    for patch in boxplot_parts.get("boxes", []):
+        patch.set_label(f"Boîte PDR ({SNIR_LABELS[snir_mode]})")
 
     rng = Random(42)
     jitter_x_range = 0.06
@@ -360,6 +362,8 @@ def _plot_pdr_distribution(
         if not values:
             continue
         step = max(1, len(values) // max_points)
+        label = f"Échantillons PDR ({SNIR_LABELS[snir_mode]})"
+        label_added = False
         for value in values[::step]:
             jitter_x = rng.uniform(-jitter_x_range, jitter_x_range)
             jitter_y = rng.uniform(-jitter_y_range, jitter_y_range)
@@ -371,8 +375,9 @@ def _plot_pdr_distribution(
                 color=color,
                 alpha=0.6,
                 zorder=3,
-                label=f"Échantillons PDR ({SNIR_LABELS[snir_mode]})",
+                label=label if not label_added else None,
             )
+            label_added = True
 
     ax.set_xlim(-0.6, 0.6)
     ax.set_xticks([])

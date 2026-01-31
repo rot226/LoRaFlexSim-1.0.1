@@ -9,6 +9,7 @@ import warnings
 
 import matplotlib.pyplot as plt
 import pandas as pd
+from matplotlib.lines import Line2D
 
 from article_c.common.plot_helpers import (
     algo_label,
@@ -102,11 +103,16 @@ def _plot_distribution(
     violin_parts = ax.violinplot(
         rewards_by_algo, positions=positions, showmedians=True
     )
-    for body, color in zip(violin_parts["bodies"], algo_colors, strict=False):
+    for body, color, algo in zip(
+        violin_parts["bodies"],
+        algo_colors,
+        algorithms,
+        strict=False,
+    ):
         body.set_facecolor(color)
         body.set_edgecolor(color)
         body.set_alpha(0.35)
-        body.set_label("_nolegend_")
+        body.set_label(f"{algo_label(str(algo))} (violon)")
     boxplot_parts = ax.boxplot(
         rewards_by_algo,
         positions=positions,
@@ -116,7 +122,7 @@ def _plot_distribution(
         medianprops={"color": "black"},
     )
     for patch, algo in zip(boxplot_parts.get("boxes", []), algorithms, strict=False):
-        patch.set_label(algo_label(str(algo)))
+        patch.set_label(f"{algo_label(str(algo))} (boxplot)")
     ax.set_xticks(positions)
     ax.set_xticklabels([algo_label(str(algo)) for algo in algorithms])
     ax.set_xlabel("Algorithm")
@@ -234,13 +240,31 @@ def _plot_diagnostics(
             patch_artist=True,
         )
         for patch, algo in zip(boxplot_parts.get("boxes", []), algos, strict=False):
-            patch.set_label(algo_label(str(algo)))
+            patch.set_label(f"{algo_label(str(algo))} (boxplot)")
         axes[3].set_title("Boxplot des récompenses par algo")
         axes[3].set_ylabel("Reward")
     else:
         axes[3].axis("off")
         axes[3].text(0.5, 0.5, "Données algo absentes", ha="center", va="center")
 
+    handles: list[Line2D] = []
+    labels: list[str] = []
+    for ax in axes:
+        subplot_handles, subplot_labels = ax.get_legend_handles_labels()
+        for handle, label in zip(subplot_handles, subplot_labels, strict=False):
+            if label in labels:
+                continue
+            handles.append(handle)
+            labels.append(label)
+    if handles:
+        add_global_legend(
+            fig,
+            axes[0],
+            legend_loc="above",
+            handles=handles,
+            labels=labels,
+            use_fallback=False,
+        )
     save_figure(fig, output_dir, f"{suffix}_diagnostics", use_tight=False)
     assert_legend_present(fig, f"{suffix}_diagnostics")
     plt.close(fig)
