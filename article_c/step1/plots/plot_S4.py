@@ -55,14 +55,14 @@ def _add_summary_plot(
     ax: plt.Axes,
     rows: list[dict[str, object]],
     metric_key: str,
-) -> None:
+) -> tuple[list[Line2D], list[str]]:
     df = pd.DataFrame(rows)
     if df.empty:
-        return
+        return [], []
     median_key, _, _ = resolve_percentile_keys(rows, metric_key)
     algos = sorted(df["algo"].dropna().unique(), key=_algo_sort_key)
     if not algos:
-        return
+        return [], []
     offsets = {"snir_on": -0.15, "snir_off": 0.15}
     for snir_mode in SNIR_MODES:
         for index, algo in enumerate(algos):
@@ -125,13 +125,7 @@ def _add_summary_plot(
             label="max",
         ),
     ]
-    ax.legend(
-        handles=summary_handles,
-        loc="upper right",
-        fontsize=8,
-        frameon=False,
-        title="Synthèse",
-    )
+    return summary_handles, [handle.get_label() for handle in summary_handles]
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
@@ -183,6 +177,10 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.yaxis.set_label_coords(-0.08, 0.5)
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
+    summary_handles, summary_labels = _add_summary_plot(ax_summary, rows, metric_key)
+    if summary_handles:
+        handles = [*handles, *summary_handles]
+        labels = [*labels, *summary_labels]
     configure_figure(
         fig,
         (ax, ax_summary),
@@ -192,7 +190,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         legend_handles=handles if handles else None,
         legend_labels=labels if handles else None,
     )
-    _add_summary_plot(ax_summary, rows, metric_key)
     apply_figure_layout(
         fig,
         margins={

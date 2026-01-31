@@ -22,7 +22,7 @@ from article_c.common.plot_helpers import (
     filter_cluster,
     is_constant_metric,
     normalize_network_size_rows,
-    place_legend,
+    add_global_legend,
     save_figure,
 )
 from article_c.common.plotting_style import legend_extra_height
@@ -132,7 +132,7 @@ def _plot_distribution(
     )
     extra_height = legend_extra_height(height, legend_rows)
     apply_figure_layout(fig, figsize=(width, height + extra_height))
-    place_legend(ax, legend_loc="above")
+    add_global_legend(fig, ax, legend_loc="above")
     return fig
 
 

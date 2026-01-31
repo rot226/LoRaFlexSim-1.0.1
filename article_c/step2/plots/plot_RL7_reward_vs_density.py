@@ -26,7 +26,7 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     metric_values,
     normalize_network_size_rows,
-    place_legend,
+    add_global_legend,
     plot_metric_by_algo,
     render_constant_metric,
     render_metric_status,
@@ -163,7 +163,7 @@ def _plot_metric(
         "Step 2 - Global Median Reward vs Network size (adaptive algorithms)"
         f"{_title_suffix(network_sizes)}"
     )
-    place_legend(ax, legend_loc="above")
+    add_global_legend(fig, ax, legend_loc="above")
     return fig
 
 

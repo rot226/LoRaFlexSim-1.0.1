@@ -20,6 +20,7 @@ from article_c.common.plot_helpers import (
     filter_cluster,
     filter_mixra_opt_fallback,
     is_constant_metric,
+    legend_margins,
     load_step1_aggregated,
     metric_values as get_metric_values,
     plot_metric_by_snir,
@@ -75,7 +76,10 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         y_min = 0.0 if y_min >= 0 else y_min - padding
         y_max = y_max + padding
         ax.set_ylim(y_min, y_max)
-    apply_figure_layout(fig, margins={"left": 0.16})
+    apply_figure_layout(
+        fig,
+        margins={**legend_margins("above"), "left": 0.16},
+    )
     return fig
 
 

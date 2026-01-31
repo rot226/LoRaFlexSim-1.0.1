@@ -20,7 +20,7 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     load_step2_selection_probs,
     normalize_network_size_rows,
-    place_legend,
+    add_global_legend,
     render_metric_status,
     save_figure,
 )
@@ -96,7 +96,7 @@ def _plot_selection(
         "Step 2 - UCB1-SF Selection Probability"
         f"{_title_suffix(network_sizes)}"
     )
-    place_legend(ax, legend_loc="above")
+    add_global_legend(fig, ax, legend_loc="above")
     return fig
 
 
