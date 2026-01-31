@@ -522,7 +522,13 @@ def _log_reward_stats(
     round_id: int,
     rewards: list[float],
     reward_alert_level: int,
+    log_counts: dict[tuple[int, str, int], int] | None = None,
 ) -> None:
+    log_key = (network_size, algo_label, round_id)
+    if log_counts is not None:
+        log_counts[log_key] = log_counts.get(log_key, 0) + 1
+        if log_counts[log_key] > 1:
+            return
     min_reward, median_reward, max_reward = _summarize_values(rewards)
     if math.isclose(min_reward, max_reward, abs_tol=1e-6):
         logger.log(
@@ -534,7 +540,8 @@ def _log_reward_stats(
             min_reward,
         )
     logger.info(
-        "Stats reward - taille=%s algo=%s round=%s reward[min/med/max]=%.4f/%.4f/%.4f",
+        "Stats reward [#%s] - taille=%s algo=%s round=%s reward[min/med/max]=%.4f/%.4f/%.4f",
+        log_counts.get(log_key, 1) if log_counts is not None else 1,
         network_size,
         algo_label,
         round_id,
@@ -1077,7 +1084,7 @@ def run_simulation(
     reference_network_size: int | None = None,
     output_dir: Path | None = None,
     debug_step2: bool = False,
-    reward_alert_level: str = "WARNING",
+    reward_alert_level: str = "INFO",
 ) -> Step2Result:
     """Exécute une simulation proxy de l'étape 2."""
     rng = random.Random(seed)
@@ -1085,7 +1092,7 @@ def run_simulation(
     snir_defaults = DEFAULT_CONFIG.snir
     traffic_mode_value = "poisson" if traffic_mode is None else traffic_mode
     reward_alert_level_value = (
-        logging.WARNING if str(reward_alert_level).upper() != "INFO" else logging.INFO
+        logging.WARNING if str(reward_alert_level).upper() == "WARNING" else logging.INFO
     )
     snir_threshold_value = (
         snir_defaults.snir_threshold_db
@@ -1425,6 +1432,7 @@ def run_simulation(
         sf: _normalize(sf, min(sf_values), max(sf_values)) for sf in sf_values
     }
     latency_norm_by_sf = energy_norm_by_sf
+    reward_log_counts: dict[tuple[int, str, int], int] = {}
 
     if algorithm == "ucb1_sf":
         bandit = BanditUCB1(
@@ -1872,6 +1880,7 @@ def run_simulation(
                 round_id=round_id,
                 rewards=window_rewards,
                 reward_alert_level=reward_alert_level_value,
+                log_counts=reward_log_counts,
             )
             logger.info(
                 "Round %s - %s : récompense moyenne = %.4f",
@@ -2353,6 +2362,7 @@ def run_simulation(
                 round_id=round_id,
                 rewards=window_rewards,
                 reward_alert_level=reward_alert_level_value,
+                log_counts=reward_log_counts,
             )
             logger.info(
                 "Round %s - %s : récompense moyenne = %.4f",
