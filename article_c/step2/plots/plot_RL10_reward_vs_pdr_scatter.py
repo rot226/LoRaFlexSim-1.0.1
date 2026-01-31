@@ -26,7 +26,7 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     load_step2_aggregated,
     normalize_network_size_rows,
-    place_legend,
+    add_global_legend,
     render_metric_status,
     save_figure,
 )
@@ -333,7 +333,7 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
     ax.set_xlim(0.0, 1.05)
     ax.set_ylim(0.0, 1.05)
     ax.grid(True, linestyle=":", alpha=0.5)
-    place_legend(ax, legend_loc=legend_loc)
+    add_global_legend(fig, ax, legend_loc=legend_loc)
     return fig
 
 

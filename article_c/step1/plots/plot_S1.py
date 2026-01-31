@@ -28,6 +28,7 @@ from article_c.common.plot_helpers import (
     filter_cluster,
     filter_mixra_opt_fallback,
     is_constant_metric,
+    legend_margins,
     load_step1_aggregated,
     metric_values,
     plot_metric_by_snir,
@@ -53,14 +54,14 @@ def _add_summary_plot(
     ax: plt.Axes,
     rows: list[dict[str, object]],
     metric_key: str,
-) -> None:
+) -> tuple[list[Line2D], list[str]]:
     df = pd.DataFrame(rows)
     if df.empty:
-        return
+        return [], []
     median_key, _, _ = resolve_percentile_keys(rows, metric_key)
     algos = sorted(df["algo"].dropna().unique(), key=_algo_sort_key)
     if not algos:
-        return
+        return [], []
     offsets = {"snir_on": -0.15, "snir_off": 0.15}
     for snir_mode in SNIR_MODES:
         for index, algo in enumerate(algos):
@@ -123,13 +124,7 @@ def _add_summary_plot(
             label="max",
         ),
     ]
-    ax.legend(
-        handles=summary_handles,
-        loc="upper right",
-        fontsize=8,
-        frameon=False,
-        title="Synthèse",
-    )
+    return summary_handles, [handle.get_label() for handle in summary_handles]
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
@@ -155,7 +150,10 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             "Step 1 - Packet Delivery Ratio (SNIR on/off)",
             legend_loc="above",
         )
-        apply_figure_layout(fig, margins={"hspace": 0.4})
+        apply_figure_layout(
+            fig,
+            margins={**legend_margins("above"), "hspace": 0.4},
+        )
         return fig
     plot_metric_by_snir(
         ax,
@@ -176,14 +174,23 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_ylim(0.0, 1.0)
+    summary_handles, summary_labels = _add_summary_plot(ax_summary, rows, metric_key)
+    handles, labels = ax.get_legend_handles_labels()
+    if summary_handles:
+        handles = [*handles, *summary_handles]
+        labels = [*labels, *summary_labels]
     configure_figure(
         fig,
         (ax, ax_summary),
         "Step 1 - Packet Delivery Ratio (SNIR on/off)",
         legend_loc="above",
+        legend_handles=handles if handles else None,
+        legend_labels=labels if handles else None,
     )
-    _add_summary_plot(ax_summary, rows, metric_key)
-    apply_figure_layout(fig, margins={"hspace": 0.4})
+    apply_figure_layout(
+        fig,
+        margins={**legend_margins("above"), "hspace": 0.4},
+    )
     return fig
 
 
