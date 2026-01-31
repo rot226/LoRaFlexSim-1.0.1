@@ -28,7 +28,7 @@ from article_c.common.utils import (
     timestamp_tag,
 )
 from article_c.step2.simulate_step2 import run_simulation
-from plot_defaults import DEFAULT_FIGSIZE_MULTI
+from plot_defaults import resolve_ieee_figsize
 
 
 def _aggregate_selection_probs(
@@ -687,9 +687,9 @@ def _plot_summary_reward(output_dir: Path) -> None:
     apply_plot_style()
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_MULTI)
     network_sizes = sorted({row["network_size"] for row in rows})
     algorithms = sorted({row["algo"] for row in rows})
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
     error_key = "reward_ci95" if any(row.get("reward_ci95") for row in rows) else "reward_std"
     for algo in algorithms:
         algo_rows = [row for row in rows if row["algo"] == algo]
