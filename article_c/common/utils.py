@@ -208,6 +208,36 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Plafond de probabilité de congestion (0 à 1).",
     )
     parser.add_argument(
+        "--network-load-min",
+        type=float,
+        default=step2_defaults.network_load_min,
+        help="Borne minimale du facteur de charge réseau.",
+    )
+    parser.add_argument(
+        "--network-load-max",
+        type=float,
+        default=step2_defaults.network_load_max,
+        help="Borne maximale du facteur de charge réseau.",
+    )
+    parser.add_argument(
+        "--collision-size-min",
+        type=float,
+        default=step2_defaults.collision_size_min,
+        help="Borne minimale du facteur de taille des collisions.",
+    )
+    parser.add_argument(
+        "--collision-size-under-max",
+        type=float,
+        default=step2_defaults.collision_size_under_max,
+        help="Borne max (sous-charge) du facteur de taille des collisions.",
+    )
+    parser.add_argument(
+        "--collision-size-over-max",
+        type=float,
+        default=step2_defaults.collision_size_over_max,
+        help="Borne max (surcharge) du facteur de taille des collisions.",
+    )
+    parser.add_argument(
         "--collision-size-factor",
         type=float,
         default=step2_defaults.collision_size_factor,

@@ -1062,6 +1062,11 @@ def run_simulation(
     congestion_coeff_base: float | None = None,
     congestion_coeff_growth: float | None = None,
     congestion_coeff_max: float | None = None,
+    network_load_min: float | None = None,
+    network_load_max: float | None = None,
+    collision_size_min: float | None = None,
+    collision_size_under_max: float | None = None,
+    collision_size_over_max: float | None = None,
     collision_size_factor: float | None = None,
     max_penalty_ratio: float | None = None,
     traffic_coeff_clamp_min: float | None = None,
@@ -1236,16 +1241,36 @@ def run_simulation(
         if reference_network_size is None
         else max(1, int(reference_network_size))
     )
-    load_clamp_min_value = step2_defaults.network_load_min
-    load_clamp_max_value = step2_defaults.network_load_max
+    load_clamp_min_value = (
+        step2_defaults.network_load_min
+        if network_load_min is None
+        else float(network_load_min)
+    )
+    load_clamp_max_value = (
+        step2_defaults.network_load_max
+        if network_load_max is None
+        else float(network_load_max)
+    )
     if load_clamp_min_value > load_clamp_max_value:
         load_clamp_min_value, load_clamp_max_value = (
             load_clamp_max_value,
             load_clamp_min_value,
         )
-    collision_clamp_min_value = step2_defaults.collision_size_min
-    collision_clamp_under_max_value = step2_defaults.collision_size_under_max
-    collision_clamp_over_max_value = step2_defaults.collision_size_over_max
+    collision_clamp_min_value = (
+        step2_defaults.collision_size_min
+        if collision_size_min is None
+        else float(collision_size_min)
+    )
+    collision_clamp_under_max_value = (
+        step2_defaults.collision_size_under_max
+        if collision_size_under_max is None
+        else float(collision_size_under_max)
+    )
+    collision_clamp_over_max_value = (
+        step2_defaults.collision_size_over_max
+        if collision_size_over_max is None
+        else float(collision_size_over_max)
+    )
     if collision_clamp_min_value > collision_clamp_under_max_value:
         collision_clamp_min_value, collision_clamp_under_max_value = (
             collision_clamp_under_max_value,

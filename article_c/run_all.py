@@ -200,6 +200,36 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Plafond de probabilité de congestion (0 à 1).",
     )
     parser.add_argument(
+        "--network-load-min",
+        type=float,
+        default=None,
+        help="Borne minimale du facteur de charge réseau.",
+    )
+    parser.add_argument(
+        "--network-load-max",
+        type=float,
+        default=None,
+        help="Borne maximale du facteur de charge réseau.",
+    )
+    parser.add_argument(
+        "--collision-size-min",
+        type=float,
+        default=None,
+        help="Borne minimale du facteur de taille des collisions.",
+    )
+    parser.add_argument(
+        "--collision-size-under-max",
+        type=float,
+        default=None,
+        help="Borne max (sous-charge) du facteur de taille des collisions.",
+    )
+    parser.add_argument(
+        "--collision-size-over-max",
+        type=float,
+        default=None,
+        help="Borne max (surcharge) du facteur de taille des collisions.",
+    )
+    parser.add_argument(
         "--collision-size-factor",
         type=float,
         default=None,
@@ -503,6 +533,20 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         )
     if args.congestion_coeff_max is not None:
         step2_args.extend(["--congestion-coeff-max", str(args.congestion_coeff_max)])
+    if args.network_load_min is not None:
+        step2_args.extend(["--network-load-min", str(args.network_load_min)])
+    if args.network_load_max is not None:
+        step2_args.extend(["--network-load-max", str(args.network_load_max)])
+    if args.collision_size_min is not None:
+        step2_args.extend(["--collision-size-min", str(args.collision_size_min)])
+    if args.collision_size_under_max is not None:
+        step2_args.extend(
+            ["--collision-size-under-max", str(args.collision_size_under_max)]
+        )
+    if args.collision_size_over_max is not None:
+        step2_args.extend(
+            ["--collision-size-over-max", str(args.collision_size_over_max)]
+        )
     if args.collision_size_factor is not None:
         step2_args.extend(["--collision-size-factor", str(args.collision_size_factor)])
     if args.traffic_coeff_clamp_min is not None:
