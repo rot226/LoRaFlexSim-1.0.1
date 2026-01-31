@@ -104,6 +104,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Active le profil sécurisé pour l'étape 2.",
     )
     parser.add_argument(
+        "--allow-low-success-rate",
+        action="store_true",
+        help=(
+            "Autorise un success_rate global trop faible à l'étape 2 "
+            "(log un avertissement au lieu d'arrêter)."
+        ),
+    )
+    parser.add_argument(
         "--traffic-mode",
         type=str,
         default=None,
@@ -493,6 +501,8 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         step2_args.append("--timestamp")
     if args.safe_profile:
         step2_args.append("--safe-profile")
+    if args.allow_low_success_rate:
+        step2_args.append("--allow-low-success-rate")
     if args.snir_threshold_db is not None:
         step2_args.extend(["--snir-threshold-db", str(args.snir_threshold_db)])
     if args.snir_threshold_min_db is not None:

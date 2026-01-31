@@ -78,6 +78,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Active le profil sécurisé pour l'étape 2.",
     )
     parser.add_argument(
+        "--allow-low-success-rate",
+        action="store_true",
+        help=(
+            "Autorise un success_rate global trop faible en étape 2 "
+            "(log un avertissement au lieu d'arrêter)."
+        ),
+    )
+    parser.add_argument(
         "--plot-summary",
         action=argparse.BooleanOptionalAction,
         default=True,

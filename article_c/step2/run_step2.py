@@ -607,7 +607,9 @@ def _compose_post_simulation_report(
 
 
 def _assert_success_rate_threshold(
-    per_size_stats: dict[int, dict[str, object]], threshold: float = 0.95
+    per_size_stats: dict[int, dict[str, object]],
+    threshold: float = 0.95,
+    allow_low_success_rate: bool = False,
 ) -> None:
     overall_success_count = sum(
         int(stats.get("success_count", 0)) for stats in per_size_stats.values()
@@ -619,7 +621,11 @@ def _assert_success_rate_threshold(
         return
     zero_ratio = overall_success_zero_count / overall_success_count
     if zero_ratio > threshold:
-        raise RuntimeError("Simulation invalide : success_rate trop faible.")
+        message = "Simulation invalide : success_rate trop faible."
+        if allow_low_success_rate:
+            logging.warning(message)
+            return
+        raise RuntimeError(message)
 
 
 def _write_post_simulation_report(
@@ -1009,7 +1015,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         _assert_flat_output_sizes(base_results_dir, simulated_sizes)
     _verify_metric_variation(size_diagnostics)
     _write_post_simulation_report(base_results_dir, size_post_stats, size_diagnostics)
-    _assert_success_rate_threshold(size_post_stats)
+    _assert_success_rate_threshold(
+        size_post_stats,
+        allow_low_success_rate=bool(args.allow_low_success_rate),
+    )
 
     if selection_rows:
         rl5_rows = _aggregate_selection_probs(selection_rows)
