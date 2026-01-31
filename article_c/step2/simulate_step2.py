@@ -1453,7 +1453,9 @@ def run_simulation(
                         1,
                         int(
                             math.floor(
-                                window_duration_value / (airtime_s * n_channels)
+                                window_duration_value
+                                * load_factor
+                                / (airtime_s * n_channels)
                             )
                         ),
                     )
@@ -1917,6 +1919,7 @@ def run_simulation(
                         int(
                             math.floor(
                                 window_duration_value
+                                * load_factor
                                 / (airtime_reference_s * n_channels)
                             )
                         ),
