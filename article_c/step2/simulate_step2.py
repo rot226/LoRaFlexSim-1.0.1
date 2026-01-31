@@ -112,12 +112,11 @@ def _compute_reward(
     reward = success_rate * weighted_quality - collision_penalty
     if success_rate > 0.0:
         reward /= max(success_rate, 0.05)
-    reward_floor = weights.exploration_floor
-    if reward_floor > 0.0:
-        if success_rate > 0.0 and reward < reward_floor:
-            reward = reward_floor
-        elif floor_on_zero_success and success_rate == 0.0:
-            reward = max(reward, reward_floor)
+    reward_floor = max(weights.exploration_floor, 0.0)
+    if floor_on_zero_success and success_rate == 0.0 and reward_floor > 0.0:
+        reward = reward_floor
+    elif reward_floor > 0.0 and success_rate > 0.0 and reward < reward_floor:
+        reward = reward_floor
     clipped_reward = _clip(reward, 0.0, 1.0)
     if reward_floor > 0.0 and clipped_reward < reward_floor:
         if success_rate > 0.0 or (floor_on_zero_success and success_rate <= 0.0):
