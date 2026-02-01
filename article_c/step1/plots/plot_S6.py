@@ -14,22 +14,23 @@ from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
-    add_global_legend,
+    add_figure_legend,
     assert_legend_present,
     MetricStatus,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
+    fallback_legend_handles,
     is_constant_metric,
-    legend_margins,
+    legend_handles_for_algos_snir,
     load_step1_aggregated,
     metric_values,
     plot_metric_by_snir,
     render_metric_status,
     select_received_metric_key,
     save_figure,
+    suptitle_y_from_top,
 )
-from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import resolve_ieee_figsize
 
 
@@ -51,14 +52,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         axes = [axes]
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
-        render_metric_status(fig, axes, metric_state, legend_handles=None)
-        configure_figure(
+        render_metric_status(
             fig,
             axes,
-            "Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)",
-            legend_loc="above",
+            metric_state,
+            legend_handles=legend_handles_for_algos_snir(),
         )
-        apply_figure_layout(fig, margins=legend_margins("above"))
+        fig.suptitle(
+            "Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)",
+            y=suptitle_y_from_top(fig),
+        )
         return fig
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
@@ -69,26 +72,18 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.set_xticks(network_sizes)
     axes[0].set_ylabel("Packet Delivery Ratio")
-    handles, labels = axes[0].get_legend_handles_labels()
+    handles, labels = legend_handles_for_algos_snir()
     for ax in axes:
         legend = ax.get_legend()
         if legend is not None:
             legend.remove()
-    if handles:
-        add_global_legend(
-            fig,
-            axes[0],
-            legend_loc="above",
-            handles=handles,
-            labels=labels,
-        )
-    configure_figure(
-        fig,
-        axes,
+    if not handles:
+        handles, labels = fallback_legend_handles()
+    add_figure_legend(fig, handles, labels, legend_loc="above")
+    fig.suptitle(
         "Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)",
-        legend_loc="above",
+        y=suptitle_y_from_top(fig),
     )
-    apply_figure_layout(fig, margins=legend_margins("above"))
     return fig
 
 

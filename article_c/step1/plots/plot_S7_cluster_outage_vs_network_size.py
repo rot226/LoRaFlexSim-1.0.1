@@ -19,24 +19,21 @@ from article_c.common.plot_helpers import (
     MetricStatus,
     apply_plot_style,
     apply_figure_layout,
-    add_global_legend,
+    add_figure_legend,
     assert_legend_present,
-    collect_legend_entries,
-    deduplicate_legend_entries,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     is_constant_metric,
-    legend_margins,
+    legend_handles_for_algos_snir,
     load_step1_aggregated,
     metric_values,
     render_metric_status,
     save_figure,
+    suptitle_y_from_top,
 )
-from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import resolve_ieee_figsize
 
 PDR_TARGETS = (0.90, 0.80, 0.70)
-LAYOUT_MARGINS = legend_margins("above")
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
@@ -103,14 +100,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
 
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
-        render_metric_status(fig, axes, metric_state, legend_handles=None)
-        configure_figure(
+        render_metric_status(
             fig,
             axes,
-            "Step 1 - Outage probability by Cluster (network size)",
-            legend_loc="above",
+            metric_state,
+            legend_handles=legend_handles_for_algos_snir(),
         )
-        apply_figure_layout(fig, margins=LAYOUT_MARGINS)
+        fig.suptitle(
+            "Step 1 - Outage probability by Cluster (network size)",
+            y=suptitle_y_from_top(fig),
+        )
         return fig
 
     for ax, snir_mode in zip(axes, SNIR_MODES, strict=False):
@@ -142,27 +141,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
-    handles, labels = collect_legend_entries(axes)
-    handles, labels = deduplicate_legend_entries(handles, labels)
+    handles, labels = legend_handles_for_algos_snir()
     for ax in axes:
         legend = ax.get_legend()
         if legend is not None:
             legend.remove()
-    if handles:
-        add_global_legend(
-            fig,
-            axes[-1],
-            legend_loc="above",
-            handles=handles,
-            labels=labels,
-        )
-    configure_figure(
-        fig,
-        axes,
+    add_figure_legend(fig, handles, labels, legend_loc="above")
+    fig.suptitle(
         "Step 1 - Outage probability by Cluster (network size)",
-        legend_loc="above",
+        y=suptitle_y_from_top(fig),
     )
-    apply_figure_layout(fig, margins=LAYOUT_MARGINS)
     return fig
 
 
