@@ -19,7 +19,6 @@ from article_c.common.plot_helpers import (
     ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
-    CONSTANT_METRIC_MESSAGE,
     MetricStatus,
     fallback_legend_handles,
     is_constant_metric,
@@ -28,7 +27,6 @@ from article_c.common.plot_helpers import (
     normalize_network_size_rows,
     add_global_legend,
     plot_metric_by_algo,
-    render_constant_metric,
     render_metric_status,
     resolve_percentile_keys,
     save_figure,
@@ -197,6 +195,11 @@ def _warn_if_constant(series: pd.Series, label: str) -> bool:
     return False
 
 
+def _warn_constant_reward(label: str) -> None:
+    warnings.warn("reward constant → plots invalides", stacklevel=2)
+    print(f"INFO: {label} constant; les graphiques sont ignorés.")
+
+
 def _ensure_density(rows: list[dict[str, object]]) -> None:
     for row in rows:
         if row.get("density") in (None, "") and row.get("network_size") not in (None, ""):
@@ -295,29 +298,6 @@ def _log_min_max_by_size(
     grouped = df.groupby("network_size")["value"]
     for size, stats in grouped.agg(["min", "max"]).sort_index().iterrows():
         print(f"  taille={int(size)} -> min={stats['min']:.6f} / max={stats['max']:.6f}")
-
-
-def _plot_constant_message(
-    message: str,
-    *,
-    title: str,
-    output_dir: Path,
-    stem: str,
-) -> None:
-    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(1))
-    apply_figure_layout(fig)
-    render_constant_metric(
-        fig,
-        ax,
-        message=message,
-        legend_loc="above",
-        show_fallback_legend=True,
-        legend_handles=fallback_legend_handles(),
-    )
-    ax.set_title(title)
-    save_figure(fig, output_dir, stem, use_tight=False)
-    assert_legend_present(fig, stem)
-    plt.close(fig)
 
 
 def _diagnose_density(rows: list[dict[str, object]]) -> None:
@@ -501,6 +481,9 @@ def main(
                 stacklevel=2,
             )
 
+    if is_constant:
+        _warn_constant_reward(diagnostics_metric_key)
+        return
     output_dir = step_dir / "plots" / "output"
     _plot_diagnostics(
         diagnostics_rows,
@@ -513,14 +496,6 @@ def main(
         diagnostics_metric_key,
         label=diagnostics_metric_key,
     )
-    if is_constant:
-        _plot_constant_message(
-            CONSTANT_METRIC_MESSAGE,
-            title="Step 2 - Global Median Reward vs Network size",
-            output_dir=output_dir,
-            stem="plot_RL7_reward_vs_density",
-        )
-        return
     fig = _plot_metric(rows_for_plot, metric_key, network_sizes_filter)
     if fig is None:
         return

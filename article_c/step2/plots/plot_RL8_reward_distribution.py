@@ -16,7 +16,6 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
     ALGO_COLORS,
-    CONSTANT_METRIC_MESSAGE,
     MetricStatus,
     assert_legend_present,
     filter_rows_by_network_sizes,
@@ -155,6 +154,11 @@ def _warn_if_constant(series: pd.Series, label: str) -> bool:
         )
         return True
     return False
+
+
+def _warn_constant_reward(label: str) -> None:
+    warnings.warn("reward constant → plots invalides", stacklevel=2)
+    print(f"INFO: {label} constant; les graphiques sont ignorés.")
 
 
 def _diagnose_density(rows: list[dict[str, object]]) -> None:
@@ -296,23 +300,6 @@ def _log_min_max_by_size(
         print(f"  taille={int(size)} -> min={stats['min']:.6f} / max={stats['max']:.6f}")
 
 
-def _plot_constant_message(
-    message: str,
-    *,
-    title: str,
-    output_dir: Path,
-    stem: str,
-) -> None:
-    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(1))
-    apply_figure_layout(fig)
-    ax.axis("off")
-    ax.set_title(title)
-    ax.text(0.5, 0.5, message, ha="center", va="center", wrap=True)
-    save_figure(fig, output_dir, stem, use_tight=False)
-    assert_legend_present(fig, stem)
-    plt.close(fig)
-
-
 def main(
     network_sizes: list[int] | None = None,
     argv: list[str] | None = None,
@@ -361,17 +348,12 @@ def main(
     ).dropna()
     is_constant = _warn_if_constant(rewards_series, "reward")
 
+    if is_constant:
+        _warn_constant_reward("reward")
+        return
     output_dir = step_dir / "plots" / "output"
     _plot_diagnostics(rows, output_dir, "plot_RL8_reward_distribution")
     _log_min_max_by_size(rows, "reward", label="reward")
-    if is_constant:
-        _plot_constant_message(
-            CONSTANT_METRIC_MESSAGE,
-            title="Step 2 - Reward Distribution by Algorithm",
-            output_dir=output_dir,
-            stem="plot_RL8_reward_distribution",
-        )
-        return
     fig = _plot_distribution(rows, network_sizes)
     save_figure(fig, output_dir, "plot_RL8_reward_distribution", use_tight=False)
     assert_legend_present(fig, "plot_RL8_reward_distribution")
