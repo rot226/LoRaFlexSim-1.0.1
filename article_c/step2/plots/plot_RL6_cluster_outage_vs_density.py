@@ -12,7 +12,7 @@ import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
-    add_global_legend,
+    add_figure_legend,
     algo_label,
     apply_plot_style,
     apply_figure_layout,
@@ -24,7 +24,7 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     fallback_legend_handles,
     is_constant_metric,
-    legend_margins,
+    legend_handles_for_algos_snir,
     load_step2_aggregated,
     metric_values,
     normalize_network_size_rows,
@@ -179,7 +179,7 @@ def _plot_metric(
             axes,
             metric_state,
             show_fallback_legend=True,
-            legend_handles=fallback_legend_handles(),
+            legend_handles=legend_handles_for_algos_snir(["snir_on"]),
         )
         fig.suptitle(
             "Step 2 - Outage probability by Cluster (SNIR on)"
@@ -222,16 +222,10 @@ def _plot_metric(
     handles, labels = collect_legend_entries(axes)
     handles, labels = deduplicate_legend_entries(handles, labels)
     if not handles:
+        handles, labels = legend_handles_for_algos_snir(["snir_on"])
+    if not handles:
         handles, labels = fallback_legend_handles()
-    if handles:
-        add_global_legend(
-            fig,
-            axes[-1],
-            legend_loc="above",
-            handles=handles,
-            labels=labels,
-        )
-        apply_figure_layout(fig, margins=legend_margins("above"))
+    add_figure_legend(fig, handles, labels, legend_loc="above")
     fig.suptitle(
         "Step 2 - Outage probability by Cluster (SNIR on)"
         f"{_title_suffix(network_sizes)}",
@@ -384,16 +378,10 @@ def _plot_raw_metric(
     handles, labels = collect_legend_entries(axes)
     handles, labels = deduplicate_legend_entries(handles, labels)
     if not handles:
+        handles, labels = legend_handles_for_algos_snir(["snir_on"])
+    if not handles:
         handles, labels = fallback_legend_handles()
-    if handles:
-        add_global_legend(
-            fig,
-            axes[-1],
-            legend_loc="above",
-            handles=handles,
-            labels=labels,
-        )
-        apply_figure_layout(fig, margins=legend_margins("above"))
+    add_figure_legend(fig, handles, labels, legend_loc="above")
     fig.suptitle(
         "Step 2 - Outage probability brut par cluster et réplication (SNIR on)"
         f"{_title_suffix(network_sizes)}",

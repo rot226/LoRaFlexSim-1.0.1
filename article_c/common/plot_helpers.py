@@ -676,6 +676,33 @@ def add_global_legend(
     )
 
 
+def add_figure_legend(
+    fig: plt.Figure,
+    handles: list[Line2D],
+    labels: list[str],
+    *,
+    legend_loc: str = "above",
+) -> int:
+    """Ajoute une légende globale à la figure et applique les marges associées."""
+    if not handles:
+        return 0
+    legend_style, legend_rows = _legend_style(
+        legend_loc,
+        len(labels),
+        fig=fig,
+    )
+    legend = fig.legend(handles, labels, **legend_style)
+    bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
+    legend.set_bbox_to_anchor(bbox_to_anchor)
+    apply_figure_layout(
+        fig,
+        margins=legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
+        bbox_to_anchor=bbox_to_anchor,
+        legend_rows=legend_rows,
+    )
+    return legend_rows
+
+
 def save_figure(
     fig: plt.Figure,
     output_dir: Path,

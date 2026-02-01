@@ -19,18 +19,20 @@ from article_c.common.plot_helpers import (
     MetricStatus,
     apply_plot_style,
     apply_figure_layout,
-    add_global_legend,
+    add_figure_legend,
     assert_legend_present,
+    fallback_legend_handles,
     filter_mixra_opt_fallback,
     is_constant_metric,
     legend_margins,
+    legend_handles_for_algos_snir,
     load_step1_aggregated,
     metric_values,
     filter_rows_by_network_sizes,
     render_metric_status,
     save_figure,
+    suptitle_y_from_top,
 )
-from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import resolve_ieee_figsize
 
 PDR_TARGETS = (0.90, 0.80, 0.70)
@@ -81,14 +83,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
 
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
-        render_metric_status(fig, axes, metric_state, legend_handles=None)
-        configure_figure(
+        render_metric_status(
             fig,
             axes,
-            "Step 1 - PDR by Cluster (network size)",
-            legend_loc="above",
+            metric_state,
+            legend_handles=legend_handles_for_algos_snir(),
         )
-        apply_figure_layout(fig, margins=legend_margins("above"))
+        fig.suptitle(
+            "Step 1 - PDR by Cluster (network size)",
+            y=suptitle_y_from_top(fig),
+        )
         return fig
 
     cluster_handles: list[plt.Line2D] = []
@@ -134,29 +138,28 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         legend = ax.get_legend()
         if legend is not None:
             legend.remove()
-    if cluster_handles:
-        add_global_legend(
-            fig,
-            axes[0],
-            legend_loc="above",
-            handles=cluster_handles,
-            labels=legend_labels,
-        )
-        if fig.legends:
-            fig.legends[-1].set_title("Clusters")
-    configure_figure(
+    if not cluster_handles:
+        cluster_handles, legend_labels = fallback_legend_handles()
+    legend_rows = add_figure_legend(
         fig,
-        axes,
-        "Step 1 - PDR by Cluster (network size)",
+        cluster_handles,
+        legend_labels,
         legend_loc="above",
     )
-    layout_margins = legend_margins("above")
+    if fig.legends:
+        fig.legends[-1].set_title("Clusters")
+    layout_margins = legend_margins("above", legend_rows=max(1, legend_rows), fig=fig)
     apply_figure_layout(
         fig,
         margins={
             **layout_margins,
             "top": max(0.7, layout_margins.get("top", 0.0)),
         },
+        legend_rows=max(1, legend_rows),
+    )
+    fig.suptitle(
+        "Step 1 - PDR by Cluster (network size)",
+        y=suptitle_y_from_top(fig),
     )
     return fig
 
