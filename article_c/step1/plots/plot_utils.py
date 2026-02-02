@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from article_c.common.plot_helpers import (
     add_global_legend,
     apply_figure_layout,
+    deduplicate_legend_entries,
     fallback_legend_handles,
     legend_margins,
     suptitle_y_from_top,
@@ -68,6 +69,8 @@ def configure_figure(
         if not handles:
             handles, labels = fallback_legend_handles()
         if handles:
+            handles, labels = deduplicate_legend_entries(handles, labels)
+        if handles:
             if legend_loc == "above":
                 ncol = min(len(labels), int(LEGEND_STYLE.get("ncol", len(labels)) or 1))
                 legend_rows = max(1, math.ceil(len(labels) / max(1, ncol)))
@@ -78,12 +81,25 @@ def configure_figure(
                 handles=handles,
                 labels=labels,
             )
+    legend_in_figure = bool(fig.legends)
+    if legend_in_figure:
+        legend = fig.legends[0]
+        legend_rows = max(
+            1,
+            math.ceil(len(legend.get_texts()) / max(1, legend.get_ncols())),
+        )
+    else:
+        legend_rows = 1
 
     if legend_loc == "above":
-        above_margins = {
-            **legend_margins("above", legend_rows=legend_rows),
-            "bottom": FIGURE_MARGINS["bottom"],
-        }
+        above_margins = (
+            {
+                **legend_margins("above", legend_rows=legend_rows),
+                "bottom": FIGURE_MARGINS["bottom"],
+            }
+            if legend_in_figure
+            else FIGURE_MARGINS
+        )
         apply_figure_layout(
             fig,
             margins=above_margins,
@@ -92,10 +108,14 @@ def configure_figure(
     else:
         apply_figure_layout(
             fig,
-            margins={
-                "top": FIGURE_MARGINS["top"],
-                "bottom": FIGURE_MARGINS["bottom"],
-                "right": 0.80,
-            },
+            margins=(
+                {
+                    "top": FIGURE_MARGINS["top"],
+                    "bottom": FIGURE_MARGINS["bottom"],
+                    "right": 0.80,
+                }
+                if legend_in_figure
+                else FIGURE_MARGINS
+            ),
         )
     fig.suptitle(title, y=suptitle_y_from_top(fig))

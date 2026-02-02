@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import logging
 import math
+import re
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -14,10 +15,14 @@ from typing import Callable, Iterable
 
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from matplotlib.legend import Legend
 
 from article_c.common.plotting_style import (
     FIGURE_MARGINS,
     FIGURE_SIZE,
+    LEGEND_MAX_HEIGHT_RATIO,
+    LEGEND_MAX_WIDTH_RATIO,
+    LEGEND_MIN_FONTSIZE,
     LEGEND_STYLE,
     SAVEFIG_STYLE,
     SUPTITLE_Y,
@@ -199,7 +204,7 @@ def deduplicate_legend_entries(
     dedup_handles: list[Line2D] = []
     dedup_labels: list[str] = []
     for handle, label in zip(handles, labels, strict=False):
-        normalized_label = str(label).strip()
+        normalized_label = normalize_legend_label(label)
         if not normalized_label or normalized_label == "_nolegend_":
             continue
         if normalized_label in seen:
@@ -208,6 +213,112 @@ def deduplicate_legend_entries(
         dedup_handles.append(handle)
         dedup_labels.append(normalized_label)
     return dedup_handles, dedup_labels
+
+
+def normalize_legend_label(label: object) -> str:
+    """Normalise les labels pour éviter les doublons incohérents."""
+    cleaned = str(label).strip()
+    if not cleaned:
+        return ""
+    normalized = cleaned
+    for mode in ("on", "off"):
+        normalized = re.sub(
+            rf"\bsnir\s*[-_ ]?\s*{mode}\b",
+            f"SNIR {mode}",
+            normalized,
+            flags=re.IGNORECASE,
+        )
+    normalized = re.sub(r"\bsnir\b", "SNIR", normalized, flags=re.IGNORECASE)
+    return " ".join(normalized.split())
+
+
+def _legend_bbox_ratios(legend: Legend) -> tuple[float, float] | None:
+    fig = legend.figure
+    if fig is None or fig.canvas is None:
+        return None
+    try:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        bbox = legend.get_window_extent(renderer=renderer)
+    except Exception:
+        return None
+    fig_width, fig_height = fig.get_size_inches()
+    if fig_width <= 0 or fig_height <= 0:
+        return None
+    width_ratio = bbox.width / (fig.dpi * fig_width)
+    height_ratio = bbox.height / (fig.dpi * fig_height)
+    return width_ratio, height_ratio
+
+
+def _legend_needs_reflow(
+    legend: Legend,
+    *,
+    max_width_ratio: float = LEGEND_MAX_WIDTH_RATIO,
+    max_height_ratio: float = LEGEND_MAX_HEIGHT_RATIO,
+) -> bool:
+    ratios = _legend_bbox_ratios(legend)
+    if ratios is None:
+        return False
+    width_ratio, height_ratio = ratios
+    return width_ratio > max_width_ratio or height_ratio > max_height_ratio
+
+
+def _legend_fallback_in_axis(
+    *,
+    axes: Iterable[plt.Axes] | None,
+    handles: list[Line2D],
+    labels: list[str],
+    fontsize: float | None,
+) -> Legend | None:
+    axes_list = list(axes or [])
+    if not axes_list:
+        return None
+    ax = axes_list[0]
+    legend_kwargs: dict[str, object] = {
+        "loc": "upper right",
+        "frameon": True,
+        "ncol": 1,
+    }
+    if fontsize is not None:
+        legend_kwargs["fontsize"] = fontsize
+    return ax.legend(handles, labels, **legend_kwargs)
+
+
+def postprocess_legend(
+    legend: Legend,
+    *,
+    legend_loc: str,
+    handles: list[Line2D],
+    labels: list[str],
+    fig: plt.Figure,
+    axes: Iterable[plt.Axes] | None = None,
+) -> tuple[Legend, int, bool]:
+    """Ajuste la légende et bascule dans l'axe si nécessaire."""
+    legend_rows = max(1, math.ceil(len(labels) / max(1, legend.get_ncols())))
+    if adjust_legend_to_fit(legend):
+        legend_rows = max(1, math.ceil(len(labels) / max(1, legend.get_ncols())))
+        if _normalize_legend_loc(legend_loc) == "above":
+            bbox_to_anchor = legend_bbox_to_anchor(
+                legend=legend,
+                legend_rows=legend_rows,
+            )
+            legend.set_bbox_to_anchor(bbox_to_anchor)
+    if not _legend_needs_reflow(legend):
+        return legend, legend_rows, False
+    font_size: float | None = None
+    texts = legend.get_texts()
+    if texts:
+        font_size = max(LEGEND_MIN_FONTSIZE, float(texts[0].get_fontsize()))
+    legend.remove()
+    fallback_legend = _legend_fallback_in_axis(
+        axes=axes or fig.axes,
+        handles=handles,
+        labels=labels,
+        fontsize=font_size,
+    )
+    if fallback_legend is None:
+        return legend, legend_rows, False
+    return fallback_legend, 1, True
 
 
 def render_constant_metric(
@@ -253,6 +364,8 @@ def render_constant_metric(
                 else:
                     handles, labels = legend_handles
             if handles:
+                handles, labels = deduplicate_legend_entries(handles, labels)
+            if handles:
                 legend_style, legend_rows = _legend_style(
                     legend_loc,
                     len(labels),
@@ -293,29 +406,35 @@ def render_constant_metric(
                         len(labels),
                         fig=fig,
                     )
-                legend = fig.legend(handles, labels, **legend_style)
-                if adjust_legend_to_fit(legend):
-                    legend_rows = max(
-                        1,
-                        math.ceil(len(labels) / max(1, legend.get_ncols())),
-                    )
-                    bbox_to_anchor = legend_bbox_to_anchor(
-                        legend=legend,
-                        legend_rows=legend_rows,
-                    )
-                    legend.set_bbox_to_anchor(bbox_to_anchor)
-                if margins_for_layout is None:
-                    margins_for_layout = legend_margins(
-                        legend_loc,
-                        legend_rows=legend_rows,
+                handles, labels = deduplicate_legend_entries(handles, labels)
+                if handles:
+                    legend = fig.legend(handles, labels, **legend_style)
+                    legend, legend_rows, moved_to_axis = postprocess_legend(
+                        legend,
+                        legend_loc=legend_loc,
+                        handles=handles,
+                        labels=labels,
                         fig=fig,
+                        axes=_flatten_axes(axes),
                     )
-                apply_figure_layout(
-                    fig,
-                    margins=margins_for_layout,
-                    bbox_to_anchor=legend.get_bbox_to_anchor(),
-                    legend_rows=legend_rows,
-                )
+                    if margins_for_layout is None:
+                        margins_for_layout = (
+                            FIGURE_MARGINS
+                            if moved_to_axis
+                            else legend_margins(
+                                legend_loc,
+                                legend_rows=legend_rows,
+                                fig=fig,
+                            )
+                        )
+                    apply_figure_layout(
+                        fig,
+                        margins=margins_for_layout,
+                        bbox_to_anchor=None
+                        if moved_to_axis
+                        else legend.get_bbox_to_anchor(),
+                        legend_rows=legend_rows,
+                    )
         elif normalized_legend_mode == "constante" and _figure_has_legend(fig):
             apply_figure_layout(fig, margins=legend_margins(legend_loc, fig=fig))
 
@@ -445,6 +564,8 @@ def place_legend(ax: plt.Axes, *, legend_loc: str = "above") -> None:
     handles, labels = ax.get_legend_handles_labels()
     if not handles:
         handles, labels = fallback_legend_handles()
+    if handles:
+        handles, labels = deduplicate_legend_entries(handles, labels)
     if not handles:
         return
     legend_style, legend_rows = _legend_style(
@@ -453,14 +574,20 @@ def place_legend(ax: plt.Axes, *, legend_loc: str = "above") -> None:
         fig=ax.figure,
     )
     legend = ax.figure.legend(handles, labels, **legend_style)
-    if adjust_legend_to_fit(legend):
-        legend_rows = max(1, math.ceil(len(labels) / max(1, legend.get_ncols())))
-        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
-        legend.set_bbox_to_anchor(bbox_to_anchor)
+    legend, legend_rows, moved_to_axis = postprocess_legend(
+        legend,
+        legend_loc=legend_loc,
+        handles=handles,
+        labels=labels,
+        fig=ax.figure,
+        axes=[ax],
+    )
     apply_figure_layout(
         ax.figure,
-        margins=legend_margins(legend_loc, legend_rows=legend_rows, fig=ax.figure),
-        bbox_to_anchor=legend.get_bbox_to_anchor(),
+        margins=FIGURE_MARGINS
+        if moved_to_axis
+        else legend_margins(legend_loc, legend_rows=legend_rows, fig=ax.figure),
+        bbox_to_anchor=None if moved_to_axis else legend.get_bbox_to_anchor(),
         legend_rows=legend_rows,
     )
 
@@ -667,6 +794,8 @@ def add_global_legend(
         handles, labels = ax.get_legend_handles_labels()
     if not handles and use_fallback:
         handles, labels = fallback_legend_handles()
+    if handles:
+        handles, labels = deduplicate_legend_entries(handles, labels)
     if not handles:
         return
     legend_style, legend_rows = _legend_style(
@@ -677,14 +806,20 @@ def add_global_legend(
     legend = fig.legend(handles, labels, **legend_style)
     bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
     legend.set_bbox_to_anchor(bbox_to_anchor)
-    if adjust_legend_to_fit(legend):
-        legend_rows = max(1, math.ceil(len(labels) / max(1, legend.get_ncols())))
-        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
-        legend.set_bbox_to_anchor(bbox_to_anchor)
+    legend, legend_rows, moved_to_axis = postprocess_legend(
+        legend,
+        legend_loc=legend_loc,
+        handles=handles,
+        labels=labels,
+        fig=fig,
+        axes=[ax],
+    )
     apply_figure_layout(
         fig,
-        margins=legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
-        bbox_to_anchor=bbox_to_anchor,
+        margins=FIGURE_MARGINS
+        if moved_to_axis
+        else legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
+        bbox_to_anchor=None if moved_to_axis else legend.get_bbox_to_anchor(),
         legend_rows=legend_rows,
     )
 
@@ -699,6 +834,9 @@ def add_figure_legend(
     """Ajoute une légende globale à la figure et applique les marges associées."""
     if not handles:
         return 0
+    handles, labels = deduplicate_legend_entries(handles, labels)
+    if not handles:
+        return 0
     legend_style, legend_rows = _legend_style(
         legend_loc,
         len(labels),
@@ -707,14 +845,19 @@ def add_figure_legend(
     legend = fig.legend(handles, labels, **legend_style)
     bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
     legend.set_bbox_to_anchor(bbox_to_anchor)
-    if adjust_legend_to_fit(legend):
-        legend_rows = max(1, math.ceil(len(labels) / max(1, legend.get_ncols())))
-        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
-        legend.set_bbox_to_anchor(bbox_to_anchor)
+    legend, legend_rows, moved_to_axis = postprocess_legend(
+        legend,
+        legend_loc=legend_loc,
+        handles=handles,
+        labels=labels,
+        fig=fig,
+    )
     apply_figure_layout(
         fig,
-        margins=legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
-        bbox_to_anchor=bbox_to_anchor,
+        margins=FIGURE_MARGINS
+        if moved_to_axis
+        else legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
+        bbox_to_anchor=None if moved_to_axis else legend.get_bbox_to_anchor(),
         legend_rows=legend_rows,
     )
     return legend_rows
