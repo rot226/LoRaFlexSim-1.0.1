@@ -132,27 +132,22 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     df = pd.DataFrame(rows)
     algos = sorted(df["algo"].dropna().unique(), key=_algo_sort_key)
     num_series = len(algos) * len(SNIR_MODES) if algos else None
-    fig, (ax, ax_summary) = plt.subplots(
-        2,
-        1,
-        figsize=resolve_ieee_figsize(num_series),
-        gridspec_kw={"height_ratios": [4.0, 1.4]},
-    )
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(num_series))
     network_sizes = sorted(df["network_size"].unique())
     if len(network_sizes) < 2:
         warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
-        render_metric_status(fig, (ax, ax_summary), metric_state, legend_handles=None)
+        render_metric_status(fig, ax, metric_state, legend_handles=None)
         configure_figure(
             fig,
-            (ax, ax_summary),
+            ax,
             "Step 1 - Packet Delivery Ratio (SNIR on/off)",
             legend_loc="above",
         )
         apply_figure_layout(
             fig,
-            margins={**legend_margins("above"), "hspace": 0.4},
+            margins=legend_margins("above"),
         )
         return fig
     plot_metric_by_snir(
@@ -174,14 +169,10 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_ylim(0.0, 1.0)
-    summary_handles, summary_labels = _add_summary_plot(ax_summary, rows, metric_key)
     handles, labels = ax.get_legend_handles_labels()
-    if summary_handles:
-        handles = [*handles, *summary_handles]
-        labels = [*labels, *summary_labels]
     configure_figure(
         fig,
-        (ax, ax_summary),
+        ax,
         "Step 1 - Packet Delivery Ratio (SNIR on/off)",
         legend_loc="above",
         legend_handles=handles if handles else None,
@@ -189,8 +180,42 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     )
     apply_figure_layout(
         fig,
-        margins={**legend_margins("above"), "hspace": 0.4},
+        margins=legend_margins("above"),
     )
+    return fig
+
+
+def _plot_summary_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
+    ensure_network_size(rows)
+    df = pd.DataFrame(rows)
+    algos = sorted(df["algo"].dropna().unique(), key=_algo_sort_key)
+    num_series = len(algos) * len(SNIR_MODES) if algos else None
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(num_series))
+    metric_state = is_constant_metric(metric_values(rows, metric_key))
+    if metric_state is not MetricStatus.OK:
+        render_metric_status(fig, ax, metric_state, legend_handles=None)
+        configure_figure(
+            fig,
+            ax,
+            "Step 1 - Packet Delivery Ratio (SNIR on/off) — Synthèse",
+            legend_loc="above",
+        )
+        apply_figure_layout(fig, margins=legend_margins("above"))
+        return fig
+    summary_handles, summary_labels = _add_summary_plot(ax, rows, metric_key)
+    handles, labels = ax.get_legend_handles_labels()
+    if summary_handles:
+        handles = [*handles, *summary_handles]
+        labels = [*labels, *summary_labels]
+    configure_figure(
+        fig,
+        ax,
+        "Step 1 - Packet Delivery Ratio (SNIR on/off) — Synthèse",
+        legend_loc="above",
+        legend_handles=handles if handles else None,
+        legend_labels=labels if handles else None,
+    )
+    apply_figure_layout(fig, margins=legend_margins("above"))
     return fig
 
 
@@ -215,10 +240,14 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     rows = filter_mixra_opt_fallback(rows)
 
     fig = _plot_metric(rows, "pdr_mean")
+    fig_summary = _plot_summary_metric(rows, "pdr_mean")
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_S1", use_tight=False)
+    save_figure(fig_summary, output_dir, "plot_S1_summary", use_tight=False)
     assert_legend_present(fig, "plot_S1")
+    assert_legend_present(fig_summary, "plot_S1_summary")
     plt.close(fig)
+    plt.close(fig_summary)
 
 
 if __name__ == "__main__":
