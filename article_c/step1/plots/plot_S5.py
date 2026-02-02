@@ -38,7 +38,7 @@ from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import resolve_ieee_figsize
 
 TARGET_NETWORK_SIZE = 1280
-MAX_ROWS_PER_PAGE = 6
+MAX_ROWS_PER_PAGE = 3
 NETWORK_SIZE_COLUMNS = ("network_size", "density", "nodes", "num_nodes")
 PDR_COLUMNS = ("pdr",)
 PDR_AGGREGATED_COLUMNS = ("aggregated_pdr",)
@@ -496,7 +496,8 @@ def _plot_pdr_distribution_page(
     ncols = 2
     nrows = max(1, len(row_specs))
     base_width, base_height = resolve_ieee_figsize(ncols)
-    figsize = (base_width, base_height * nrows)
+    height_per_row = base_height * 0.95
+    figsize = (base_width, height_per_row * nrows)
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize, sharey=True)
     legend_bbox = _legend_bbox(fig, legend_rows)
     apply_figure_layout(fig, figsize=figsize)
