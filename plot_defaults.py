@@ -4,12 +4,20 @@ from __future__ import annotations
 
 from typing import Tuple
 
-DEFAULT_FIGSIZE_SIMPLE: Tuple[float, float] = (6.0, 4.0)
-DEFAULT_FIGSIZE_MULTI: Tuple[float, float] = (7.0, 4.0)
+from article_c.common.plotting_style import (
+    DOUBLE_COLUMN_FIGSIZE,
+    DOUBLE_COLUMN_WIDTH,
+    HEIGHT_RATIO,
+    SINGLE_COLUMN_FIGSIZE,
+    SINGLE_COLUMN_WIDTH,
+)
 
-IEEE_SINGLE_COLUMN_WIDTH: float = 3.5
-IEEE_DOUBLE_COLUMN_WIDTH: float = 7.16
-IEEE_HEIGHT_RATIO: float = 2 / 3
+DEFAULT_FIGSIZE_SIMPLE: Tuple[float, float] = SINGLE_COLUMN_FIGSIZE
+DEFAULT_FIGSIZE_MULTI: Tuple[float, float] = DOUBLE_COLUMN_FIGSIZE
+
+IEEE_SINGLE_COLUMN_WIDTH: float = SINGLE_COLUMN_WIDTH
+IEEE_DOUBLE_COLUMN_WIDTH: float = DOUBLE_COLUMN_WIDTH
+IEEE_HEIGHT_RATIO: float = HEIGHT_RATIO
 
 
 def resolve_figsize(num_series: int | None = None) -> Tuple[float, float]:
@@ -18,7 +26,7 @@ def resolve_figsize(num_series: int | None = None) -> Tuple[float, float]:
         width, height = DEFAULT_FIGSIZE_MULTI
     else:
         width, height = DEFAULT_FIGSIZE_SIMPLE
-    return (width, height + 2)
+    return (width, height)
 
 
 def resolve_ieee_figsize(num_series: int | None = None) -> Tuple[float, float]:
