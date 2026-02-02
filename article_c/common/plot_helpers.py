@@ -21,9 +21,12 @@ from article_c.common.plotting_style import (
     LEGEND_STYLE,
     SAVEFIG_STYLE,
     SUPTITLE_Y,
+    adjust_legend_to_fit,
+    apply_base_rcparams,
     apply_output_fonttype,
     legend_bbox_to_anchor,
     set_network_size_ticks,
+    tight_layout_rect_from_margins,
 )
 from article_c.common.utils import ensure_dir
 from article_c.common.config import DEFAULT_CONFIG
@@ -117,6 +120,7 @@ class MetricValues:
 
 def apply_plot_style() -> None:
     """Applique un style homogène pour les figures Step1/Step2."""
+    apply_base_rcparams()
     plt.rcParams.update(
         {
             "figure.figsize": FIGURE_SIZE,
@@ -124,16 +128,7 @@ def apply_plot_style() -> None:
             "figure.subplot.bottom": FIGURE_SUBPLOT_BOTTOM,
             "figure.dpi": BASE_DPI,
             "axes.grid": BASE_GRID_ENABLED,
-            "axes.titlesize": 12,
-            "axes.labelsize": 10,
             "axes.titley": AXES_TITLE_Y,
-            "grid.color": BASE_GRID_COLOR,
-            "grid.alpha": BASE_GRID_ALPHA,
-            "grid.linewidth": BASE_GRID_LINEWIDTH,
-            "font.family": BASE_FONT_FAMILY,
-            "font.sans-serif": BASE_FONT_SANS,
-            "font.size": BASE_FONT_SIZE,
-            "lines.linewidth": BASE_LINE_WIDTH,
             "savefig.dpi": BASE_DPI,
         }
     )
@@ -298,7 +293,17 @@ def render_constant_metric(
                         len(labels),
                         fig=fig,
                     )
-                fig.legend(handles, labels, **legend_style)
+                legend = fig.legend(handles, labels, **legend_style)
+                if adjust_legend_to_fit(legend):
+                    legend_rows = max(
+                        1,
+                        math.ceil(len(labels) / max(1, legend.get_ncols())),
+                    )
+                    bbox_to_anchor = legend_bbox_to_anchor(
+                        legend=legend,
+                        legend_rows=legend_rows,
+                    )
+                    legend.set_bbox_to_anchor(bbox_to_anchor)
                 if margins_for_layout is None:
                     margins_for_layout = legend_margins(
                         legend_loc,
@@ -308,7 +313,7 @@ def render_constant_metric(
                 apply_figure_layout(
                     fig,
                     margins=margins_for_layout,
-                    bbox_to_anchor=legend_style.get("bbox_to_anchor"),
+                    bbox_to_anchor=legend.get_bbox_to_anchor(),
                     legend_rows=legend_rows,
                 )
         elif normalized_legend_mode == "constante" and _figure_has_legend(fig):
@@ -447,11 +452,15 @@ def place_legend(ax: plt.Axes, *, legend_loc: str = "above") -> None:
         len(labels),
         fig=ax.figure,
     )
-    ax.figure.legend(handles, labels, **legend_style)
+    legend = ax.figure.legend(handles, labels, **legend_style)
+    if adjust_legend_to_fit(legend):
+        legend_rows = max(1, math.ceil(len(labels) / max(1, legend.get_ncols())))
+        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
+        legend.set_bbox_to_anchor(bbox_to_anchor)
     apply_figure_layout(
         ax.figure,
         margins=legend_margins(legend_loc, legend_rows=legend_rows, fig=ax.figure),
-        bbox_to_anchor=legend_style.get("bbox_to_anchor"),
+        bbox_to_anchor=legend.get_bbox_to_anchor(),
         legend_rows=legend_rows,
     )
 
@@ -668,6 +677,10 @@ def add_global_legend(
     legend = fig.legend(handles, labels, **legend_style)
     bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
     legend.set_bbox_to_anchor(bbox_to_anchor)
+    if adjust_legend_to_fit(legend):
+        legend_rows = max(1, math.ceil(len(labels) / max(1, legend.get_ncols())))
+        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
+        legend.set_bbox_to_anchor(bbox_to_anchor)
     apply_figure_layout(
         fig,
         margins=legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
@@ -694,6 +707,10 @@ def add_figure_legend(
     legend = fig.legend(handles, labels, **legend_style)
     bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
     legend.set_bbox_to_anchor(bbox_to_anchor)
+    if adjust_legend_to_fit(legend):
+        legend_rows = max(1, math.ceil(len(labels) / max(1, legend.get_ncols())))
+        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
+        legend.set_bbox_to_anchor(bbox_to_anchor)
     apply_figure_layout(
         fig,
         margins=legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
@@ -793,7 +810,8 @@ def apply_figure_layout(
                 )
             fig.tight_layout(**adjusted_tight)
         else:
-            fig.tight_layout()
+            rect = tight_layout_rect_from_margins(margins)
+            fig.tight_layout(rect=rect)
 
 
 def _layout_rect_from_margins(
