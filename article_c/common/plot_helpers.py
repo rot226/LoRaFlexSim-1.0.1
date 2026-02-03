@@ -7,6 +7,7 @@ import logging
 import math
 import re
 import warnings
+from contextlib import contextmanager
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
@@ -107,7 +108,7 @@ LEGEND_RIGHT_MARGIN = 0.78
 CONSTANT_METRIC_VARIANCE_THRESHOLD = 1e-6
 CONSTANT_METRIC_MESSAGE = "métrique constante – à investiguer"
 MISSING_METRIC_MESSAGE = "données manquantes"
-DEFAULT_EXPORT_FORMATS = ("png", "pdf", "eps")
+DEFAULT_EXPORT_FORMATS = ("png", "pdf")
 _EXPORT_FORMATS = DEFAULT_EXPORT_FORMATS
 
 
@@ -164,6 +165,11 @@ def set_default_export_formats(formats: Iterable[str]) -> tuple[str, ...]:
     _EXPORT_FORMATS = _normalize_export_formats(formats)
     return _EXPORT_FORMATS
     plt.subplots_adjust(top=FIGURE_SUBPLOT_TOP)
+
+
+def get_export_formats() -> tuple[str, ...]:
+    """Retourne la liste globale des formats d'export."""
+    return _EXPORT_FORMATS
 
 
 def _flatten_axes(axes: object) -> list[plt.Axes]:
@@ -870,10 +876,7 @@ def save_figure(
     use_tight: bool = False,
     formats: Iterable[str] | None = None,
 ) -> None:
-    """Sauvegarde la figure dans les formats demandés.
-
-    Sur Windows, privilégier bbox_inches=None (valeur par défaut).
-    """
+    """Sauvegarde la figure dans les formats demandés."""
     ensure_dir(output_dir)
     apply_output_fonttype()
     if use_tight:
@@ -884,7 +887,68 @@ def save_figure(
         else _normalize_export_formats(formats)
     )
     for ext in selected_formats:
-        fig.savefig(output_dir / f"{stem}.{ext}", dpi=BASE_DPI, **SAVEFIG_STYLE)
+        save_figure_path(
+            fig,
+            output_dir / f"{stem}.{ext}",
+            fmt=ext,
+        )
+
+
+def _alpha_is_transparent(alpha: object) -> bool:
+    if alpha is None:
+        return False
+    if isinstance(alpha, (list, tuple)):
+        return any(item is not None and item < 1 for item in alpha)
+    if hasattr(alpha, "__iter__") and not isinstance(alpha, (str, bytes)):
+        try:
+            return any(item is not None and float(item) < 1 for item in alpha)
+        except TypeError:
+            return False
+    try:
+        return float(alpha) < 1
+    except (TypeError, ValueError):
+        return False
+
+
+@contextmanager
+def _rasterize_transparent_artists(fig: plt.Figure) -> Iterable[None]:
+    modified: list[tuple[object, bool]] = []
+    for artist in fig.findobj():
+        if not hasattr(artist, "get_alpha") or not hasattr(artist, "set_rasterized"):
+            continue
+        if _alpha_is_transparent(artist.get_alpha()):
+            try:
+                previous = bool(artist.get_rasterized())
+            except Exception:
+                previous = False
+            try:
+                artist.set_rasterized(True)
+                modified.append((artist, previous))
+            except Exception:
+                continue
+    try:
+        yield
+    finally:
+        for artist, previous in modified:
+            try:
+                artist.set_rasterized(previous)
+            except Exception:
+                continue
+
+
+def save_figure_path(
+    fig: plt.Figure,
+    output_path: Path,
+    *,
+    fmt: str | None = None,
+) -> None:
+    """Sauvegarde une figure en gérant l'export EPS (transparences rasterisées)."""
+    format_name = fmt or output_path.suffix.lstrip(".").lower()
+    if format_name == "eps":
+        with _rasterize_transparent_artists(fig):
+            fig.savefig(output_path, format=format_name, dpi=BASE_DPI, **SAVEFIG_STYLE)
+    else:
+        fig.savefig(output_path, format=format_name, dpi=BASE_DPI, **SAVEFIG_STYLE)
 
 
 def apply_figure_layout(
