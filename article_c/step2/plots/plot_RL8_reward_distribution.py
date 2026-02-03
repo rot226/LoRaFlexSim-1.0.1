@@ -57,9 +57,8 @@ def _load_step2_raw_results(
     allow_sample: bool = True,
 ) -> list[dict[str, object]]:
     if not results_path.exists():
-        if allow_sample:
-            return []
-        raise FileNotFoundError(f"CSV Step2 manquant: {results_path}")
+        warnings.warn(f"CSV Step2 manquant: {results_path}", stacklevel=2)
+        return []
     df = pd.read_csv(results_path)
     if df.empty:
         return []
