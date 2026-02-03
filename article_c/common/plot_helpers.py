@@ -1052,6 +1052,21 @@ def _read_csv_rows(path: Path) -> list[dict[str, str]]:
         return list(reader)
 
 
+def safe_load_csv(path: Path) -> list[dict[str, str]] | None:
+    if not path.exists():
+        warnings.warn(f"CSV introuvable: {path}", stacklevel=2)
+        return None
+    try:
+        rows = _read_csv_rows(path)
+    except OSError as exc:
+        warnings.warn(f"CSV illisible ({path}): {exc}", stacklevel=2)
+        return None
+    if not rows:
+        warnings.warn(f"CSV vide: {path}", stacklevel=2)
+        return None
+    return rows
+
+
 def _to_float(value: object, default: float = 0.0) -> float:
     try:
         return float(value)
@@ -1142,9 +1157,9 @@ def load_step2_aggregated(
 ) -> list[dict[str, object]]:
     intermediate_path = _resolve_intermediate_step2_path(path)
     source_path = intermediate_path or path
-    rows = _read_csv_rows(source_path)
+    rows = safe_load_csv(source_path)
     if not rows:
-        raise ValueError(f"CSV vide pour Step2: {source_path}")
+        return []
     parsed: list[dict[str, object]] = []
     for row in rows:
         network_size_value = row.get("density")
@@ -1284,9 +1299,9 @@ def _percentile(values: list[float], percentile: float) -> float:
 
 
 def load_step2_selection_probs(path: Path) -> list[dict[str, object]]:
-    rows = _read_csv_rows(path)
+    rows = safe_load_csv(path)
     if not rows:
-        raise ValueError(f"CSV vide pour Step2 (sélections): {path}")
+        return []
     parsed: list[dict[str, object]] = []
     for row in rows:
         parsed_row: dict[str, object] = {
