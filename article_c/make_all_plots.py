@@ -584,7 +584,7 @@ def main(argv: list[str] | None = None) -> None:
         step2_sizes = step_network_sizes.get("step2", [])
         if len(step2_sizes) < 2:
             print(
-                "ERREUR: Step2 doit contenir au moins 2 tailles "
+                "WARNING: Step2 doit contenir au moins 2 tailles "
                 "pour générer les plots RL. Aucun plot RL ne sera généré."
             )
             print(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
@@ -607,13 +607,12 @@ def main(argv: list[str] | None = None) -> None:
                 if missing_sizes:
                     missing_label = ", ".join(str(size) for size in missing_sizes)
                     print(
-                        "ERREUR: Step2 ne contient pas toutes les tailles attendues."
+                        "WARNING: Step2 ne contient pas toutes les tailles attendues."
                     )
                     print(f"Tailles attendues manquantes: {missing_label}")
                     print(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
                     print("Commande PowerShell pour terminer Step2 (mode reprise):")
                     print(_suggest_step2_resume_command(expected_sizes))
-                    skip_step2_plots = True
     csv_cache: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
     for step in steps:
         if step == "step2" and skip_step2_plots:
@@ -639,7 +638,7 @@ def main(argv: list[str] | None = None) -> None:
                 intersection = sorted(set(step1_sizes) & set(step2_sizes))
                 if len(intersection) < 2:
                     print(
-                        "ERREUR: "
+                        "WARNING: "
                         "plot_RL10_reward_vs_pdr_scatter nécessite au moins "
                         "2 tailles communes entre Step1 et Step2."
                     )
