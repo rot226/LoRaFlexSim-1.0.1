@@ -51,7 +51,8 @@ SUPTITLE_Y = IEEE_SUPTITLE_Y if IEEE_STYLE else BASE_SUPTITLE_Y
 TIGHT_LAYOUT_RECT = IEEE_TIGHT_LAYOUT_RECT if IEEE_STYLE else BASE_TIGHT_LAYOUT_RECT
 
 SAVEFIG_STYLE = {
-    "bbox_inches": None,
+    "bbox_inches": "tight",
+    "pad_inches": 0.02,
 }
 
 LEGEND_ANCHOR_BASE_Y = 1.0
