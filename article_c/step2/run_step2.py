@@ -1015,9 +1015,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         _assert_flat_output_sizes(base_results_dir, simulated_sizes)
     _verify_metric_variation(size_diagnostics)
     _write_post_simulation_report(base_results_dir, size_post_stats, size_diagnostics)
+    strict_mode = bool(getattr(args, "strict", False)) or not bool(
+        args.allow_low_success_rate
+    )
     _assert_success_rate_threshold(
         size_post_stats,
-        allow_low_success_rate=bool(args.allow_low_success_rate),
+        allow_low_success_rate=not strict_mode,
     )
 
     if selection_rows:
