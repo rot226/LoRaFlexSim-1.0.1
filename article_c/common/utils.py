@@ -79,10 +79,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--allow-low-success-rate",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help=(
             "Autorise un success_rate global trop faible en étape 2 "
             "(log un avertissement au lieu d'arrêter)."
+        ),
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Active le mode strict pour l'étape 2 (arrêt si success_rate trop faible)."
         ),
     )
     parser.add_argument(

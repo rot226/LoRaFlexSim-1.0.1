@@ -105,10 +105,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--allow-low-success-rate",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help=(
             "Autorise un success_rate global trop faible à l'étape 2 "
             "(log un avertissement au lieu d'arrêter)."
+        ),
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Active le mode strict pour l'étape 2 (arrêt si success_rate trop faible)."
         ),
     )
     parser.add_argument(
@@ -501,8 +509,10 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         step2_args.append("--timestamp")
     if args.safe_profile:
         step2_args.append("--safe-profile")
-    if args.allow_low_success_rate:
-        step2_args.append("--allow-low-success-rate")
+    if args.strict:
+        step2_args.append("--strict")
+    elif args.allow_low_success_rate is False:
+        step2_args.append("--no-allow-low-success-rate")
     if args.snir_threshold_db is not None:
         step2_args.extend(["--snir-threshold-db", str(args.snir_threshold_db)])
     if args.snir_threshold_min_db is not None:
