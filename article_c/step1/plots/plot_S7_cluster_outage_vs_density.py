@@ -16,6 +16,7 @@ from article_c.common.plot_helpers import (
     apply_figure_layout,
     add_figure_legend,
     assert_legend_present,
+    clear_axis_legends,
     MetricStatus,
     ensure_network_size,
     filter_mixra_opt_fallback,
@@ -117,10 +118,7 @@ def _plot_metric_page(
         ax.set_xticks(network_sizes)
     axes[0].set_ylabel("Outage probability")
     handles, labels = legend_handles_for_algos_snir()
-    for ax in axes:
-        legend = ax.get_legend()
-        if legend is not None:
-            legend.remove()
+    clear_axis_legends(axes)
     if not handles:
         handles, labels = fallback_legend_handles()
     add_figure_legend(fig, handles, labels, legend_loc="right")

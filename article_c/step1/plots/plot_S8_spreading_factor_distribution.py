@@ -23,6 +23,7 @@ from article_c.common.plot_helpers import (
     apply_figure_layout,
     add_global_legend,
     assert_legend_present,
+    clear_axis_legends,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
@@ -300,10 +301,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         ax.set_ylim(0.0, 1.0)
     axes[0].set_ylabel("Share of nodes")
     handles, labels = axes[0].get_legend_handles_labels()
-    for ax in axes:
-        legend = ax.get_legend()
-        if legend is not None:
-            legend.remove()
+    clear_axis_legends(axes)
     if handles:
         add_global_legend(
             fig,

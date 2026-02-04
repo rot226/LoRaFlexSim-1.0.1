@@ -21,6 +21,7 @@ from article_c.common.plot_helpers import (
     apply_figure_layout,
     add_figure_legend,
     assert_legend_present,
+    clear_axis_legends,
     fallback_legend_handles,
     filter_mixra_opt_fallback,
     is_constant_metric,
@@ -134,10 +135,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
-    for ax in axes:
-        legend = ax.get_legend()
-        if legend is not None:
-            legend.remove()
+    clear_axis_legends(axes)
     if not cluster_handles:
         cluster_handles, legend_labels = fallback_legend_handles()
     legend_rows = add_figure_legend(
