@@ -13,6 +13,7 @@ from article_c.common.plot_helpers import (
     deduplicate_legend_entries,
     fallback_legend_handles,
     legend_margins,
+    legend_ncols,
     suptitle_y_from_top,
 )
 from article_c.common.plotting_style import FIGURE_MARGINS, LEGEND_STYLE
@@ -33,25 +34,6 @@ def _flatten_axes(axes: object) -> list[plt.Axes]:
                 flattened.extend([ax for ax in item if isinstance(ax, plt.Axes)])
         return flattened
     return []
-
-
-def _legend_ncols(legend: plt.Legend, default: int | None = None) -> int:
-    if default is None:
-        default = int(LEGEND_STYLE.get("ncol", 1) or 1)
-    get_ncols = getattr(legend, "get_ncols", None)
-    ncols = None
-    if callable(get_ncols):
-        try:
-            ncols = int(get_ncols())
-        except (TypeError, ValueError):
-            ncols = None
-    if ncols is None:
-        ncols = getattr(legend, "_ncols", None)
-    try:
-        ncols = int(ncols) if ncols is not None else default
-    except (TypeError, ValueError):
-        ncols = default
-    return max(1, ncols)
 
 
 def configure_figure(
@@ -105,9 +87,10 @@ def configure_figure(
     if legend_in_figure:
         legend = fig.legends[0]
         legend_entry_count = len(legend.get_texts())
+        legend_cols_default = int(LEGEND_STYLE.get("ncol", 1) or 1)
         legend_rows = max(
             1,
-            math.ceil(legend_entry_count / _legend_ncols(legend)),
+            math.ceil(legend_entry_count / legend_ncols(legend, legend_cols_default)),
         )
     else:
         legend_rows = 1
