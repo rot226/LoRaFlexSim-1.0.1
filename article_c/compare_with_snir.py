@@ -22,7 +22,7 @@ Les figures sont écrites dans `--output-dir` avec les stems suivants :
 - `compare_der_snir`  (DER vs taille du réseau)
 - `compare_throughput_snir` (throughput vs taille du réseau)
 
-Les formats d'export sont contrôlés via `--formats` (par défaut: png,pdf,eps).
+Les formats d'export sont contrôlés via `--formats` (par défaut: png,pdf).
 """
 
 from __future__ import annotations

@@ -972,6 +972,30 @@ def _rasterize_transparent_artists(fig: plt.Figure) -> Iterable[None]:
                 continue
 
 
+@contextmanager
+def _force_opaque_alpha(fig: plt.Figure) -> Iterable[None]:
+    modified: list[tuple[object, object]] = []
+    for artist in fig.findobj():
+        if not hasattr(artist, "get_alpha") or not hasattr(artist, "set_alpha"):
+            continue
+        alpha = artist.get_alpha()
+        if not _alpha_is_transparent(alpha):
+            continue
+        try:
+            artist.set_alpha(1)
+            modified.append((artist, alpha))
+        except Exception:
+            continue
+    try:
+        yield
+    finally:
+        for artist, previous in modified:
+            try:
+                artist.set_alpha(previous)
+            except Exception:
+                continue
+
+
 def save_figure_path(
     fig: plt.Figure,
     output_path: Path,
@@ -983,7 +1007,8 @@ def save_figure_path(
     format_name = fmt or output_path.suffix.lstrip(".").lower()
     if format_name == "eps":
         with _rasterize_transparent_artists(fig):
-            fig.savefig(output_path, format=format_name, dpi=BASE_DPI, **SAVEFIG_STYLE)
+            with _force_opaque_alpha(fig):
+                fig.savefig(output_path, format=format_name, dpi=BASE_DPI, **SAVEFIG_STYLE)
     else:
         fig.savefig(output_path, format=format_name, dpi=BASE_DPI, **SAVEFIG_STYLE)
 
