@@ -977,6 +977,7 @@ def save_figure_path(
     fmt: str | None = None,
 ) -> None:
     """Sauvegarde une figure en gérant l'export EPS (transparences rasterisées)."""
+    ensure_dir(output_path.parent)
     format_name = fmt or output_path.suffix.lstrip(".").lower()
     if format_name == "eps":
         with _rasterize_transparent_artists(fig):
