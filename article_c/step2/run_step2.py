@@ -56,19 +56,53 @@ def _aggregate_selection_probs(
     return aggregated
 
 
-def _apply_safe_profile(args: object) -> None:
-    args.safe_profile = True
-    args.traffic_coeff_clamp_enabled = STEP2_SAFE_CONFIG.traffic_coeff_clamp_enabled
-    args.traffic_coeff_clamp_min = STEP2_SAFE_CONFIG.traffic_coeff_clamp_min
-    args.traffic_coeff_clamp_max = STEP2_SAFE_CONFIG.traffic_coeff_clamp_max
-    args.network_load_min = STEP2_SAFE_CONFIG.network_load_min
-    args.network_load_max = STEP2_SAFE_CONFIG.network_load_max
-    args.collision_size_min = STEP2_SAFE_CONFIG.collision_size_min
-    args.collision_size_under_max = STEP2_SAFE_CONFIG.collision_size_under_max
-    args.collision_size_over_max = STEP2_SAFE_CONFIG.collision_size_over_max
-    args.reward_floor = STEP2_SAFE_CONFIG.reward_floor
-    args.max_penalty_ratio = STEP2_SAFE_CONFIG.max_penalty_ratio
-    args.shadowing_sigma_db = STEP2_SAFE_CONFIG.shadowing_sigma_db
+def _apply_safe_profile_with_log(args: object, reason: str) -> None:
+    changes: list[tuple[str, object, object]] = []
+
+    def _set_value(name: str, value: object) -> None:
+        previous = getattr(args, name, None)
+        if previous != value:
+            changes.append((name, previous, value))
+        setattr(args, name, value)
+
+    _set_value("safe_profile", True)
+    _set_value("traffic_coeff_clamp_enabled", STEP2_SAFE_CONFIG.traffic_coeff_clamp_enabled)
+    _set_value("traffic_coeff_clamp_min", STEP2_SAFE_CONFIG.traffic_coeff_clamp_min)
+    _set_value("traffic_coeff_clamp_max", STEP2_SAFE_CONFIG.traffic_coeff_clamp_max)
+    _set_value("network_load_min", STEP2_SAFE_CONFIG.network_load_min)
+    _set_value("network_load_max", STEP2_SAFE_CONFIG.network_load_max)
+    _set_value("collision_size_min", STEP2_SAFE_CONFIG.collision_size_min)
+    _set_value("collision_size_under_max", STEP2_SAFE_CONFIG.collision_size_under_max)
+    _set_value("collision_size_over_max", STEP2_SAFE_CONFIG.collision_size_over_max)
+    _set_value("reward_floor", STEP2_SAFE_CONFIG.reward_floor)
+    _set_value("max_penalty_ratio", STEP2_SAFE_CONFIG.max_penalty_ratio)
+    _set_value("shadowing_sigma_db", STEP2_SAFE_CONFIG.shadowing_sigma_db)
+
+    print(f"Profil sécurisé activé ({reason}).")
+    if not changes:
+        print("Aucun paramètre modifié par le profil sécurisé.")
+        return
+    print("Paramètres modifiés par le profil sécurisé:")
+    for name, previous, value in sorted(changes):
+        print(f"- {name}: {previous} -> {value}")
+
+
+def _update_safe_profile_config(config: dict[str, object], args: object) -> None:
+    config.update(
+        {
+            "traffic_coeff_clamp_enabled": args.traffic_coeff_clamp_enabled,
+            "traffic_coeff_clamp_min": args.traffic_coeff_clamp_min,
+            "traffic_coeff_clamp_max": args.traffic_coeff_clamp_max,
+            "network_load_min": args.network_load_min,
+            "network_load_max": args.network_load_max,
+            "collision_size_min": args.collision_size_min,
+            "collision_size_under_max": args.collision_size_under_max,
+            "collision_size_over_max": args.collision_size_over_max,
+            "reward_floor": args.reward_floor,
+            "max_penalty_ratio": getattr(args, "max_penalty_ratio", None),
+            "shadowing_sigma_db": getattr(args, "shadowing_sigma_db", None),
+        }
+    )
 
 
 def _aggregate_learning_curve(
@@ -677,6 +711,27 @@ def _write_post_simulation_report(
     print(report)
 
 
+def _detect_low_success_first_size(
+    density: int,
+    diagnostics: dict[str, float],
+    threshold: float = 0.2,
+) -> bool:
+    success_mean = float(diagnostics.get("success_mean", 0.0))
+    if success_mean >= threshold:
+        return False
+    print(
+        "AVERTISSEMENT: success_rate moyen trop bas sur la première taille simulée "
+        f"({density})."
+    )
+    print(
+        "Résumé première taille: success_mean="
+        f"{success_mean:.4f}, min={diagnostics.get('success_min', 0.0):.4f}, "
+        f"max={diagnostics.get('success_max', 0.0):.4f} "
+        f"(seuil {threshold:.2f})."
+    )
+    return True
+
+
 def _is_non_empty_file(path: Path) -> bool:
     return path.exists() and path.stat().st_size > 0
 
@@ -909,7 +964,7 @@ def _simulate_density(
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_cli_args(argv)
     if getattr(args, "safe_profile", False):
-        _apply_safe_profile(args)
+        _apply_safe_profile_with_log(args, "demande explicite --safe-profile")
     try:
         export_formats = parse_export_formats(args.formats)
     except ValueError as exc:
@@ -1019,7 +1074,48 @@ def main(argv: Sequence[str] | None = None) -> None:
         print(f"Tailles déjà présentes dans les sous-dossiers: {existing_label}")
     print(f"Tailles à simuler: {simulated_label}")
 
-    tasks = [
+    worker_count = max(1, int(args.workers))
+    first_result: dict[str, object] | None = None
+    if densities:
+        first_task = (
+            densities[0],
+            0,
+            replications,
+            config,
+            base_results_dir,
+            timestamp_dir,
+            flat_output,
+        )
+        first_result = _simulate_density(first_task)
+        simulated_sizes.append(int(first_result["density"]))
+        total_rows += int(first_result["row_count"])
+        selection_rows.extend(first_result["selection_rows"])
+        learning_curve_rows.extend(first_result["learning_curve_rows"])
+        size_diagnostics[int(first_result["density"])] = dict(
+            first_result["diagnostics"]
+        )
+        size_post_stats[int(first_result["density"])] = dict(
+            first_result["post_stats"]
+        )
+
+    if first_result is not None:
+        first_density = int(first_result["density"])
+        diagnostics = dict(first_result["diagnostics"])
+        low_success = _detect_low_success_first_size(first_density, diagnostics)
+        if low_success and not getattr(args, "safe_profile", False):
+            if getattr(args, "auto_safe_profile", False):
+                _apply_safe_profile_with_log(
+                    args,
+                    "auto-safe-profile (success_rate faible sur la première taille)",
+                )
+                _update_safe_profile_config(config, args)
+            else:
+                print(
+                    "Astuce: utilisez --auto-safe-profile pour basculer "
+                    "automatiquement vers STEP2_SAFE_CONFIG."
+                )
+
+    remaining_tasks = [
         (
             density,
             density_idx,
@@ -1030,28 +1126,33 @@ def main(argv: Sequence[str] | None = None) -> None:
             flat_output,
         )
         for density_idx, density in enumerate(densities)
+        if density_idx != 0
     ]
 
-    worker_count = max(1, int(args.workers))
-    if worker_count == 1:
-        results = map(_simulate_density, tasks)
-        for result in results:
-            simulated_sizes.append(int(result["density"]))
-            total_rows += int(result["row_count"])
-            selection_rows.extend(result["selection_rows"])
-            learning_curve_rows.extend(result["learning_curve_rows"])
-            size_diagnostics[int(result["density"])] = dict(result["diagnostics"])
-            size_post_stats[int(result["density"])] = dict(result["post_stats"])
-    else:
-        ctx = get_context("spawn")
-        with ctx.Pool(processes=worker_count) as pool:
-            for result in pool.imap_unordered(_simulate_density, tasks):
+    if remaining_tasks:
+        if worker_count == 1:
+            results = map(_simulate_density, remaining_tasks)
+            for result in results:
                 simulated_sizes.append(int(result["density"]))
                 total_rows += int(result["row_count"])
                 selection_rows.extend(result["selection_rows"])
                 learning_curve_rows.extend(result["learning_curve_rows"])
                 size_diagnostics[int(result["density"])] = dict(result["diagnostics"])
                 size_post_stats[int(result["density"])] = dict(result["post_stats"])
+        else:
+            ctx = get_context("spawn")
+            with ctx.Pool(processes=worker_count) as pool:
+                for result in pool.imap_unordered(_simulate_density, remaining_tasks):
+                    simulated_sizes.append(int(result["density"]))
+                    total_rows += int(result["row_count"])
+                    selection_rows.extend(result["selection_rows"])
+                    learning_curve_rows.extend(result["learning_curve_rows"])
+                    size_diagnostics[int(result["density"])] = dict(
+                        result["diagnostics"]
+                    )
+                    size_post_stats[int(result["density"])] = dict(
+                        result["post_stats"]
+                    )
 
     print(f"Rows written: {total_rows}")
     if flat_output and simulated_sizes:

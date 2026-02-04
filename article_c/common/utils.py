@@ -78,6 +78,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Active le profil sécurisé pour l'étape 2.",
     )
     parser.add_argument(
+        "--auto-safe-profile",
+        action="store_true",
+        help=(
+            "Active un profil sécurisé automatique si la première taille simulée "
+            "présente un success_rate trop faible."
+        ),
+    )
+    parser.add_argument(
         "--allow-low-success-rate",
         action=argparse.BooleanOptionalAction,
         default=True,
