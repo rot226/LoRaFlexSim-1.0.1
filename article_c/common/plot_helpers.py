@@ -911,6 +911,7 @@ def save_figure(
     stem: str,
     use_tight: bool = False,
     formats: Iterable[str] | None = None,
+    bbox_inches: str | None = None,
 ) -> None:
     """Sauvegarde la figure dans les formats demandés."""
     ensure_dir(output_dir)
@@ -922,11 +923,15 @@ def save_figure(
         if formats is None
         else _normalize_export_formats(formats)
     )
+    effective_bbox = bbox_inches
+    if effective_bbox is None and use_tight:
+        effective_bbox = "tight"
     for ext in selected_formats:
         save_figure_path(
             fig,
             output_dir / f"{stem}.{ext}",
             fmt=ext,
+            bbox_inches=effective_bbox,
         )
 
 
@@ -1001,16 +1006,20 @@ def save_figure_path(
     output_path: Path,
     *,
     fmt: str | None = None,
+    bbox_inches: str | None = None,
 ) -> None:
     """Sauvegarde une figure en gérant l'export EPS (transparences rasterisées)."""
     ensure_dir(output_path.parent)
     format_name = fmt or output_path.suffix.lstrip(".").lower()
+    savefig_style = dict(SAVEFIG_STYLE)
+    if bbox_inches is not None:
+        savefig_style["bbox_inches"] = bbox_inches
     if format_name == "eps":
         with _rasterize_transparent_artists(fig):
             with _force_opaque_alpha(fig):
-                fig.savefig(output_path, format=format_name, dpi=BASE_DPI, **SAVEFIG_STYLE)
+                fig.savefig(output_path, format=format_name, dpi=BASE_DPI, **savefig_style)
     else:
-        fig.savefig(output_path, format=format_name, dpi=BASE_DPI, **SAVEFIG_STYLE)
+        fig.savefig(output_path, format=format_name, dpi=BASE_DPI, **savefig_style)
 
 
 def apply_figure_layout(
