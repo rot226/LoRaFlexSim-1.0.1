@@ -1087,7 +1087,11 @@ def _apply_congestion_and_link_quality(
             successes_after_link_total,
             snir_successes_after_link,
         )
-    successes_after_link_total = snir_successes_after_link
+    successes_after_link_total = _apply_snir_filter(
+        snir_successes_after_link,
+        snir_threshold_db,
+        snir_mode,
+    )
     logger.debug(
         "Diag congestion/lien (debug) - link_quality_weighted=%.3f successes_after_congestion_total=%s successes_after_link_total=%s",
         link_quality_weighted,
@@ -1163,6 +1167,38 @@ def _snir_success_factor(
         0.0,
         1.0,
     )
+
+
+def _apply_snir_filter(
+    successes_after_link: int,
+    snir_threshold_db: float,
+    snir_mode: str,
+) -> int:
+    if snir_mode != "snir_on" or successes_after_link <= 0:
+        return successes_after_link
+    snir_defaults = DEFAULT_CONFIG.snir
+    min_db = min(
+        snir_defaults.snir_threshold_min_db, snir_defaults.snir_threshold_max_db
+    )
+    max_db = max(
+        snir_defaults.snir_threshold_min_db, snir_defaults.snir_threshold_max_db
+    )
+    if max_db <= min_db:
+        return successes_after_link
+    threshold_db = _clamp_range(float(snir_threshold_db), min_db, max_db)
+    threshold_ratio = (threshold_db - min_db) / max(max_db - min_db, 1e-6)
+    success_factor = _clip(1.0 - threshold_ratio, 0.0, 1.0)
+    filtered_successes = int(round(successes_after_link * success_factor))
+    filtered_successes = max(0, min(filtered_successes, successes_after_link))
+    logger.debug(
+        "snir filter - mode=%s seuil=%.2f dB facteur=%.3f succès_avant=%s succès_après=%s",
+        snir_mode,
+        threshold_db,
+        success_factor,
+        successes_after_link,
+        filtered_successes,
+    )
+    return filtered_successes
 
 
 def _select_adr_arm(
