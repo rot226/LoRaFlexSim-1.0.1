@@ -348,7 +348,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--formats",
         type=str,
-        default="png,pdf,eps",
+        default="png,pdf",
         help="Formats d'export des figures (ex: png,pdf,eps).",
     )
     return parser

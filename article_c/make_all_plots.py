@@ -203,7 +203,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--formats",
         type=str,
-        default="png,pdf,eps",
+        default="png,pdf",
         help="Formats d'export des figures (ex: png,pdf,eps).",
     )
     return parser
@@ -257,35 +257,44 @@ def _validate_plot_modules_use_save_figure() -> bool:
     return True
 
 
-def _inspect_plot_outputs(output_dir: Path, label: str) -> None:
+def _inspect_plot_outputs(
+    output_dir: Path,
+    label: str,
+    formats: list[str],
+) -> None:
     if not output_dir.exists():
         print(
             "AVERTISSEMENT: "
             f"dossier de sortie absent pour {label}: {output_dir}"
         )
         return
-    png_files = sorted(output_dir.glob("*.png"))
-    if not png_files:
+    if not formats:
+        print(f"INFO: aucun format d'export fourni pour {label}.")
+        return
+    primary_format = formats[0]
+    primary_files = sorted(output_dir.glob(f"*.{primary_format}"))
+    if not primary_files:
         print(
             "AVERTISSEMENT: "
-            f"aucun PNG trouvé pour {label} dans {output_dir}."
+            f"aucun {primary_format.upper()} trouvé pour {label} dans {output_dir}."
         )
         return
     missing_variants: list[str] = []
-    for png_path in png_files:
-        stem = png_path.stem
-        for ext in ("pdf", "eps"):
+    for primary_path in primary_files:
+        stem = primary_path.stem
+        for ext in formats:
             candidate = output_dir / f"{stem}.{ext}"
             if not candidate.exists():
                 missing_variants.append(str(candidate))
     if missing_variants:
         print(
-            "AVERTISSEMENT: sorties manquantes pour le test visuel (PDF/EPS):\n"
+            "AVERTISSEMENT: sorties manquantes pour le test visuel:\n"
             + "\n".join(f"- {path}" for path in missing_variants)
         )
     else:
+        formats_label = "/".join(fmt.upper() for fmt in formats)
         print(
-            "Test visuel: fichiers PNG/PDF/EPS présents "
+            f"Test visuel: fichiers {formats_label} présents "
             f"pour {label} dans {output_dir}."
         )
 
@@ -718,11 +727,13 @@ def main(argv: list[str] | None = None) -> None:
         _inspect_plot_outputs(
             ARTICLE_DIR / "step1" / "plots" / "output",
             "Step1",
+            list(export_formats),
         )
     if "step2" in steps and not skip_step2_plots:
         _inspect_plot_outputs(
             ARTICLE_DIR / "step2" / "plots" / "output",
             "Step2",
+            list(export_formats),
         )
 
 

@@ -68,8 +68,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--formats",
         type=str,
-        default="png,eps",
-        help="Formats d'export (ex: png,eps).",
+        default="png,pdf",
+        help="Formats d'export (ex: png,pdf,eps).",
     )
     parser.add_argument(
         "--snir-modes",
