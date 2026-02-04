@@ -39,7 +39,7 @@ def configure_figure(
     fig: plt.Figure,
     axes: object,
     title: str,
-    legend_loc: str,
+    legend_loc: str = "right",
     legend_handles: list[object] | None = None,
     legend_labels: list[str] | None = None,
 ) -> None:
@@ -104,18 +104,19 @@ def configure_figure(
             fig,
             margins=above_margins,
             legend_rows=legend_rows,
+            legend_loc=legend_loc,
         )
     else:
         apply_figure_layout(
             fig,
             margins=(
                 {
-                    "top": FIGURE_MARGINS["top"],
+                    **legend_margins("right"),
                     "bottom": FIGURE_MARGINS["bottom"],
-                    "right": 0.80,
                 }
                 if legend_in_figure
                 else FIGURE_MARGINS
             ),
+            legend_loc=legend_loc,
         )
     fig.suptitle(title, y=suptitle_y_from_top(fig))

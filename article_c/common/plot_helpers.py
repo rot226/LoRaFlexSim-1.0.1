@@ -104,7 +104,8 @@ LEGEND_TOP_MARGIN = 0.74
 LEGEND_TOP_RESERVED = 0.02
 LEGEND_ROW_EXTRA_MARGIN = 0.05
 LEGEND_ABOVE_TIGHT_LAYOUT_TOP = 0.86
-LEGEND_RIGHT_MARGIN = 0.78
+LEGEND_RIGHT_MARGIN = 0.79
+DEFAULT_LEGEND_LOC = "right"
 CONSTANT_METRIC_VARIANCE_THRESHOLD = 1e-6
 CONSTANT_METRIC_MESSAGE = "métrique constante – à investiguer"
 MISSING_METRIC_MESSAGE = "données manquantes"
@@ -459,9 +460,14 @@ def render_constant_metric(
                         if moved_to_axis
                         else legend.get_bbox_to_anchor(),
                         legend_rows=legend_rows,
+                        legend_loc=legend_loc,
                     )
         elif normalized_legend_mode == "constante" and _figure_has_legend(fig):
-            apply_figure_layout(fig, margins=legend_margins(legend_loc, fig=fig))
+            apply_figure_layout(
+                fig,
+                margins=legend_margins(legend_loc, fig=fig),
+                legend_loc=legend_loc,
+            )
 
 
 def _metric_variance(
@@ -584,8 +590,9 @@ def select_received_metric_key(
     return derived_key
 
 
-def place_legend(ax: plt.Axes, *, legend_loc: str = "above") -> None:
+def place_legend(ax: plt.Axes, *, legend_loc: str | None = None) -> None:
     """Place la légende selon les consignes (au-dessus ou à droite)."""
+    legend_loc = legend_loc or DEFAULT_LEGEND_LOC
     handles, labels = ax.get_legend_handles_labels()
     if not handles:
         handles, labels = fallback_legend_handles()
@@ -615,6 +622,7 @@ def place_legend(ax: plt.Axes, *, legend_loc: str = "above") -> None:
         else legend_margins(legend_loc, legend_rows=legend_rows, fig=ax.figure),
         bbox_to_anchor=None if moved_to_axis else legend.get_bbox_to_anchor(),
         legend_rows=legend_rows,
+        legend_loc=legend_loc,
     )
 
 
@@ -810,12 +818,13 @@ def add_global_legend(
     fig: plt.Figure,
     ax: plt.Axes,
     *,
-    legend_loc: str = "above",
+    legend_loc: str | None = None,
     handles: list[Line2D] | None = None,
     labels: list[str] | None = None,
     use_fallback: bool = True,
 ) -> None:
     """Ajoute une légende globale à la figure."""
+    legend_loc = legend_loc or DEFAULT_LEGEND_LOC
     if handles is None or labels is None:
         handles, labels = ax.get_legend_handles_labels()
     if not handles and use_fallback:
@@ -848,6 +857,7 @@ def add_global_legend(
         else legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
         bbox_to_anchor=None if moved_to_axis else legend.get_bbox_to_anchor(),
         legend_rows=legend_rows,
+        legend_loc=legend_loc,
     )
 
 
@@ -856,9 +866,10 @@ def add_figure_legend(
     handles: list[Line2D],
     labels: list[str],
     *,
-    legend_loc: str = "above",
+    legend_loc: str | None = None,
 ) -> int:
     """Ajoute une légende globale à la figure et applique les marges associées."""
+    legend_loc = legend_loc or DEFAULT_LEGEND_LOC
     if not handles:
         return 0
     handles, labels = deduplicate_legend_entries(handles, labels)
@@ -887,6 +898,7 @@ def add_figure_legend(
         else legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
         bbox_to_anchor=None if moved_to_axis else legend.get_bbox_to_anchor(),
         legend_rows=legend_rows,
+        legend_loc=legend_loc,
     )
     return legend_rows
 
@@ -981,6 +993,7 @@ def apply_figure_layout(
     bbox_to_anchor: tuple[float, float] | None = None,
     margins: dict[str, float] | None = None,
     legend_rows: int = 1,
+    legend_loc: str | None = None,
 ) -> None:
     """Applique taille, marges, légendes et tight_layout sur une figure."""
     extra_legend_rows = max(0, legend_rows - 1)
@@ -994,6 +1007,10 @@ def apply_figure_layout(
                 margins.get("top", FIGURE_MARGINS["top"]),
                 _legend_top_margin(fig, legend_rows),
             )
+    normalized_legend_loc = _normalize_legend_loc(legend_loc) if legend_loc else ""
+    if normalized_legend_loc == "right":
+        if "right" not in margins or margins["right"] > LEGEND_RIGHT_MARGIN:
+            margins["right"] = LEGEND_RIGHT_MARGIN
     if margins:
         adjusted_margins = dict(margins)
         if "top" in adjusted_margins:
