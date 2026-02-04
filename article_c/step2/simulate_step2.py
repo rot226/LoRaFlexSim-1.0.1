@@ -630,6 +630,7 @@ def _log_cluster_all_diagnostics(
     collision_size_factor: float,
 ) -> None:
     traffic_total = sum(traffic_sent)
+    traffic_per_node = traffic_total / len(traffic_sent) if traffic_sent else 0.0
     successes_total = sum(successes)
     min_sent, median_sent, max_sent = _summarize_values(
         [float(value) for value in traffic_sent]
@@ -643,6 +644,7 @@ def _log_cluster_all_diagnostics(
     logger.info(
         "Diag cluster=all - taille=%s algo=%s round=%s "
         "traffic_sent[total/min/med/max]=%s/%.0f/%.1f/%.0f "
+        "traffic_sent_per_node=%.2f "
         "successes[total/min/med/max]=%s/%.0f/%.1f/%.0f "
         "collision_norm[min/med/max]=%.3f/%.3f/%.3f "
         "link_quality[min/med/max]=%.3f/%.3f/%.3f "
@@ -655,6 +657,7 @@ def _log_cluster_all_diagnostics(
         min_sent,
         median_sent,
         max_sent,
+        traffic_per_node,
         successes_total,
         min_success,
         median_success,
@@ -1555,17 +1558,23 @@ def run_simulation(
                         expected_sent_raw,
                     )
                 max_tx = expected_sent_raw
-                if airtime_s > 0.0 and n_channels > 0:
-                    max_tx = max(
+                if airtime_s > 0.0:
+                    per_node_cap = max(
+                        1, int(math.floor(window_duration_value / airtime_s))
+                    )
+                    capped_tx = max(
                         1,
                         int(
                             math.floor(
                                 window_duration_value
                                 * load_factor
-                                / (airtime_s * n_channels)
+                                * traffic_coeff_scale_value
+                                * max(n_channels, 1)
+                                / airtime_s
                             )
                         ),
                     )
+                    max_tx = min(max_tx, per_node_cap, capped_tx)
                 expected_sent = min(expected_sent_raw, max_tx)
                 if _should_debug_log(debug_step2, round_id):
                     logger.debug(
@@ -2032,17 +2041,23 @@ def run_simulation(
                     )
                 airtime_reference_s = max(airtime_by_sf.values())
                 max_tx = expected_sent_raw
-                if airtime_reference_s > 0.0 and n_channels > 0:
-                    max_tx = max(
+                if airtime_reference_s > 0.0:
+                    per_node_cap = max(
+                        1, int(math.floor(window_duration_value / airtime_reference_s))
+                    )
+                    capped_tx = max(
                         1,
                         int(
                             math.floor(
                                 window_duration_value
                                 * load_factor
-                                / (airtime_reference_s * n_channels)
+                                * traffic_coeff_scale_value
+                                * max(n_channels, 1)
+                                / airtime_reference_s
                             )
                         ),
                     )
+                    max_tx = min(max_tx, per_node_cap, capped_tx)
                 expected_sent = min(expected_sent_raw, max_tx)
                 if _should_debug_log(debug_step2, round_id):
                     logger.debug(

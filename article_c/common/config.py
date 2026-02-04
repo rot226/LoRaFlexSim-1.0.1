@@ -75,7 +75,7 @@ class Step2Config:
     traffic_coeff_min: float = 0.7
     traffic_coeff_max: float = 1.3
     traffic_coeff_enabled: bool = True
-    traffic_coeff_scale: float = 0.85
+    traffic_coeff_scale: float = 0.75
     traffic_coeff_clamp_min: float = 0.4
     traffic_coeff_clamp_max: float = 2.5
     traffic_coeff_clamp_enabled: bool = True
@@ -87,7 +87,7 @@ class Step2Config:
     congestion_coeff_growth: float = 0.35
     congestion_coeff_max: float = 0.35
     network_load_min: float = 0.6
-    network_load_max: float = 2.6
+    network_load_max: float = 2.2
     collision_size_min: float = 0.6
     collision_size_under_max: float = 1.0
     collision_size_over_max: float = 2.4
