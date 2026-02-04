@@ -290,6 +290,21 @@ def _legend_fallback_in_axis(
     return ax.legend(handles, labels, **legend_kwargs)
 
 
+def legend_ncols(legend: Legend, default: int) -> int:
+    """Retourne le nombre de colonnes de légende avec un fallback robuste."""
+    if hasattr(legend, "_ncols"):
+        try:
+            return int(getattr(legend, "_ncols"))
+        except (TypeError, ValueError):
+            pass
+    if hasattr(legend, "get_ncols"):
+        try:
+            return int(legend.get_ncols())
+        except (TypeError, ValueError):
+            pass
+    return default
+
+
 def postprocess_legend(
     legend: Legend,
     *,
@@ -297,12 +312,15 @@ def postprocess_legend(
     handles: list[Line2D],
     labels: list[str],
     fig: plt.Figure,
+    legend_ncols_default: int,
     axes: Iterable[plt.Axes] | None = None,
 ) -> tuple[Legend, int, bool]:
     """Ajuste la légende et bascule dans l'axe si nécessaire."""
-    legend_rows = max(1, math.ceil(len(labels) / max(1, legend.get_ncols())))
+    legend_cols = legend_ncols(legend, legend_ncols_default)
+    legend_rows = max(1, math.ceil(len(labels) / max(1, legend_cols)))
     if adjust_legend_to_fit(legend):
-        legend_rows = max(1, math.ceil(len(labels) / max(1, legend.get_ncols())))
+        legend_cols = legend_ncols(legend, legend_ncols_default)
+        legend_rows = max(1, math.ceil(len(labels) / max(1, legend_cols)))
         if _normalize_legend_loc(legend_loc) == "above":
             bbox_to_anchor = legend_bbox_to_anchor(
                 legend=legend,
@@ -421,6 +439,7 @@ def render_constant_metric(
                         handles=handles,
                         labels=labels,
                         fig=fig,
+                        legend_ncols_default=int(legend_style.get("ncol", 1)),
                         axes=_flatten_axes(axes),
                     )
                     if margins_for_layout is None:
@@ -586,6 +605,7 @@ def place_legend(ax: plt.Axes, *, legend_loc: str = "above") -> None:
         handles=handles,
         labels=labels,
         fig=ax.figure,
+        legend_ncols_default=int(legend_style.get("ncol", 1)),
         axes=[ax],
     )
     apply_figure_layout(
@@ -818,6 +838,7 @@ def add_global_legend(
         handles=handles,
         labels=labels,
         fig=fig,
+        legend_ncols_default=int(legend_style.get("ncol", 1)),
         axes=[ax],
     )
     apply_figure_layout(
@@ -857,6 +878,7 @@ def add_figure_legend(
         handles=handles,
         labels=labels,
         fig=fig,
+        legend_ncols_default=int(legend_style.get("ncol", 1)),
     )
     apply_figure_layout(
         fig,
