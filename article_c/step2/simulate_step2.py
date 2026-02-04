@@ -923,6 +923,12 @@ def _apply_congestion_and_link_quality(
     successes_by_node: dict[int, int],
     congestion_probability: float,
     rng: random.Random,
+    round_id: int,
+    snir_mode: str,
+    snir_threshold_db: float,
+    snir_threshold_min_db: float,
+    snir_threshold_max_db: float,
+    debug_step2: bool,
 ) -> tuple[dict[int, int], dict[str, int], float]:
     per_node_after_congestion: dict[int, int] = {}
     losses_congestion = 0
@@ -960,6 +966,33 @@ def _apply_congestion_and_link_quality(
         and successes_after_link_total < 1
     ):
         successes_after_link_total = 1
+    snir_success_factor = _snir_success_factor(
+        snir_mode=snir_mode,
+        snir_threshold_db=snir_threshold_db,
+        snir_threshold_min_db=snir_threshold_min_db,
+        snir_threshold_max_db=snir_threshold_max_db,
+        link_quality_weighted=link_quality_weighted,
+    )
+    snir_successes_after_link = int(
+        round(successes_after_link_total * snir_success_factor)
+    )
+    snir_successes_after_link = max(
+        0, min(snir_successes_after_link, successes_after_link_total)
+    )
+    if _should_debug_log(debug_step2, round_id):
+        logger.debug(
+            "SNIR facteur succès=%.3f (mode=%s seuil=%.2f dB min=%.2f dB max=%.2f dB "
+            "link_quality_weighted=%.3f succès_avant=%s succès_après=%s).",
+            snir_success_factor,
+            snir_mode,
+            snir_threshold_db,
+            snir_threshold_min_db,
+            snir_threshold_max_db,
+            link_quality_weighted,
+            successes_after_link_total,
+            snir_successes_after_link,
+        )
+    successes_after_link_total = snir_successes_after_link
     logger.debug(
         "Diag congestion/lien (debug) - link_quality_weighted=%.3f successes_after_congestion_total=%s successes_after_link_total=%s",
         link_quality_weighted,
@@ -1005,6 +1038,35 @@ def _apply_congestion_and_link_quality(
             "losses_link_quality": losses_link_quality,
         },
         link_quality_weighted,
+    )
+
+
+def _snir_success_factor(
+    *,
+    snir_mode: str,
+    snir_threshold_db: float,
+    snir_threshold_min_db: float,
+    snir_threshold_max_db: float,
+    link_quality_weighted: float,
+) -> float:
+    if snir_mode != "snir_on":
+        return 1.0
+    min_db = min(snir_threshold_min_db, snir_threshold_max_db)
+    max_db = max(snir_threshold_min_db, snir_threshold_max_db)
+    if max_db <= min_db:
+        return 1.0
+    threshold_db = _clamp_range(snir_threshold_db, min_db, max_db)
+    effective_snir_db = min_db + _clip(link_quality_weighted, 0.0, 1.0) * (
+        max_db - min_db
+    )
+    if effective_snir_db >= threshold_db:
+        return 1.0
+    if effective_snir_db <= min_db:
+        return 0.0
+    return _clip(
+        (effective_snir_db - min_db) / max(threshold_db - min_db, 1e-6),
+        0.0,
+        1.0,
     )
 
 
@@ -1651,6 +1713,12 @@ def run_simulation(
                     successes_by_node=successes_by_node,
                     congestion_probability=congestion_probability,
                     rng=rng,
+                    round_id=round_id,
+                    snir_mode=snir_mode,
+                    snir_threshold_db=snir_threshold_value,
+                    snir_threshold_min_db=snir_threshold_min_value,
+                    snir_threshold_max_db=snir_threshold_max_value,
+                    debug_step2=debug_step2,
                 )
             )
             _log_success_chain(
@@ -2133,6 +2201,12 @@ def run_simulation(
                     successes_by_node=successes_by_node,
                     congestion_probability=congestion_probability,
                     rng=rng,
+                    round_id=round_id,
+                    snir_mode=snir_mode,
+                    snir_threshold_db=snir_threshold_value,
+                    snir_threshold_min_db=snir_threshold_min_value,
+                    snir_threshold_max_db=snir_threshold_max_value,
+                    debug_step2=debug_step2,
                 )
             )
             _log_success_chain(
