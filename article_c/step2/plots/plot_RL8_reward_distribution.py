@@ -134,9 +134,9 @@ def _plot_distribution(
         if algorithms
         else 1
     )
-    extra_height = legend_extra_height(height, legend_rows)
+    extra_height = legend_extra_height(height, legend_rows, legend_loc="right")
     apply_figure_layout(fig, figsize=(width, height + extra_height))
-    add_global_legend(fig, ax, legend_loc="above")
+    add_global_legend(fig, ax, legend_loc="right")
     return fig
 
 
@@ -264,7 +264,7 @@ def _plot_diagnostics(
         add_global_legend(
             fig,
             axes[0],
-            legend_loc="above",
+            legend_loc="right",
             handles=handles,
             labels=labels,
             use_fallback=False,

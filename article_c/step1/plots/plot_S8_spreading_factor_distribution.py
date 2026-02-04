@@ -262,7 +262,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         add_global_legend(
             fig,
             axes[0],
-            legend_loc="above",
+            legend_loc="right",
             handles=snir_handles,
             labels=[handle.get_label() for handle in snir_handles],
         )
@@ -270,7 +270,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
             fig,
             axes,
             "Step 1 - Spreading Factor Distribution (SNIR on/off)",
-            legend_loc="above",
+            legend_loc="right",
         )
         apply_figure_layout(fig, margins=legend_margins("above"))
         return fig
@@ -308,7 +308,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         add_global_legend(
             fig,
             axes[0],
-            legend_loc="above",
+            legend_loc="right",
             handles=handles,
             labels=labels,
         )
@@ -316,7 +316,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         fig,
         axes,
         "Step 1 - Spreading Factor Distribution (SNIR on/off)",
-        legend_loc="above",
+        legend_loc="right",
     )
     apply_figure_layout(fig, margins=legend_margins("above"))
     return fig

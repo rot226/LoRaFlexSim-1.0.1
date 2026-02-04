@@ -144,7 +144,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         fig,
         cluster_handles,
         legend_labels,
-        legend_loc="above",
+        legend_loc="right",
     )
     if fig.legends:
         fig.legends[-1].set_title("Clusters")

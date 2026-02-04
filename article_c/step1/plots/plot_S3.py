@@ -89,7 +89,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             fig,
             ax,
             "Step 1 - Received Frames vs Network size (number of nodes) (SNIR on/off)",
-            legend_loc="above",
+            legend_loc="right",
         )
         return fig
     _warn_if_low_algo_variance(rows, metric_key)
@@ -102,7 +102,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         fig,
         ax,
         "Step 1 - Received Frames vs Network size (number of nodes) (SNIR on/off)",
-        legend_loc="above",
+        legend_loc="right",
     )
     return fig
 

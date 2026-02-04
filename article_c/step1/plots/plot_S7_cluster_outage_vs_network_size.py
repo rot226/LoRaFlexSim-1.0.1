@@ -146,7 +146,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         legend = ax.get_legend()
         if legend is not None:
             legend.remove()
-    add_figure_legend(fig, handles, labels, legend_loc="above")
+    add_figure_legend(fig, handles, labels, legend_loc="right")
     fig.suptitle(
         "Step 1 - Outage probability by Cluster (network size)",
         y=suptitle_y_from_top(fig),

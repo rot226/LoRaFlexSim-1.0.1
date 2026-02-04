@@ -79,7 +79,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             legend.remove()
     if not handles:
         handles, labels = fallback_legend_handles()
-    add_figure_legend(fig, handles, labels, legend_loc="above")
+    add_figure_legend(fig, handles, labels, legend_loc="right")
     fig.suptitle(
         "Step 1 - Packet Delivery Ratio by Cluster (SNIR on/off)",
         y=suptitle_y_from_top(fig),

@@ -69,7 +69,7 @@ def _plot_selection(
             fig,
             ax,
             metric_state,
-            legend_loc="above",
+            legend_loc="right",
             show_fallback_legend=True,
             legend_handles=fallback_legend_handles(),
         )
@@ -96,7 +96,7 @@ def _plot_selection(
         "Step 2 - UCB1-SF Selection Probability"
         f"{_title_suffix(network_sizes)}"
     )
-    add_global_legend(fig, ax, legend_loc="above")
+    add_global_legend(fig, ax, legend_loc="right")
     return fig
 
 

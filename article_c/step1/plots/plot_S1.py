@@ -143,7 +143,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             fig,
             ax,
             "Step 1 - Packet Delivery Ratio (SNIR on/off)",
-            legend_loc="above",
+            legend_loc="right",
         )
         apply_figure_layout(
             fig,
@@ -174,7 +174,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         fig,
         ax,
         "Step 1 - Packet Delivery Ratio (SNIR on/off)",
-        legend_loc="above",
+        legend_loc="right",
         legend_handles=handles if handles else None,
         legend_labels=labels if handles else None,
     )
@@ -198,7 +198,7 @@ def _plot_summary_metric(rows: list[dict[str, object]], metric_key: str) -> plt.
             fig,
             ax,
             "Step 1 - Packet Delivery Ratio (SNIR on/off) — Synthèse",
-            legend_loc="above",
+            legend_loc="right",
         )
         apply_figure_layout(fig, margins=legend_margins("above"))
         return fig
@@ -211,7 +211,7 @@ def _plot_summary_metric(rows: list[dict[str, object]], metric_key: str) -> plt.
         fig,
         ax,
         "Step 1 - Packet Delivery Ratio (SNIR on/off) — Synthèse",
-        legend_loc="above",
+        legend_loc="right",
         legend_handles=handles if handles else None,
         legend_labels=labels if handles else None,
     )

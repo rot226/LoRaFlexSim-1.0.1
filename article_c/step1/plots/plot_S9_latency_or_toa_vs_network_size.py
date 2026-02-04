@@ -54,7 +54,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str, y_label: str) -
             fig,
             ax,
             "Step 1 - ToA/Latency vs Network Size (SNIR on/off)",
-            legend_loc="above",
+            legend_loc="right",
         )
         return fig
     plot_metric_by_snir(ax, rows, metric_key)
@@ -66,7 +66,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str, y_label: str) -
         fig,
         ax,
         "Step 1 - ToA/Latency vs Network Size (SNIR on/off)",
-        legend_loc="above",
+        legend_loc="right",
     )
     return fig
 

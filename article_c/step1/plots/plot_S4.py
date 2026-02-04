@@ -149,7 +149,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             ax,
             "Step 1 - Sent Frames (budget saturant) vs Network size (number of nodes) "
             "(SNIR on/off)",
-            legend_loc="above",
+            legend_loc="right",
         )
         return fig
     plot_metric_by_snir(
@@ -177,7 +177,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax,
         "Step 1 - Sent Frames (budget saturant) vs Network size (number of nodes) "
         "(SNIR on/off)",
-        legend_loc="above",
+        legend_loc="right",
         legend_handles=handles if handles else None,
         legend_labels=labels if handles else None,
     )
@@ -208,7 +208,7 @@ def _plot_summary_metric(rows: list[dict[str, object]], metric_key: str) -> plt.
             fig,
             ax,
             "Step 1 - Sent Frames (budget saturant) (SNIR on/off) — Synthèse",
-            legend_loc="above",
+            legend_loc="right",
         )
         apply_figure_layout(
             fig,
@@ -227,7 +227,7 @@ def _plot_summary_metric(rows: list[dict[str, object]], metric_key: str) -> plt.
         fig,
         ax,
         "Step 1 - Sent Frames (budget saturant) (SNIR on/off) — Synthèse",
-        legend_loc="above",
+        legend_loc="right",
         legend_handles=handles if handles else None,
         legend_labels=labels if handles else None,
     )

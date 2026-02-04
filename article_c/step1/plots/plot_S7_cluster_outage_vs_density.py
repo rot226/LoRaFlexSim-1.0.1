@@ -123,7 +123,7 @@ def _plot_metric_page(
             legend.remove()
     if not handles:
         handles, labels = fallback_legend_handles()
-    add_figure_legend(fig, handles, labels, legend_loc="above")
+    add_figure_legend(fig, handles, labels, legend_loc="right")
     fig.suptitle(title, y=suptitle_y_from_top(fig))
     return fig
 

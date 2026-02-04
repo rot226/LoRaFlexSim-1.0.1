@@ -287,7 +287,7 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
         legend_ncol = int(LEGEND_STYLE.get("ncol", series_count) or series_count)
         ncol = min(series_count, legend_ncol) or 1
         legend_rows = max(1, math.ceil(series_count / ncol))
-    extra_height = legend_extra_height(height, legend_rows)
+    extra_height = legend_extra_height(height, legend_rows, legend_loc="right")
     apply_figure_layout(fig, figsize=(width, height + extra_height))
     reward_values = [
         float(point["reward_mean"])
