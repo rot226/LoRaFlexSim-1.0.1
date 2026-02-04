@@ -350,7 +350,11 @@ def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
         return set()
     with aggregated_path.open("r", newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
-        fieldnames = reader.fieldnames or []
+        raw_fieldnames = reader.fieldnames or []
+        fieldnames = [
+            name.lstrip("\ufeff").strip() for name in raw_fieldnames if name is not None
+        ]
+        reader.fieldnames = fieldnames
         preview = ", ".join(fieldnames[:6]) if fieldnames else "aucun"
         print(f"Premiers headers lus dans {aggregated_path}: {preview}")
         size_key = None
@@ -368,7 +372,15 @@ def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
             )
             return set()
         sizes: set[int] = set()
+        lines_read = 0
+        valid_lines = 0
         for row in reader:
+            lines_read += 1
+            if not row or row == {}:
+                continue
+            if all(value in (None, "") for value in row.values()):
+                continue
+            valid_lines += 1
             value = row.get(size_key)
             if value in (None, ""):
                 continue
@@ -378,6 +390,11 @@ def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
                 print(
                     f"Valeur {size_key} invalide détectée: {value}"
                 )
+        if not sizes:
+            print(
+                "Aucune taille détectée dans aggregated_results.csv "
+                f"(lignes lues: {lines_read}, lignes valides: {valid_lines})."
+            )
         return sizes
 
 
