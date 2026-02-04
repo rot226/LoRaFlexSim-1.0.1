@@ -30,7 +30,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     save_figure,
 )
-from article_c.common.plotting_style import LEGEND_STYLE, legend_extra_height
+from article_c.common.plotting_style import LEGEND_STYLE
 from plot_defaults import resolve_ieee_figsize
 
 ALGO_ALIASES = {
@@ -280,15 +280,19 @@ def _legend_handles_for_algos(
 def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(points)))
     width, height = fig.get_size_inches()
-    legend_loc = "above"
+    legend_loc = "right"
     legend_rows = 1
     series_count = len(points)
     if series_count:
         legend_ncol = int(LEGEND_STYLE.get("ncol", series_count) or series_count)
         ncol = min(series_count, legend_ncol) or 1
         legend_rows = max(1, math.ceil(series_count / ncol))
-    extra_height = legend_extra_height(height, legend_rows, legend_loc="right")
-    apply_figure_layout(fig, figsize=(width, height + extra_height))
+    apply_figure_layout(
+        fig,
+        figsize=(width, height),
+        legend_loc=legend_loc,
+        legend_rows=legend_rows,
+    )
     reward_values = [
         float(point["reward_mean"])
         for point in points
