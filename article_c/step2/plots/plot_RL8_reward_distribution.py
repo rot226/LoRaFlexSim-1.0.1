@@ -140,24 +140,31 @@ def _plot_distribution(
     return fig
 
 
-def _warn_if_constant(series: pd.Series, label: str) -> bool:
+def _metric_status(series: pd.Series, label: str) -> MetricStatus:
     if series.empty:
-        warnings.warn(f"Aucune valeur disponible pour {label}.", stacklevel=2)
-        return True
+        warnings.warn(f"Aucune valeur disponible pour {label} (données absentes).", stacklevel=2)
+        return MetricStatus.MISSING
     values = [float(value) for value in series.dropna().tolist()]
+    if not values:
+        warnings.warn(f"Aucune valeur disponible pour {label} (données absentes).", stacklevel=2)
+        return MetricStatus.MISSING
     metric_state = is_constant_metric(values)
     if metric_state is MetricStatus.CONSTANT:
         warnings.warn(
             f"Valeurs constantes détectées pour {label} (variance faible).",
             stacklevel=2,
         )
-        return True
-    return False
+        return MetricStatus.CONSTANT
+    return MetricStatus.OK
 
 
-def _warn_constant_reward(label: str) -> None:
-    warnings.warn("reward constant → plots invalides", stacklevel=2)
-    print(f"INFO: {label} constant; les graphiques sont ignorés.")
+def _emit_step2_tuning_message() -> None:
+    message = (
+        "Step2: ajustez les paramètres trafic, collision, link_quality pour "
+        "obtenir une récompense exploitable."
+    )
+    warnings.warn(message, stacklevel=2)
+    print(f"INFO: {message}")
 
 
 def _diagnose_density(rows: list[dict[str, object]]) -> None:
@@ -166,15 +173,15 @@ def _diagnose_density(rows: list[dict[str, object]]) -> None:
         warnings.warn("Colonne density absente: impossible de valider la densité.", stacklevel=2)
         return
     density = pd.to_numeric(df["density"], errors="coerce").dropna()
-    density_constant = _warn_if_constant(density, "density")
+    density_status = _metric_status(density, "density")
     if "network_size" in df.columns:
         network_size = pd.to_numeric(df["network_size"], errors="coerce").dropna()
         aligned = pd.concat([network_size, density], axis=1).dropna()
         if not aligned.empty:
             area = aligned.iloc[:, 0] / aligned.iloc[:, 1].replace(0, pd.NA)
             area = area.dropna()
-            if density_constant:
-                _warn_if_constant(area, "area (network_size / density)")
+            if density_status is MetricStatus.CONSTANT:
+                _metric_status(area, "area (network_size / density)")
 
 
 def _plot_diagnostics(
@@ -346,12 +353,18 @@ def main(
     rewards_series = pd.to_numeric(
         pd.Series([row.get("reward") for row in rows]), errors="coerce"
     ).dropna()
-    is_constant = _warn_if_constant(rewards_series, "reward")
-
-    if is_constant:
-        _warn_constant_reward("reward")
-        return
+    metric_status = _metric_status(rewards_series, "reward")
     output_dir = step_dir / "plots" / "output"
+    if metric_status is MetricStatus.MISSING:
+        warnings.warn("Données reward absentes: figure ignorée.", stacklevel=2)
+        _emit_step2_tuning_message()
+        return
+    if metric_status is MetricStatus.CONSTANT:
+        warnings.warn("reward constant → plots invalides", stacklevel=2)
+        print("INFO: reward constant; génération d'un diagnostic uniquement.")
+        _plot_diagnostics(rows, output_dir, "plot_RL8_reward_distribution")
+        _emit_step2_tuning_message()
+        return
     _plot_diagnostics(rows, output_dir, "plot_RL8_reward_distribution")
     _log_min_max_by_size(rows, "reward", label="reward")
     fig = _plot_distribution(rows, network_sizes)
