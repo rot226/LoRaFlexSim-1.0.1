@@ -23,6 +23,7 @@ from article_c.common.plot_helpers import (
     is_constant_metric,
     render_metric_status,
     save_figure,
+    warn_if_insufficient_network_sizes,
 )
 from plot_defaults import resolve_ieee_figsize
 from article_c.step1.plots.plot_utils import configure_figure
@@ -266,8 +267,7 @@ def main() -> None:
     rows, _ = filter_rows_by_network_sizes(rows, args.network_sizes)
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
-    if len(network_sizes) < 2:
-        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+    warn_if_insufficient_network_sizes(network_sizes)
     plot_cdf_by_algo(rows, args.metric, args.output_dir)
 
 

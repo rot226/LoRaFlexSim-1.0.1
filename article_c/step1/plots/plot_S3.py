@@ -27,6 +27,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     select_received_metric_key,
     save_figure,
+    warn_if_insufficient_network_sizes,
 )
 from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import resolve_ieee_figsize
@@ -79,8 +80,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
     apply_figure_layout(fig, figsize=tuple(fig.get_size_inches()))
     network_sizes = sorted(df["network_size"].unique())
-    if len(network_sizes) < 2:
-        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+    warn_if_insufficient_network_sizes(network_sizes)
     metric_key = select_received_metric_key(rows, metric_key)
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:

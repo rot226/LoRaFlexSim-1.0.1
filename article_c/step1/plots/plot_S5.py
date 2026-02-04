@@ -34,6 +34,7 @@ from article_c.common.plot_helpers import (
     select_received_metric_key,
     save_figure,
     save_figure_path,
+    warn_if_insufficient_network_sizes,
 )
 from article_c.common.plotting_style import SAVEFIG_STYLE
 from article_c.common.utils import ensure_dir
@@ -664,8 +665,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
             ]
         values_by_size = _extract_aggregated_pdr_groups(aggregated_rows)
 
-    if len(network_sizes) < 2:
-        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+    warn_if_insufficient_network_sizes(network_sizes)
 
     figures = _plot_pdr_distributions(values_by_size, network_sizes)
     output_dir = step_dir / "plots" / "output"

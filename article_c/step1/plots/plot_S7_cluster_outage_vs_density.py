@@ -29,6 +29,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     save_figure,
     suptitle_y_from_top,
+    warn_if_insufficient_network_sizes,
 )
 from plot_defaults import resolve_ieee_figsize
 
@@ -131,8 +132,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> list[plt.Fig
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
-    if len(network_sizes) < 2:
-        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+    warn_if_insufficient_network_sizes(network_sizes)
     available_clusters = {
         row["cluster"] for row in rows if row.get("cluster") not in (None, "all")
     }
