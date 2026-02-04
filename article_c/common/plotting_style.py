@@ -33,13 +33,15 @@ IEEE_LEGEND_STYLE = {
 BASE_FIGURE_MARGINS = {
     "top": 0.88,
     "bottom": 0.12,
+    "right": 0.98,
 }
 IEEE_FIGURE_MARGINS = {
     "top": 0.84,
     "bottom": 0.14,
+    "right": 0.79,
 }
 BASE_TIGHT_LAYOUT_RECT = (0.08, 0.12, 0.98, 0.92)
-IEEE_TIGHT_LAYOUT_RECT = (0.07, 0.12, 0.98, 0.9)
+IEEE_TIGHT_LAYOUT_RECT = (0.07, 0.12, 0.8, 0.9)
 
 BASE_SUPTITLE_Y = 0.965
 IEEE_SUPTITLE_Y = 0.945

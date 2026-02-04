@@ -100,6 +100,7 @@ AXES_TITLE_Y = 1.02
 SUPTITLE_TOP_RATIO = 0.85
 FIGURE_SUBPLOT_TOP = FIGURE_MARGINS["top"]
 FIGURE_SUBPLOT_BOTTOM = FIGURE_MARGINS["bottom"]
+FIGURE_SUBPLOT_RIGHT = FIGURE_MARGINS.get("right", 0.98)
 LEGEND_TOP_MARGIN = 0.74
 LEGEND_TOP_RESERVED = 0.02
 LEGEND_ROW_EXTRA_MARGIN = 0.05
@@ -133,6 +134,7 @@ def apply_plot_style() -> None:
             "figure.figsize": FIGURE_SIZE,
             "figure.subplot.top": FIGURE_SUBPLOT_TOP,
             "figure.subplot.bottom": FIGURE_SUBPLOT_BOTTOM,
+            "figure.subplot.right": FIGURE_SUBPLOT_RIGHT,
             "figure.dpi": BASE_DPI,
             "axes.grid": BASE_GRID_ENABLED,
             "axes.titley": AXES_TITLE_Y,
