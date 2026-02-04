@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 import random
 import math
-from statistics import median
+from statistics import mean, median, pstdev
 from typing import Literal
 
 from article_c.common.config import DEFAULT_CONFIG
@@ -219,7 +219,24 @@ def _link_quality_min_variation(network_size: int, reference_size: int) -> float
     if ratio <= 1.0:
         return 0.02
     growth = (ratio - 1.0) ** 0.75
-    return _clamp_range(0.02 + 0.045 * growth, 0.02, 0.1)
+    return _clamp_range(0.02 + 0.06 * growth, 0.02, 0.14)
+
+
+def _link_quality_load_factor(network_size: int, reference_size: int) -> float:
+    if reference_size <= 0:
+        return 1.0
+    ratio = max(0.2, network_size / reference_size)
+    if ratio <= 1.0:
+        return _clamp_range(1.0 - 0.04 * (1.0 - ratio), 0.9, 1.0)
+    overload = ratio - 1.0
+    return _clamp_range(1.0 / (1.0 + 0.18 * overload**0.6), 0.65, 1.0)
+
+
+def _link_quality_mean_degradation(network_size: int, reference_size: int) -> float:
+    if reference_size <= 0:
+        return 1.0
+    overload = max(0.0, (network_size / reference_size) - 1.0)
+    return _clamp_range(1.0 - 0.09 * math.log1p(overload), 0.7, 1.0)
 
 
 def _collision_size_factor(
@@ -813,6 +830,27 @@ def _log_link_quality_summary(
     )
 
 
+def _log_link_quality_stats(
+    *,
+    network_size: int,
+    algo_label: str,
+    round_id: int,
+    link_qualities: list[float],
+) -> None:
+    if not link_qualities:
+        return
+    mean_lq = mean(link_qualities)
+    std_lq = pstdev(link_qualities)
+    logger.info(
+        "Stats link_quality - taille=%s algo=%s round=%s moyenne=%.3f ecart_type=%.3f",
+        network_size,
+        algo_label,
+        round_id,
+        mean_lq,
+        std_lq,
+    )
+
+
 def _apply_link_quality_variation(
     rng: random.Random,
     link_quality: float,
@@ -820,6 +858,9 @@ def _apply_link_quality_variation(
     network_size: int,
     reference_size: int,
 ) -> float:
+    load_factor = _link_quality_load_factor(network_size, reference_size)
+    mean_degradation = _link_quality_mean_degradation(network_size, reference_size)
+    link_quality = _clip(link_quality * load_factor * mean_degradation, 0.0, 1.0)
     variation = rng.gauss(1.0, 0.12)
     min_variation = _link_quality_min_variation(network_size, reference_size)
     variation_floor = 0.2
@@ -1664,14 +1705,21 @@ def run_simulation(
                 rng=rng,
                 capture_probability=capture_probability_value,
             )
+            link_qualities = [
+                float(node_window["link_quality"]) for node_window in node_windows
+            ]
             _log_pre_collision_stats(
                 network_size=network_size_value,
                 algo_label=algo_label,
                 round_id=round_id,
                 traffic_sent_by_node=traffic_sent_by_node,
-                link_qualities=[
-                    float(node_window["link_quality"]) for node_window in node_windows
-                ],
+                link_qualities=link_qualities,
+            )
+            _log_link_quality_stats(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                link_qualities=link_qualities,
             )
             _log_pre_clip_stats(
                 network_size=network_size_value,
@@ -1688,9 +1736,6 @@ def run_simulation(
             collision_success_total = sum(successes_by_node.values())
             total_traffic_sent = sum(traffic_sent_by_node.values())
             if _should_debug_log(debug_step2, round_id):
-                link_qualities = [
-                    float(node_window["link_quality"]) for node_window in node_windows
-                ]
                 _log_link_quality_summary(
                     network_size=network_size_value,
                     algo_label=algo_label,
@@ -1904,9 +1949,7 @@ def run_simulation(
                 traffic_sent=round_traffic_sent,
                 successes=round_successes,
                 collision_norms=round_collision_norms,
-                link_qualities=[
-                    float(node_window["link_quality"]) for node_window in node_windows
-                ],
+                link_qualities=link_qualities,
                 rewards=round_rewards,
                 lambda_collision=lambda_collision,
                 congestion_probability=congestion_probability,
@@ -2163,14 +2206,21 @@ def run_simulation(
                 rng=rng,
                 capture_probability=capture_probability_value,
             )
+            link_qualities = [
+                float(node_window["link_quality"]) for node_window in node_windows
+            ]
             _log_pre_collision_stats(
                 network_size=network_size_value,
                 algo_label=algo_label,
                 round_id=round_id,
                 traffic_sent_by_node=traffic_sent_by_node,
-                link_qualities=[
-                    float(node_window["link_quality"]) for node_window in node_windows
-                ],
+                link_qualities=link_qualities,
+            )
+            _log_link_quality_stats(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                link_qualities=link_qualities,
             )
             _log_pre_clip_stats(
                 network_size=network_size_value,
@@ -2187,9 +2237,6 @@ def run_simulation(
             collision_success_total = sum(successes_by_node.values())
             total_traffic_sent = sum(traffic_sent_by_node.values())
             if _should_debug_log(debug_step2, round_id):
-                link_qualities = [
-                    float(node_window["link_quality"]) for node_window in node_windows
-                ]
                 _log_link_quality_summary(
                     network_size=network_size_value,
                     algo_label=algo_label,
@@ -2403,9 +2450,7 @@ def run_simulation(
                 traffic_sent=round_traffic_sent,
                 successes=round_successes,
                 collision_norms=round_collision_norms,
-                link_qualities=[
-                    float(node_window["link_quality"]) for node_window in node_windows
-                ],
+                link_qualities=link_qualities,
                 rewards=round_rewards,
                 lambda_collision=lambda_collision,
                 congestion_probability=congestion_probability,
