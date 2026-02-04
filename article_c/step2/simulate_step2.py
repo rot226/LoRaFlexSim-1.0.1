@@ -1237,6 +1237,10 @@ def run_simulation(
         if n_nodes == 0:
             logger.error("network_size == 0 avant écriture des résultats.")
         raise ValueError("network_size doit être strictement positif.")
+    scenario_radius_m = float(DEFAULT_CONFIG.scenario.radius_m)
+    if scenario_radius_m <= 0.0:
+        raise ValueError("radius_m doit être strictement positif pour calculer la densité.")
+    density_value = n_nodes / (math.pi * scenario_radius_m**2)
     algo_label = _algo_label(algorithm)
     raw_rows: list[dict[str, object]] = []
     selection_prob_rows: list[dict[str, object]] = []
@@ -1765,7 +1769,7 @@ def run_simulation(
                 round_successes.append(successes)
                 common_raw_row = {
                     "network_size": network_size_value,
-                    "density": network_size_value,
+                    "density": density_value,
                     "algo": algo_label,
                     "snir_mode": snir_mode,
                     "round": round_id,
@@ -1891,7 +1895,7 @@ def run_simulation(
             learning_curve_rows.append(
                 {
                     "network_size": network_size_value,
-                    "density": network_size_value,
+                    "density": density_value,
                     "round": round_id,
                     "algo": algo_label,
                     "avg_reward": avg_reward,
@@ -1903,7 +1907,7 @@ def run_simulation(
                 selection_prob_rows.append(
                     {
                         "network_size": network_size_value,
-                        "density": network_size_value,
+                        "density": density_value,
                         "round": round_id,
                         "sf": sf_value,
                         "selection_prob": bandit.counts[sf_index] / total,
@@ -2247,7 +2251,7 @@ def run_simulation(
                 round_successes.append(successes)
                 common_raw_row = {
                     "network_size": network_size_value,
-                    "density": network_size_value,
+                    "density": density_value,
                     "algo": algo_label,
                     "snir_mode": snir_mode,
                     "round": round_id,
@@ -2373,7 +2377,7 @@ def run_simulation(
             learning_curve_rows.append(
                 {
                     "network_size": network_size_value,
-                    "density": network_size_value,
+                    "density": density_value,
                     "round": round_id,
                     "algo": algo_label,
                     "avg_reward": avg_reward,
