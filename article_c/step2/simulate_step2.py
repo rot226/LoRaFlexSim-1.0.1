@@ -354,7 +354,7 @@ def _compute_window_metrics(
 
 
 def _compute_collision_successes(
-    transmissions: dict[int, list[tuple[float, float, int]]],
+    transmissions: dict[int, dict[int, list[tuple[float, float, int]]]],
     *,
     rng: random.Random | None = None,
     approx_threshold: int = 5000,
@@ -397,52 +397,59 @@ def _compute_collision_successes(
                     collided[index] = True
         return collided
 
-    total_transmissions = sum(len(events) for events in transmissions.values())
-    approx_mode = total_transmissions > approx_threshold
+    transmissions_per_channel = {
+        channel_id: sum(len(events) for events in sf_events.values())
+        for channel_id, sf_events in transmissions.items()
+    }
+    max_transmissions_per_channel = max(transmissions_per_channel.values(), default=0)
+    approx_mode = max_transmissions_per_channel > approx_threshold
     rng = rng or random.Random(0)
     successes_by_node: dict[int, int] = {}
-    for events in transmissions.values():
-        if not events:
-            continue
-        per_node_total: dict[int, int] = {}
-        for _start, _end, node_id in events:
-            per_node_total[node_id] = per_node_total.get(node_id, 0) + 1
-        sample_probability = 1.0
-        sampled_events = events
-        if approx_mode:
-            scaled_sample_size = max(
-                1,
-                int(round(approx_sample_size * len(events) / total_transmissions)),
+    for channel_id, sf_events in transmissions.items():
+        channel_total = transmissions_per_channel.get(channel_id, 0)
+        channel_approx = channel_total > approx_threshold
+        for events in sf_events.values():
+            if not events:
+                continue
+            per_node_total: dict[int, int] = {}
+            for _start, _end, node_id in events:
+                per_node_total[node_id] = per_node_total.get(node_id, 0) + 1
+            sample_probability = 1.0
+            sampled_events = events
+            if channel_approx and channel_total > 0:
+                scaled_sample_size = max(
+                    1,
+                    int(round(approx_sample_size * len(events) / channel_total)),
+                )
+                scaled_sample_size = min(scaled_sample_size, len(events))
+                if len(events) > scaled_sample_size:
+                    sample_probability = scaled_sample_size / len(events)
+                    sampled_events = [
+                        event for event in events if rng.random() < sample_probability
+                    ]
+                    if not sampled_events:
+                        sampled_events = [rng.choice(events)]
+            collided = _compute_collisions(
+                sampled_events,
+                rng=rng,
+                capture_probability=capture_probability,
             )
-            scaled_sample_size = min(scaled_sample_size, len(events))
-            if len(events) > scaled_sample_size:
-                sample_probability = scaled_sample_size / len(events)
-                sampled_events = [
-                    event for event in events if rng.random() < sample_probability
-                ]
-                if not sampled_events:
-                    sampled_events = [rng.choice(events)]
-        collided = _compute_collisions(
-            sampled_events,
-            rng=rng,
-            capture_probability=capture_probability,
-        )
-        sample_successes: dict[int, int] = {}
-        for event_index, (_start, _end, node_id) in enumerate(sampled_events):
-            if not collided[event_index]:
-                sample_successes[node_id] = sample_successes.get(node_id, 0) + 1
-        if sample_probability < 1.0:
-            for node_id, successes in sample_successes.items():
-                estimated = int(round(successes / sample_probability))
-                successes_by_node[node_id] = successes_by_node.get(node_id, 0) + min(
-                    estimated, per_node_total[node_id]
-                )
-        else:
-            for node_id, successes in sample_successes.items():
-                successes_by_node[node_id] = (
-                    successes_by_node.get(node_id, 0) + successes
-                )
-    return successes_by_node, total_transmissions, approx_mode
+            sample_successes: dict[int, int] = {}
+            for event_index, (_start, _end, node_id) in enumerate(sampled_events):
+                if not collided[event_index]:
+                    sample_successes[node_id] = sample_successes.get(node_id, 0) + 1
+            if sample_probability < 1.0:
+                for node_id, successes in sample_successes.items():
+                    estimated = int(round(successes / sample_probability))
+                    successes_by_node[node_id] = successes_by_node.get(node_id, 0) + min(
+                        estimated, per_node_total[node_id]
+                    )
+            else:
+                for node_id, successes in sample_successes.items():
+                    successes_by_node[node_id] = (
+                        successes_by_node.get(node_id, 0) + successes
+                    )
+    return successes_by_node, max_transmissions_per_channel, approx_mode
 
 
 def _collect_traffic_sent(node_windows: list[dict[str, object]]) -> dict[int, int]:
@@ -461,16 +468,18 @@ def _compute_successes_and_traffic(
     rng: random.Random,
     capture_probability: float,
 ) -> tuple[dict[int, int], dict[int, int], int, bool]:
-    transmissions_by_sf: dict[int, list[tuple[float, float, int]]] = {}
+    transmissions_by_channel: dict[int, dict[int, list[tuple[float, float, int]]]] = {}
     for node_window in node_windows:
         sf_value = int(node_window["sf"])
         airtime = airtime_by_sf[sf_value]
-        for start_time in node_window["tx_starts"]:
-            transmissions_by_sf.setdefault(sf_value, []).append(
+        tx_starts = node_window["tx_starts"]
+        tx_channels = node_window["tx_channels"]
+        for start_time, channel_id in zip(tx_starts, tx_channels):
+            transmissions_by_channel.setdefault(channel_id, {}).setdefault(sf_value, []).append(
                 (start_time, start_time + airtime, int(node_window["node_id"]))
             )
     successes_by_node, transmission_count, approx_mode = _compute_collision_successes(
-        transmissions_by_sf,
+        transmissions_by_channel,
         rng=rng,
         capture_probability=capture_probability,
     )
@@ -1609,6 +1618,10 @@ def run_simulation(
                     else 0.0
                 )
                 tx_starts = [window_start_s + node_offset_s + t for t in traffic_times]
+                tx_channels = [
+                    rng.randrange(n_channels) if n_channels > 0 else 0
+                    for _ in range(len(tx_starts))
+                ]
                 effective_duration_s = _effective_window_duration(
                     tx_starts,
                     airtime_s,
@@ -1624,6 +1637,7 @@ def run_simulation(
                         "rate_multiplier": rate_multiplier,
                         "traffic_sent": len(traffic_times),
                         "tx_starts": tx_starts,
+                        "tx_channels": tx_channels,
                         "effective_duration_s": effective_duration_s,
                         "shadowing_db": shadowing_db,
                         "shadowing_sigma_db": shadowing_sigma_db_node,
@@ -2097,6 +2111,10 @@ def run_simulation(
                     else 0.0
                 )
                 tx_starts = [window_start_s + node_offset_s + t for t in traffic_times]
+                tx_channels = [
+                    rng.randrange(n_channels) if n_channels > 0 else 0
+                    for _ in range(len(tx_starts))
+                ]
                 effective_duration_s = _effective_window_duration(
                     tx_starts,
                     airtime_s,
@@ -2112,6 +2130,7 @@ def run_simulation(
                         "rate_multiplier": rate_multiplier,
                         "traffic_sent": len(traffic_times),
                         "tx_starts": tx_starts,
+                        "tx_channels": tx_channels,
                         "effective_duration_s": effective_duration_s,
                         "shadowing_db": shadowing_db,
                         "shadowing_sigma_db": shadowing_sigma_db_node,
