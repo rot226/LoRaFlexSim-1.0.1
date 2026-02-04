@@ -24,7 +24,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     save_figure,
 )
-from article_c.common.plotting_style import LEGEND_STYLE, legend_extra_height
+from article_c.common.plotting_style import LEGEND_STYLE
 from plot_defaults import resolve_ieee_figsize
 
 
@@ -198,14 +198,18 @@ def _plot_learning_curve(
     algorithms = _select_algorithms(preferred_algos, available)
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
     width, height = fig.get_size_inches()
-    legend_loc = "above"
+    legend_loc = "right"
     legend_rows = 1
     if algorithms:
         legend_ncol = int(LEGEND_STYLE.get("ncol", len(algorithms)) or len(algorithms))
         ncol = min(len(algorithms), legend_ncol) or 1
         legend_rows = max(1, math.ceil(len(algorithms) / ncol))
-    extra_height = legend_extra_height(height, legend_rows, legend_loc="right")
-    apply_figure_layout(fig, figsize=(width, height + extra_height))
+    apply_figure_layout(
+        fig,
+        figsize=(width, height),
+        legend_loc=legend_loc,
+        legend_rows=legend_rows,
+    )
     reward_values = [
         float(row.get("avg_reward"))
         for row in rows

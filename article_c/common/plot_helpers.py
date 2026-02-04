@@ -1130,6 +1130,14 @@ def apply_figure_layout(
                     right,
                     max(0.0, top - reserved_top),
                 )
+            if normalized_legend_loc == "right" and adjusted_tight.get("rect"):
+                left, bottom, right, top = adjusted_tight["rect"]
+                adjusted_tight["rect"] = (
+                    left,
+                    bottom,
+                    min(right, LEGEND_RIGHT_MARGIN),
+                    top,
+                )
             fig.tight_layout(**adjusted_tight)
         else:
             rect = tight_layout_rect_from_margins(margins)
