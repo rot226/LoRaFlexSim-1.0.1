@@ -450,7 +450,7 @@ def _validate_plot_data(
             f"{csv_path}: {sizes_label}."
         )
         print(
-            "AVERTISSEMENT: "
+            "WARNING: "
             f"{module_path} nécessite au moins 2 tailles "
             "disponibles, figure ignorée."
         )
