@@ -609,8 +609,11 @@ def _compose_post_simulation_report(
 def _assert_success_rate_threshold(
     per_size_stats: dict[int, dict[str, object]],
     threshold: float = 0.95,
-    allow_low_success_rate: bool = False,
+    strict: bool = False,
 ) -> None:
+    overall_success_sum = sum(
+        float(stats.get("success_sum", 0.0)) for stats in per_size_stats.values()
+    )
     overall_success_count = sum(
         int(stats.get("success_count", 0)) for stats in per_size_stats.values()
     )
@@ -621,11 +624,29 @@ def _assert_success_rate_threshold(
         return
     zero_ratio = overall_success_zero_count / overall_success_count
     if zero_ratio > threshold:
-        message = "Simulation invalide : success_rate trop faible."
-        if allow_low_success_rate:
-            logging.warning(message)
-            return
-        raise RuntimeError(message)
+        success_mean = overall_success_sum / overall_success_count
+        per_size_lines: list[str] = []
+        for size in sorted(per_size_stats):
+            stats = per_size_stats[size]
+            size_count = int(stats.get("success_count", 0))
+            size_zero = int(stats.get("success_zero_count", 0))
+            size_sum = float(stats.get("success_sum", 0.0))
+            size_mean = size_sum / size_count if size_count > 0 else 0.0
+            size_zero_ratio = size_zero / size_count if size_count > 0 else 0.0
+            per_size_lines.append(
+                f"  - taille {size}: mean={size_mean:.4f}, zéros={size_zero_ratio:.1%}"
+            )
+        summary = "\n".join(per_size_lines) if per_size_lines else "  - aucune statistique"
+        message = (
+            "Simulation invalide : success_rate trop faible.\n"
+            f"- success_rate moyen global: {success_mean:.4f}\n"
+            f"- part de zéros: {zero_ratio:.1%} (seuil {threshold:.1%})\n"
+            "- résumé par taille:\n"
+            f"{summary}"
+        )
+        logging.warning(message)
+        if strict:
+            raise RuntimeError(message)
 
 
 def _write_post_simulation_report(
@@ -1020,7 +1041,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     _assert_success_rate_threshold(
         size_post_stats,
-        allow_low_success_rate=not strict_mode,
+        strict=strict_mode,
     )
 
     if selection_rows:
