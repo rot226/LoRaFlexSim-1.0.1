@@ -6,6 +6,7 @@ import argparse
 import sys
 from importlib.util import find_spec
 from pathlib import Path
+from statistics import median
 
 if find_spec("article_c") is None:
     repo_root = Path(__file__).resolve().parents[1]
@@ -501,6 +502,10 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
     if args.network_sizes:
         step2_args.append("--network-sizes")
         step2_args.extend([str(size) for size in args.network_sizes])
+    if getattr(args, "reference_network_size", None) is not None:
+        step2_args.extend(
+            ["--reference-network-size", str(args.reference_network_size)]
+        )
     if args.replications is not None:
         step2_args.extend(["--replications", str(args.replications)])
     if args.seeds_base is not None:
@@ -622,6 +627,8 @@ def main(argv: list[str] | None = None) -> None:
         if args.network_sizes
         else list(DEFAULT_CONFIG.scenario.network_sizes)
     )
+    reference_network_size = int(round(median(network_sizes)))
+    args.reference_network_size = reference_network_size
     for size in network_sizes:
         size_args = argparse.Namespace(**vars(args))
         size_args.network_sizes = [size]

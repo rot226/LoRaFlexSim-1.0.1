@@ -907,10 +907,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     densities = parse_network_size_list(args.network_sizes)
     requested_sizes = list(densities)
     flat_output = bool(args.flat_output)
-    reference_network_size = (
-        int(args.reference_network_size)
-        if getattr(args, "reference_network_size", None) is not None
-        else int(round(median(requested_sizes)))
+    if getattr(args, "reference_network_size", None) is not None:
+        reference_network_size = int(args.reference_network_size)
+        reference_source = "argument --reference-network-size"
+    else:
+        reference_network_size = int(round(median(requested_sizes)))
+        reference_source = "médiane des tailles demandées"
+    print(
+        "Référence réseau utilisée pour l'étape 2: "
+        f"{reference_network_size} ({reference_source})."
     )
     replications = replication_ids(args.replications)
     simulated_sizes: list[int] = []
