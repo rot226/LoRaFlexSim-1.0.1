@@ -166,14 +166,15 @@ def _diagnose_density(rows: list[dict[str, object]]) -> None:
         warnings.warn("Colonne density absente: impossible de valider la densité.", stacklevel=2)
         return
     density = pd.to_numeric(df["density"], errors="coerce").dropna()
-    _warn_if_constant(density, "density")
+    density_constant = _warn_if_constant(density, "density")
     if "network_size" in df.columns:
         network_size = pd.to_numeric(df["network_size"], errors="coerce").dropna()
         aligned = pd.concat([network_size, density], axis=1).dropna()
         if not aligned.empty:
             area = aligned.iloc[:, 0] / aligned.iloc[:, 1].replace(0, pd.NA)
             area = area.dropna()
-            _warn_if_constant(area, "area (network_size / density)")
+            if density_constant:
+                _warn_if_constant(area, "area (network_size / density)")
 
 
 def _plot_diagnostics(
