@@ -268,10 +268,12 @@ def validate_results(
     tolerance: float,
     const_tolerance: float,
     max_samples: int,
+    skip_step2: bool,
 ) -> AnomalyTracker:
     tracker = AnomalyTracker(max_samples=max_samples)
     _ensure_step1_flat_files(step1_dir)
-    _ensure_step2_flat_files(step2_dir)
+    if not skip_step2:
+        _ensure_step2_flat_files(step2_dir)
 
     _validate_pdr_file(
         step1_dir / "raw_metrics.csv",
@@ -291,18 +293,19 @@ def validate_results(
         const_tolerance=const_tolerance,
         tracker=tracker,
     )
-    _validate_reward_file(
-        step2_dir / "raw_results.csv",
-        reward_key="reward",
-        const_tolerance=const_tolerance,
-        tracker=tracker,
-    )
-    _validate_reward_file(
-        step2_dir / "aggregated_results.csv",
-        reward_key="reward_mean",
-        const_tolerance=const_tolerance,
-        tracker=tracker,
-    )
+    if not skip_step2:
+        _validate_reward_file(
+            step2_dir / "raw_results.csv",
+            reward_key="reward",
+            const_tolerance=const_tolerance,
+            tracker=tracker,
+        )
+        _validate_reward_file(
+            step2_dir / "aggregated_results.csv",
+            reward_key="reward_mean",
+            const_tolerance=const_tolerance,
+            tracker=tracker,
+        )
     return tracker
 
 
@@ -340,6 +343,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=20,
         help="Nombre maximal d'anomalies détaillées à afficher.",
     )
+    parser.add_argument(
+        "--skip-step2",
+        action="store_true",
+        help="Ignore les contrôles de l'étape 2.",
+    )
     return parser
 
 
@@ -352,9 +360,11 @@ def main(argv: list[str] | None = None) -> int:
         tolerance=args.tolerance,
         const_tolerance=args.const_tolerance,
         max_samples=args.max_samples,
+        skip_step2=args.skip_step2,
     )
+    scope_label = "Step1" if args.skip_step2 else "résultats"
     if tracker.has_anomalies():
-        print(f"Anomalies détectées: {tracker.count}.")
+        print(f"Anomalies détectées ({scope_label}): {tracker.count}.")
         for message in tracker.samples:
             print(f"- {message}")
         if tracker.count > len(tracker.samples):
@@ -366,7 +376,7 @@ def main(argv: list[str] | None = None) -> int:
             "Validation info: "
             f"{tracker.packet_level_rows} ligne(s) packet-level ignorée(s)."
         )
-    print("Aucune anomalie détectée.")
+    print(f"Aucune anomalie {scope_label} détectée.")
     return 0
 
 

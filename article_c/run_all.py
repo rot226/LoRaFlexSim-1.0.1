@@ -631,7 +631,10 @@ def main(argv: list[str] | None = None) -> None:
             run_step2(_build_step2_args(size_args))
         print(f"Résumé: taille de réseau {size} terminée.")
     print("Validation des résultats (article C) en cours...")
-    validation_code = validate_results([])
+    validation_args: list[str] = []
+    if args.skip_step2:
+        validation_args.append("--skip-step2")
+    validation_code = validate_results(validation_args)
     if validation_code != 0:
         raise SystemExit(validation_code)
 
