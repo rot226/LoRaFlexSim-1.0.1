@@ -82,14 +82,17 @@ def configure_figure(
                 labels=labels,
             )
     legend_in_figure = bool(fig.legends)
+    legend_entry_count = 0
     if legend_in_figure:
         legend = fig.legends[0]
+        legend_entry_count = len(legend.get_texts())
         legend_rows = max(
             1,
-            math.ceil(len(legend.get_texts()) / max(1, legend.get_ncols())),
+            math.ceil(legend_entry_count / max(1, legend.get_ncols())),
         )
     else:
         legend_rows = 1
+    adjust_layout_for_legend = legend_in_figure and legend_entry_count > 1
 
     if legend_loc == "above":
         above_margins = (
@@ -97,7 +100,7 @@ def configure_figure(
                 **legend_margins("above", legend_rows=legend_rows),
                 "bottom": FIGURE_MARGINS["bottom"],
             }
-            if legend_in_figure
+            if adjust_layout_for_legend
             else FIGURE_MARGINS
         )
         apply_figure_layout(
@@ -114,7 +117,7 @@ def configure_figure(
                     **legend_margins("right"),
                     "bottom": FIGURE_MARGINS["bottom"],
                 }
-                if legend_in_figure
+                if adjust_layout_for_legend
                 else FIGURE_MARGINS
             ),
             legend_loc=legend_loc,

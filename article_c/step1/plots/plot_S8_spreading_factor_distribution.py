@@ -32,6 +32,7 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     render_metric_status,
     save_figure,
+    warn_if_insufficient_network_sizes,
 )
 from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import resolve_ieee_figsize
@@ -394,8 +395,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = False) -> None:
     size_rows, _ = filter_rows_by_network_sizes(size_rows, args.network_sizes)
     df = pd.DataFrame(size_rows)
     network_sizes = sorted(df["network_size"].unique())
-    if len(network_sizes) < 2:
-        warnings.warn("Moins de deux tailles de réseau disponibles.", stacklevel=2)
+    warn_if_insufficient_network_sizes(network_sizes)
 
     fig = _plot_distribution(rows)
     output_dir = step_dir / "plots" / "output"

@@ -1407,6 +1407,16 @@ def warn_if_missing_network_sizes(
         )
 
 
+def warn_if_insufficient_network_sizes(network_sizes: Iterable[int]) -> None:
+    """Avertit si une seule taille de réseau est disponible."""
+    sizes = list(network_sizes)
+    if len(sizes) < 2:
+        warnings.warn(
+            "Moins de deux tailles de réseau disponibles ; tracé avec une seule valeur.",
+            stacklevel=2,
+        )
+
+
 def _network_size_value(row: dict[str, object]) -> int:
     if "network_size" in row:
         return int(_to_float(row.get("network_size")))
