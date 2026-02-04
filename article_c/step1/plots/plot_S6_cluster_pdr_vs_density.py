@@ -21,6 +21,7 @@ from article_c.common.plot_helpers import (
     apply_figure_layout,
     add_figure_legend,
     assert_legend_present,
+    clear_axis_legends,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
@@ -142,11 +143,7 @@ def _plot_metric_page(
             ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
     handles, labels = legend_handles_for_algos_snir()
-    for row in axes:
-        for ax in row:
-            legend = ax.get_legend()
-            if legend is not None:
-                legend.remove()
+    clear_axis_legends(axes)
     if not handles:
         handles, labels = fallback_legend_handles()
     add_figure_legend(fig, handles, labels, legend_loc="right")

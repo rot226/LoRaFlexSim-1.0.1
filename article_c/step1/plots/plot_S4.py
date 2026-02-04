@@ -23,6 +23,7 @@ from article_c.common.plot_helpers import (
     apply_figure_layout,
     algo_label,
     assert_legend_present,
+    clear_axis_legends,
     ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
@@ -163,9 +164,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     )
     handles, labels = ax.get_legend_handles_labels()
     if handles:
-        existing_legend = ax.get_legend()
-        if existing_legend is not None:
-            existing_legend.remove()
+        clear_axis_legends(ax)
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Sent Frames (budget saturant, median, p10-p90)")
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))

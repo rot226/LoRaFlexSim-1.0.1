@@ -23,6 +23,7 @@ from article_c.common.plot_helpers import (
     apply_figure_layout,
     algo_label,
     assert_legend_present,
+    clear_axis_legends,
     ensure_network_size,
     filter_rows_by_network_sizes,
     filter_cluster,
@@ -159,9 +160,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         marker_size=6.5,
         percentile_line_width=1.4,
     )
-    existing_legend = ax.get_legend()
-    if existing_legend is not None:
-        existing_legend.remove()
+    clear_axis_legends(ax)
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Packet Delivery Ratio")
     ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.2f}"))

@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
     assert_legend_present,
+    clear_axis_legends,
     collect_legend_entries,
     MetricStatus,
     deduplicate_legend_entries,
@@ -216,9 +217,7 @@ def _plot_metric(
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     axes[0].set_ylabel("Outage probability")
-    for ax in axes:
-        if ax.get_legend() is not None:
-            ax.get_legend().remove()
+    clear_axis_legends(axes)
     handles, labels = collect_legend_entries(axes)
     handles, labels = deduplicate_legend_entries(handles, labels)
     if not handles:
@@ -372,9 +371,7 @@ def _plot_raw_metric(
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     axes[0].set_ylabel("Outage probability (raw)")
-    for ax in axes:
-        if ax.get_legend() is not None:
-            ax.get_legend().remove()
+    clear_axis_legends(axes)
     handles, labels = collect_legend_entries(axes)
     handles, labels = deduplicate_legend_entries(handles, labels)
     if not handles:

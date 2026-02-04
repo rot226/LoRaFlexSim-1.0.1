@@ -107,7 +107,7 @@ LEGEND_TOP_MARGIN = 0.74
 LEGEND_TOP_RESERVED = 0.02
 LEGEND_ROW_EXTRA_MARGIN = 0.05
 LEGEND_ABOVE_TIGHT_LAYOUT_TOP = 0.86
-LEGEND_RIGHT_MARGIN = 0.79
+LEGEND_RIGHT_MARGIN = 0.75
 DEFAULT_LEGEND_LOC = "right"
 CONSTANT_METRIC_VARIANCE_THRESHOLD = 1e-6
 CONSTANT_METRIC_MESSAGE = "métrique constante – à investiguer"
@@ -193,6 +193,16 @@ def _flatten_axes(axes: object) -> list[plt.Axes]:
 def flatten_axes(axes: object) -> list[plt.Axes]:
     """Retourne une liste aplatie d'axes Matplotlib."""
     return _flatten_axes(axes)
+
+
+def clear_axis_legends(axes: object) -> None:
+    """Supprime proprement les légendes attachées aux axes."""
+    for ax in _flatten_axes(axes):
+        legend = ax.get_legend()
+        if legend is None:
+            continue
+        legend.remove()
+        ax.legend_ = None
 
 
 def collect_legend_entries(axes: object) -> tuple[list[Line2D], list[str]]:
