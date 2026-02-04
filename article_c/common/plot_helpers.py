@@ -96,6 +96,8 @@ BASE_GRID_ALPHA = 0.6
 BASE_GRID_LINEWIDTH = 0.8
 BASE_DPI = 300
 BASE_GRID_ENABLED = True
+MAX_TIGHT_BBOX_SCALE = 4.0
+MAX_TIGHT_BBOX_INCHES = 30.0
 AXES_TITLE_Y = 1.02
 SUPTITLE_TOP_RATIO = 0.85
 FIGURE_SUBPLOT_TOP = FIGURE_MARGINS["top"]
@@ -929,6 +931,8 @@ def save_figure(
     effective_bbox = bbox_inches
     if effective_bbox is None and use_tight:
         effective_bbox = "tight"
+    if not use_tight and effective_bbox == "tight":
+        effective_bbox = None
     for ext in selected_formats:
         save_figure_path(
             fig,
@@ -1015,14 +1019,46 @@ def save_figure_path(
     ensure_dir(output_path.parent)
     format_name = fmt or output_path.suffix.lstrip(".").lower()
     savefig_style = dict(SAVEFIG_STYLE)
-    if bbox_inches is not None:
-        savefig_style["bbox_inches"] = bbox_inches
+    safe_bbox = _safe_bbox_inches(fig, bbox_inches)
+    savefig_style["bbox_inches"] = safe_bbox
     if format_name == "eps":
         with _rasterize_transparent_artists(fig):
             with _force_opaque_alpha(fig):
                 fig.savefig(output_path, format=format_name, dpi=BASE_DPI, **savefig_style)
     else:
         fig.savefig(output_path, format=format_name, dpi=BASE_DPI, **savefig_style)
+
+
+def _safe_bbox_inches(fig: plt.Figure, bbox_inches: str | None) -> str | None:
+    if bbox_inches != "tight":
+        return bbox_inches
+    if fig.canvas is None:
+        return bbox_inches
+    try:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        tight_bbox = fig.get_tightbbox(renderer=renderer)
+    except Exception as exc:
+        LOGGER.debug("Impossible d'évaluer la bounding box tight: %s", exc)
+        return bbox_inches
+    if tight_bbox is None:
+        return bbox_inches
+    fig_width_in, fig_height_in = fig.get_size_inches()
+    bbox_width_in = tight_bbox.width / fig.dpi
+    bbox_height_in = tight_bbox.height / fig.dpi
+    max_width_in = max(fig_width_in * MAX_TIGHT_BBOX_SCALE, MAX_TIGHT_BBOX_INCHES)
+    max_height_in = max(fig_height_in * MAX_TIGHT_BBOX_SCALE, MAX_TIGHT_BBOX_INCHES)
+    if bbox_width_in > max_width_in or bbox_height_in > max_height_in:
+        LOGGER.warning(
+            "Bounding box tight trop grande (%.2f x %.2f in, limite %.2f x %.2f). "
+            "Désactivation de bbox_inches.",
+            bbox_width_in,
+            bbox_height_in,
+            max_width_in,
+            max_height_in,
+        )
+        return None
+    return bbox_inches
 
 
 def apply_figure_layout(
