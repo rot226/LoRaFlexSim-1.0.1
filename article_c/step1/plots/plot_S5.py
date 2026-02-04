@@ -426,7 +426,7 @@ def _plot_pdr_distributions(
             fig,
             configure_axes,
             "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)",
-            legend_loc="above",
+            legend_loc="right",
             legend_handles=legend_handles,
             legend_labels=legend_labels,
         )
@@ -554,7 +554,7 @@ def _plot_pdr_distribution_page(
         fig,
         axes,
         title,
-        legend_loc="above",
+        legend_loc="right",
         legend_handles=legend_handles,
         legend_labels=legend_labels,
     )

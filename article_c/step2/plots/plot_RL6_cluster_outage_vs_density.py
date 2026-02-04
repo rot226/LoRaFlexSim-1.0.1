@@ -225,7 +225,7 @@ def _plot_metric(
         handles, labels = legend_handles_for_algos_snir(["snir_on"])
     if not handles:
         handles, labels = fallback_legend_handles()
-    add_figure_legend(fig, handles, labels, legend_loc="above")
+    add_figure_legend(fig, handles, labels, legend_loc="right")
     fig.suptitle(
         "Step 2 - Outage probability by Cluster (SNIR on)"
         f"{_title_suffix(network_sizes)}",
@@ -381,7 +381,7 @@ def _plot_raw_metric(
         handles, labels = legend_handles_for_algos_snir(["snir_on"])
     if not handles:
         handles, labels = fallback_legend_handles()
-    add_figure_legend(fig, handles, labels, legend_loc="above")
+    add_figure_legend(fig, handles, labels, legend_loc="right")
     fig.suptitle(
         "Step 2 - Outage probability brut par cluster et réplication (SNIR on)"
         f"{_title_suffix(network_sizes)}",

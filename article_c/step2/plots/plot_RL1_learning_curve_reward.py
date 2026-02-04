@@ -204,7 +204,7 @@ def _plot_learning_curve(
         legend_ncol = int(LEGEND_STYLE.get("ncol", len(algorithms)) or len(algorithms))
         ncol = min(len(algorithms), legend_ncol) or 1
         legend_rows = max(1, math.ceil(len(algorithms) / ncol))
-    extra_height = legend_extra_height(height, legend_rows)
+    extra_height = legend_extra_height(height, legend_rows, legend_loc="right")
     apply_figure_layout(fig, figsize=(width, height + extra_height))
     reward_values = [
         float(row.get("avg_reward"))

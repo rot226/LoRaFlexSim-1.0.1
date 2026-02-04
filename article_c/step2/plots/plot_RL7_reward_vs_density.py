@@ -120,7 +120,7 @@ def _plot_metric(
         legend_ncol = int(LEGEND_STYLE.get("ncol", series_count) or series_count)
         ncol = min(series_count, legend_ncol) or 1
         legend_rows = max(1, math.ceil(series_count / ncol))
-    extra_height = legend_extra_height(height, legend_rows)
+    extra_height = legend_extra_height(height, legend_rows, legend_loc="right")
     apply_figure_layout(fig, figsize=(width, height + extra_height))
     ensure_network_size(rows)
     if network_sizes is None:
@@ -161,7 +161,7 @@ def _plot_metric(
         "Step 2 - Global Median Reward vs Network size (adaptive algorithms)"
         f"{_title_suffix(network_sizes)}"
     )
-    add_global_legend(fig, ax, legend_loc="above")
+    add_global_legend(fig, ax, legend_loc="right")
     return fig
 
 
@@ -404,7 +404,7 @@ def _plot_diagnostics(
         add_global_legend(
             fig,
             axes[0],
-            legend_loc="above",
+            legend_loc="right",
             handles=handles,
             labels=labels,
             use_fallback=False,

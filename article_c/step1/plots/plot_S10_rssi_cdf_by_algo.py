@@ -174,7 +174,7 @@ def plot_cdf_by_algo(
             fig,
             [ax],
             f"CDF {metric_key.upper()} par algorithme (SNIR on/off)",
-            legend_loc="above",
+            legend_loc="right",
         )
         save_figure(fig, output_dir, "plot_S10")
         assert_legend_present(fig, "plot_S10")
@@ -215,7 +215,7 @@ def plot_cdf_by_algo(
         fig,
         [ax],
         f"CDF {metric_key.upper()} par algorithme (SNIR on/off)",
-        legend_loc="above",
+        legend_loc="right",
     )
 
     save_figure(fig, output_dir, "plot_S10")

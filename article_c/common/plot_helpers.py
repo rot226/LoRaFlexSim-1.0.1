@@ -710,7 +710,10 @@ def _legend_margins(
 ) -> dict[str, float]:
     normalized = _normalize_legend_loc(legend_loc)
     if normalized == "right":
-        return {"top": FIGURE_SUBPLOT_TOP, "right": LEGEND_RIGHT_MARGIN}
+        return {
+            "top": FIGURE_SUBPLOT_TOP,
+            "right": min(FIGURE_SUBPLOT_RIGHT, LEGEND_RIGHT_MARGIN),
+        }
     if normalized == "above":
         return {"top": _legend_top_margin(fig, legend_rows)}
     return {"top": FIGURE_SUBPLOT_TOP}
