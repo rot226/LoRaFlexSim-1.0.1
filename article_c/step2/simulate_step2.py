@@ -418,6 +418,11 @@ def _compute_collision_successes(
         channel_id: sum(len(events) for events in sf_events.values())
         for channel_id, sf_events in transmissions.items()
     }
+    per_node_total_global: dict[int, int] = {}
+    for sf_events in transmissions.values():
+        for events in sf_events.values():
+            for _start, _end, node_id in events:
+                per_node_total_global[node_id] = per_node_total_global.get(node_id, 0) + 1
     max_transmissions_per_channel = max(transmissions_per_channel.values(), default=0)
     approx_mode = max_transmissions_per_channel > approx_threshold
     rng = rng or random.Random(0)
@@ -458,13 +463,24 @@ def _compute_collision_successes(
             if sample_probability < 1.0:
                 for node_id, successes in sample_successes.items():
                     estimated = int(round(successes / sample_probability))
+                    remaining_global = per_node_total_global.get(
+                        node_id, 0
+                    ) - successes_by_node.get(node_id, 0)
+                    if remaining_global <= 0:
+                        continue
                     successes_by_node[node_id] = successes_by_node.get(node_id, 0) + min(
-                        estimated, per_node_total[node_id]
+                        estimated, per_node_total[node_id], remaining_global
                     )
             else:
                 for node_id, successes in sample_successes.items():
+                    remaining_global = per_node_total_global.get(
+                        node_id, 0
+                    ) - successes_by_node.get(node_id, 0)
+                    if remaining_global <= 0:
+                        continue
                     successes_by_node[node_id] = (
-                        successes_by_node.get(node_id, 0) + successes
+                        successes_by_node.get(node_id, 0)
+                        + min(successes, remaining_global)
                     )
     return successes_by_node, max_transmissions_per_channel, approx_mode
 
@@ -484,16 +500,22 @@ def _compute_successes_and_traffic(
     *,
     rng: random.Random,
     capture_probability: float,
+    debug_step2: bool = False,
 ) -> tuple[dict[int, int], dict[int, int], int, bool]:
     transmissions_by_channel: dict[int, dict[int, list[tuple[float, float, int]]]] = {}
+    per_node_total_global: dict[int, int] = {}
     for node_window in node_windows:
         sf_value = int(node_window["sf"])
         airtime = airtime_by_sf[sf_value]
         tx_starts = node_window["tx_starts"]
+        node_id = int(node_window["node_id"])
+        per_node_total_global[node_id] = per_node_total_global.get(node_id, 0) + len(
+            tx_starts
+        )
         tx_channels = node_window["tx_channels"]
         for start_time, channel_id in zip(tx_starts, tx_channels):
             transmissions_by_channel.setdefault(channel_id, {}).setdefault(sf_value, []).append(
-                (start_time, start_time + airtime, int(node_window["node_id"]))
+                (start_time, start_time + airtime, node_id)
             )
     successes_by_node, transmission_count, approx_mode = _compute_collision_successes(
         transmissions_by_channel,
@@ -501,14 +523,34 @@ def _compute_successes_and_traffic(
         capture_probability=capture_probability,
     )
     traffic_sent_by_node = _collect_traffic_sent(node_windows)
+    aberrant_nodes: list[int] = []
     for node_id, successes in successes_by_node.items():
         traffic_sent = traffic_sent_by_node.get(node_id, 0)
-        if successes > traffic_sent:
+        per_node_total = per_node_total_global.get(node_id, 0)
+        corrected_successes = min(successes, traffic_sent, per_node_total)
+        if corrected_successes != successes:
             logger.warning(
-                "Succès > trafic après collisions (node_id=%s successes=%s traffic_sent=%s).",
+                (
+                    "Succès incohérents après collisions "
+                    "(node_id=%s successes=%s traffic_sent=%s per_node_total=%s)."
+                ),
                 node_id,
                 successes,
                 traffic_sent,
+                per_node_total,
+            )
+            aberrant_nodes.append(node_id)
+            successes_by_node[node_id] = corrected_successes
+        elif debug_step2 and traffic_sent != per_node_total:
+            aberrant_nodes.append(node_id)
+    if debug_step2 and aberrant_nodes:
+        for node_id in aberrant_nodes:
+            logger.debug(
+                "Noeud aberrant (node_id=%s per_node_total=%s traffic_sent=%s successes=%s).",
+                node_id,
+                per_node_total_global.get(node_id, 0),
+                traffic_sent_by_node.get(node_id, 0),
+                successes_by_node.get(node_id, 0),
             )
     return successes_by_node, traffic_sent_by_node, transmission_count, approx_mode
 
@@ -1704,6 +1746,7 @@ def run_simulation(
                 airtime_by_sf,
                 rng=rng,
                 capture_probability=capture_probability_value,
+                debug_step2=debug_step2,
             )
             link_qualities = [
                 float(node_window["link_quality"]) for node_window in node_windows
@@ -2205,6 +2248,7 @@ def run_simulation(
                 airtime_by_sf,
                 rng=rng,
                 capture_probability=capture_probability_value,
+                debug_step2=debug_step2,
             )
             link_qualities = [
                 float(node_window["link_quality"]) for node_window in node_windows
