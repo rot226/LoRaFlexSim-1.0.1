@@ -139,6 +139,25 @@ def legend_bbox_to_anchor(
     return (anchor_x, LEGEND_ANCHOR_BASE_Y + LEGEND_ANCHOR_PADDING + legend_height)
 
 
+def _legend_ncols(legend: Legend, default: int | None = None) -> int:
+    if default is None:
+        default = int(LEGEND_STYLE.get("ncol", 1) or 1)
+    get_ncols = getattr(legend, "get_ncols", None)
+    ncols = None
+    if callable(get_ncols):
+        try:
+            ncols = int(get_ncols())
+        except (TypeError, ValueError):
+            ncols = None
+    if ncols is None:
+        ncols = getattr(legend, "_ncols", None)
+    try:
+        ncols = int(ncols) if ncols is not None else default
+    except (TypeError, ValueError):
+        ncols = default
+    return max(1, ncols)
+
+
 def set_network_size_ticks(ax: plt.Axes, network_sizes: Iterable[int]) -> None:
     """Force les ticks de tailles de réseau et les formate en entier."""
     ax.set_xticks(list(network_sizes))
@@ -189,8 +208,9 @@ def adjust_legend_to_fit(
         height_ratio = bbox.height / (fig.dpi * fig_height)
         if width_ratio <= max_width_ratio and height_ratio <= max_height_ratio:
             break
-        if width_ratio > max_width_ratio and legend.get_ncols() > 1:
-            legend.set_ncols(max(1, legend.get_ncols() - 1))
+        current_ncols = _legend_ncols(legend)
+        if width_ratio > max_width_ratio and current_ncols > 1:
+            legend.set_ncols(max(1, current_ncols - 1))
             adjusted = True
         else:
             texts = legend.get_texts()
