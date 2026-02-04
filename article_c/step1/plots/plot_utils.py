@@ -35,6 +35,25 @@ def _flatten_axes(axes: object) -> list[plt.Axes]:
     return []
 
 
+def _legend_ncols(legend: plt.Legend, default: int | None = None) -> int:
+    if default is None:
+        default = int(LEGEND_STYLE.get("ncol", 1) or 1)
+    get_ncols = getattr(legend, "get_ncols", None)
+    ncols = None
+    if callable(get_ncols):
+        try:
+            ncols = int(get_ncols())
+        except (TypeError, ValueError):
+            ncols = None
+    if ncols is None:
+        ncols = getattr(legend, "_ncols", None)
+    try:
+        ncols = int(ncols) if ncols is not None else default
+    except (TypeError, ValueError):
+        ncols = default
+    return max(1, ncols)
+
+
 def configure_figure(
     fig: plt.Figure,
     axes: object,
@@ -88,7 +107,7 @@ def configure_figure(
         legend_entry_count = len(legend.get_texts())
         legend_rows = max(
             1,
-            math.ceil(legend_entry_count / max(1, legend.get_ncols())),
+            math.ceil(legend_entry_count / _legend_ncols(legend)),
         )
     else:
         legend_rows = 1
