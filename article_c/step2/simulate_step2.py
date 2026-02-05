@@ -171,6 +171,22 @@ def _apply_phase_offset(
     return sorted(((time + phase_offset) % window_duration_s) for time in traffic_times)
 
 
+def _assign_tx_channels(
+    tx_starts: list[float],
+    n_channels: int,
+    *,
+    rng: random.Random,
+    mode: Literal["random", "round_robin"] = "random",
+) -> list[int]:
+    if not tx_starts:
+        return []
+    if n_channels <= 0:
+        return [0 for _ in tx_starts]
+    if mode == "round_robin":
+        return [index % n_channels for index in range(len(tx_starts))]
+    return [rng.randrange(n_channels) for _ in tx_starts]
+
+
 def _effective_window_duration(
     tx_starts: list[float],
     airtime_s: float,
@@ -431,36 +447,33 @@ def _compute_collision_successes(
                     collided[index] = True
         return collided
 
-    transmissions_per_channel = {
-        channel_id: sum(len(events) for events in sf_events.values())
+    transmissions_per_bucket = {
+        (channel_id, sf_value): len(events)
         for channel_id, sf_events in transmissions.items()
+        for sf_value, events in sf_events.items()
     }
     per_node_total_global: dict[int, int] = {}
     for sf_events in transmissions.values():
         for events in sf_events.values():
             for _start, _end, node_id in events:
                 per_node_total_global[node_id] = per_node_total_global.get(node_id, 0) + 1
-    max_transmissions_per_channel = max(transmissions_per_channel.values(), default=0)
-    approx_mode = max_transmissions_per_channel > approx_threshold
+    max_transmissions_per_bucket = max(transmissions_per_bucket.values(), default=0)
+    approx_mode = max_transmissions_per_bucket > approx_threshold
     rng = rng or random.Random(0)
     successes_by_node: dict[int, int] = {}
     for channel_id, sf_events in transmissions.items():
-        channel_total = transmissions_per_channel.get(channel_id, 0)
-        channel_approx = channel_total > approx_threshold
-        for events in sf_events.values():
+        for sf_value, events in sf_events.items():
             if not events:
                 continue
+            bucket_total = transmissions_per_bucket.get((channel_id, sf_value), 0)
+            bucket_approx = bucket_total > approx_threshold
             per_node_total: dict[int, int] = {}
             for _start, _end, node_id in events:
                 per_node_total[node_id] = per_node_total.get(node_id, 0) + 1
             sample_probability = 1.0
             sampled_events = events
-            if channel_approx and channel_total > 0:
-                scaled_sample_size = max(
-                    1,
-                    int(round(approx_sample_size * len(events) / channel_total)),
-                )
-                scaled_sample_size = min(scaled_sample_size, len(events))
+            if bucket_approx and bucket_total > 0:
+                scaled_sample_size = min(max(1, approx_sample_size), len(events))
                 if len(events) > scaled_sample_size:
                     sample_probability = scaled_sample_size / len(events)
                     sampled_events = [
@@ -499,7 +512,7 @@ def _compute_collision_successes(
                         successes_by_node.get(node_id, 0)
                         + min(successes, remaining_global)
                     )
-    return successes_by_node, max_transmissions_per_channel, approx_mode
+    return successes_by_node, max_transmissions_per_bucket, approx_mode
 
 
 def _collect_traffic_sent(node_windows: list[dict[str, object]]) -> dict[int, int]:
@@ -1715,10 +1728,12 @@ def run_simulation(
                     else 0.0
                 )
                 tx_starts = [window_start_s + node_offset_s + t for t in traffic_times]
-                tx_channels = [
-                    rng.randrange(n_channels) if n_channels > 0 else 0
-                    for _ in range(len(tx_starts))
-                ]
+                tx_channels = _assign_tx_channels(
+                    tx_starts,
+                    n_channels,
+                    rng=rng,
+                    mode="random",
+                )
                 effective_duration_s = _effective_window_duration(
                     tx_starts,
                     airtime_s,
@@ -2225,10 +2240,12 @@ def run_simulation(
                     else 0.0
                 )
                 tx_starts = [window_start_s + node_offset_s + t for t in traffic_times]
-                tx_channels = [
-                    rng.randrange(n_channels) if n_channels > 0 else 0
-                    for _ in range(len(tx_starts))
-                ]
+                tx_channels = _assign_tx_channels(
+                    tx_starts,
+                    n_channels,
+                    rng=rng,
+                    mode="random",
+                )
                 effective_duration_s = _effective_window_duration(
                     tx_starts,
                     airtime_s,
