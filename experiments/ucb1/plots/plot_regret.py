@@ -7,6 +7,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from article_c.common.plot_helpers import apply_figure_layout
 from experiments.ucb1.plots.plot_style import apply_ieee_style, top_groups
 
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
@@ -144,7 +145,7 @@ def plot_regret(*, csv_path: Path, output_path: Path, packet_intervals: list[flo
         ax.legend(fontsize=8, ncol=2)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
     return output_path

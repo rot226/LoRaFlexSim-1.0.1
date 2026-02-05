@@ -11,6 +11,7 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 
+from article_c.common.plot_helpers import apply_figure_layout
 try:  # pragma: no cover - dépend du mode d'exécution
     from .lfs_metrics import (
         MethodScenarioMetrics,
@@ -466,7 +467,7 @@ def _plot_points(
         ax.set_title(f"{_metric_label(y_spec)} vs {_metric_label(x_spec)}")
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
     fig.savefig(output, dpi=dpi)
     plt.close(fig)
 

@@ -8,6 +8,7 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from article_c.common.plot_helpers import apply_figure_layout
 from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups, top_groups
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -114,7 +115,7 @@ def _style_maps(clusters: list[int], intervals: list[float]) -> tuple[dict[int, 
 def _save_plot(fig: plt.Figure, output_dir: Path, name: str) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / name
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
     fig.savefig(path, dpi=150)
     plt.close(fig)
     return path
