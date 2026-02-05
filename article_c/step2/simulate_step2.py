@@ -10,7 +10,7 @@ import math
 from statistics import mean, median, pstdev
 from typing import Literal
 
-from article_c.common.config import DEFAULT_CONFIG
+from article_c.common.config import DEFAULT_CONFIG, STEP2_SAFE_CONFIG, Step2Config
 from article_c.common.csv_io import write_rows, write_simulation_results
 from article_c.common.lora_phy import bitrate_lora, coding_rate_to_cr, compute_airtime
 from article_c.common.utils import assign_clusters, generate_traffic_times
@@ -297,6 +297,101 @@ def _collision_size_factor(
     overload = ratio - 1.0
     return _clamp_range(
         1.0 + 0.6 * (1.0 + overload) ** 0.45, 1.0, clamp_over_max
+    )
+
+
+def _resolve_load_clamps(
+    step2_defaults: Step2Config,
+    network_load_min: float | None,
+    network_load_max: float | None,
+    *,
+    safe_profile: bool,
+) -> tuple[float, float]:
+    load_clamp_min_value = (
+        step2_defaults.network_load_min
+        if network_load_min is None
+        else float(network_load_min)
+    )
+    load_clamp_max_value = (
+        step2_defaults.network_load_max
+        if network_load_max is None
+        else float(network_load_max)
+    )
+    if load_clamp_min_value > load_clamp_max_value:
+        load_clamp_min_value, load_clamp_max_value = (
+            load_clamp_max_value,
+            load_clamp_min_value,
+        )
+    if safe_profile:
+        load_clamp_min_value = max(
+            load_clamp_min_value, STEP2_SAFE_CONFIG.network_load_min
+        )
+        load_clamp_max_value = min(
+            load_clamp_max_value, STEP2_SAFE_CONFIG.network_load_max
+        )
+        if load_clamp_min_value > load_clamp_max_value:
+            load_clamp_min_value = STEP2_SAFE_CONFIG.network_load_min
+            load_clamp_max_value = STEP2_SAFE_CONFIG.network_load_max
+    return load_clamp_min_value, load_clamp_max_value
+
+
+def _resolve_collision_clamps(
+    step2_defaults: Step2Config,
+    collision_size_min: float | None,
+    collision_size_under_max: float | None,
+    collision_size_over_max: float | None,
+    *,
+    safe_profile: bool,
+) -> tuple[float, float, float]:
+    collision_clamp_min_value = (
+        step2_defaults.collision_size_min
+        if collision_size_min is None
+        else float(collision_size_min)
+    )
+    collision_clamp_under_max_value = (
+        step2_defaults.collision_size_under_max
+        if collision_size_under_max is None
+        else float(collision_size_under_max)
+    )
+    collision_clamp_over_max_value = (
+        step2_defaults.collision_size_over_max
+        if collision_size_over_max is None
+        else float(collision_size_over_max)
+    )
+    if collision_clamp_min_value > collision_clamp_under_max_value:
+        collision_clamp_min_value, collision_clamp_under_max_value = (
+            collision_clamp_under_max_value,
+            collision_clamp_min_value,
+        )
+    if collision_clamp_under_max_value > collision_clamp_over_max_value:
+        collision_clamp_under_max_value, collision_clamp_over_max_value = (
+            collision_clamp_over_max_value,
+            collision_clamp_under_max_value,
+        )
+    if safe_profile:
+        collision_clamp_min_value = max(
+            collision_clamp_min_value, STEP2_SAFE_CONFIG.collision_size_min
+        )
+        collision_clamp_under_max_value = min(
+            collision_clamp_under_max_value,
+            STEP2_SAFE_CONFIG.collision_size_under_max,
+        )
+        collision_clamp_over_max_value = min(
+            collision_clamp_over_max_value, STEP2_SAFE_CONFIG.collision_size_over_max
+        )
+        if collision_clamp_min_value > collision_clamp_under_max_value:
+            collision_clamp_min_value = STEP2_SAFE_CONFIG.collision_size_min
+            collision_clamp_under_max_value = STEP2_SAFE_CONFIG.collision_size_under_max
+        if collision_clamp_under_max_value > collision_clamp_over_max_value:
+            collision_clamp_over_max_value = STEP2_SAFE_CONFIG.collision_size_over_max
+            if collision_clamp_under_max_value > collision_clamp_over_max_value:
+                collision_clamp_under_max_value = (
+                    STEP2_SAFE_CONFIG.collision_size_under_max
+                )
+    return (
+        collision_clamp_min_value,
+        collision_clamp_under_max_value,
+        collision_clamp_over_max_value,
     )
 
 
@@ -1315,6 +1410,7 @@ def run_simulation(
     output_dir: Path | None = None,
     debug_step2: bool = False,
     reward_alert_level: str = "INFO",
+    safe_profile: bool = False,
 ) -> Step2Result:
     """Exécute une simulation proxy de l'étape 2."""
     rng = random.Random(seed)
@@ -1512,46 +1608,23 @@ def run_simulation(
                 congestion_coeff_growth_value,
                 congestion_coeff_max_value,
             )
-    load_clamp_min_value = (
-        step2_defaults.network_load_min
-        if network_load_min is None
-        else float(network_load_min)
+    load_clamp_min_value, load_clamp_max_value = _resolve_load_clamps(
+        step2_defaults,
+        network_load_min,
+        network_load_max,
+        safe_profile=bool(safe_profile),
     )
-    load_clamp_max_value = (
-        step2_defaults.network_load_max
-        if network_load_max is None
-        else float(network_load_max)
+    (
+        collision_clamp_min_value,
+        collision_clamp_under_max_value,
+        collision_clamp_over_max_value,
+    ) = _resolve_collision_clamps(
+        step2_defaults,
+        collision_size_min,
+        collision_size_under_max,
+        collision_size_over_max,
+        safe_profile=bool(safe_profile),
     )
-    if load_clamp_min_value > load_clamp_max_value:
-        load_clamp_min_value, load_clamp_max_value = (
-            load_clamp_max_value,
-            load_clamp_min_value,
-        )
-    collision_clamp_min_value = (
-        step2_defaults.collision_size_min
-        if collision_size_min is None
-        else float(collision_size_min)
-    )
-    collision_clamp_under_max_value = (
-        step2_defaults.collision_size_under_max
-        if collision_size_under_max is None
-        else float(collision_size_under_max)
-    )
-    collision_clamp_over_max_value = (
-        step2_defaults.collision_size_over_max
-        if collision_size_over_max is None
-        else float(collision_size_over_max)
-    )
-    if collision_clamp_min_value > collision_clamp_under_max_value:
-        collision_clamp_min_value, collision_clamp_under_max_value = (
-            collision_clamp_under_max_value,
-            collision_clamp_min_value,
-        )
-    if collision_clamp_under_max_value > collision_clamp_over_max_value:
-        collision_clamp_under_max_value, collision_clamp_over_max_value = (
-            collision_clamp_over_max_value,
-            collision_clamp_under_max_value,
-        )
     load_factor = _network_load_factor(
         n_nodes, reference_size, load_clamp_min_value, load_clamp_max_value
     )
