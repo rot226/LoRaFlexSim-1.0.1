@@ -66,6 +66,8 @@ def _compute_reward(
     max_penalty_ratio: float,
     *,
     floor_on_zero_success: bool = False,
+    log_components: bool = False,
+    log_context: str | None = None,
 ) -> float:
     latency_norm = _clip(latency_norm**1.35 * 1.08, 0.0, 1.0)
     energy_norm = _clip(energy_norm**1.35 * 1.08, 0.0, 1.0)
@@ -130,6 +132,29 @@ def _compute_reward(
             latency_norm,
             energy_norm,
             collision_norm,
+        )
+    if log_components:
+        suffix = f" ({log_context})" if log_context else ""
+        logger.info(
+            "reward components%s: success_rate=%.4f weighted_quality=%.4f "
+            "collision_penalty=%.4f reward=%.4f sf_norm=%.3f latency_norm=%.3f "
+            "energy_norm=%.3f collision_norm=%.3f lambda_energy=%.3f "
+            "lambda_collision=%.3f weights=(sf=%.2f latency=%.2f energy=%.2f collision=%.2f).",
+            suffix,
+            success_rate,
+            weighted_quality,
+            collision_penalty,
+            clipped_reward,
+            sf_norm,
+            latency_norm,
+            energy_norm,
+            collision_norm,
+            lambda_energy,
+            lambda_collision,
+            weights.sf_weight,
+            weights.latency_weight,
+            weights.energy_weight,
+            weights.collision_weight,
         )
     return clipped_reward
 
@@ -1115,7 +1140,7 @@ def _reward_weights_for_algo(
             sf_weight=0.45,
             latency_weight=0.32,
             energy_weight=0.23,
-            collision_weight=0.18,
+            collision_weight=0.14,
         )
     elif algorithm == "mixra_h":
         weights = AlgoRewardWeights(
@@ -1129,7 +1154,7 @@ def _reward_weights_for_algo(
             sf_weight=0.23,
             latency_weight=0.22,
             energy_weight=0.55,
-            collision_weight=0.24,
+            collision_weight=0.18,
         )
     else:
         default_floor = 0.1
@@ -1569,6 +1594,8 @@ def run_simulation(
         if n_nodes == 0:
             logger.error("network_size == 0 avant écriture des résultats.")
         raise ValueError("network_size doit être strictement positif.")
+    pilot_network_size = min(DEFAULT_CONFIG.scenario.network_sizes)
+    log_reward_components = n_nodes == pilot_network_size
     scenario_radius_m = float(DEFAULT_CONFIG.scenario.radius_m)
     if scenario_radius_m <= 0.0:
         raise ValueError("radius_m doit être strictement positif pour calculer la densité.")
@@ -1753,7 +1780,13 @@ def run_simulation(
         collision_clamp_over_max=collision_clamp_over_max_value,
     )
     if lambda_collision is None:
-        lambda_collision = _clip(0.15 + 0.45 * lambda_energy, 0.08, 0.7)
+        lambda_collision_base = step2_defaults.lambda_collision_base + 0.35 * lambda_energy
+        size_scale = 1.0 + step2_defaults.lambda_collision_overload_scale * overload_ratio
+        lambda_collision = _clip(
+            lambda_collision_base * size_scale,
+            step2_defaults.lambda_collision_min,
+            step2_defaults.lambda_collision_max,
+        )
     else:
         lambda_collision = _clip(lambda_collision, 0.0, 1.0)
     max_penalty_ratio_value = (
@@ -2115,6 +2148,15 @@ def run_simulation(
                     window_duration_s=window_duration_value,
                     airtime_s=airtime_s,
                 )
+                log_components = (
+                    log_reward_components and round_id == 0 and node_id == 0
+                )
+                log_context = (
+                    f"pilot_size={network_size_value} algo={algo_label} "
+                    f"round={round_id} node={node_id}"
+                    if log_components
+                    else None
+                )
                 reward = _compute_reward(
                     metrics.success_rate,
                     traffic_sent,
@@ -2127,6 +2169,8 @@ def run_simulation(
                     lambda_collision,
                     max_penalty_ratio_value,
                     floor_on_zero_success=floor_on_zero_success_value,
+                    log_components=log_components,
+                    log_context=log_context,
                 )
                 window_rewards.append(reward)
                 round_success_rates.append(metrics.success_rate)
@@ -2615,6 +2659,15 @@ def run_simulation(
                     window_duration_s=window_duration_value,
                     airtime_s=airtime_s,
                 )
+                log_components = (
+                    log_reward_components and round_id == 0 and node_id == 0
+                )
+                log_context = (
+                    f"pilot_size={network_size_value} algo={algo_label} "
+                    f"round={round_id} node={node_id}"
+                    if log_components
+                    else None
+                )
                 reward = _compute_reward(
                     metrics.success_rate,
                     traffic_sent,
@@ -2627,6 +2680,8 @@ def run_simulation(
                     lambda_collision,
                     max_penalty_ratio_value,
                     floor_on_zero_success=floor_on_zero_success_value,
+                    log_components=log_components,
+                    log_context=log_context,
                 )
                 window_rewards.append(reward)
                 round_success_rates.append(metrics.success_rate)
