@@ -88,9 +88,10 @@ def configure_figure(
         legend = fig.legends[0]
         legend_entry_count = len(legend.get_texts())
         legend_cols_default = int(LEGEND_STYLE.get("ncol", 1) or 1)
+        legend_cols = legend_ncols(legend, legend_cols_default)
         legend_rows = max(
             1,
-            math.ceil(legend_entry_count / legend_ncols(legend, legend_cols_default)),
+            math.ceil(legend_entry_count / max(1, legend_cols)),
         )
     else:
         legend_rows = 1
