@@ -270,7 +270,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         configure_figure(
             fig,
             axes,
-            "Step 1 - Spreading Factor Distribution (SNIR on/off)",
+            title=None,
             legend_loc="right",
         )
         apply_figure_layout(fig, margins=legend_margins("above"))
@@ -297,7 +297,6 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         ax.set_xticks(x_positions)
         ax.set_xticklabels(algo_labels(algorithms))
         ax.set_xlabel("Algorithm")
-        ax.set_title(SNIR_LABELS.get(snir_mode, snir_mode))
         ax.set_ylim(0.0, 1.0)
     axes[0].set_ylabel("Share of nodes")
     handles, labels = axes[0].get_legend_handles_labels()
@@ -313,7 +312,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
     configure_figure(
         fig,
         axes,
-        "Step 1 - Spreading Factor Distribution (SNIR on/off)",
+        title=None,
         legend_loc="right",
     )
     apply_figure_layout(fig, margins=legend_margins("above"))

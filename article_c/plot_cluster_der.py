@@ -182,7 +182,6 @@ def _plot_der_by_cluster(df: pd.DataFrame, clusters: list[str]) -> plt.Figure:
                 legend_handles.append(line)
                 legend_labels.append(label)
                 seen_algos.add(algo)
-        ax.set_title(f"Cluster {cluster}")
         ax.set_xlabel("Nombre de nœuds")
         ax.set_ylabel("DER")
         ax.set_ylim(0.0, 1.0)

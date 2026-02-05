@@ -73,10 +73,6 @@ def _plot_selection(
             show_fallback_legend=True,
             legend_handles=fallback_legend_handles(),
         )
-        ax.set_title(
-            "Step 2 - UCB1-SF Selection Probability"
-            f"{_title_suffix(sorted(network_sizes))}"
-        )
         return fig
     for network_size in network_sizes:
         size_rows = [row for row in rows if row["network_size"] == network_size]
@@ -92,10 +88,6 @@ def _plot_selection(
             ax.plot(rounds, values, marker="o", label=label)
     ax.set_xlabel("Round")
     ax.set_ylabel("Selection Probability")
-    ax.set_title(
-        "Step 2 - UCB1-SF Selection Probability"
-        f"{_title_suffix(network_sizes)}"
-    )
     add_global_legend(fig, ax, legend_loc="right")
     return fig
 

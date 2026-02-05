@@ -320,7 +320,6 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
             show_fallback_legend=True,
             legend_handles=_legend_handles_for_algos(algos),
         )
-        ax.set_title("Step 2 - Mean reward vs Aggregated PDR")
         return fig
     for point in points:
         algo = str(point["algo"])
@@ -333,7 +332,6 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
         )
     ax.set_xlabel("Aggregated PDR (probability)")
     ax.set_ylabel("Mean window reward")
-    ax.set_title("Step 2 - Mean reward vs Aggregated PDR")
     ax.set_xlim(0.0, 1.05)
     ax.set_ylim(0.0, 1.05)
     ax.grid(True, linestyle=":", alpha=0.5)

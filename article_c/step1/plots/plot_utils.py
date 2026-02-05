@@ -39,7 +39,7 @@ def _flatten_axes(axes: object) -> list[plt.Axes]:
 def configure_figure(
     fig: plt.Figure,
     axes: object,
-    title: str,
+    title: str | None = None,
     legend_loc: str = "right",
     legend_handles: list[object] | None = None,
     legend_labels: list[str] | None = None,
@@ -125,4 +125,5 @@ def configure_figure(
             ),
             legend_loc=legend_loc,
         )
-    fig.suptitle(title, y=suptitle_y_from_top(fig))
+    if title:
+        fig.suptitle(title, y=suptitle_y_from_top(fig))

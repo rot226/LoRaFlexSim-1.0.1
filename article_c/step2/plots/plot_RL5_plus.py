@@ -75,10 +75,6 @@ def _plot_selection(
             show_fallback_legend=True,
             legend_handles=fallback_legend_handles(),
         )
-        ax.set_title(
-            "Step 2 - UCB1-SF Selection Probability (p10/p50/p90)"
-            f"{_title_suffix(sorted(network_sizes))}"
-        )
         return fig
     data = _summarize_selection(rows, network_sizes)
     max_points = 60 if lite else None
@@ -104,10 +100,6 @@ def _plot_selection(
             ax.fill_between(rounds, p10, p90, alpha=0.15)
     ax.set_xlabel("Round")
     ax.set_ylabel("Selection Probability")
-    ax.set_title(
-        "Step 2 - UCB1-SF Selection Probability (p10/p50/p90)"
-        f"{_title_suffix(network_sizes)}"
-    )
     add_global_legend(fig, ax, legend_loc="right")
     return fig
 

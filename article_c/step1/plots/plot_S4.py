@@ -97,7 +97,6 @@ def _add_summary_plot(
     ax.set_xticklabels([algo_label(str(algo)) for algo in algos])
     ax.set_ylabel("Trames\n(médiane ± min/max)")
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.set_title("Synthèse min/médiane/max")
     summary_handles = [
         Line2D(
             [],
@@ -148,7 +147,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         configure_figure(
             fig,
             ax,
-            "Step 1 - Sent Frames (budget saturant) vs Network size (number of nodes) "
+            title=None,
             "(SNIR on/off)",
             legend_loc="right",
         )
@@ -174,7 +173,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     configure_figure(
         fig,
         ax,
-        "Step 1 - Sent Frames (budget saturant) vs Network size (number of nodes) "
+        title=None,
         "(SNIR on/off)",
         legend_loc="right",
         legend_handles=handles if handles else None,
@@ -206,7 +205,7 @@ def _plot_summary_metric(rows: list[dict[str, object]], metric_key: str) -> plt.
         configure_figure(
             fig,
             ax,
-            "Step 1 - Sent Frames (budget saturant) (SNIR on/off) — Synthèse",
+            title=None,
             legend_loc="right",
         )
         apply_figure_layout(
@@ -225,7 +224,7 @@ def _plot_summary_metric(rows: list[dict[str, object]], metric_key: str) -> plt.
     configure_figure(
         fig,
         ax,
-        "Step 1 - Sent Frames (budget saturant) (SNIR on/off) — Synthèse",
+        title=None,
         legend_loc="right",
         legend_handles=handles if handles else None,
         legend_labels=labels if handles else None,

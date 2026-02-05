@@ -101,17 +101,9 @@ def _plot_entropy(
             show_fallback_legend=True,
             legend_handles=fallback_legend_handles(),
         )
-        ax.set_title(
-            "Step 2 - SF Selection Entropy vs Round"
-            f"{_title_suffix(network_sizes)}"
-        )
         return fig
     ax.set_xlabel("Round")
     ax.set_ylabel("Selection Entropy (bits)")
-    ax.set_title(
-        "Step 2 - SF Selection Entropy vs Round"
-        f"{_title_suffix(network_sizes)}"
-    )
     if network_sizes:
         add_global_legend(fig, ax, legend_loc="right")
     return fig

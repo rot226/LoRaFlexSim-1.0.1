@@ -225,7 +225,6 @@ def _plot_learning_curve(
             show_fallback_legend=True,
             legend_handles=_legend_handles_for_algos(algorithms),
         )
-        ax.set_title("Average window reward vs Decision rounds")
         return fig
     network_sizes = sorted(
         {int(_to_float(row.get("network_size"))) for row in rows}
@@ -259,7 +258,6 @@ def _plot_learning_curve(
                 ax.plot(rounds, values, marker="o", label=label)
     ax.set_xlabel("Decision rounds")
     ax.set_ylabel("Average window reward")
-    ax.set_title("Average window reward vs Decision rounds")
     add_global_legend(fig, ax, legend_loc=legend_loc)
     return fig
 
