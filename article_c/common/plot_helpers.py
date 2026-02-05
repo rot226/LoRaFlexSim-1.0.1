@@ -307,14 +307,14 @@ def _legend_fallback_in_axis(
 
 def legend_ncols(legend: Legend, default: int) -> int:
     """Retourne le nombre de colonnes de légende avec un fallback robuste."""
-    if hasattr(legend, "_ncols"):
-        try:
-            return int(getattr(legend, "_ncols"))
-        except (TypeError, ValueError):
-            pass
     if hasattr(legend, "get_ncols"):
         try:
             return int(legend.get_ncols())
+        except (TypeError, ValueError):
+            pass
+    if hasattr(legend, "_ncols"):
+        try:
+            return int(getattr(legend, "_ncols"))
         except (TypeError, ValueError):
             pass
     return default
