@@ -192,12 +192,12 @@ def _plot_der_by_cluster(df: pd.DataFrame, clusters: list[str]) -> plt.Figure:
     add_global_legend(
         fig,
         axes[0],
-        legend_loc="above",
+        legend_loc="right",
         handles=legend_handles,
         labels=legend_labels,
         use_fallback=False,
     )
-    apply_figure_layout(fig, margins=legend_margins("above"))
+    apply_figure_layout(fig, margins=legend_margins("right"), legend_loc="right")
     return fig
 
 
