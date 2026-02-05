@@ -31,5 +31,11 @@ def resolve_figsize(num_series: int | None = None) -> Tuple[float, float]:
 def resolve_ieee_figsize(num_series: int | None = None) -> Tuple[float, float]:
     """Retourne la taille IEEE (simple/double colonne) selon le nombre de séries."""
     if num_series and num_series > 1:
-        return DOUBLE_COLUMN_FIGSIZE
-    return SINGLE_COLUMN_FIGSIZE
+        return (
+            IEEE_DOUBLE_COLUMN_WIDTH,
+            IEEE_DOUBLE_COLUMN_WIDTH * IEEE_HEIGHT_RATIO,
+        )
+    return (
+        IEEE_SINGLE_COLUMN_WIDTH,
+        IEEE_SINGLE_COLUMN_WIDTH * IEEE_HEIGHT_RATIO,
+    )
