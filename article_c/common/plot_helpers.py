@@ -109,7 +109,7 @@ LEGEND_TOP_MARGIN = 0.74
 LEGEND_TOP_RESERVED = 0.02
 LEGEND_ROW_EXTRA_MARGIN = 0.05
 LEGEND_ABOVE_TIGHT_LAYOUT_TOP = 0.86
-LEGEND_RIGHT_MARGIN = 0.7
+LEGEND_RIGHT_MARGIN = 0.68
 DEFAULT_LEGEND_LOC = "right"
 CONSTANT_METRIC_VARIANCE_THRESHOLD = 1e-6
 CONSTANT_METRIC_MESSAGE = "métrique constante – à investiguer"
@@ -951,13 +951,11 @@ def save_figure(
     ensure_dir(output_dir)
     apply_output_fonttype()
     if use_tight:
-        fig.tight_layout()
+        apply_figure_layout(fig, tight_layout=True)
     selected_formats = _EXPORT_FORMATS if formats is None else _normalize_export_formats(formats)
     effective_bbox = bbox_inches
-    if effective_bbox is None and use_tight:
+    if effective_bbox is None:
         effective_bbox = "tight"
-    if effective_bbox is None and not use_tight:
-        effective_bbox = False
     for ext in selected_formats:
         save_figure_path(
             fig,
@@ -1044,6 +1042,8 @@ def save_figure_path(
     ensure_dir(output_path.parent)
     format_name = fmt or output_path.suffix.lstrip(".").lower()
     savefig_style = dict(SAVEFIG_STYLE)
+    if bbox_inches is None:
+        bbox_inches = "tight"
     if bbox_inches is not False:
         safe_bbox = _safe_bbox_inches(fig, bbox_inches)
         savefig_style["bbox_inches"] = safe_bbox

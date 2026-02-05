@@ -11,6 +11,7 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 
+from article_c.common.plot_helpers import apply_figure_layout
 try:  # pragma: no cover - dépend du mode d'exécution
     from .lfs_metrics import (
         MethodScenarioMetrics,
@@ -193,7 +194,7 @@ def _plot_heatmap(
         ax.set_xlabel("Period (s)")
         ax.set_ylabel("Node count")
         ax.set_title(title)
-        fig.tight_layout()
+        apply_figure_layout(fig, tight_layout=True)
         fig.savefig(output_path, dpi=300)
         plt.close(fig)
         return
@@ -239,7 +240,7 @@ def _plot_heatmap(
         except Exception:  # pragma: no cover - contour peut échouer sur des données dégénérées
             pass
 
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
 

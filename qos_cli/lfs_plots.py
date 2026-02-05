@@ -13,6 +13,7 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
+from article_c.common.plot_helpers import apply_figure_layout
 try:  # pragma: no cover - dépend du mode d'exécution
     from .lfs_metrics import (
         MethodScenarioMetrics,
@@ -643,7 +644,7 @@ def plot_cluster_pdr(
 
     axes[-1].set_xticks(x_positions, scenarios)
     axes[-1].set_xlabel("Scenario")
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
 
     output_path = out_dir / "pdr_clusters_vs_scenarios.png"
     fig.savefig(output_path, dpi=150)
@@ -708,7 +709,7 @@ def plot_pdr_vs_nodes(
                 transform=ax.transAxes,
             )
     axes[-1].set_xlabel("Nombre de nœuds")
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
 
     output_path = out_dir / "pdr_global_vs_nodes.png"
     fig.savefig(output_path, dpi=150)
@@ -773,7 +774,7 @@ def plot_der_vs_nodes(
                 transform=ax.transAxes,
             )
     axes[-1].set_xlabel("Nombre de nœuds")
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
 
     output_path = out_dir / "der_global_vs_nodes.png"
     fig.savefig(output_path, dpi=150)
@@ -864,7 +865,7 @@ def plot_cluster_pdr_vs_nodes(
         ax.spines["left"].set_linewidth(1.2)
 
     axes[-1].set_xlabel("Nombre de nœuds")
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
 
     output_path = out_dir / "pdr_clusters_vs_nodes.png"
     fig.savefig(output_path, dpi=150)
@@ -948,7 +949,7 @@ def plot_snir_mean_vs_nodes_by_sf(
         ax.spines["left"].set_linewidth(1.2)
 
     axes[-1].set_xlabel("Nombre de nœuds")
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
 
     output_path = out_dir / "snir_mean_by_sf_vs_nodes.png"
     fig.savefig(output_path, dpi=150)
@@ -1031,7 +1032,7 @@ def plot_snir_mean_vs_nodes_by_cluster(
         ax.spines["left"].set_linewidth(1.2)
 
     axes[-1].set_xlabel("Nombre de nœuds")
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
 
     output_path = out_dir / "snir_mean_by_cluster_vs_nodes.png"
     fig.savefig(output_path, dpi=150)
@@ -1127,7 +1128,7 @@ def _plot_metric_with_snir_states(
                 )
         axes[-1].set_xticklabels(scenarios)
         axes[-1].set_xlabel("Scenario")
-        fig.tight_layout()
+        apply_figure_layout(fig, tight_layout=True)
 
         filename = f"{filename_base}{suffix}.png"
         output_path = out_dir / filename
@@ -1272,7 +1273,7 @@ def plot_snir_moving_average(
                 va="center",
                 transform=ax.transAxes,
             )
-        fig.tight_layout()
+        apply_figure_layout(fig, tight_layout=True)
 
         filename = f"snir_moving_average_vs_scenarios{suffix}.png"
         output_path = out_dir / filename
@@ -1382,7 +1383,7 @@ def plot_collisions(
             )
     axes[-1].set_xticklabels(scenarios)
     axes[-1].set_xlabel("Scenario")
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
 
     output_path = out_dir / "collisions_vs_scenarios.png"
     fig.savefig(output_path, dpi=150)
@@ -1443,7 +1444,7 @@ def plot_energy(
             )
     axes[-1].set_xticklabels(scenarios)
     axes[-1].set_xlabel("Scenario")
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
 
     output_path = out_dir / "energy_total_vs_scenarios.png"
     fig.savefig(output_path, dpi=150)
@@ -1504,7 +1505,7 @@ def plot_jain_index(
             )
     axes[-1].set_xticklabels(scenarios)
     axes[-1].set_xlabel("Scenario")
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
 
     output_path = out_dir / "jain_index_vs_scenarios.png"
     fig.savefig(output_path, dpi=150)
@@ -1565,7 +1566,7 @@ def plot_min_sf_share(
             )
     axes[-1].set_xticklabels(scenarios)
     axes[-1].set_xlabel("Scenario")
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
 
     output_path = out_dir / "min_sf_share_vs_scenarios.png"
     fig.savefig(output_path, dpi=150)
@@ -1648,7 +1649,7 @@ def plot_snir_cdf(
                 filtered_labels = [l for l in labels if l]
                 if filtered_handles:
                     ax.legend(filtered_handles, filtered_labels, loc="best")
-                fig.tight_layout()
+                apply_figure_layout(fig, tight_layout=True)
 
                 filename = f"{filename_prefix}_{sanitize_filename(scenario)}{suffix}.png"
                 output_path = out_dir / filename
@@ -1780,7 +1781,7 @@ def plot_pdr_vs_snir_by_method(
                     transform=ax.transAxes,
                 )
         axes[-1].set_xlabel("SNIR (dB)")
-        fig.tight_layout()
+        apply_figure_layout(fig, tight_layout=True)
 
         filename = f"pdr_vs_snir_{sanitize_filename(scenario)}.png"
         output_path = out_dir / filename
@@ -1872,7 +1873,7 @@ def plot_pdr_vs_snir_by_cluster(
                         transform=ax.transAxes,
                     )
             axes[-1].set_xlabel("SNIR (dB)")
-            fig.tight_layout()
+            apply_figure_layout(fig, tight_layout=True)
 
             filename = f"pdr_vs_snir_{sanitize_filename(scenario)}_cluster_{sanitize_filename(cluster)}.png"
             output_path = out_dir / filename
@@ -1967,7 +1968,7 @@ def plot_collision_rates_vs_nodes(
                 transform=ax.transAxes,
             )
     axes[-1].set_xlabel("Nombre de nœuds")
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
 
     output_path = out_dir / "collision_rates_vs_nodes.png"
     fig.savefig(output_path, dpi=150)
@@ -2041,7 +2042,7 @@ def plot_energy_vs_qos(
                     transform=ax.transAxes,
                 )
         axes[-1].set_xlabel("Énergie moyenne par nœud (J)")
-        fig.tight_layout()
+        apply_figure_layout(fig, tight_layout=True)
         output_path = out_dir / filename
         fig.savefig(output_path, dpi=150)
         plt.close(fig)
@@ -2138,7 +2139,7 @@ def plot_effective_sf_vs_distance(
             va="center",
             transform=ax.transAxes,
         )
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
 
     output_path = out_dir / "effective_sf_vs_distance.png"
     fig.savefig(output_path, dpi=150)
@@ -2228,7 +2229,7 @@ def _plot_rolling_metric_for_scenario(
                 transform=ax.transAxes,
             )
     axes[-1].set_xlabel(x_label)
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
 
     filename = f"rolling_{metric}_{sanitize_filename(scenario)}_{window_mode}.png"
     output_path = out_dir / filename

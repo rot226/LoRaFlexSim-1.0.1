@@ -8,6 +8,7 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from article_c.common.plot_helpers import apply_figure_layout
 from experiments.ucb1.plots.plot_style import apply_ieee_style
 
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
@@ -141,7 +142,7 @@ def main() -> None:
 
     fig.suptitle("Comparaison SNIR on/off")
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
     fig.savefig(args.output, dpi=150)
     plt.close(fig)
 

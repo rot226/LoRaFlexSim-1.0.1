@@ -18,6 +18,7 @@ from typing import Dict, Iterable, List, Mapping, MutableMapping
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from article_c.common.plot_helpers import apply_figure_layout
 from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -229,7 +230,7 @@ def _plot(df: pd.DataFrame, output: Path) -> None:
     ax.set_title("Sensibilité à la charge")
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
     fig.savefig(output, dpi=300)
     print(f"Figure enregistrée dans {output}")
 

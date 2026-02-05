@@ -8,6 +8,7 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from article_c.common.plot_helpers import apply_figure_layout
 from experiments.ucb1.plots.plot_style import apply_ieee_style
 
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
@@ -141,7 +142,7 @@ def _plot_heatmaps(
         fig.colorbar(image, ax=axis, label=labels[key])
 
     fig.suptitle(f"UCB1 – {SNIR_LABELS.get(snir_state, snir_state)}")
-    fig.tight_layout(rect=[0, 0, 1, 0.93])
+    apply_figure_layout(fig, tight_layout={"rect": [0, 0, 1, 0.93]})
 
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"ucb1_reward_snir_der_heatmap_{snir_state}.png"

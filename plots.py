@@ -9,6 +9,7 @@ from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 
+from article_c.common.plot_helpers import apply_figure_layout
 from metrics import RunMetrics, load_cluster_ids
 
 
@@ -161,7 +162,7 @@ def _plot_pdr_by_cluster(
         fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(handles))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.08, 1.0, 0.88))
+    apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.08, 1.0, 0.88)})
     output_path = output_dir / "pdr_clusters.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -212,7 +213,7 @@ def _plot_pdr_global(
     fig.legend(loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
+    apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "pdr_global.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -267,7 +268,7 @@ def _plot_der_global(
     fig.legend(loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
+    apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "der_global.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -334,7 +335,7 @@ def _plot_der_global_log(
     fig.legend(loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
+    apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "der_global_log.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -365,7 +366,7 @@ def _plot_snir_cdf(
     ax.set_title(f"CDF SNIR – {scenario}")
     ax.grid(True, which="both", linestyle=":", alpha=0.5)
     ax.legend(loc="lower right")
-    fig.tight_layout()
+    apply_figure_layout(fig, tight_layout=True)
     output_path = output_dir / "snir_cdf.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -431,7 +432,7 @@ def _plot_snir_distributions(
         fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
+    apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "snir_distributions.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -503,7 +504,7 @@ def _plot_rates_vs_snir(
         fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
+    apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "pdr_vs_snir.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -549,7 +550,7 @@ def _plot_collisions_vs_load(
     fig.legend(loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
+    apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "collisions_vs_charge.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -603,7 +604,7 @@ def _plot_collisions_vs_load_log(
     fig.legend(loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=len(algorithms))
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
+    apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "collisions_vs_charge_log.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -673,7 +674,7 @@ def _plot_delivery_breakdown(
         fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.02), ncol=2)
     if subtitle:
         fig.suptitle(subtitle)
-    fig.tight_layout(rect=(0.0, 0.05, 1.0, 0.88))
+    apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "breakdown_tentatives.png"
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
