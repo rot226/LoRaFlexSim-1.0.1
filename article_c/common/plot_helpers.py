@@ -107,7 +107,7 @@ LEGEND_TOP_MARGIN = 0.74
 LEGEND_TOP_RESERVED = 0.02
 LEGEND_ROW_EXTRA_MARGIN = 0.05
 LEGEND_ABOVE_TIGHT_LAYOUT_TOP = 0.86
-LEGEND_RIGHT_MARGIN = 0.75
+LEGEND_RIGHT_MARGIN = 0.7
 DEFAULT_LEGEND_LOC = "right"
 CONSTANT_METRIC_VARIANCE_THRESHOLD = 1e-6
 CONSTANT_METRIC_MESSAGE = "métrique constante – à investiguer"
@@ -714,6 +714,16 @@ def _legend_top_reserved(fig: plt.Figure | None, legend_rows: int) -> float:
     return _scale_margin_from_base(base_reserved, fig)
 
 
+def _legend_right_margin(fig: plt.Figure | None) -> float:
+    fig_width, _ = _figure_size(fig)
+    base_width = FIGURE_SIZE[0]
+    if fig_width <= 0 or base_width <= 0:
+        return LEGEND_RIGHT_MARGIN
+    margin_inches = (1.0 - LEGEND_RIGHT_MARGIN) * base_width
+    right = 1.0 - margin_inches / fig_width
+    return max(0.0, min(1.0, right))
+
+
 def _legend_margins(
     legend_loc: str,
     *,
@@ -724,7 +734,7 @@ def _legend_margins(
     if normalized == "right":
         return {
             "top": FIGURE_SUBPLOT_TOP,
-            "right": min(FIGURE_SUBPLOT_RIGHT, LEGEND_RIGHT_MARGIN),
+            "right": min(FIGURE_SUBPLOT_RIGHT, _legend_right_margin(fig)),
         }
     if normalized == "above":
         return {"top": _legend_top_margin(fig, legend_rows)}
@@ -1095,8 +1105,9 @@ def apply_figure_layout(
             )
     normalized_legend_loc = _normalize_legend_loc(legend_loc) if legend_loc else ""
     if normalized_legend_loc == "right":
-        if "right" not in margins or margins["right"] > LEGEND_RIGHT_MARGIN:
-            margins["right"] = LEGEND_RIGHT_MARGIN
+        right_margin = _legend_right_margin(fig)
+        if "right" not in margins or margins["right"] > right_margin:
+            margins["right"] = right_margin
     if margins:
         adjusted_margins = dict(margins)
         if "top" in adjusted_margins:
@@ -1145,7 +1156,7 @@ def apply_figure_layout(
                 adjusted_tight["rect"] = (
                     left,
                     bottom,
-                    min(right, LEGEND_RIGHT_MARGIN),
+                    min(right, _legend_right_margin(fig)),
                     top,
                 )
             fig.tight_layout(**adjusted_tight)
