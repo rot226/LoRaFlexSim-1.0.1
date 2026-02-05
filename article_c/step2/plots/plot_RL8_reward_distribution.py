@@ -29,6 +29,9 @@ from article_c.common.plotting_style import legend_extra_height
 from plot_defaults import resolve_ieee_figsize
 
 
+_DENSITY_CONSTANT_WARNED = False
+
+
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
     if not network_sizes:
         return None
@@ -158,6 +161,33 @@ def _metric_status(series: pd.Series, label: str) -> MetricStatus:
     return MetricStatus.OK
 
 
+def _density_series(rows: list[dict[str, object]]) -> pd.Series:
+    df = pd.DataFrame(rows)
+    if "density" not in df.columns:
+        return pd.Series(dtype=float)
+    return pd.to_numeric(df["density"], errors="coerce").dropna()
+
+
+def _density_varies(rows: list[dict[str, object]]) -> bool:
+    density = _density_series(rows)
+    return density.nunique() > 1
+
+
+def _warn_if_constant_density(rows: list[dict[str, object]]) -> None:
+    global _DENSITY_CONSTANT_WARNED
+    if _DENSITY_CONSTANT_WARNED:
+        return
+    density = _density_series(rows)
+    if density.empty:
+        return
+    if density.nunique() <= 1:
+        warnings.warn(
+            "Density constante détectée; utilisation de network_size pour le plot.",
+            stacklevel=2,
+        )
+        _DENSITY_CONSTANT_WARNED = True
+
+
 def _emit_step2_tuning_message() -> None:
     message = (
         "Step2: ajustez les paramètres trafic, collision, link_quality pour "
@@ -171,6 +201,9 @@ def _diagnose_density(rows: list[dict[str, object]]) -> None:
     df = pd.DataFrame(rows)
     if "density" not in df.columns:
         warnings.warn("Colonne density absente: impossible de valider la densité.", stacklevel=2)
+        return
+    if not _density_varies(rows):
+        _warn_if_constant_density(rows)
         return
     density = pd.to_numeric(df["density"], errors="coerce").dropna()
     density_status = _metric_status(density, "density")
@@ -209,8 +242,10 @@ def _plot_diagnostics(
     axes[0].set_title("Histogramme des tailles de réseau")
     axes[0].set_xlabel("Network size")
 
-    if "density" in df.columns:
-        density = pd.to_numeric(df["density"], errors="coerce").dropna()
+    density = _density_series(rows)
+    density_has_values = not density.empty
+    density_varies = density.nunique() > 1
+    if density_has_values and density_varies:
         axes[1].hist(
             density,
             bins="auto",
@@ -222,7 +257,8 @@ def _plot_diagnostics(
         axes[1].set_xlabel("Density")
     else:
         axes[1].axis("off")
-        axes[1].text(0.5, 0.5, "Density absente", ha="center", va="center")
+        label = "Density constante" if density_has_values else "Density absente"
+        axes[1].text(0.5, 0.5, label, ha="center", va="center")
 
     rewards = pd.to_numeric(df.get("reward"), errors="coerce").dropna()
     axes[2].hist(
@@ -334,6 +370,7 @@ def main(
     rows = filter_cluster(rows, "all")
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
     normalize_network_size_rows(rows)
+    _warn_if_constant_density(rows)
     network_sizes_filter = _normalized_network_sizes(network_sizes)
     rows, _ = filter_rows_by_network_sizes(rows, network_sizes_filter)
     if network_sizes_filter is None:
