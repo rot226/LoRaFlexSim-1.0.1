@@ -98,6 +98,8 @@ BASE_DPI = 300
 BASE_GRID_ENABLED = True
 MAX_TIGHT_BBOX_SCALE = 4.0
 MAX_TIGHT_BBOX_INCHES = 30.0
+MAX_IMAGE_DIM_PX = 12000
+MAX_IMAGE_TOTAL_PIXELS = 120_000_000
 AXES_TITLE_Y = 1.02
 SUPTITLE_TOP_RATIO = 0.85
 FIGURE_SUBPLOT_TOP = FIGURE_MARGINS["top"]
@@ -936,23 +938,19 @@ def save_figure(
     stem: str,
     use_tight: bool = False,
     formats: Iterable[str] | None = None,
-    bbox_inches: str | None = None,
+    bbox_inches: str | bool | None = None,
 ) -> None:
     """Sauvegarde la figure dans les formats demandés."""
     ensure_dir(output_dir)
     apply_output_fonttype()
     if use_tight:
         fig.tight_layout()
-    selected_formats = (
-        _EXPORT_FORMATS
-        if formats is None
-        else _normalize_export_formats(formats)
-    )
+    selected_formats = _EXPORT_FORMATS if formats is None else _normalize_export_formats(formats)
     effective_bbox = bbox_inches
     if effective_bbox is None and use_tight:
         effective_bbox = "tight"
-    if not use_tight and effective_bbox == "tight":
-        effective_bbox = None
+    if effective_bbox is None and not use_tight:
+        effective_bbox = False
     for ext in selected_formats:
         save_figure_path(
             fig,
@@ -1033,25 +1031,32 @@ def save_figure_path(
     output_path: Path,
     *,
     fmt: str | None = None,
-    bbox_inches: str | None = None,
+    bbox_inches: str | bool | None = None,
 ) -> None:
     """Sauvegarde une figure en gérant l'export EPS (transparences rasterisées)."""
     ensure_dir(output_path.parent)
     format_name = fmt or output_path.suffix.lstrip(".").lower()
     savefig_style = dict(SAVEFIG_STYLE)
-    safe_bbox = _safe_bbox_inches(fig, bbox_inches)
-    savefig_style["bbox_inches"] = safe_bbox
+    if bbox_inches is not False:
+        safe_bbox = _safe_bbox_inches(fig, bbox_inches)
+        savefig_style["bbox_inches"] = safe_bbox
+    safe_dpi = _safe_dpi(fig, BASE_DPI)
     if format_name == "eps":
         with _rasterize_transparent_artists(fig):
             with _force_opaque_alpha(fig):
-                fig.savefig(output_path, format=format_name, dpi=BASE_DPI, **savefig_style)
+                fig.savefig(output_path, format=format_name, dpi=safe_dpi, **savefig_style)
     else:
-        fig.savefig(output_path, format=format_name, dpi=BASE_DPI, **savefig_style)
+        fig.savefig(output_path, format=format_name, dpi=safe_dpi, **savefig_style)
 
 
-def _safe_bbox_inches(fig: plt.Figure, bbox_inches: str | None) -> str | None:
+def _safe_bbox_inches(
+    fig: plt.Figure,
+    bbox_inches: str | bool | None,
+) -> str | None:
+    if bbox_inches is False:
+        return None
     if bbox_inches != "tight":
-        return bbox_inches
+        return bbox_inches if isinstance(bbox_inches, str) or bbox_inches is None else None
     if fig.canvas is None:
         return bbox_inches
     try:
@@ -1079,6 +1084,28 @@ def _safe_bbox_inches(fig: plt.Figure, bbox_inches: str | None) -> str | None:
         )
         return None
     return bbox_inches
+
+
+def _safe_dpi(fig: plt.Figure, dpi: float) -> float:
+    fig_width_in, fig_height_in = fig.get_size_inches()
+    width_px = fig_width_in * dpi
+    height_px = fig_height_in * dpi
+    max_dim = max(width_px, height_px)
+    total_pixels = width_px * height_px
+    max_dpi = dpi
+    if max_dim > MAX_IMAGE_DIM_PX:
+        max_dpi = min(max_dpi, MAX_IMAGE_DIM_PX / max(fig_width_in, fig_height_in))
+    if total_pixels > MAX_IMAGE_TOTAL_PIXELS:
+        max_dpi = min(max_dpi, math.sqrt(MAX_IMAGE_TOTAL_PIXELS / (fig_width_in * fig_height_in)))
+    if max_dpi < dpi:
+        LOGGER.warning(
+            "DPI réduit de %.1f à %.1f pour éviter une image trop grande (%.0f x %.0f px).",
+            dpi,
+            max_dpi,
+            width_px,
+            height_px,
+        )
+    return max_dpi
 
 
 def apply_figure_layout(
