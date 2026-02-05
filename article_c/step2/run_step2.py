@@ -5,12 +5,13 @@ from __future__ import annotations
 from collections import defaultdict
 import csv
 import logging
+import math
 from multiprocessing import get_context
 from pathlib import Path
 from statistics import median
 from typing import Sequence
 
-from article_c.common.config import STEP2_SAFE_CONFIG
+from article_c.common.config import DEFAULT_CONFIG, STEP2_SAFE_CONFIG
 from article_c.common.csv_io import write_rows, write_simulation_results
 from article_c.common.plot_helpers import (
     add_global_legend,
@@ -35,19 +36,29 @@ def _aggregate_selection_probs(
     selection_rows: list[dict[str, object]]
 ) -> list[dict[str, object]]:
     grouped: dict[tuple[int, int, int], list[float]] = defaultdict(list)
+    density_by_key: dict[tuple[int, int, int], list[float]] = defaultdict(list)
     for row in selection_rows:
         network_size = int(row["network_size"])
         round_id = int(row["round"])
         sf = int(row["sf"])
         selection_prob = float(row["selection_prob"])
         grouped[(network_size, round_id, sf)].append(selection_prob)
+        density_value = row.get("density")
+        if isinstance(density_value, (int, float)):
+            density_by_key[(network_size, round_id, sf)].append(float(density_value))
     aggregated: list[dict[str, object]] = []
     for (network_size, round_id, sf), values in sorted(grouped.items()):
         avg = sum(values) / len(values) if values else 0.0
+        density_values = density_by_key.get((network_size, round_id, sf), [])
+        density_value = (
+            sum(density_values) / len(density_values)
+            if density_values
+            else _compute_density(network_size)
+        )
         aggregated.append(
             {
                 "network_size": network_size,
-                "density": network_size,
+                "density": density_value,
                 "round": round_id,
                 "sf": sf,
                 "selection_prob": round(avg, 6),
@@ -109,25 +120,42 @@ def _aggregate_learning_curve(
     learning_curve_rows: list[dict[str, object]]
 ) -> list[dict[str, object]]:
     grouped: dict[tuple[int, int, str], list[float]] = defaultdict(list)
+    density_by_key: dict[tuple[int, int, str], list[float]] = defaultdict(list)
     for row in learning_curve_rows:
         network_size = int(row["network_size"])
         round_id = int(row["round"])
         algo = str(row["algo"])
         avg_reward = float(row["avg_reward"])
         grouped[(network_size, round_id, algo)].append(avg_reward)
+        density_value = row.get("density")
+        if isinstance(density_value, (int, float)):
+            density_by_key[(network_size, round_id, algo)].append(float(density_value))
     aggregated: list[dict[str, object]] = []
     for (network_size, round_id, algo), values in sorted(grouped.items()):
         avg = sum(values) / len(values) if values else 0.0
+        density_values = density_by_key.get((network_size, round_id, algo), [])
+        density_value = (
+            sum(density_values) / len(density_values)
+            if density_values
+            else _compute_density(network_size)
+        )
         aggregated.append(
             {
                 "network_size": network_size,
-                "density": network_size,
+                "density": density_value,
                 "round": round_id,
                 "algo": algo,
                 "avg_reward": round(avg, 6),
             }
         )
     return aggregated
+
+
+def _compute_density(network_size: int) -> float:
+    radius_m = float(DEFAULT_CONFIG.scenario.radius_m)
+    if radius_m <= 0.0:
+        raise ValueError("radius_m doit être strictement positif pour calculer la densité.")
+    return network_size / (math.pi * radius_m**2)
 
 
 def _log_results_written(output_dir: Path, row_count: int) -> None:
