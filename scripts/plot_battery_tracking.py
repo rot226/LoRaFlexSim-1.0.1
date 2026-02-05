@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 try:  # pandas and matplotlib are optional but required for plotting
     import pandas as pd
     import matplotlib.pyplot as plt
+    from article_c.common.plotting_style import apply_base_rcparams
 except Exception as exc:  # pragma: no cover - handled at runtime
     raise SystemExit(f"Required plotting libraries missing: {exc}")
 
@@ -133,6 +134,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     # Statistics across replicates
     stats = rep_avg.groupby("time")["energy_pct"].agg(["mean", "std"]).reset_index()
 
+    apply_base_rcparams()
     try:
         fig, ax = plt.subplots(figsize=DEFAULT_FIGSIZE_SIMPLE)
     except AttributeError:

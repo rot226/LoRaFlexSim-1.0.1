@@ -20,6 +20,8 @@ import warnings
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from article_c.common.plotting_style import apply_base_rcparams
+
 
 def plot(
     csv_path: str,
@@ -31,6 +33,7 @@ def plot(
     scenarios: set[str] | None = None,
     network_sizes: list[int] | None = None,
 ) -> None:
+    apply_base_rcparams()
     df = pd.read_csv(csv_path)
     if network_sizes and "nodes" in df.columns:
         available = sorted(df["nodes"].dropna().unique())
@@ -43,9 +46,6 @@ def plot(
                 stacklevel=2,
             )
         df = df[df["nodes"].isin(requested)]
-    if hasattr(plt, "rcParams"):
-        plt.rcParams.update({"font.size": 16})
-
     if "scenario" not in df.columns:
         raise ValueError("CSV must contain a 'scenario' column")
 
@@ -95,8 +95,6 @@ def plot(
             df["scenario_label"], rotation=45, ha="right"
         )
         ax.set_ylabel(label)
-        if hasattr(ax, "tick_params"):
-            ax.tick_params(axis="both", labelsize=16)
 
         if metric == "pdr":
             cap = 100.0

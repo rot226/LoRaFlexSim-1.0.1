@@ -15,6 +15,8 @@ import warnings
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from article_c.common.plotting_style import apply_base_rcparams
+
 
 def plot(
     csv_path: str,
@@ -23,6 +25,7 @@ def plot(
     max_energy: float | None = None,
     network_sizes: list[int] | None = None,
 ) -> None:
+    apply_base_rcparams()
     df = pd.read_csv(csv_path)
     if network_sizes and "nodes" in df.columns:
         available = sorted(df["nodes"].dropna().unique())
@@ -41,8 +44,6 @@ def plot(
         )
     else:
         df["scenario_label"] = df["scenario"]
-    plt.rcParams.update({"font.size": 16})
-
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -107,7 +108,6 @@ def plot(
         ax.set_xticks(range(len(df["scenario"])))
         ax.set_xticklabels(df["scenario_label"], rotation=45, ha="right")
         ax.set_ylabel(label)
-        ax.tick_params(axis="both", labelsize=16)
 
         if metric == "pdr":
             cap = 100.0

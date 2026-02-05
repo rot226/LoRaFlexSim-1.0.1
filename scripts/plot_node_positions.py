@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 
 # Allow running the script from a clone without installation
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from article_c.common.plotting_style import apply_base_rcparams
 from loraflexsim.launcher.simulator import Simulator
 from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
 
@@ -38,6 +39,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
+    apply_base_rcparams()
     sim = Simulator(
         num_nodes=args.num_nodes,
         area_size=args.area_size,

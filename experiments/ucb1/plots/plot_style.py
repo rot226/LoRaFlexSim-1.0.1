@@ -6,9 +6,11 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from article_c.common.plotting_style import apply_base_rcparams
 
 def apply_ieee_style() -> None:
     """Applique un style proche des recommandations IEEE."""
+    apply_base_rcparams()
     plt.rcParams.update(
         {
             "font.family": "serif",

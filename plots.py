@@ -9,6 +9,7 @@ from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 
+from article_c.common.plotting_style import apply_base_rcparams
 from article_c.common.plot_helpers import apply_figure_layout
 from metrics import RunMetrics, load_cluster_ids
 
@@ -693,6 +694,7 @@ def generate_plots(
 
     if not results:
         return []
+    apply_base_rcparams()
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     mapping = _index_results(results)

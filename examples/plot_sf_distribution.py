@@ -5,8 +5,11 @@ from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from article_c.common.plotting_style import apply_base_rcparams
+
 
 def main(files: list[str], output_dir: Path, basename: str) -> None:
+    apply_base_rcparams()
     df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
     sf_cols = [c for c in df.columns if c.startswith("sf_distribution.")]
     if sf_cols:

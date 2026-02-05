@@ -4,8 +4,11 @@ from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from article_c.common.plotting_style import apply_base_rcparams
+
 
 def main(files: list[str], output_dir: Path, basename: str) -> None:
+    apply_base_rcparams()
     data = [pd.read_csv(f) for f in files]
     df = pd.concat(data, ignore_index=True)
     by_nodes = df.groupby("nodes")["PDR(%)"].mean()

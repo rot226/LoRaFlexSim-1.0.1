@@ -13,6 +13,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from article_c.common.plotting_style import apply_base_rcparams
 from loraflexsim.launcher import MultiChannel, Simulator
 
 from mobility_models import RandomWaypointWithPause, SmoothMobilityWithPause
@@ -319,6 +320,7 @@ def main() -> None:
         writer.writerows(summary)
     print(f"Saved comparison table to {args.output}")
 
+    apply_base_rcparams()
     plot_comparison(summary, args.figure)
     print(f"Saved comparison figure to {args.figure}")
 

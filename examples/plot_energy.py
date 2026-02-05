@@ -6,6 +6,8 @@ import warnings
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from article_c.common.plotting_style import apply_base_rcparams
+
 
 def main(
     files: list[str],
@@ -14,6 +16,7 @@ def main(
     basename: str | None,
     network_sizes: list[int] | None,
 ) -> None:
+    apply_base_rcparams()
     df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
     if network_sizes and "nodes" in df.columns:
         available = sorted(df["nodes"].dropna().unique())

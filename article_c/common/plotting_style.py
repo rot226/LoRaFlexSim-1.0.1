@@ -84,6 +84,8 @@ BASE_RCPARAMS = {
     "xtick.major.width": 0.8,
     "ytick.major.width": 0.8,
     "lines.linewidth": 1.6,
+    "lines.markersize": 6.0,
+    "lines.markeredgewidth": 0.8,
     "figure.figsize": FIGURE_SIZE,
     "figure.constrained_layout.use": False,
 }

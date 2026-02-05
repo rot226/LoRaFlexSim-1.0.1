@@ -11,6 +11,7 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 
+from article_c.common.plotting_style import apply_base_rcparams
 from article_c.common.plot_helpers import apply_figure_layout
 try:  # pragma: no cover - dépend du mode d'exécution
     from .lfs_metrics import (
@@ -262,6 +263,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     n_values = sorted({params["N"] for params in scenario_params.values()})
     period_values = sorted({params["period"] for params in scenario_params.values()})
 
+    apply_base_rcparams()
     for method, metrics_by_scenario in metrics_by_method.items():
         method_tag = _sanitize_method_name(method)
         pdr_matrix = _build_matrix(
