@@ -46,6 +46,14 @@ class Step2Result:
     learning_curve_rows: list[dict[str, object]]
 
 
+@dataclass
+class RewardAlertState:
+    consecutive_alerts: int = 0
+    correction_rounds_left: int = 0
+    collision_penalty_scale: float = 1.0
+    reward_floor_boost: float = 0.0
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -161,6 +169,41 @@ def _compute_reward(
 
 def _clamp_range(value: float, min_value: float, max_value: float) -> float:
     return max(min_value, min(max_value, value))
+
+
+def _apply_reward_floor_boost(
+    weights: AlgoRewardWeights, reward_floor_boost: float
+) -> AlgoRewardWeights:
+    if reward_floor_boost <= 0.0:
+        return weights
+    boosted_floor = _clip(weights.exploration_floor + reward_floor_boost, 0.0, 1.0)
+    return AlgoRewardWeights(
+        sf_weight=weights.sf_weight,
+        latency_weight=weights.latency_weight,
+        energy_weight=weights.energy_weight,
+        collision_weight=weights.collision_weight,
+        exploration_floor=boosted_floor,
+    )
+
+
+def _consume_reward_alert_adjustment(
+    alert_state: dict[tuple[int, str], RewardAlertState] | None,
+    network_size: int,
+    algo_label: str,
+) -> tuple[float, float]:
+    if alert_state is None:
+        return 1.0, 0.0
+    alert_key = (network_size, algo_label)
+    state = alert_state.get(alert_key)
+    if state is None or state.correction_rounds_left <= 0:
+        return 1.0, 0.0
+    state.correction_rounds_left -= 1
+    collision_penalty_scale = state.collision_penalty_scale
+    reward_floor_boost = state.reward_floor_boost
+    if state.correction_rounds_left <= 0:
+        state.collision_penalty_scale = 1.0
+        state.reward_floor_boost = 0.0
+    return collision_penalty_scale, reward_floor_boost
 
 
 def _max_window_tx(
@@ -760,6 +803,9 @@ def _log_reward_stats(
     rewards: list[float],
     reward_alert_level: int,
     log_counts: dict[tuple[int, str, int], int] | None = None,
+    alert_state: dict[tuple[int, str], "RewardAlertState"] | None = None,
+    global_alert_counts: dict[tuple[int, str], int] | None = None,
+    reward_floor: float = 0.0,
 ) -> None:
     log_key = (network_size, algo_label, round_id)
     if log_counts is not None:
@@ -767,15 +813,47 @@ def _log_reward_stats(
         if log_counts[log_key] > 1:
             return
     min_reward, median_reward, max_reward = _summarize_values(rewards)
-    if math.isclose(min_reward, max_reward, abs_tol=1e-6):
-        logger.log(
-            reward_alert_level,
-            "Alerte reward uniforme (taille=%s algo=%s round=%s reward=%.4f).",
-            network_size,
-            algo_label,
-            round_id,
-            min_reward,
-        )
+    alert_key = (network_size, algo_label)
+    uniform_reward_alert = math.isclose(min_reward, max_reward, abs_tol=1e-6)
+    if uniform_reward_alert:
+        if global_alert_counts is not None:
+            global_alert_counts[alert_key] = global_alert_counts.get(alert_key, 0) + 1
+        should_log_alert = True
+        if global_alert_counts is not None:
+            should_log_alert = global_alert_counts[alert_key] <= 3
+        if should_log_alert:
+            logger.log(
+                reward_alert_level,
+                "Alerte reward uniforme (taille=%s algo=%s round=%s reward=%.4f).",
+                network_size,
+                algo_label,
+                round_id,
+                min_reward,
+            )
+    if alert_state is not None:
+        state = alert_state.setdefault(alert_key, RewardAlertState())
+        if uniform_reward_alert:
+            state.consecutive_alerts += 1
+        else:
+            state.consecutive_alerts = 0
+        if state.consecutive_alerts >= 3 and state.correction_rounds_left == 0:
+            if reward_floor < 0.05:
+                state.reward_floor_boost = 0.05
+                state.collision_penalty_scale = 1.0
+                correction = "hausse du reward_floor"
+            else:
+                state.collision_penalty_scale = 0.75
+                state.reward_floor_boost = 0.0
+                correction = "réduction du collision_penalty"
+            state.correction_rounds_left = 3
+            logger.info(
+                "Correction reward appliquée (taille=%s algo=%s round=%s %s, durée=%s rounds).",
+                network_size,
+                algo_label,
+                round_id,
+                correction,
+                state.correction_rounds_left,
+            )
     logger.info(
         "Stats reward [#%s] - taille=%s algo=%s round=%s reward[min/med/max]=%.4f/%.4f/%.4f",
         log_counts.get(log_key, 1) if log_counts is not None else 1,
@@ -1804,6 +1882,8 @@ def run_simulation(
     }
     latency_norm_by_sf = energy_norm_by_sf
     reward_log_counts: dict[tuple[int, str, int], int] = {}
+    reward_alert_state: dict[tuple[int, str], RewardAlertState] = {}
+    reward_alert_global_counts: dict[tuple[int, str], int] = {}
 
     if algorithm == "ucb1_sf":
         bandit = BanditUCB1(
@@ -1814,6 +1894,18 @@ def run_simulation(
         exploration_epsilon = max(epsilon_greedy, reward_weights.exploration_floor)
         window_start_s = 0.0
         for round_id in range(n_rounds):
+            (
+                collision_penalty_scale,
+                reward_floor_boost,
+            ) = _consume_reward_alert_adjustment(
+                reward_alert_state, network_size_value, algo_label
+            )
+            effective_reward_weights = _apply_reward_floor_boost(
+                reward_weights, reward_floor_boost
+            )
+            lambda_collision_effective = _clip(
+                lambda_collision * collision_penalty_scale, 0.0, 1.0
+            )
             arm_index = bandit.select_arm()
             if exploration_epsilon > 0.0 and rng.random() < exploration_epsilon:
                 arm_index = rng.randrange(n_arms)
@@ -2164,9 +2256,9 @@ def run_simulation(
                     latency_norm_by_sf[sf_value],
                     metrics.energy_norm,
                     metrics.collision_norm,
-                    reward_weights,
+                    effective_reward_weights,
                     lambda_energy,
-                    lambda_collision,
+                    lambda_collision_effective,
                     max_penalty_ratio_value,
                     floor_on_zero_success=floor_on_zero_success_value,
                     log_components=log_components,
@@ -2296,6 +2388,9 @@ def run_simulation(
                 rewards=window_rewards,
                 reward_alert_level=reward_alert_level_value,
                 log_counts=reward_log_counts,
+                alert_state=reward_alert_state,
+                global_alert_counts=reward_alert_global_counts,
+                reward_floor=reward_weights.exploration_floor,
             )
             logger.info(
                 "Round %s - %s : récompense moyenne = %.4f",
@@ -2329,6 +2424,18 @@ def run_simulation(
         mixra_strength = 0.45 if algorithm == "mixra_h" else 0.25
         window_start_s = 0.0
         for round_id in range(n_rounds):
+            (
+                collision_penalty_scale,
+                reward_floor_boost,
+            ) = _consume_reward_alert_adjustment(
+                reward_alert_state, network_size_value, algo_label
+            )
+            effective_reward_weights = _apply_reward_floor_boost(
+                reward_weights, reward_floor_boost
+            )
+            lambda_collision_effective = _clip(
+                lambda_collision * collision_penalty_scale, 0.0, 1.0
+            )
             window_rewards: list[float] = []
             if round_id > 0:
                 delay_s = (
@@ -2675,9 +2782,9 @@ def run_simulation(
                     latency_norm_by_sf[sf_value],
                     metrics.energy_norm,
                     metrics.collision_norm,
-                    reward_weights,
+                    effective_reward_weights,
                     lambda_energy,
-                    lambda_collision,
+                    lambda_collision_effective,
                     max_penalty_ratio_value,
                     floor_on_zero_success=floor_on_zero_success_value,
                     log_components=log_components,
@@ -2807,6 +2914,9 @@ def run_simulation(
                 rewards=window_rewards,
                 reward_alert_level=reward_alert_level_value,
                 log_counts=reward_log_counts,
+                alert_state=reward_alert_state,
+                global_alert_counts=reward_alert_global_counts,
+                reward_floor=reward_weights.exploration_floor,
             )
             logger.info(
                 "Round %s - %s : récompense moyenne = %.4f",
