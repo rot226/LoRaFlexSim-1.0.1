@@ -982,6 +982,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     if getattr(args, "reference_network_size", None) is not None:
         reference_network_size = int(args.reference_network_size)
         reference_source = "argument --reference-network-size"
+    elif len(requested_sizes) == 1:
+        reference_network_size = int(requested_sizes[0])
+        reference_source = "taille unique demandée"
     else:
         reference_network_size = int(round(median(requested_sizes)))
         reference_source = "médiane des tailles demandées"
