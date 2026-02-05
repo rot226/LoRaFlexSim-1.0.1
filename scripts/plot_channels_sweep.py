@@ -18,6 +18,7 @@ import sys
 try:  # pandas and matplotlib are optional but required for plotting
     import pandas as pd
     import matplotlib.pyplot as plt
+    from article_c.common.plotting_style import apply_base_rcparams
 except Exception as exc:  # pragma: no cover - handled at runtime
     raise SystemExit(f"Required plotting libraries missing: {exc}")
 from plot_defaults import DEFAULT_FIGSIZE_SIMPLE
@@ -27,6 +28,7 @@ FIGURES_DIR = os.path.join(os.path.dirname(__file__), "..", "figures")
 
 
 def main() -> None:
+    apply_base_rcparams()
     in_path = os.path.join(RESULTS_DIR, "channels_summary.csv")
     if not os.path.exists(in_path):
         raise SystemExit(f"Input file not found: {in_path}")

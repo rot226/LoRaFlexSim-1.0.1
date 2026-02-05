@@ -13,12 +13,15 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from article_c.common.plotting_style import apply_base_rcparams
+
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS_DIR = ROOT / "results"
 FIGURES_DIR = ROOT / "figures"
 
 
 def main() -> None:
+    apply_base_rcparams()
     summary_path = RESULTS_DIR / "interval_summary.csv"
     df = pd.read_csv(summary_path)
     agg = (

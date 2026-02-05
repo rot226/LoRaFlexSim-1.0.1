@@ -13,6 +13,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from article_c.common.plotting_style import apply_base_rcparams
+
 
 def plot(
     csv_path: str,
@@ -20,8 +22,8 @@ def plot(
     max_delay: float | None = None,
     max_energy: float | None = None,
 ) -> None:
+    apply_base_rcparams()
     df = pd.read_csv(csv_path)
-    plt.rcParams.update({"font.size": 16})
 
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -54,7 +56,6 @@ def plot(
         ax.set_xticks(x)
         ax.set_xticklabels(df["model"], rotation=45, ha="right")
         ax.set_ylabel(label)
-        ax.tick_params(axis="both", labelsize=16)
 
         if metric == "pdr":
             cap = 100.0

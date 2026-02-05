@@ -13,6 +13,7 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
+from article_c.common.plotting_style import apply_base_rcparams
 from article_c.common.plot_helpers import apply_figure_layout
 try:  # pragma: no cover - dépend du mode d'exécution
     from .lfs_metrics import (
@@ -2308,6 +2309,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    apply_base_rcparams()
     plot_cluster_pdr(metrics_by_method, scenarios, out_dir)
     plot_pdr(metrics_by_method, scenarios, out_dir, per_algo=args.per_algo)
     plot_der(metrics_by_method, scenarios, out_dir, per_algo=args.per_algo)

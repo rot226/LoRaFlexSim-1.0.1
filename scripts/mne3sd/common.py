@@ -75,6 +75,8 @@ def resolve_worker_count(workers: WorkerCount, task_count: int) -> int:
 
 import matplotlib.pyplot as plt
 
+from article_c.common.plotting_style import apply_base_rcparams
+
 PROFILE_CHOICES = ("full", "fast", "ci")
 PROFILE_ENV_VAR = "MNE3SD_PROFILE"
 PROFILE_HELP = (
@@ -125,7 +127,7 @@ def prepare_figure_directory(
 def apply_ieee_style(figsize: tuple[float, float] = (3.5, 2.2)) -> None:
     """Apply a compact IEEE-friendly Matplotlib style."""
 
-    plt.rcdefaults()
+    apply_base_rcparams()
     plt.rcParams.update(
         {
             "font.size": 8,

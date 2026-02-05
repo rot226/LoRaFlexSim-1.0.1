@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from article_c.common.plotting_style import apply_base_rcparams
+
 SNIR_COLORS: Mapping[str, str] = {
     "snir_on": "#d62728",
     "snir_off": "#1f77b4",
@@ -22,6 +24,7 @@ THEME_MARKER_EDGE_WIDTH = 0.8
 
 def apply_plot_theme(plt: Any) -> None:
     """Applique un thème matplotlib partagé (polices, lignes, marqueurs)."""
+    apply_base_rcparams()
     plt.rcParams.update(
         {
             "font.size": THEME_FONT_SIZE,

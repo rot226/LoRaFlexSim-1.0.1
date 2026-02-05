@@ -15,6 +15,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from article_c.common.plotting_style import apply_base_rcparams
+
 
 def plot(csv_path: str, output_dir: str = "figures", by_model: bool = False) -> None:
     """Plot average spreading factor with error bars.
@@ -41,7 +43,7 @@ def plot(csv_path: str, output_dir: str = "figures", by_model: bool = False) -> 
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    plt.rcParams.update({"font.size": 14})
+    apply_base_rcparams()
     fig, ax = plt.subplots(figsize=(16, 8))
     x = range(len(df[x_col]))
     bars = ax.bar(
