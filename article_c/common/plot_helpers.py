@@ -207,6 +207,11 @@ def clear_axis_legends(axes: object) -> None:
         ax.legend_ = None
 
 
+def find_internal_legends(fig: plt.Figure) -> list[Legend]:
+    """Retourne les légendes attachées aux axes d'une figure."""
+    return [legend for ax in fig.axes if (legend := ax.get_legend()) is not None]
+
+
 def collect_legend_entries(axes: object) -> tuple[list[Line2D], list[str]]:
     """Collecte toutes les entrées de légende depuis un ensemble d'axes."""
     handles: list[Line2D] = []
@@ -854,6 +859,8 @@ def add_global_legend(
 ) -> None:
     """Ajoute une légende globale à la figure."""
     legend_loc = legend_loc or DEFAULT_LEGEND_LOC
+    if _normalize_legend_loc(legend_loc) == "right":
+        clear_axis_legends(fig.axes)
     if handles is None or labels is None:
         handles, labels = ax.get_legend_handles_labels()
     if not handles and use_fallback:
