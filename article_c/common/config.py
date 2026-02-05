@@ -94,7 +94,7 @@ class Step2Config:
     collision_size_factor: float | None = None
     reward_floor: float | None = None
     floor_on_zero_success: bool = False
-    max_penalty_ratio: float = 1.0
+    max_penalty_ratio: float = 0.8
     shadowing_sigma_db: float | None = None
 
 
@@ -124,7 +124,7 @@ STEP2_SAFE_CONFIG = Step2Config(
     collision_size_min=0.8,
     collision_size_under_max=1.2,
     collision_size_over_max=1.6,
-    reward_floor=0.03,
-    max_penalty_ratio=0.6,
+    reward_floor=0.05,
+    max_penalty_ratio=0.5,
     shadowing_sigma_db=8.0,
 )

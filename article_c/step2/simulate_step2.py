@@ -1020,21 +1020,21 @@ def _reward_weights_for_algo(
             sf_weight=0.45,
             latency_weight=0.32,
             energy_weight=0.23,
-            collision_weight=0.22,
+            collision_weight=0.18,
         )
     elif algorithm == "mixra_h":
         weights = AlgoRewardWeights(
             sf_weight=0.28,
             latency_weight=0.27,
             energy_weight=0.45,
-            collision_weight=0.28,
+            collision_weight=0.22,
         )
     elif algorithm == "mixra_opt":
         weights = AlgoRewardWeights(
             sf_weight=0.23,
             latency_weight=0.22,
             energy_weight=0.55,
-            collision_weight=0.3,
+            collision_weight=0.24,
         )
     else:
         default_floor = 0.1
@@ -1042,7 +1042,7 @@ def _reward_weights_for_algo(
             sf_weight=0.38,
             latency_weight=0.32,
             energy_weight=0.3,
-            collision_weight=0.24,
+            collision_weight=0.18,
         )
     selected_floor = default_floor if reward_floor is None else reward_floor
     if selected_floor > 0.0:
