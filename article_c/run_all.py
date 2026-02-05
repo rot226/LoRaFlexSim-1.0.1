@@ -622,14 +622,14 @@ def main(argv: list[str] | None = None) -> None:
                 "Étape 1: le répertoire de sortie doit être "
                 f"{default_step1_dir}."
             )
-    network_sizes = (
+    requested_sizes = (
         parse_network_size_list(args.network_sizes)
         if args.network_sizes
         else list(DEFAULT_CONFIG.scenario.network_sizes)
     )
-    reference_network_size = int(round(median(network_sizes)))
+    reference_network_size = int(round(median(requested_sizes)))
     args.reference_network_size = reference_network_size
-    for size in network_sizes:
+    for size in requested_sizes:
         size_args = argparse.Namespace(**vars(args))
         size_args.network_sizes = [size]
         if not size_args.skip_step1:
