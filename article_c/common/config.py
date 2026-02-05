@@ -86,6 +86,7 @@ class Step2Config:
     congestion_coeff_base: float = 0.32
     congestion_coeff_growth: float = 0.35
     congestion_coeff_max: float = 0.35
+    link_success_min_ratio: float = 0.02
     network_load_min: float = 0.6
     network_load_max: float = 2.2
     collision_size_min: float = 0.6
