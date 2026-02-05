@@ -368,7 +368,15 @@ def _aggregate_rows(
         if aggregated_row.get("network_size") in (None, ""):
             raise AssertionError("network_size manquant dans les résultats agrégés.")
         if aggregated_row.get("density") in (None, ""):
-            aggregated_row["density"] = aggregated_row.get("network_size")
+            density_values = [
+                row.get("density")
+                for row in grouped_rows
+                if isinstance(row.get("density"), (int, float))
+            ]
+            if density_values:
+                aggregated_row["density"] = sum(density_values) / len(density_values)
+            else:
+                aggregated_row["density"] = aggregated_row.get("network_size")
         for key in sorted(numeric_keys):
             values = [
                 row[key]
