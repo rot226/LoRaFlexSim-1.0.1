@@ -1098,6 +1098,7 @@ def _apply_congestion_and_link_quality(
     node_windows: list[dict[str, object]],
     successes_by_node: dict[int, int],
     congestion_probability: float,
+    link_success_min_ratio: float,
     rng: random.Random,
     round_id: int,
     snir_mode: str,
@@ -1143,12 +1144,11 @@ def _apply_congestion_and_link_quality(
         for _ in range(successes_after_congestion_total)
         if rng.random() < link_quality_snir
     )
-    if (
-        successes_after_congestion_total > 0
-        and link_quality_snir >= 0.2
-        and successes_after_link_total < 1
-    ):
-        successes_after_link_total = 1
+    min_ratio = _clip(link_success_min_ratio, 0.0, 1.0)
+    if successes_after_congestion_total > 0:
+        min_keep = max(1, int(round(successes_after_congestion_total * min_ratio)))
+        if successes_after_link_total < min_keep:
+            successes_after_link_total = min_keep
     if _should_debug_log(debug_step2, round_id):
         logger.debug(
             "SNIR facteur succès=%.3f (mode=%s seuil=%.2f dB min=%.2f dB max=%.2f dB "
@@ -1165,6 +1165,13 @@ def _apply_congestion_and_link_quality(
     logger.debug(
         "Diag congestion/lien (debug) - link_quality_weighted=%.3f successes_after_congestion_total=%s successes_after_link_total=%s",
         link_quality_weighted,
+        successes_after_congestion_total,
+        successes_after_link_total,
+    )
+    logger.info(
+        "Diag congestion/lien - avant/after: congestion %s/%s lien %s/%s",
+        sum(successes_by_node.values()),
+        successes_after_congestion_total,
         successes_after_congestion_total,
         successes_after_link_total,
     )
@@ -1290,6 +1297,7 @@ def run_simulation(
     congestion_coeff_base: float | None = None,
     congestion_coeff_growth: float | None = None,
     congestion_coeff_max: float | None = None,
+    link_success_min_ratio: float | None = None,
     network_load_min: float | None = None,
     network_load_max: float | None = None,
     collision_size_min: float | None = None,
@@ -1441,6 +1449,11 @@ def run_simulation(
         if congestion_coeff_max is None
         else float(congestion_coeff_max)
     )
+    link_success_min_ratio_value = (
+        step2_defaults.link_success_min_ratio
+        if link_success_min_ratio is None
+        else float(link_success_min_ratio)
+    )
     if congestion_coeff_base_value < 0.0:
         raise ValueError("congestion_coeff_base doit être positif.")
     if congestion_coeff_growth_value <= 0.0:
@@ -1475,6 +1488,30 @@ def run_simulation(
         if reference_network_size is None
         else max(1, int(reference_network_size))
     )
+    overload_ratio = max(0.0, (n_nodes / reference_size) - 1.0)
+    if overload_ratio > 0.0:
+        capture_probability_value = _clip(
+            capture_probability_value / (1.0 + 0.75 * overload_ratio), 0.0, 1.0
+        )
+        congestion_coeff_base_value *= 1.0 + min(0.6, 0.45 * overload_ratio)
+        congestion_coeff_growth_value *= 1.0 + min(0.6, 0.45 * overload_ratio)
+        congestion_coeff_max_value = _clip(
+            congestion_coeff_max_value * (1.0 + min(0.6, 0.45 * overload_ratio)),
+            0.0,
+            1.0,
+        )
+        if debug_step2:
+            logger.info(
+                "Ajustement congestion/capture (taille=%s ref=%s overload=%.2f): "
+                "capture=%.3f base=%.3f growth=%.3f max=%.3f",
+                n_nodes,
+                reference_size,
+                overload_ratio,
+                capture_probability_value,
+                congestion_coeff_base_value,
+                congestion_coeff_growth_value,
+                congestion_coeff_max_value,
+            )
     load_clamp_min_value = (
         step2_defaults.network_load_min
         if network_load_min is None
@@ -1887,6 +1924,7 @@ def run_simulation(
                     node_windows=node_windows,
                     successes_by_node=successes_by_node,
                     congestion_probability=congestion_probability,
+                    link_success_min_ratio=link_success_min_ratio_value,
                     rng=rng,
                     round_id=round_id,
                     snir_mode=snir_mode,
@@ -2400,6 +2438,7 @@ def run_simulation(
                     node_windows=node_windows,
                     successes_by_node=successes_by_node,
                     congestion_probability=congestion_probability,
+                    link_success_min_ratio=link_success_min_ratio_value,
                     rng=rng,
                     round_id=round_id,
                     snir_mode=snir_mode,
