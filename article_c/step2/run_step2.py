@@ -748,11 +748,11 @@ def _detect_low_success_first_size(
     if success_mean >= threshold:
         return False
     print(
-        "AVERTISSEMENT: success_rate moyen trop bas sur la première taille simulée "
-        f"({density})."
+        "AVERTISSEMENT: première taille avec success_rate moyen trop bas "
+        f"détectée ({density})."
     )
     print(
-        "Résumé première taille: success_mean="
+        "Résumé première taille sous le seuil: success_mean="
         f"{success_mean:.4f}, min={diagnostics.get('success_min', 0.0):.4f}, "
         f"max={diagnostics.get('success_max', 0.0):.4f} "
         f"(seuil {threshold:.2f})."
@@ -1106,8 +1106,60 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"Tailles à simuler: {simulated_label}")
 
     worker_count = max(1, int(args.workers))
-    first_result: dict[str, object] | None = None
-    if densities:
+    low_success_detected = False
+    if getattr(args, "auto_safe_profile", False) and not getattr(
+        args, "safe_profile", False
+    ):
+        if worker_count > 1:
+            print(
+                "Auto-safe-profile actif: exécution séquentielle pour détecter "
+                "la première taille sous le seuil."
+            )
+        worker_count = 1
+
+    if densities and worker_count == 1:
+        for density_idx, density in enumerate(densities):
+            task = (
+                density,
+                density_idx,
+                replications,
+                config,
+                base_results_dir,
+                timestamp_dir,
+                flat_output,
+            )
+            result = _simulate_density(task)
+            diagnostics = dict(result["diagnostics"])
+            low_success = False
+            if not low_success_detected:
+                low_success = _detect_low_success_first_size(density, diagnostics)
+                if low_success and not getattr(args, "safe_profile", False):
+                    if getattr(args, "auto_safe_profile", False):
+                        _apply_safe_profile_with_log(
+                            args,
+                            "auto-safe-profile (success_rate faible détecté)",
+                        )
+                        _update_safe_profile_config(config, args)
+                        print(
+                            "Relance de la taille "
+                            f"{density} avec le profil sécurisé."
+                        )
+                        result = _simulate_density(task)
+                        diagnostics = dict(result["diagnostics"])
+                    else:
+                        print(
+                            "Astuce: utilisez --auto-safe-profile pour basculer "
+                            "automatiquement vers STEP2_SAFE_CONFIG."
+                        )
+            if low_success:
+                low_success_detected = True
+            simulated_sizes.append(int(result["density"]))
+            total_rows += int(result["row_count"])
+            selection_rows.extend(result["selection_rows"])
+            learning_curve_rows.extend(result["learning_curve_rows"])
+            size_diagnostics[int(result["density"])] = dict(result["diagnostics"])
+            size_post_stats[int(result["density"])] = dict(result["post_stats"])
+    elif densities:
         first_task = (
             densities[0],
             0,
@@ -1128,49 +1180,25 @@ def main(argv: Sequence[str] | None = None) -> None:
         size_post_stats[int(first_result["density"])] = dict(
             first_result["post_stats"]
         )
-
-    if first_result is not None:
-        first_density = int(first_result["density"])
         diagnostics = dict(first_result["diagnostics"])
-        low_success = _detect_low_success_first_size(first_density, diagnostics)
-        if low_success and not getattr(args, "safe_profile", False):
-            if getattr(args, "auto_safe_profile", False):
-                _apply_safe_profile_with_log(
-                    args,
-                    "auto-safe-profile (success_rate faible sur la première taille)",
-                )
-                _update_safe_profile_config(config, args)
-            else:
-                print(
-                    "Astuce: utilisez --auto-safe-profile pour basculer "
-                    "automatiquement vers STEP2_SAFE_CONFIG."
-                )
-
-    remaining_tasks = [
-        (
-            density,
-            density_idx,
-            replications,
-            config,
-            base_results_dir,
-            timestamp_dir,
-            flat_output,
+        low_success_detected = _detect_low_success_first_size(
+            int(first_result["density"]), diagnostics
         )
-        for density_idx, density in enumerate(densities)
-        if density_idx != 0
-    ]
+        remaining_tasks = [
+            (
+                density,
+                density_idx,
+                replications,
+                config,
+                base_results_dir,
+                timestamp_dir,
+                flat_output,
+            )
+            for density_idx, density in enumerate(densities)
+            if density_idx != 0
+        ]
 
-    if remaining_tasks:
-        if worker_count == 1:
-            results = map(_simulate_density, remaining_tasks)
-            for result in results:
-                simulated_sizes.append(int(result["density"]))
-                total_rows += int(result["row_count"])
-                selection_rows.extend(result["selection_rows"])
-                learning_curve_rows.extend(result["learning_curve_rows"])
-                size_diagnostics[int(result["density"])] = dict(result["diagnostics"])
-                size_post_stats[int(result["density"])] = dict(result["post_stats"])
-        else:
+        if remaining_tasks:
             ctx = get_context("spawn")
             with ctx.Pool(processes=worker_count) as pool:
                 for result in pool.imap_unordered(_simulate_density, remaining_tasks):
@@ -1184,6 +1212,15 @@ def main(argv: Sequence[str] | None = None) -> None:
                     size_post_stats[int(result["density"])] = dict(
                         result["post_stats"]
                     )
+
+        if not low_success_detected:
+            for density in densities:
+                diagnostics = size_diagnostics.get(int(density))
+                if diagnostics and _detect_low_success_first_size(
+                    int(density), diagnostics
+                ):
+                    low_success_detected = True
+                    break
 
     print(f"Rows written: {total_rows}")
     if flat_output and simulated_sizes:
