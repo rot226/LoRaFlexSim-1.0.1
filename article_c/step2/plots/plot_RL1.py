@@ -29,7 +29,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     save_figure,
 )
-from article_c.common.plotting_style import LEGEND_STYLE, legend_extra_height
+from article_c.common.plotting_style import LEGEND_STYLE
 from plot_defaults import resolve_ieee_figsize
 
 TARGET_CLUSTER = "gold"
@@ -78,8 +78,12 @@ def _plot_metric(
         legend_ncol = int(LEGEND_STYLE.get("ncol", series_count) or series_count)
         ncol = min(series_count, legend_ncol) or 1
         legend_rows = max(1, math.ceil(series_count / ncol))
-    extra_height = legend_extra_height(height, legend_rows, legend_loc="right")
-    apply_figure_layout(fig, figsize=(width, height + extra_height))
+    apply_figure_layout(
+        fig,
+        figsize=(width, height),
+        legend_loc="right",
+        legend_rows=legend_rows,
+    )
     ensure_network_size(rows)
     if network_sizes is None:
         network_sizes = sorted(df["network_size"].unique())
