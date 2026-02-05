@@ -87,11 +87,11 @@ class Step2Config:
     congestion_coeff_growth: float = 0.35
     congestion_coeff_max: float = 0.35
     link_success_min_ratio: float = 0.02
-    network_load_min: float = 0.6
-    network_load_max: float = 2.2
-    collision_size_min: float = 0.6
-    collision_size_under_max: float = 1.0
-    collision_size_over_max: float = 2.4
+    network_load_min: float = 0.7
+    network_load_max: float = 1.9
+    collision_size_min: float = 0.7
+    collision_size_under_max: float = 1.1
+    collision_size_over_max: float = 2.0
     collision_size_factor: float | None = None
     reward_floor: float | None = None
     floor_on_zero_success: bool = False

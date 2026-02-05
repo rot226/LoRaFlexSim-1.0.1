@@ -28,8 +28,16 @@ from article_c.common.utils import (
     set_deterministic_seed,
     timestamp_tag,
 )
-from article_c.step2.simulate_step2 import run_simulation
+from article_c.step2.simulate_step2 import (
+    _collision_size_factor,
+    _network_load_factor,
+    _resolve_collision_clamps,
+    _resolve_load_clamps,
+    run_simulation,
+)
 from plot_defaults import resolve_ieee_figsize
+
+logger = logging.getLogger(__name__)
 
 
 def _aggregate_selection_probs(
@@ -67,6 +75,57 @@ def _aggregate_selection_probs(
     return aggregated
 
 
+def _format_size_factor_table(
+    sizes: Sequence[int],
+    reference_size: int,
+    load_clamp_min: float,
+    load_clamp_max: float,
+    collision_clamp_min: float,
+    collision_clamp_under_max: float,
+    collision_clamp_over_max: float,
+) -> str:
+    headers = (
+        "Taille",
+        "Charge",
+        "Charge (legacy)",
+        "Collision",
+        "Collision (legacy)",
+    )
+    rows: list[tuple[str, ...]] = [headers]
+    for size in sizes:
+        load_factor = _network_load_factor(
+            size, reference_size, load_clamp_min, load_clamp_max
+        )
+        legacy_load_factor = _network_load_factor(size, reference_size, 0.6, 2.6)
+        collision_factor = _collision_size_factor(
+            size,
+            reference_size,
+            collision_clamp_min,
+            collision_clamp_under_max,
+            collision_clamp_over_max,
+        )
+        legacy_collision_factor = _collision_size_factor(
+            size, reference_size, 0.6, 1.0, 2.4
+        )
+        rows.append(
+            (
+                f"{size}",
+                f"{load_factor:.3f}",
+                f"{legacy_load_factor:.3f}",
+                f"{collision_factor:.3f}",
+                f"{legacy_collision_factor:.3f}",
+            )
+        )
+    widths = [max(len(row[idx]) for row in rows) for idx in range(len(headers))]
+    lines: list[str] = []
+    for idx, row in enumerate(rows):
+        line = " | ".join(cell.ljust(widths[col_idx]) for col_idx, cell in enumerate(row))
+        lines.append(line)
+        if idx == 0:
+            lines.append("-+-".join("-" * width for width in widths))
+    return "\n".join(lines)
+
+
 def _apply_safe_profile_with_log(args: object, reason: str) -> None:
     changes: list[tuple[str, object, object]] = []
 
@@ -101,6 +160,7 @@ def _apply_safe_profile_with_log(args: object, reason: str) -> None:
 def _update_safe_profile_config(config: dict[str, object], args: object) -> None:
     config.update(
         {
+            "safe_profile": bool(getattr(args, "safe_profile", False)),
             "traffic_coeff_clamp_enabled": args.traffic_coeff_clamp_enabled,
             "traffic_coeff_clamp_min": args.traffic_coeff_clamp_min,
             "traffic_coeff_clamp_max": args.traffic_coeff_clamp_max,
@@ -951,6 +1011,7 @@ def _simulate_density(
                 floor_on_zero_success=bool(config["floor_on_zero_success"]),
                 debug_step2=bool(config.get("debug_step2", False)),
                 reward_alert_level=str(config.get("reward_alert_level", "WARNING")),
+                safe_profile=bool(config.get("safe_profile", False)),
             )
             for row in result.raw_rows:
                 row["replication"] = replication
@@ -1063,6 +1124,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     config: dict[str, object] = {
         "base_seed": base_seed,
+        "safe_profile": bool(getattr(args, "safe_profile", False)),
         "traffic_mode": args.traffic_mode,
         "jitter_range_s": args.jitter_range_s,
         "window_duration_s": args.window_duration_s,
@@ -1122,6 +1184,38 @@ def main(argv: Sequence[str] | None = None) -> None:
     else:
         print(f"Tailles déjà présentes dans les sous-dossiers: {existing_label}")
     print(f"Tailles à simuler: {simulated_label}")
+    safe_profile_active = bool(getattr(args, "safe_profile", False))
+    load_clamp_min, load_clamp_max = _resolve_load_clamps(
+        DEFAULT_CONFIG.step2,
+        args.network_load_min,
+        args.network_load_max,
+        safe_profile=safe_profile_active,
+    )
+    (
+        collision_clamp_min,
+        collision_clamp_under_max,
+        collision_clamp_over_max,
+    ) = _resolve_collision_clamps(
+        DEFAULT_CONFIG.step2,
+        args.collision_size_min,
+        args.collision_size_under_max,
+        args.collision_size_over_max,
+        safe_profile=safe_profile_active,
+    )
+    table = _format_size_factor_table(
+        sorted(set(requested_sizes)),
+        reference_network_size,
+        load_clamp_min,
+        load_clamp_max,
+        collision_clamp_min,
+        collision_clamp_under_max,
+        collision_clamp_over_max,
+    )
+    logger.info(
+        "Tableau comparaison facteurs par taille (réf=%s):\n%s",
+        reference_network_size,
+        table,
+    )
 
     worker_count = max(1, int(args.workers))
     low_success_detected = False
