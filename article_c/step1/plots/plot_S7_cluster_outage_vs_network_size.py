@@ -130,8 +130,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
                 linestyle=SNIR_LINESTYLES[snir_mode],
                 label=label,
             )
-        ax.set_xlabel("Network size (number of nodes)")
-        ax.set_ylabel("Outage probability")
+        ax.set_xlabel("Network size (nodes)")
+        ax.set_ylabel("Outage (prob.)")
         ax.set_ylim(0.0, 1.0)
         ax.grid(True, linestyle=":", alpha=0.4)
         ax.set_xticks(network_sizes)

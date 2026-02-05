@@ -63,11 +63,11 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
         plot_metric_by_snir(ax, cluster_rows, metric_key)
-        ax.set_xlabel("Network size (number of nodes)")
+        ax.set_xlabel("Network size (nodes)")
+        ax.set_ylabel("PDR (prob.)")
         ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.set_xticks(network_sizes)
-    axes[0].set_ylabel("Packet Delivery Ratio")
     handles, labels = legend_handles_for_algos_snir()
     clear_axis_legends(axes)
     if not handles:

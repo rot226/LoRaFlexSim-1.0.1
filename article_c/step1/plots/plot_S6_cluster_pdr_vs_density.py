@@ -132,11 +132,11 @@ def _plot_metric_page(
                     linestyle=SNIR_LINESTYLES[snir_mode],
                     label=SNIR_LABELS[snir_mode],
                 )
-            if algo_idx == 0:
+            ax.set_xlabel("Network size (nodes)")
             if cluster_idx == 0:
-                ax.set_ylabel(f"{algo_label(algo, fallback)}\nPacket Delivery Ratio")
-            if algo_idx == len(algorithms) - 1:
-                ax.set_xlabel("Network size (number of nodes)")
+                ax.set_ylabel(f"{algo_label(algo, fallback)}\nPDR (prob.)")
+            else:
+                ax.set_ylabel("PDR (prob.)")
             ax.set_xticks(network_sizes)
             ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 

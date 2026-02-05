@@ -102,8 +102,8 @@ def _plot_entropy(
             legend_handles=fallback_legend_handles(),
         )
         return fig
-    ax.set_xlabel("Round")
-    ax.set_ylabel("Selection Entropy (bits)")
+    ax.set_xlabel("Round (index)")
+    ax.set_ylabel("Selection entropy (bits)")
     if network_sizes:
         add_global_legend(fig, ax, legend_loc="right")
     return fig

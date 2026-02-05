@@ -107,8 +107,8 @@ def _plot_metric(
     plot_metric_by_algo(ax, rows, metric_key, network_sizes)
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-    ax.set_xlabel("Network size (number of nodes)")
-    ax.set_ylabel(f"Median Reward ({cluster_label} cluster, p10-p90)")
+    ax.set_xlabel("Network size (nodes)")
+    ax.set_ylabel(f"Reward {cluster_label} (a.u., median, p10–p90)")
     add_global_legend(fig, ax, legend_loc="right")
     return fig
 

@@ -60,7 +60,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str, y_label: str) -
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-    ax.set_xlabel("Network size (number of nodes)")
+    ax.set_xlabel("Network size (nodes)")
     ax.set_ylabel(y_label)
     configure_figure(
         fig,

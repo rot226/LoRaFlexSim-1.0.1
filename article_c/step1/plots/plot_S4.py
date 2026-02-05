@@ -95,7 +95,7 @@ def _add_summary_plot(
             )
     ax.set_xticks(range(len(algos)))
     ax.set_xticklabels([algo_label(str(algo)) for algo in algos])
-    ax.set_ylabel("Trames\n(médiane ± min/max)")
+    ax.set_ylabel("Tx frames (count)\n(median ± min/max)")
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
     summary_handles = [
         Line2D(
@@ -164,8 +164,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     handles, labels = ax.get_legend_handles_labels()
     if handles:
         clear_axis_legends(ax)
-    ax.set_xlabel("Network size (number of nodes)")
-    ax.set_ylabel("Sent Frames (budget saturant, median, p10-p90)")
+    ax.set_xlabel("Network size (nodes)")
+    ax.set_ylabel("Tx frames (count, median, p10–p90)")
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
     ax.yaxis.set_label_coords(-0.08, 0.5)
     ax.set_xticks(network_sizes)

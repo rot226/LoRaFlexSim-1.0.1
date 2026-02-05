@@ -330,8 +330,8 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
             color=ALGO_COLORS.get(algo, "#333333"),
             marker=ALGO_MARKERS.get(algo, "o"),
         )
-    ax.set_xlabel("Aggregated PDR (probability)")
-    ax.set_ylabel("Mean window reward")
+    ax.set_xlabel("Aggregated PDR (prob.)")
+    ax.set_ylabel("Mean reward (a.u.)")
     ax.set_xlim(0.0, 1.05)
     ax.set_ylim(0.0, 1.05)
     ax.grid(True, linestyle=":", alpha=0.5)

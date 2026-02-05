@@ -297,8 +297,8 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         ax.set_xticks(x_positions)
         ax.set_xticklabels(algo_labels(algorithms))
         ax.set_xlabel("Algorithm")
+        ax.set_ylabel("Share (prob.)")
         ax.set_ylim(0.0, 1.0)
-    axes[0].set_ylabel("Share of nodes")
     handles, labels = axes[0].get_legend_handles_labels()
     clear_axis_legends(axes)
     if handles:

@@ -96,8 +96,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-    ax.set_xlabel("Network size (number of nodes)")
-    ax.set_ylabel("Received Frames (median, p10-p90)")
+    ax.set_xlabel("Network size (nodes)")
+    ax.set_ylabel("Rx frames (count, median, p10–p90)")
     configure_figure(
         fig,
         ax,
