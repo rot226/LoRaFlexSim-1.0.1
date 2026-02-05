@@ -272,6 +272,16 @@ def _link_quality_mean_degradation(network_size: int, reference_size: int) -> fl
     return _clamp_range(1.0 - 0.09 * math.log1p(overload), 0.7, 1.0)
 
 
+def _link_quality_size_factor(network_size: int, reference_size: int) -> float:
+    if reference_size <= 0:
+        return 1.0
+    ratio = max(0.2, network_size / reference_size)
+    if ratio <= 1.0:
+        return _clamp_range(1.0 - 0.05 * (1.0 - ratio), 0.93, 1.0)
+    overload = ratio - 1.0
+    return _clamp_range(1.0 / (1.0 + 0.12 * overload), 0.7, 1.0)
+
+
 def _collision_size_factor(
     network_size: int,
     reference_size: int,
@@ -932,6 +942,26 @@ def _log_link_quality_stats(
     )
 
 
+def _log_link_quality_size_summary(
+    *,
+    network_size: int,
+    algo_label: str,
+    link_qualities: list[float],
+) -> None:
+    if not link_qualities:
+        return
+    mean_lq = mean(link_qualities)
+    std_lq = pstdev(link_qualities)
+    logger.info(
+        "Synthèse link_quality - taille=%s algo=%s moyenne=%.3f ecart_type=%.3f n=%s",
+        network_size,
+        algo_label,
+        mean_lq,
+        std_lq,
+        len(link_qualities),
+    )
+
+
 def _apply_link_quality_variation(
     rng: random.Random,
     link_quality: float,
@@ -941,7 +971,10 @@ def _apply_link_quality_variation(
 ) -> float:
     load_factor = _link_quality_load_factor(network_size, reference_size)
     mean_degradation = _link_quality_mean_degradation(network_size, reference_size)
-    link_quality = _clip(link_quality * load_factor * mean_degradation, 0.0, 1.0)
+    size_factor = _link_quality_size_factor(network_size, reference_size)
+    link_quality = _clip(
+        link_quality * load_factor * mean_degradation * size_factor, 0.0, 1.0
+    )
     variation = rng.gauss(1.0, 0.12)
     min_variation = _link_quality_min_variation(network_size, reference_size)
     variation_floor = 0.2
@@ -1426,6 +1459,7 @@ def run_simulation(
     raw_rows: list[dict[str, object]] = []
     selection_prob_rows: list[dict[str, object]] = []
     learning_curve_rows: list[dict[str, object]] = []
+    all_link_qualities: list[float] = []
     node_clusters = assign_clusters(n_nodes, rng=rng)
     reference_size = (
         _default_reference_size()
@@ -1771,6 +1805,7 @@ def run_simulation(
             link_qualities = [
                 float(node_window["link_quality"]) for node_window in node_windows
             ]
+            all_link_qualities.extend(link_qualities)
             _log_pre_collision_stats(
                 network_size=network_size_value,
                 algo_label=algo_label,
@@ -2283,6 +2318,7 @@ def run_simulation(
             link_qualities = [
                 float(node_window["link_quality"]) for node_window in node_windows
             ]
+            all_link_qualities.extend(link_qualities)
             _log_pre_collision_stats(
                 network_size=network_size_value,
                 algo_label=algo_label,
@@ -2613,6 +2649,12 @@ def run_simulation(
             )
     else:
         raise ValueError("algorithm doit être adr, mixra_h, mixra_opt ou ucb1_sf.")
+
+    _log_link_quality_size_summary(
+        network_size=network_size_value,
+        algo_label=algo_label,
+        link_qualities=all_link_qualities,
+    )
 
     if output_dir is not None:
         write_simulation_results(output_dir, raw_rows, network_size=network_size_value)
