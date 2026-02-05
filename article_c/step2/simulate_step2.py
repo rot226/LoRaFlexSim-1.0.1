@@ -138,6 +138,23 @@ def _clamp_range(value: float, min_value: float, max_value: float) -> float:
     return max(min_value, min(max_value, value))
 
 
+def _max_window_tx(
+    window_duration_s: float,
+    airtime_s: float,
+    n_channels: int,
+    safety_factor: float,
+    *,
+    min_tx: int = 1,
+) -> int:
+    if window_duration_s <= 0.0 or airtime_s <= 0.0:
+        return min_tx
+    effective_channels = max(n_channels, 1)
+    denom = airtime_s * effective_channels * max(safety_factor, 0.1)
+    if denom <= 0.0:
+        return min_tx
+    return max(min_tx, int(math.floor(window_duration_s / denom)))
+
+
 def _apply_phase_offset(
     traffic_times: list[float],
     *,
@@ -826,6 +843,7 @@ def _log_loss_breakdown(
 def _log_success_chain(
     *,
     network_size: int,
+    n_nodes: int,
     algo_label: str,
     round_id: int,
     total_traffic_sent: int,
@@ -843,6 +861,14 @@ def _log_success_chain(
         successes_after_collisions,
         successes_after_congestion,
         successes_after_link,
+    )
+    avg_traffic_per_node = total_traffic_sent / max(n_nodes, 1)
+    logger.info(
+        "Charge moyenne - taille=%s algo=%s round=%s traffic_sent_total/n_nodes=%.2f",
+        network_size,
+        algo_label,
+        round_id,
+        avg_traffic_per_node,
     )
 
 
@@ -1323,6 +1349,7 @@ def run_simulation(
     if jitter_range_value is not None and jitter_range_value < 0:
         logger.warning("jitter_range_s négatif (%.3f), forcé à 0.", jitter_range_value)
         jitter_range_value = 0.0
+    tx_window_safety_factor = 1.2
     traffic_coeff_min_value = (
         step2_defaults.traffic_coeff_min if traffic_coeff_min is None else traffic_coeff_min
     )
@@ -1681,19 +1708,13 @@ def run_simulation(
                     per_node_cap = max(
                         1, int(math.floor(window_duration_value / airtime_s))
                     )
-                    capped_tx = max(
-                        1,
-                        int(
-                            math.floor(
-                                window_duration_value
-                                * load_factor
-                                * traffic_coeff_scale_value
-                                * max(n_channels, 1)
-                                / airtime_s
-                            )
-                        ),
+                    window_cap = _max_window_tx(
+                        window_duration_value,
+                        airtime_s,
+                        n_channels,
+                        tx_window_safety_factor,
                     )
-                    max_tx = min(max_tx, per_node_cap, capped_tx)
+                    max_tx = min(max_tx, per_node_cap, window_cap)
                 expected_sent = min(expected_sent_raw, max_tx)
                 if _should_debug_log(debug_step2, round_id):
                     logger.debug(
@@ -1870,6 +1891,7 @@ def run_simulation(
             )
             _log_success_chain(
                 network_size=network_size_value,
+                n_nodes=n_nodes,
                 algo_label=algo_label,
                 round_id=round_id,
                 total_traffic_sent=total_traffic_sent,
@@ -2143,71 +2165,6 @@ def run_simulation(
             for node_id in range(n_nodes):
                 rate_multiplier = base_rate_multipliers[node_id]
                 cluster = node_clusters[node_id]
-                expected_sent_raw = max(
-                    1,
-                    int(
-                        round(
-                            window_size
-                            * traffic_coeffs[node_id]
-                            * rate_multiplier
-                            * load_factor
-                            * traffic_coeff_scale_value
-                        )
-                    ),
-                )
-                if _should_debug_log(debug_step2, round_id):
-                    logger.debug(
-                        "Traffic attendu avant plafonnement node=%s expected_sent=%s.",
-                        node_id,
-                        expected_sent_raw,
-                    )
-                airtime_reference_s = max(airtime_by_sf.values())
-                max_tx = expected_sent_raw
-                if airtime_reference_s > 0.0:
-                    per_node_cap = max(
-                        1, int(math.floor(window_duration_value / airtime_reference_s))
-                    )
-                    capped_tx = max(
-                        1,
-                        int(
-                            math.floor(
-                                window_duration_value
-                                * load_factor
-                                * traffic_coeff_scale_value
-                                * max(n_channels, 1)
-                                / airtime_reference_s
-                            )
-                        ),
-                    )
-                    max_tx = min(max_tx, per_node_cap, capped_tx)
-                expected_sent = min(expected_sent_raw, max_tx)
-                if _should_debug_log(debug_step2, round_id):
-                    logger.debug(
-                        "Traffic attendu après plafonnement node=%s expected_sent=%s (max_tx=%s).",
-                        node_id,
-                        expected_sent,
-                        max_tx,
-                    )
-                base_period_s = window_duration_value / expected_sent
-                jitter_range_node_s = (
-                    0.5 * base_period_s
-                    if jitter_range_value is None
-                    else jitter_range_value
-                )
-                traffic_times = generate_traffic_times(
-                    expected_sent,
-                    duration_s=window_duration_value,
-                    traffic_mode=traffic_mode_value,
-                    jitter_range_s=jitter_range_node_s,
-                    rng=rng,
-                )
-                if jitter_range_node_s <= 0.0:
-                    traffic_times = _apply_phase_offset(
-                        traffic_times,
-                        rng=rng,
-                        window_duration_s=window_duration_value,
-                        base_period_s=base_period_s,
-                    )
                 shadowing_sigma_db_node = _clamp_range(
                     base_shadowing_sigma_db
                     * _cluster_shadowing_sigma_factor(cluster, qos_clusters),
@@ -2242,6 +2199,64 @@ def run_simulation(
                     arm_index = rng.choices(range(n_arms), weights=cluster_weights, k=1)[0]
                 sf_value = sf_values[arm_index]
                 airtime_s = airtime_by_sf[sf_value]
+                expected_sent_raw = max(
+                    1,
+                    int(
+                        round(
+                            window_size
+                            * traffic_coeffs[node_id]
+                            * rate_multiplier
+                            * load_factor
+                            * traffic_coeff_scale_value
+                        )
+                    ),
+                )
+                if _should_debug_log(debug_step2, round_id):
+                    logger.debug(
+                        "Traffic attendu avant plafonnement node=%s expected_sent=%s.",
+                        node_id,
+                        expected_sent_raw,
+                    )
+                max_tx = expected_sent_raw
+                if airtime_s > 0.0:
+                    per_node_cap = max(
+                        1, int(math.floor(window_duration_value / airtime_s))
+                    )
+                    window_cap = _max_window_tx(
+                        window_duration_value,
+                        airtime_s,
+                        n_channels,
+                        tx_window_safety_factor,
+                    )
+                    max_tx = min(max_tx, per_node_cap, window_cap)
+                expected_sent = min(expected_sent_raw, max_tx)
+                if _should_debug_log(debug_step2, round_id):
+                    logger.debug(
+                        "Traffic attendu après plafonnement node=%s expected_sent=%s (max_tx=%s).",
+                        node_id,
+                        expected_sent,
+                        max_tx,
+                    )
+                base_period_s = window_duration_value / expected_sent
+                jitter_range_node_s = (
+                    0.5 * base_period_s
+                    if jitter_range_value is None
+                    else jitter_range_value
+                )
+                traffic_times = generate_traffic_times(
+                    expected_sent,
+                    duration_s=window_duration_value,
+                    traffic_mode=traffic_mode_value,
+                    jitter_range_s=jitter_range_node_s,
+                    rng=rng,
+                )
+                if jitter_range_node_s <= 0.0:
+                    traffic_times = _apply_phase_offset(
+                        traffic_times,
+                        rng=rng,
+                        window_duration_s=window_duration_value,
+                        base_period_s=base_period_s,
+                    )
                 node_offset_s = (
                     rng.uniform(0.0, window_delay_range_value)
                     if window_delay_enabled_value and window_delay_range_value > 0
@@ -2372,6 +2387,7 @@ def run_simulation(
             )
             _log_success_chain(
                 network_size=network_size_value,
+                n_nodes=n_nodes,
                 algo_label=algo_label,
                 round_id=round_id,
                 total_traffic_sent=total_traffic_sent,
