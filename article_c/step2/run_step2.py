@@ -186,13 +186,26 @@ def _log_unique_network_sizes(output_dir: Path) -> None:
         return
     with raw_path.open("r", newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
-        headers_label = ", ".join(reader.fieldnames or [])
+        raw_fieldnames = reader.fieldnames or []
+        fieldnames = [
+            name.lstrip("\ufeff").strip() for name in raw_fieldnames if name is not None
+        ]
+        reader.fieldnames = fieldnames
+        headers_label = ", ".join(fieldnames or [])
         print(f"Headers lus dans {raw_path}: {headers_label or 'aucun'}")
-        if not reader.fieldnames or "network_size" not in reader.fieldnames:
+        if not fieldnames or "network_size" not in fieldnames:
             print(f"Colonne network_size absente dans {raw_path}")
             return
         values: list[float] = []
+        lines_read = 0
+        valid_lines = 0
         for row in reader:
+            lines_read += 1
+            if not row or row == {}:
+                continue
+            if all(value in (None, "") for value in row.values()):
+                continue
+            valid_lines += 1
             value = row.get("network_size")
             if value in (None, ""):
                 continue
@@ -205,6 +218,11 @@ def _log_unique_network_sizes(output_dir: Path) -> None:
             "ERREUR: network_size à 0.0 détecté dans raw_results.csv, vérifiez la configuration."
         )
     sizes = sorted({int(value) for value in values})
+    if not sizes:
+        print(
+            "Aucune taille détectée dans raw_results.csv "
+            f"(lignes lues: {lines_read}, lignes valides: {valid_lines})."
+        )
     sizes_label = ", ".join(map(str, sizes)) if sizes else "aucune"
     print(f"Tailles détectées dans raw_results: {sizes_label}")
 
