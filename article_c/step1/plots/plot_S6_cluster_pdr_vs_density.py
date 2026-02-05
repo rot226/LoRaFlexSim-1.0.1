@@ -107,7 +107,6 @@ def _plot_metric_page(
             metric_state,
             legend_handles=legend_handles_for_algos_snir(),
         )
-        fig.suptitle(title, y=suptitle_y_from_top(fig))
         return fig
 
     for algo_idx, (algo, fallback) in enumerate(algorithms):
@@ -134,7 +133,6 @@ def _plot_metric_page(
                     label=SNIR_LABELS[snir_mode],
                 )
             if algo_idx == 0:
-                ax.set_title(f"Cluster {cluster_labels.get(cluster, cluster)}")
             if cluster_idx == 0:
                 ax.set_ylabel(f"{algo_label(algo, fallback)}\nPacket Delivery Ratio")
             if algo_idx == len(algorithms) - 1:
@@ -147,7 +145,6 @@ def _plot_metric_page(
     if not handles:
         handles, labels = fallback_legend_handles()
     add_figure_legend(fig, handles, labels, legend_loc="right")
-    fig.suptitle(title, y=suptitle_y_from_top(fig))
     return fig
 
 

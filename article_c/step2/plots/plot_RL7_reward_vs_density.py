@@ -142,10 +142,6 @@ def _plot_metric(
             show_fallback_legend=True,
             legend_handles=fallback_legend_handles(),
         )
-        ax.set_title(
-            "Step 2 - Global Median Reward vs Network size (adaptive algorithms)"
-            f"{_title_suffix(network_sizes)}"
-        )
         return fig
     plot_metric_by_algo(
         ax,
@@ -158,10 +154,6 @@ def _plot_metric(
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Median Reward (global, p10-p90)")
-    ax.set_title(
-        "Step 2 - Global Median Reward vs Network size (adaptive algorithms)"
-        f"{_title_suffix(network_sizes)}"
-    )
     add_global_legend(fig, ax, legend_loc="right")
     return fig
 
@@ -378,7 +370,6 @@ def _plot_diagnostics(
         alpha=0.8,
         label="Network size",
     )
-    axes[0].set_title("Histogramme des tailles de réseau")
     axes[0].set_xlabel("Network size")
 
     density = _density_series(rows)
@@ -392,7 +383,6 @@ def _plot_diagnostics(
             alpha=0.8,
             label="Density",
         )
-        axes[1].set_title("Histogramme des densités")
         axes[1].set_xlabel("Density")
     else:
         axes[1].axis("off")
@@ -406,7 +396,6 @@ def _plot_diagnostics(
         alpha=0.8,
         label=metric_label,
     )
-    axes[2].set_title(f"Histogramme {metric_label}")
     axes[2].set_xlabel(metric_label)
 
     if "algo" in df.columns and not metric_values.empty:
@@ -426,7 +415,6 @@ def _plot_diagnostics(
         )
         for patch, algo in zip(boxplot_parts.get("boxes", []), algos, strict=False):
             patch.set_label(_label_for_algo(str(algo)))
-        axes[3].set_title("Boxplot des récompenses par algo")
         axes[3].set_ylabel(metric_label)
     else:
         axes[3].axis("off")

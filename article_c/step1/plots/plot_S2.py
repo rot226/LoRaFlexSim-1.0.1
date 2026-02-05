@@ -49,7 +49,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         configure_figure(
             fig,
             ax,
-            "Step 1 - Mean Time on Air vs Network Size (SNIR on/off)",
+            title=None,
             legend_loc="right",
         )
         return fig
@@ -63,7 +63,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     configure_figure(
         fig,
         ax,
-        "Step 1 - Mean Time on Air vs Network Size (SNIR on/off)",
+        title=None,
         legend_loc="right",
     )
     if fig.legends:

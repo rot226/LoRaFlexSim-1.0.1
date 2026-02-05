@@ -172,7 +172,7 @@ def plot_cdf_by_algo(
         configure_figure(
             fig,
             [ax],
-            f"CDF {metric_key.upper()} par algorithme (SNIR on/off)",
+            title=None,
             legend_loc="right",
         )
         save_figure(fig, output_dir, "plot_S10_rssi_or_snr_cdf")
@@ -202,7 +202,7 @@ def plot_cdf_by_algo(
     configure_figure(
         fig,
         [ax],
-        f"CDF {metric_key.upper()} par algorithme (SNIR on/off)",
+        title=None,
         legend_loc="right",
     )
 

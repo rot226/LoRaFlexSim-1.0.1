@@ -107,10 +107,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             metric_state,
             legend_handles=legend_handles_for_algos_snir(),
         )
-        fig.suptitle(
-            "Step 1 - Outage probability by Cluster (network size)",
-            y=suptitle_y_from_top(fig),
-        )
         return fig
 
     for ax, snir_mode in zip(axes, SNIR_MODES, strict=False):
@@ -134,7 +130,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
                 linestyle=SNIR_LINESTYLES[snir_mode],
                 label=label,
             )
-        ax.set_title(SNIR_LABELS[snir_mode])
         ax.set_xlabel("Network size (number of nodes)")
         ax.set_ylabel("Outage probability")
         ax.set_ylim(0.0, 1.0)
@@ -145,10 +140,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     handles, labels = legend_handles_for_algos_snir()
     clear_axis_legends(axes)
     add_figure_legend(fig, handles, labels, legend_loc="right")
-    fig.suptitle(
-        "Step 1 - Outage probability by Cluster (network size)",
-        y=suptitle_y_from_top(fig),
-    )
     return fig
 
 

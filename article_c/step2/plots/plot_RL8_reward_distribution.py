@@ -128,10 +128,6 @@ def _plot_distribution(
     ax.set_xticklabels([algo_label(str(algo)) for algo in algorithms])
     ax.set_xlabel("Algorithm")
     ax.set_ylabel("Reward")
-    ax.set_title(
-        "Step 2 - Reward Distribution by Algorithm"
-        f"{_title_suffix(network_sizes)}"
-    )
     legend_rows = (
         max(1, math.ceil(len(algorithms) / min(3, len(algorithms))))
         if algorithms
@@ -239,7 +235,6 @@ def _plot_diagnostics(
         alpha=0.8,
         label="Network size",
     )
-    axes[0].set_title("Histogramme des tailles de réseau")
     axes[0].set_xlabel("Network size")
 
     density = _density_series(rows)
@@ -253,7 +248,6 @@ def _plot_diagnostics(
             alpha=0.8,
             label="Density",
         )
-        axes[1].set_title("Histogramme des densités")
         axes[1].set_xlabel("Density")
     else:
         axes[1].axis("off")
@@ -268,7 +262,6 @@ def _plot_diagnostics(
         alpha=0.8,
         label="Reward",
     )
-    axes[2].set_title("Histogramme des récompenses")
     axes[2].set_xlabel("Reward")
 
     if "algo" in df.columns and not rewards.empty:
@@ -288,7 +281,6 @@ def _plot_diagnostics(
         )
         for patch, algo in zip(boxplot_parts.get("boxes", []), algos, strict=False):
             patch.set_label(f"{algo_label(str(algo))} (boxplot)")
-        axes[3].set_title("Boxplot des récompenses par algo")
         axes[3].set_ylabel("Reward")
     else:
         axes[3].axis("off")

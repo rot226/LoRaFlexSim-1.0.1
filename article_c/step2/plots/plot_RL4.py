@@ -96,20 +96,12 @@ def _plot_metric(
             show_fallback_legend=True,
             legend_handles=legend_handles_for_algos_snir(["snir_on"]),
         )
-        ax.set_title(
-            "Step 2 - Median Normalized Energy vs Network size (number of nodes)"
-            f"{_title_suffix(network_sizes)}"
-        )
         return fig
     plot_metric_by_algo(ax, rows, metric_key, network_sizes)
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Airtime per success (s, median, p10-p90)")
-    ax.set_title(
-        "Step 2 - Median Energy per Success vs Network size (number of nodes)"
-        f"{_title_suffix(network_sizes)}"
-    )
     add_global_legend(fig, ax, legend_loc="right")
     return fig
 

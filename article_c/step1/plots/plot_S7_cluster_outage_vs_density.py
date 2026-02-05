@@ -105,14 +105,12 @@ def _plot_metric_page(
             metric_state,
             legend_handles=legend_handles_for_algos_snir(),
         )
-        fig.suptitle(title, y=suptitle_y_from_top(fig))
         return fig
 
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
         plot_metric_by_snir(ax, cluster_rows, metric_key)
         ax.set_xlabel("Network size (number of nodes)")
-        ax.set_title(f"Cluster {cluster_labels.get(cluster, cluster)}")
         ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.set_xticks(network_sizes)
@@ -122,7 +120,6 @@ def _plot_metric_page(
     if not handles:
         handles, labels = fallback_legend_handles()
     add_figure_legend(fig, handles, labels, legend_loc="right")
-    fig.suptitle(title, y=suptitle_y_from_top(fig))
     return fig
 
 

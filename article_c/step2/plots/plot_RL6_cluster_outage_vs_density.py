@@ -182,11 +182,6 @@ def _plot_metric(
             show_fallback_legend=True,
             legend_handles=legend_handles_for_algos_snir(["snir_on"]),
         )
-        fig.suptitle(
-            "Step 2 - Outage probability by Cluster (SNIR on)"
-            f"{_title_suffix(network_sizes)}",
-            y=suptitle_y_from_top(fig),
-        )
         return fig
 
     algorithms = sorted({row["algo"] for row in rows})
@@ -213,7 +208,6 @@ def _plot_metric(
             values = [points.get(size, float("nan")) for size in network_sizes]
             ax.plot(network_sizes, values, marker="o", label=_label_for_algo(str(algo)))
         ax.set_xlabel("Network size (number of nodes)")
-        ax.set_title(f"Cluster {cluster_labels.get(cluster, cluster)}")
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     axes[0].set_ylabel("Outage probability")
@@ -225,11 +219,6 @@ def _plot_metric(
     if not handles:
         handles, labels = fallback_legend_handles()
     add_figure_legend(fig, handles, labels, legend_loc="right")
-    fig.suptitle(
-        "Step 2 - Outage probability by Cluster (SNIR on)"
-        f"{_title_suffix(network_sizes)}",
-        y=suptitle_y_from_top(fig),
-    )
     return fig
 
 
@@ -367,7 +356,6 @@ def _plot_raw_metric(
                     label=label,
                 )
         ax.set_xlabel("Network size (number of nodes)")
-        ax.set_title(f"Cluster {cluster_labels.get(cluster, cluster)}")
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     axes[0].set_ylabel("Outage probability (raw)")
@@ -379,11 +367,6 @@ def _plot_raw_metric(
     if not handles:
         handles, labels = fallback_legend_handles()
     add_figure_legend(fig, handles, labels, legend_loc="right")
-    fig.suptitle(
-        "Step 2 - Outage probability brut par cluster et réplication (SNIR on)"
-        f"{_title_suffix(network_sizes)}",
-        y=suptitle_y_from_top(fig),
-    )
     return fig
 
 

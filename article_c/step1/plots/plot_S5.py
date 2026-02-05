@@ -408,7 +408,7 @@ def _plot_pdr_distributions(
         configure_figure(
             fig,
             configure_axes,
-            "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)",
+            title=None,
             legend_loc="right",
             legend_handles=legend_handles,
             legend_labels=legend_labels,
@@ -512,8 +512,6 @@ def _plot_pdr_distribution_page(
             if row_index != nrows - 1:
                 ax.set_xlabel("")
         if row_index == 0:
-            axes[row_index][0].set_title(SNIR_LABELS["snir_on"])
-            axes[row_index][1].set_title(SNIR_LABELS["snir_off"])
         axes[row_index][0].annotate(
             f"Taille réseau = {size} nœuds",
             xy=(0.02, 1.02),
@@ -536,7 +534,7 @@ def _plot_pdr_distribution_page(
     configure_figure(
         fig,
         axes,
-        title,
+        title=None,
         legend_loc="right",
         legend_handles=legend_handles,
         legend_labels=legend_labels,

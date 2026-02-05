@@ -53,7 +53,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str, y_label: str) -
         configure_figure(
             fig,
             ax,
-            "Step 1 - ToA/Latency vs Network Size (SNIR on/off)",
+            title=None,
             legend_loc="right",
         )
         return fig
@@ -65,7 +65,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str, y_label: str) -
     configure_figure(
         fig,
         ax,
-        "Step 1 - ToA/Latency vs Network Size (SNIR on/off)",
+        title=None,
         legend_loc="right",
     )
     return fig

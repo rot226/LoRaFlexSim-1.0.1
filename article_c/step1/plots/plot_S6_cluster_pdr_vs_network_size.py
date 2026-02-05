@@ -90,10 +90,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             metric_state,
             legend_handles=legend_handles_for_algos_snir(),
         )
-        fig.suptitle(
-            "Step 1 - PDR by Cluster (network size)",
-            y=suptitle_y_from_top(fig),
-        )
         return fig
 
     cluster_handles: list[plt.Line2D] = []
@@ -127,7 +123,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
                 cluster_handles.append(line)
                 legend_labels.append(label)
                 seen_labels.add(label)
-        ax.set_title(SNIR_LABELS[snir_mode])
         ax.set_xlabel("Network size (number of nodes)")
         ax.set_ylabel("Packet Delivery Ratio")
         ax.set_ylim(0.0, 1.05)
@@ -154,10 +149,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             "top": max(0.7, layout_margins.get("top", 0.0)),
         },
         legend_rows=max(1, legend_rows),
-    )
-    fig.suptitle(
-        "Step 1 - PDR by Cluster (network size)",
-        y=suptitle_y_from_top(fig),
     )
     return fig
 
