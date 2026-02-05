@@ -207,10 +207,10 @@ def _plot_metric(
                 continue
             values = [points.get(size, float("nan")) for size in network_sizes]
             ax.plot(network_sizes, values, marker="o", label=_label_for_algo(str(algo)))
-        ax.set_xlabel("Network size (number of nodes)")
+        ax.set_xlabel("Network size (nodes)")
+        ax.set_ylabel("Outage (prob.)")
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-    axes[0].set_ylabel("Outage probability")
     clear_axis_legends(axes)
     handles, labels = collect_legend_entries(axes)
     handles, labels = deduplicate_legend_entries(handles, labels)
@@ -355,10 +355,10 @@ def _plot_raw_metric(
                     alpha=0.35,
                     label=label,
                 )
-        ax.set_xlabel("Network size (number of nodes)")
+        ax.set_xlabel("Network size (nodes)")
+        ax.set_ylabel("Outage (raw, prob.)")
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-    axes[0].set_ylabel("Outage probability (raw)")
     clear_axis_legends(axes)
     handles, labels = collect_legend_entries(axes)
     handles, labels = deduplicate_legend_entries(handles, labels)

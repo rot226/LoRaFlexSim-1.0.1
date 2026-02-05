@@ -504,24 +504,25 @@ def _plot_pdr_distribution_page(
                 values=values_by_group.get((algo, fallback, snir_mode), []),
                 snir_mode=snir_mode,
             )
+            ax.set_xlabel("SNIR mode")
             if col_index == 0:
                 ax.set_ylabel(
-                    f"{algo_label(algo, fallback)}\nPDR (ratio 0–1)",
+                    f"{algo_label(algo, fallback)}\nPDR (prob.)",
                     fontsize=9,
                 )
-            if row_index != nrows - 1:
-                ax.set_xlabel("")
+            else:
+                ax.set_ylabel("PDR (prob.)", fontsize=9)
         if row_index == 0:
-        axes[row_index][0].annotate(
-            f"Taille réseau = {size} nœuds",
-            xy=(0.02, 1.02),
-            xycoords="axes fraction",
-            ha="left",
-            va="bottom",
-            fontsize=7,
-            color="#444444",
-            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.0},
-        )
+            axes[row_index][0].annotate(
+                f"Taille réseau = {size} nœuds",
+                xy=(0.02, 1.02),
+                xycoords="axes fraction",
+                ha="left",
+                va="bottom",
+                fontsize=7,
+                color="#444444",
+                bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.0},
+            )
 
     layout_margins = {
         **legend_margins("above", legend_rows=legend_rows),

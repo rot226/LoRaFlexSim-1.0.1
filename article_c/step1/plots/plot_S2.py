@@ -54,8 +54,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         )
         return fig
     plot_metric_by_snir(ax, rows, metric_key)
-    ax.set_xlabel("Network size (number of nodes)")
-    ax.set_ylabel("Mean Time on Air (s)")
+    ax.set_xlabel("Network size (nodes)")
+    ax.set_ylabel("Mean ToA (s)")
     ax.yaxis.set_label_coords(-0.08, 0.5)
     ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
     ax.set_xticks(network_sizes)
@@ -67,7 +67,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         legend_loc="right",
     )
     if fig.legends:
-        fig.legends[0].set_title("Mean Time on Air (s)")
+        fig.legends[0].set_title("Mean ToA (s)")
     metric_series = pd.to_numeric(df[metric_key], errors="coerce").dropna()
     if not metric_series.empty:
         y_min = metric_series.min()

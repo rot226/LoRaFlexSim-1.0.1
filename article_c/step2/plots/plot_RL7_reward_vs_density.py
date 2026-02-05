@@ -152,8 +152,8 @@ def _plot_metric(
     )
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-    ax.set_xlabel("Network size (number of nodes)")
-    ax.set_ylabel("Median Reward (global, p10-p90)")
+    ax.set_xlabel("Network size (nodes)")
+    ax.set_ylabel("Reward (a.u., median, p10–p90)")
     add_global_legend(fig, ax, legend_loc="right")
     return fig
 
@@ -356,6 +356,7 @@ def _plot_diagnostics(
     if df.empty:
         return
     metric_values, metric_label = _extract_metric_values(rows, metric_key)
+    display_label = "Reward (a.u.)"
     base_width, base_height = resolve_ieee_figsize(2)
     figsize = (base_width, base_height * 2)
     fig, axes = plt.subplots(2, 2, figsize=figsize)
@@ -370,7 +371,8 @@ def _plot_diagnostics(
         alpha=0.8,
         label="Network size",
     )
-    axes[0].set_xlabel("Network size")
+    axes[0].set_xlabel("Network size (nodes)")
+    axes[0].set_ylabel("Count")
 
     density = _density_series(rows)
     density_has_values = not density.empty
@@ -383,8 +385,11 @@ def _plot_diagnostics(
             alpha=0.8,
             label="Density",
         )
-        axes[1].set_xlabel("Density")
+        axes[1].set_xlabel("Density (nodes/km²)")
+        axes[1].set_ylabel("Count")
     else:
+        axes[1].set_xlabel("Density (nodes/km²)")
+        axes[1].set_ylabel("Count")
         axes[1].axis("off")
         label = "Density constante" if density_has_values else "Density absente"
         axes[1].text(0.5, 0.5, label, ha="center", va="center")
@@ -394,9 +399,10 @@ def _plot_diagnostics(
         bins="auto",
         color="#54a24b",
         alpha=0.8,
-        label=metric_label,
+        label=display_label,
     )
-    axes[2].set_xlabel(metric_label)
+    axes[2].set_xlabel(display_label)
+    axes[2].set_ylabel("Count")
 
     if "algo" in df.columns and not metric_values.empty:
         algos = sorted(df["algo"].dropna().unique())
@@ -415,8 +421,9 @@ def _plot_diagnostics(
         )
         for patch, algo in zip(boxplot_parts.get("boxes", []), algos, strict=False):
             patch.set_label(_label_for_algo(str(algo)))
-        axes[3].set_ylabel(metric_label)
+        axes[3].set_ylabel(display_label)
     else:
+        axes[3].set_ylabel(display_label)
         axes[3].axis("off")
         axes[3].text(0.5, 0.5, "Données algo absentes", ha="center", va="center")
 

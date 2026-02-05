@@ -98,8 +98,8 @@ def _plot_selection(
             label = f"SF {sf} (N={network_size})"
             ax.plot(rounds, p50, label=label)
             ax.fill_between(rounds, p10, p90, alpha=0.15)
-    ax.set_xlabel("Round")
-    ax.set_ylabel("Selection Probability")
+    ax.set_xlabel("Round (index)")
+    ax.set_ylabel("Selection prob. (prob.)")
     add_global_legend(fig, ax, legend_loc="right")
     return fig
 

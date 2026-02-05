@@ -86,8 +86,8 @@ def _plot_selection(
             values = [points[round_id] for round_id in rounds]
             label = f"SF {sf} (N={network_size})"
             ax.plot(rounds, values, marker="o", label=label)
-    ax.set_xlabel("Round")
-    ax.set_ylabel("Selection Probability")
+    ax.set_xlabel("Round (index)")
+    ax.set_ylabel("Selection prob. (prob.)")
     add_global_legend(fig, ax, legend_loc="right")
     return fig
 

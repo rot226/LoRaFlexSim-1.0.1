@@ -127,7 +127,7 @@ def _plot_distribution(
     ax.set_xticks(positions)
     ax.set_xticklabels([algo_label(str(algo)) for algo in algorithms])
     ax.set_xlabel("Algorithm")
-    ax.set_ylabel("Reward")
+    ax.set_ylabel("Reward (a.u.)")
     legend_rows = (
         max(1, math.ceil(len(algorithms) / min(3, len(algorithms))))
         if algorithms
@@ -235,7 +235,8 @@ def _plot_diagnostics(
         alpha=0.8,
         label="Network size",
     )
-    axes[0].set_xlabel("Network size")
+    axes[0].set_xlabel("Network size (nodes)")
+    axes[0].set_ylabel("Count")
 
     density = _density_series(rows)
     density_has_values = not density.empty
@@ -248,8 +249,11 @@ def _plot_diagnostics(
             alpha=0.8,
             label="Density",
         )
-        axes[1].set_xlabel("Density")
+        axes[1].set_xlabel("Density (nodes/km²)")
+        axes[1].set_ylabel("Count")
     else:
+        axes[1].set_xlabel("Density (nodes/km²)")
+        axes[1].set_ylabel("Count")
         axes[1].axis("off")
         label = "Density constante" if density_has_values else "Density absente"
         axes[1].text(0.5, 0.5, label, ha="center", va="center")
@@ -262,7 +266,8 @@ def _plot_diagnostics(
         alpha=0.8,
         label="Reward",
     )
-    axes[2].set_xlabel("Reward")
+    axes[2].set_xlabel("Reward (a.u.)")
+    axes[2].set_ylabel("Count")
 
     if "algo" in df.columns and not rewards.empty:
         algos = sorted(df["algo"].dropna().unique())
@@ -281,8 +286,9 @@ def _plot_diagnostics(
         )
         for patch, algo in zip(boxplot_parts.get("boxes", []), algos, strict=False):
             patch.set_label(f"{algo_label(str(algo))} (boxplot)")
-        axes[3].set_ylabel("Reward")
+        axes[3].set_ylabel("Reward (a.u.)")
     else:
+        axes[3].set_ylabel("Reward (a.u.)")
         axes[3].axis("off")
         axes[3].text(0.5, 0.5, "Données algo absentes", ha="center", va="center")
 

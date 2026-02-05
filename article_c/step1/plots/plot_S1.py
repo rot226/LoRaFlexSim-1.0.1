@@ -94,7 +94,7 @@ def _add_summary_plot(
             )
     ax.set_xticks(range(len(algos)))
     ax.set_xticklabels([algo_label(str(algo)) for algo in algos])
-    ax.set_ylabel("PDR\n(médiane ± min/max)")
+    ax.set_ylabel("PDR (prob.)\n(median ± min/max)")
     ax.set_ylim(0.0, 1.0)
     summary_handles = [
         Line2D(
@@ -160,8 +160,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         percentile_line_width=1.4,
     )
     clear_axis_legends(ax)
-    ax.set_xlabel("Network size (number of nodes)")
-    ax.set_ylabel("Packet Delivery Ratio")
+    ax.set_xlabel("Network size (nodes)")
+    ax.set_ylabel("PDR (prob.)")
     ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.2f}"))
     ax.yaxis.set_label_coords(-0.08, 0.5)
     ax.set_xticks(network_sizes)
