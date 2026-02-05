@@ -1050,7 +1050,7 @@ def _apply_congestion_and_link_quality(
     snir_threshold_min_db: float,
     snir_threshold_max_db: float,
     debug_step2: bool,
-) -> tuple[dict[int, int], dict[str, int], float]:
+) -> tuple[dict[int, int], dict[str, float], float]:
     per_node_after_congestion: dict[int, int] = {}
     losses_congestion = 0
     for node_window in node_windows:
@@ -1076,48 +1076,37 @@ def _apply_congestion_and_link_quality(
             link_quality = float(node_window["link_quality"])
             weighted_sum += link_quality * successes
         link_quality_weighted = weighted_sum / successes_after_congestion_total
-    successes_after_link_total = sum(
-        1
-        for _ in range(successes_after_congestion_total)
-        if rng.random() < link_quality_weighted
-    )
-    if (
-        successes_after_congestion_total > 0
-        and link_quality_weighted >= 0.2
-        and successes_after_link_total < 1
-    ):
-        successes_after_link_total = 1
     snir_success_factor = _snir_success_factor(
         snir_mode=snir_mode,
         snir_threshold_db=snir_threshold_db,
         snir_threshold_min_db=snir_threshold_min_db,
         snir_threshold_max_db=snir_threshold_max_db,
-        link_quality_weighted=link_quality_weighted,
     )
-    snir_successes_after_link = int(
-        round(successes_after_link_total * snir_success_factor)
+    link_quality_snir = _clip(link_quality_weighted * snir_success_factor, 0.0, 1.0)
+    successes_after_link_total = sum(
+        1
+        for _ in range(successes_after_congestion_total)
+        if rng.random() < link_quality_snir
     )
-    snir_successes_after_link = max(
-        0, min(snir_successes_after_link, successes_after_link_total)
-    )
+    if (
+        successes_after_congestion_total > 0
+        and link_quality_snir >= 0.2
+        and successes_after_link_total < 1
+    ):
+        successes_after_link_total = 1
     if _should_debug_log(debug_step2, round_id):
         logger.debug(
             "SNIR facteur succès=%.3f (mode=%s seuil=%.2f dB min=%.2f dB max=%.2f dB "
-            "link_quality_weighted=%.3f succès_avant=%s succès_après=%s).",
+            "link_quality_weighted=%.3f link_quality_snir=%.3f succès_après=%s).",
             snir_success_factor,
             snir_mode,
             snir_threshold_db,
             snir_threshold_min_db,
             snir_threshold_max_db,
             link_quality_weighted,
+            link_quality_snir,
             successes_after_link_total,
-            snir_successes_after_link,
         )
-    successes_after_link_total = _apply_snir_filter(
-        snir_successes_after_link,
-        snir_threshold_db,
-        snir_mode,
-    )
     logger.debug(
         "Diag congestion/lien (debug) - link_quality_weighted=%.3f successes_after_congestion_total=%s successes_after_link_total=%s",
         link_quality_weighted,
@@ -1161,6 +1150,8 @@ def _apply_congestion_and_link_quality(
             "successes_after_link": successes_after_link_total,
             "losses_congestion": losses_congestion,
             "losses_link_quality": losses_link_quality,
+            "snir_success_factor": snir_success_factor,
+            "link_quality_snir": link_quality_snir,
         },
         link_quality_weighted,
     )
@@ -1172,7 +1163,6 @@ def _snir_success_factor(
     snir_threshold_db: float,
     snir_threshold_min_db: float,
     snir_threshold_max_db: float,
-    link_quality_weighted: float,
 ) -> float:
     if snir_mode != "snir_on":
         return 1.0
@@ -1181,50 +1171,8 @@ def _snir_success_factor(
     if max_db <= min_db:
         return 1.0
     threshold_db = _clamp_range(snir_threshold_db, min_db, max_db)
-    effective_snir_db = min_db + _clip(link_quality_weighted, 0.0, 1.0) * (
-        max_db - min_db
-    )
-    if effective_snir_db >= threshold_db:
-        return 1.0
-    if effective_snir_db <= min_db:
-        return 0.0
-    return _clip(
-        (effective_snir_db - min_db) / max(threshold_db - min_db, 1e-6),
-        0.0,
-        1.0,
-    )
-
-
-def _apply_snir_filter(
-    successes_after_link: int,
-    snir_threshold_db: float,
-    snir_mode: str,
-) -> int:
-    if snir_mode != "snir_on" or successes_after_link <= 0:
-        return successes_after_link
-    snir_defaults = DEFAULT_CONFIG.snir
-    min_db = min(
-        snir_defaults.snir_threshold_min_db, snir_defaults.snir_threshold_max_db
-    )
-    max_db = max(
-        snir_defaults.snir_threshold_min_db, snir_defaults.snir_threshold_max_db
-    )
-    if max_db <= min_db:
-        return successes_after_link
-    threshold_db = _clamp_range(float(snir_threshold_db), min_db, max_db)
     threshold_ratio = (threshold_db - min_db) / max(max_db - min_db, 1e-6)
-    success_factor = _clip(1.0 - threshold_ratio, 0.0, 1.0)
-    filtered_successes = int(round(successes_after_link * success_factor))
-    filtered_successes = max(0, min(filtered_successes, successes_after_link))
-    logger.debug(
-        "snir filter - mode=%s seuil=%.2f dB facteur=%.3f succès_avant=%s succès_après=%s",
-        snir_mode,
-        threshold_db,
-        success_factor,
-        successes_after_link,
-        filtered_successes,
-    )
-    return filtered_successes
+    return _clip(1.0 - threshold_ratio, 0.0, 1.0)
 
 
 def _select_adr_arm(
@@ -1925,6 +1873,20 @@ def run_simulation(
                         loss_stats["successes_before_link"],
                         loss_stats["successes_after_link"],
                         link_quality_weighted,
+                    ),
+                )
+                _log_debug_stage(
+                    stage="snir",
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    details=(
+                        "snir_mode=%s snir_factor=%.3f link_quality_snir=%.3f"
+                    )
+                    % (
+                        snir_mode,
+                        loss_stats["snir_success_factor"],
+                        loss_stats["link_quality_snir"],
                     ),
                 )
             final_success_total = loss_stats["successes_after_link"]
