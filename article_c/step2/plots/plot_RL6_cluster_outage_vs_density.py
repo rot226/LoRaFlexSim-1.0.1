@@ -46,6 +46,13 @@ ALGO_ALIASES = {
     "ucb1_sf": "ucb1_sf",
 }
 TARGET_ALGOS = {"adr", "loba", "mixra_h", "mixra_opt", "ucb1_sf"}
+RIGHT_LEGEND_WIDTH_FACTOR = 1.3
+RIGHT_LEGEND_RATIO_FACTOR = 1.15
+
+
+def _right_legend_figsize(cluster_count: int) -> tuple[float, float]:
+    width, height = resolve_ieee_figsize(cluster_count)
+    return (width * RIGHT_LEGEND_WIDTH_FACTOR, height)
 
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
@@ -169,7 +176,7 @@ def _plot_metric(
     cluster_labels = _cluster_labels(clusters)
 
     fig, axes = plt.subplots(1, len(clusters), sharey=True)
-    apply_figure_layout(fig, figsize=resolve_ieee_figsize(len(clusters)))
+    apply_figure_layout(fig, figsize=_right_legend_figsize(len(clusters)))
     if len(clusters) == 1:
         axes = [axes]
 
@@ -223,6 +230,7 @@ def _plot_metric(
         axes,
         handles=handles if handles else None,
         labels=labels if handles else None,
+        extra_width_factor=RIGHT_LEGEND_RATIO_FACTOR,
     )
     return fig
 
@@ -328,7 +336,7 @@ def _plot_raw_metric(
         return None
     cluster_labels = _cluster_labels(clusters)
     fig, axes = plt.subplots(1, len(clusters), sharey=True)
-    apply_figure_layout(fig, figsize=resolve_ieee_figsize(len(clusters)))
+    apply_figure_layout(fig, figsize=_right_legend_figsize(len(clusters)))
     if len(clusters) == 1:
         axes = [axes]
     algorithms = sorted({row["algo"] for row in rows})
@@ -376,6 +384,7 @@ def _plot_raw_metric(
         axes,
         handles=handles if handles else None,
         labels=labels if handles else None,
+        extra_width_factor=RIGHT_LEGEND_RATIO_FACTOR,
     )
     return fig
 
