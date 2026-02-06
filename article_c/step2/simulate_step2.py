@@ -61,6 +61,14 @@ def _clip(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float
     return max(min_value, min(max_value, value))
 
 
+def _normalize_local(
+    value: float, min_value: float, max_value: float, *, fallback: float = 0.5
+) -> float:
+    if math.isclose(min_value, max_value, abs_tol=1e-9):
+        return _clip(fallback, 0.0, 1.0)
+    return _clip((value - min_value) / (max_value - min_value), 0.0, 1.0)
+
+
 def _compute_reward(
     success_rate: float,
     traffic_sent: int,
@@ -68,6 +76,8 @@ def _compute_reward(
     latency_norm: float,
     energy_norm: float,
     collision_norm: float,
+    throughput_success_norm: float,
+    energy_per_success_norm: float,
     weights: AlgoRewardWeights,
     lambda_energy: float,
     lambda_collision: float,
@@ -77,20 +87,32 @@ def _compute_reward(
     log_components: bool = False,
     log_context: str | None = None,
 ) -> float:
+    throughput_weight = 0.1
+    energy_per_success_weight = 0.1
     latency_norm = _clip(latency_norm**1.35 * 1.08, 0.0, 1.0)
     energy_norm = _clip(energy_norm**1.35 * 1.08, 0.0, 1.0)
     collision_norm = _clip(collision_norm**1.15 * 1.04, 0.0, 1.0)
     energy_weight = weights.energy_weight * (1.0 + lambda_energy)
-    total_weight = weights.sf_weight + weights.latency_weight + energy_weight
+    total_weight = (
+        weights.sf_weight
+        + weights.latency_weight
+        + energy_weight
+        + throughput_weight
+        + energy_per_success_weight
+    )
     if total_weight <= 0:
         total_weight = 1.0
     sf_score = 1.0 - sf_norm
     latency_score = 1.0 - latency_norm
     energy_score = 1.0 - energy_norm
+    throughput_score = _clip(throughput_success_norm, 0.0, 1.0)
+    energy_per_success_score = 1.0 - _clip(energy_per_success_norm, 0.0, 1.0)
     weighted_quality = (
         weights.sf_weight * sf_score
         + weights.latency_weight * latency_score
         + energy_weight * energy_score
+        + throughput_weight * throughput_score
+        + energy_per_success_weight * energy_per_success_score
     ) / total_weight
     traffic_factor = 0.0
     if traffic_sent > 0:
@@ -146,8 +168,10 @@ def _compute_reward(
         logger.info(
             "reward components%s: success_rate=%.4f weighted_quality=%.4f "
             "collision_penalty=%.4f reward=%.4f sf_norm=%.3f latency_norm=%.3f "
-            "energy_norm=%.3f collision_norm=%.3f lambda_energy=%.3f "
-            "lambda_collision=%.3f weights=(sf=%.2f latency=%.2f energy=%.2f collision=%.2f).",
+            "energy_norm=%.3f collision_norm=%.3f throughput_norm=%.3f "
+            "energy_per_success_norm=%.3f lambda_energy=%.3f lambda_collision=%.3f "
+            "weights=(sf=%.2f latency=%.2f energy=%.2f collision=%.2f "
+            "throughput=%.2f energy_per_success=%.2f).",
             suffix,
             success_rate,
             weighted_quality,
@@ -157,12 +181,16 @@ def _compute_reward(
             latency_norm,
             energy_norm,
             collision_norm,
+            throughput_success_norm,
+            energy_per_success_norm,
             lambda_energy,
             lambda_collision,
             weights.sf_weight,
             weights.latency_weight,
             weights.energy_weight,
             weights.collision_weight,
+            throughput_weight,
+            energy_per_success_weight,
         )
     return clipped_reward
 
@@ -2589,6 +2617,7 @@ def run_simulation(
             round_energy_per_success: list[float] = []
             round_traffic_sent: list[int] = []
             round_successes: list[int] = []
+            node_metrics: list[dict[str, object]] = []
             for node_window in node_windows:
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
@@ -2627,6 +2656,47 @@ def run_simulation(
                     window_duration_s=window_duration_value,
                     airtime_s=airtime_s,
                 )
+                node_metrics.append(
+                    {
+                        "node_window": node_window,
+                        "node_id": node_id,
+                        "sf_value": sf_value,
+                        "traffic_sent": traffic_sent,
+                        "successes": successes,
+                        "success_flag": success_flag,
+                        "failure_flag": failure_flag,
+                        "metrics": metrics,
+                    }
+                )
+            throughput_values = [
+                entry["metrics"].throughput_success for entry in node_metrics
+            ]
+            energy_success_values = [
+                entry["metrics"].energy_per_success for entry in node_metrics
+            ]
+            throughput_min = min(throughput_values) if throughput_values else 0.0
+            throughput_max = max(throughput_values) if throughput_values else 0.0
+            energy_success_min = (
+                min(energy_success_values) if energy_success_values else 0.0
+            )
+            energy_success_max = (
+                max(energy_success_values) if energy_success_values else 0.0
+            )
+            for entry in node_metrics:
+                node_window = entry["node_window"]
+                node_id = int(entry["node_id"])
+                sf_value = int(entry["sf_value"])
+                traffic_sent = int(entry["traffic_sent"])
+                successes = int(entry["successes"])
+                success_flag = int(entry["success_flag"])
+                failure_flag = int(entry["failure_flag"])
+                metrics = entry["metrics"]
+                throughput_norm = _normalize_local(
+                    metrics.throughput_success, throughput_min, throughput_max
+                )
+                energy_per_success_norm = _normalize_local(
+                    metrics.energy_per_success, energy_success_min, energy_success_max
+                )
                 log_components = (
                     log_reward_components and round_id == 0 and node_id == 0
                 )
@@ -2643,6 +2713,8 @@ def run_simulation(
                     latency_norm_by_sf[sf_value],
                     metrics.energy_norm,
                     metrics.collision_norm,
+                    throughput_norm,
+                    energy_per_success_norm,
                     effective_reward_weights,
                     lambda_energy,
                     lambda_collision_effective,
@@ -3241,6 +3313,7 @@ def run_simulation(
             round_energy_per_success: list[float] = []
             round_traffic_sent: list[int] = []
             round_successes: list[int] = []
+            node_metrics: list[dict[str, object]] = []
             for node_window in node_windows:
                 node_id = int(node_window["node_id"])
                 sf_value = int(node_window["sf"])
@@ -3279,6 +3352,47 @@ def run_simulation(
                     window_duration_s=window_duration_value,
                     airtime_s=airtime_s,
                 )
+                node_metrics.append(
+                    {
+                        "node_window": node_window,
+                        "node_id": node_id,
+                        "sf_value": sf_value,
+                        "traffic_sent": traffic_sent,
+                        "successes": successes,
+                        "success_flag": success_flag,
+                        "failure_flag": failure_flag,
+                        "metrics": metrics,
+                    }
+                )
+            throughput_values = [
+                entry["metrics"].throughput_success for entry in node_metrics
+            ]
+            energy_success_values = [
+                entry["metrics"].energy_per_success for entry in node_metrics
+            ]
+            throughput_min = min(throughput_values) if throughput_values else 0.0
+            throughput_max = max(throughput_values) if throughput_values else 0.0
+            energy_success_min = (
+                min(energy_success_values) if energy_success_values else 0.0
+            )
+            energy_success_max = (
+                max(energy_success_values) if energy_success_values else 0.0
+            )
+            for entry in node_metrics:
+                node_window = entry["node_window"]
+                node_id = int(entry["node_id"])
+                sf_value = int(entry["sf_value"])
+                traffic_sent = int(entry["traffic_sent"])
+                successes = int(entry["successes"])
+                success_flag = int(entry["success_flag"])
+                failure_flag = int(entry["failure_flag"])
+                metrics = entry["metrics"]
+                throughput_norm = _normalize_local(
+                    metrics.throughput_success, throughput_min, throughput_max
+                )
+                energy_per_success_norm = _normalize_local(
+                    metrics.energy_per_success, energy_success_min, energy_success_max
+                )
                 log_components = (
                     log_reward_components and round_id == 0 and node_id == 0
                 )
@@ -3295,6 +3409,8 @@ def run_simulation(
                     latency_norm_by_sf[sf_value],
                     metrics.energy_norm,
                     metrics.collision_norm,
+                    throughput_norm,
+                    energy_per_success_norm,
                     effective_reward_weights,
                     lambda_energy,
                     lambda_collision_effective,
