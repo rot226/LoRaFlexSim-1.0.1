@@ -7,6 +7,7 @@ import csv
 import importlib
 import sys
 import traceback
+from dataclasses import dataclass
 from importlib.util import find_spec
 from pathlib import Path
 
@@ -206,6 +207,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="png,pdf",
         help="Formats d'export des figures (ex: png,pdf,eps).",
     )
+    parser.add_argument(
+        "--fail-on-error",
+        action="store_true",
+        help=(
+            "Retourne un code non nul si des plots échouent, "
+            "sans interrompre l'exécution."
+        ),
+    )
     return parser
 
 
@@ -232,29 +241,28 @@ def _run_plot_module(
     module.main(network_sizes=network_sizes, allow_sample=allow_sample)
 
 
-def _validate_plot_modules_use_save_figure() -> bool:
-    missing: list[str] = []
+def _validate_plot_modules_use_save_figure() -> dict[str, str]:
+    missing: dict[str, str] = {}
     for module_paths in PLOT_MODULES.values():
         for module_path in module_paths:
             spec = find_spec(module_path)
             if spec is None or spec.origin is None:
-                missing.append(f"{module_path} (introuvable)")
+                missing[module_path] = "module introuvable"
                 continue
             source_path = Path(spec.origin)
             try:
                 source = source_path.read_text(encoding="utf-8")
             except OSError as exc:
-                missing.append(f"{module_path} ({exc})")
+                missing[module_path] = f"lecture impossible: {exc}"
                 continue
             if "save_figure(" not in source:
-                missing.append(str(source_path.relative_to(ARTICLE_DIR)))
+                missing[module_path] = "ne passe pas par save_figure"
     if missing:
         print(
             "ERREUR: certains scripts de plot ne passent pas par save_figure:\n"
             + "\n".join(f"- {item}" for item in missing)
         )
-        return False
-    return True
+    return missing
 
 
 def _inspect_plot_outputs(
@@ -441,7 +449,7 @@ def _validate_plot_data(
     module_path: str,
     csv_path: Path,
     cached_data: dict[str, tuple[list[str], list[dict[str, str]]]],
-) -> bool:
+) -> tuple[bool, str]:
     if step not in cached_data:
         cached_data[step] = _load_csv_data(csv_path)
     fieldnames, rows = cached_data[step]
@@ -450,7 +458,7 @@ def _validate_plot_data(
             "AVERTISSEMENT: "
             f"CSV vide pour {module_path}, figure ignorée."
         )
-        return False
+        return False, "CSV vide"
     sizes = _extract_network_sizes(csv_path)
     if len(sizes) < 2:
         sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
@@ -464,7 +472,7 @@ def _validate_plot_data(
             "disponibles, figure ignorée."
         )
         print(f"CSV path: {csv_path}")
-        return False
+        return False, "moins de 2 tailles de réseau"
     algo_col = _pick_column(fieldnames, ("algo", "algorithm", "method"))
     snir_col = _pick_column(
         fieldnames, ("snir_mode", "snir_state", "snir", "with_snir")
@@ -475,7 +483,7 @@ def _validate_plot_data(
             f"{module_path} nécessite les colonnes algo/snir_mode, "
             "figure ignorée."
         )
-        return False
+        return False, "colonnes algo/snir_mode manquantes"
     available_algos = {
         normalized
         for row in rows
@@ -508,8 +516,59 @@ def _validate_plot_data(
             f"{module_path} incomplet ({' ; '.join(details)}), "
             "figure ignorée."
         )
-        return False
-    return True
+        return False, "données incomplètes"
+    return True, "OK"
+
+
+@dataclass
+class PlotStatus:
+    step: str
+    module_path: str
+    status: str
+    message: str
+
+
+def _register_status(
+    status_map: dict[str, PlotStatus],
+    *,
+    step: str,
+    module_path: str,
+    status: str,
+    message: str,
+) -> None:
+    status_map[module_path] = PlotStatus(
+        step=step,
+        module_path=module_path,
+        status=status,
+        message=message,
+    )
+
+
+def _summarize_statuses(
+    status_map: dict[str, PlotStatus],
+    steps: list[str],
+) -> dict[str, int]:
+    counts = {"OK": 0, "FAIL": 0, "SKIP": 0}
+    print("\nRésumé d'exécution des plots:")
+    for step in steps:
+        print(f"\n{step.upper()}:")
+        for module_path in PLOT_MODULES[step]:
+            entry = status_map.get(module_path)
+            if entry is None:
+                status_label = "SKIP"
+                message = "Non exécuté."
+            else:
+                status_label = entry.status
+                message = entry.message
+            counts[status_label] = counts.get(status_label, 0) + 1
+            print(f"- {module_path}: {status_label} ({message})")
+    total = sum(counts.values())
+    print(
+        "\nBilan: "
+        f"{counts['OK']} OK / {counts['FAIL']} FAIL / "
+        f"{counts['SKIP']} SKIP (total {total})."
+    )
+    return counts
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -525,8 +584,19 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:
         parser.error(str(exc))
     set_default_export_formats(export_formats)
-    if not _validate_plot_modules_use_save_figure():
-        return
+    status_map: dict[str, PlotStatus] = {}
+    invalid_modules = _validate_plot_modules_use_save_figure()
+    if invalid_modules:
+        for step, module_paths in PLOT_MODULES.items():
+            for module_path in module_paths:
+                if module_path in invalid_modules:
+                    _register_status(
+                        status_map,
+                        step=step,
+                        module_path=module_path,
+                        status="FAIL",
+                        message=invalid_modules[module_path],
+                    )
     try:
         steps = _parse_steps(args.steps)
     except ValueError as exc:
@@ -535,31 +605,37 @@ def main(argv: list[str] | None = None) -> None:
     step2_results_dir = STEP2_RESULTS_DIR
     step1_csv = None
     step2_csv = None
+    step_errors: dict[str, str] = {}
     if "step1" in steps:
         step1_csv = _ensure_step1_aggregated(step1_results_dir)
         if step1_csv is None:
             _report_missing_csv("Step1", step1_results_dir)
-            return
-        _ensure_expected_results_dir(step1_csv, step1_results_dir, "Step1")
-        if not (step1_results_dir / "done.flag").exists():
-            print("AVERTISSEMENT: done.flag absent pour Step1, continuation.")
+            step_errors["step1"] = "CSV Step1 manquant"
+        else:
+            _ensure_expected_results_dir(step1_csv, step1_results_dir, "Step1")
+            if not (step1_results_dir / "done.flag").exists():
+                print("AVERTISSEMENT: done.flag absent pour Step1, continuation.")
     if "step2" in steps:
         step2_csv = _ensure_step2_aggregated(step2_results_dir)
         if step2_csv is None:
             _report_missing_csv("Step2", step2_results_dir)
-            return
-        _ensure_expected_results_dir(step2_csv, step2_results_dir, "Step2")
-        if not (step2_results_dir / "done.flag").exists():
-            print("AVERTISSEMENT: done.flag absent pour Step2, continuation.")
+            step_errors["step2"] = "CSV Step2 manquant"
+        else:
+            _ensure_expected_results_dir(step2_csv, step2_results_dir, "Step2")
+            if not (step2_results_dir / "done.flag").exists():
+                print("AVERTISSEMENT: done.flag absent pour Step2, continuation.")
     if (
         step1_csv is not None
         and step2_csv is not None
         and step1_csv.resolve() == step2_csv.resolve()
     ):
-        raise ValueError(
+        message = (
             "Step1 et Step2 pointent vers le même CSV agrégé. "
             "Vérifiez que chaque étape écrit dans son dossier results."
         )
+        print(f"ERREUR: {message}")
+        step_errors["step1"] = message
+        step_errors["step2"] = message
     csv_paths: list[Path] = []
     if "step1" in steps and step1_csv is not None:
         csv_paths.append(step1_csv)
@@ -573,7 +649,15 @@ def main(argv: list[str] | None = None) -> None:
     if args.network_sizes:
         network_sizes = args.network_sizes
         if not _validate_network_sizes(csv_paths, network_sizes):
-            return
+            step_errors.setdefault(
+                "step1",
+                "validation des tailles de réseau échouée",
+            )
+            step_errors.setdefault(
+                "step2",
+                "validation des tailles de réseau échouée",
+            )
+            network_sizes = []
     else:
         network_sizes = sorted(
             {
@@ -587,7 +671,14 @@ def main(argv: list[str] | None = None) -> None:
                 "Aucune taille de réseau détectée dans les CSV, "
                 "aucun plot n'a été généré."
             )
-            return
+            step_errors.setdefault(
+                "step1",
+                "aucune taille de réseau détectée",
+            )
+            step_errors.setdefault(
+                "step2",
+                "aucune taille de réseau détectée",
+            )
     skip_step2_plots = False
     if "step2" in steps:
         step2_sizes = step_network_sizes.get("step2", [])
@@ -623,10 +714,37 @@ def main(argv: list[str] | None = None) -> None:
                     print("Commande PowerShell pour terminer Step2 (mode reprise):")
                     print(_suggest_step2_resume_command(expected_sizes))
     csv_cache: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
+    for step, module_paths in PLOT_MODULES.items():
+        if step not in steps:
+            continue
+        if step in step_errors:
+            for module_path in module_paths:
+                if module_path not in status_map:
+                    _register_status(
+                        status_map,
+                        step=step,
+                        module_path=module_path,
+                        status="SKIP",
+                        message=step_errors[step],
+                    )
+    if skip_step2_plots and "step2" in steps:
+        for module_path in PLOT_MODULES["step2"]:
+            if module_path not in status_map:
+                _register_status(
+                    status_map,
+                    step="step2",
+                    module_path=module_path,
+                    status="SKIP",
+                    message="Step2 incomplet (moins de 2 tailles)",
+                )
     for step in steps:
+        if step in step_errors:
+            continue
         if step == "step2" and skip_step2_plots:
             continue
         for module_path in PLOT_MODULES[step]:
+            if module_path in status_map and status_map[module_path].status == "FAIL":
+                continue
             if step == "step1":
                 if step1_csv is None:
                     continue
@@ -669,14 +787,29 @@ def main(argv: list[str] | None = None) -> None:
                             "(PowerShell):"
                         )
                         print(command)
+                    _register_status(
+                        status_map,
+                        step=step,
+                        module_path=module_path,
+                        status="SKIP",
+                        message="moins de 2 tailles communes Step1/Step2",
+                    )
                     continue
                 rl10_network_sizes = intersection
-            if not _validate_plot_data(
+            is_valid, reason = _validate_plot_data(
                 step=step,
                 module_path=module_path,
                 csv_path=csv_path,
                 cached_data=csv_cache,
-            ):
+            )
+            if not is_valid:
+                _register_status(
+                    status_map,
+                    step=step,
+                    module_path=module_path,
+                    status="SKIP",
+                    message=reason,
+                )
                 continue
             if step == "step2":
                 figure = module_path.split(".")[-1]
@@ -710,19 +843,47 @@ def main(argv: list[str] | None = None) -> None:
                         network_sizes=step2_network_sizes,
                         allow_sample=False,
                     )
+                    _register_status(
+                        status_map,
+                        step=step,
+                        module_path=module_path,
+                        status="OK",
+                        message="plot généré",
+                    )
                 except Exception as exc:
                     print(
                         f"ERREUR: échec du plot {module_path}: {exc}"
                     )
                     traceback.print_exc()
+                    _register_status(
+                        status_map,
+                        step=step,
+                        module_path=module_path,
+                        status="FAIL",
+                        message=str(exc),
+                    )
             else:
                 try:
                     _run_plot_module(module_path, allow_sample=False)
+                    _register_status(
+                        status_map,
+                        step=step,
+                        module_path=module_path,
+                        status="OK",
+                        message="plot généré",
+                    )
                 except Exception as exc:
                     print(
                         f"ERREUR: échec du plot {module_path}: {exc}"
                     )
                     traceback.print_exc()
+                    _register_status(
+                        status_map,
+                        step=step,
+                        module_path=module_path,
+                        status="FAIL",
+                        message=str(exc),
+                    )
     if "step1" in steps:
         _inspect_plot_outputs(
             ARTICLE_DIR / "step1" / "plots" / "output",
@@ -735,6 +896,9 @@ def main(argv: list[str] | None = None) -> None:
             "Step2",
             list(export_formats),
         )
+    counts = _summarize_statuses(status_map, steps)
+    if args.fail_on_error and counts.get("FAIL", 0) > 0:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
