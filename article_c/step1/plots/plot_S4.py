@@ -147,7 +147,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         configure_figure(
             fig,
             ax,
-            title="(SNIR on/off)",
+            title=None,
             legend_loc="right",
         )
         return fig
@@ -172,7 +172,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     configure_figure(
         fig,
         ax,
-        title="(SNIR on/off)",
+        title=None,
         legend_loc="right",
         legend_handles=handles if handles else None,
         legend_labels=labels if handles else None,
