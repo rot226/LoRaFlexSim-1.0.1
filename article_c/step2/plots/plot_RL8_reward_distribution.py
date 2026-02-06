@@ -22,10 +22,9 @@ from article_c.common.plot_helpers import (
     filter_cluster,
     is_constant_metric,
     normalize_network_size_rows,
-    add_global_legend,
+    place_adaptive_legend,
     save_figure,
 )
-from article_c.common.plotting_style import legend_extra_height
 from plot_defaults import resolve_ieee_figsize
 
 
@@ -128,14 +127,8 @@ def _plot_distribution(
     ax.set_xticklabels([algo_label(str(algo)) for algo in algorithms])
     ax.set_xlabel("Algorithm")
     ax.set_ylabel("Reward (a.u.)")
-    legend_rows = (
-        max(1, math.ceil(len(algorithms) / min(3, len(algorithms))))
-        if algorithms
-        else 1
-    )
-    extra_height = legend_extra_height(height, legend_rows, legend_loc="right")
-    apply_figure_layout(fig, figsize=(width, height + extra_height))
-    add_global_legend(fig, ax, legend_loc="right")
+    apply_figure_layout(fig, figsize=(width, height))
+    place_adaptive_legend(fig, ax, preferred_loc="right")
     return fig
 
 
@@ -302,10 +295,10 @@ def _plot_diagnostics(
             handles.append(handle)
             labels.append(label)
     if handles:
-        add_global_legend(
+        place_adaptive_legend(
             fig,
             axes[0],
-            legend_loc="right",
+            preferred_loc="right",
             handles=handles,
             labels=labels,
             use_fallback=False,

@@ -14,14 +14,12 @@ from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
-    add_figure_legend,
+    place_adaptive_legend,
     assert_legend_present,
-    clear_axis_legends,
     MetricStatus,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
-    fallback_legend_handles,
     is_constant_metric,
     legend_handles_for_algos_snir,
     load_step1_aggregated,
@@ -116,10 +114,13 @@ def _plot_metric_page(
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.set_xticks(network_sizes)
     handles, labels = legend_handles_for_algos_snir()
-    clear_axis_legends(axes)
-    if not handles:
-        handles, labels = fallback_legend_handles()
-    add_figure_legend(fig, handles, labels, legend_loc="right")
+    place_adaptive_legend(
+        fig,
+        axes[0],
+        preferred_loc="right",
+        handles=handles if handles else None,
+        labels=labels if handles else None,
+    )
     return fig
 
 

@@ -14,7 +14,7 @@ from typing import Sequence
 from article_c.common.config import DEFAULT_CONFIG, STEP2_SAFE_CONFIG
 from article_c.common.csv_io import write_rows, write_simulation_results
 from article_c.common.plot_helpers import (
-    add_global_legend,
+    place_adaptive_legend,
     apply_plot_style,
     parse_export_formats,
     save_figure,
@@ -999,7 +999,7 @@ def _plot_summary_reward(output_dir: Path) -> None:
     ax.set_ylabel("Mean Reward")
     ax.set_title("Step 2 - Reward moyen (avec barres d'erreur)")
     ax.set_xticks(network_sizes)
-    add_global_legend(fig, ax, legend_loc="right")
+    place_adaptive_legend(fig, ax)
     output_plot_dir = output_dir / "plots"
     save_figure(fig, output_plot_dir, "summary_reward", use_tight=False)
     plt.close(fig)

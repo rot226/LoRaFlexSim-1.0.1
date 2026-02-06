@@ -19,13 +19,10 @@ from article_c.common.plot_helpers import (
     MetricStatus,
     apply_plot_style,
     apply_figure_layout,
-    add_figure_legend,
+    place_adaptive_legend,
     assert_legend_present,
-    clear_axis_legends,
-    fallback_legend_handles,
     filter_mixra_opt_fallback,
     is_constant_metric,
-    legend_margins,
     legend_handles_for_algos_snir,
     load_step1_aggregated,
     metric_values,
@@ -130,26 +127,30 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
-    clear_axis_legends(axes)
-    if not cluster_handles:
-        cluster_handles, legend_labels = fallback_legend_handles()
-    legend_rows = add_figure_legend(
+    placement = place_adaptive_legend(
         fig,
-        cluster_handles,
-        legend_labels,
-        legend_loc="right",
+        axes[0],
+        preferred_loc="right",
+        handles=cluster_handles if cluster_handles else None,
+        labels=legend_labels if cluster_handles else None,
     )
-    if fig.legends:
-        fig.legends[-1].set_title("Clusters")
-    layout_margins = legend_margins("above", legend_rows=max(1, legend_rows), fig=fig)
-    apply_figure_layout(
-        fig,
-        margins={
-            **layout_margins,
-            "top": max(0.7, layout_margins.get("top", 0.0)),
-        },
-        legend_rows=max(1, legend_rows),
-    )
+    if placement.legend is not None:
+        placement.legend.set_title("Clusters")
+    if placement.legend_loc == "above":
+        layout_margins = legend_margins(
+            "above",
+            legend_rows=max(1, placement.legend_rows),
+            fig=fig,
+        )
+        apply_figure_layout(
+            fig,
+            margins={
+                **layout_margins,
+                "top": max(0.7, layout_margins.get("top", 0.0)),
+            },
+            legend_rows=max(1, placement.legend_rows),
+            legend_loc="above",
+        )
     return fig
 
 

@@ -8,12 +8,12 @@ from collections.abc import Iterable
 import matplotlib.pyplot as plt
 
 from article_c.common.plot_helpers import (
-    add_global_legend,
     apply_figure_layout,
     deduplicate_legend_entries,
     fallback_legend_handles,
     legend_margins,
     legend_ncols,
+    place_adaptive_legend,
     suptitle_y_from_top,
 )
 from article_c.common.plotting_style import FIGURE_MARGINS, LEGEND_STYLE
@@ -75,13 +75,14 @@ def configure_figure(
             if legend_loc == "above":
                 ncol = min(len(labels), int(LEGEND_STYLE.get("ncol", len(labels)) or 1))
                 legend_rows = max(1, math.ceil(len(labels) / max(1, ncol)))
-            add_global_legend(
+            placement = place_adaptive_legend(
                 fig,
                 axes_list[0],
-                legend_loc=legend_loc,
+                preferred_loc=legend_loc,
                 handles=handles,
                 labels=labels,
             )
+            legend_rows = placement.legend_rows
     legend_in_figure = bool(fig.legends)
     legend_entry_count = 0
     if legend_in_figure:

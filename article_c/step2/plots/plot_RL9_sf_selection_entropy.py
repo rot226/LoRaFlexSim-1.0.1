@@ -22,11 +22,10 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     load_step2_selection_probs,
     normalize_network_size_rows,
-    add_global_legend,
+    place_adaptive_legend,
     render_metric_status,
     save_figure,
 )
-from article_c.common.plotting_style import LEGEND_STYLE, legend_extra_height
 from plot_defaults import resolve_ieee_figsize
 
 
@@ -71,13 +70,7 @@ def _plot_entropy(
     series_count = len(network_sizes)
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(network_sizes)))
     width, height = fig.get_size_inches()
-    legend_rows = 1
-    if series_count:
-        legend_ncol = int(LEGEND_STYLE.get("ncol", series_count) or series_count)
-        ncol = min(series_count, legend_ncol) or 1
-        legend_rows = max(1, math.ceil(series_count / ncol))
-    extra_height = legend_extra_height(height, legend_rows, legend_loc="right")
-    apply_figure_layout(fig, figsize=(width, height + extra_height))
+    apply_figure_layout(fig, figsize=(width, height))
     all_entropy_values: list[float] = []
     for network_size in network_sizes:
         size_rows = [row for row in rows if row["network_size"] == network_size]
@@ -105,7 +98,7 @@ def _plot_entropy(
     ax.set_xlabel("Round (index)")
     ax.set_ylabel("Selection entropy (bits)")
     if network_sizes:
-        add_global_legend(fig, ax, legend_loc="right")
+        place_adaptive_legend(fig, ax, preferred_loc="right")
     return fig
 
 

@@ -19,9 +19,8 @@ from article_c.common.plot_helpers import (
     MetricStatus,
     apply_plot_style,
     apply_figure_layout,
-    add_figure_legend,
+    place_adaptive_legend,
     assert_legend_present,
-    clear_axis_legends,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     is_constant_metric,
@@ -138,8 +137,13 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
     handles, labels = legend_handles_for_algos_snir()
-    clear_axis_legends(axes)
-    add_figure_legend(fig, handles, labels, legend_loc="right")
+    place_adaptive_legend(
+        fig,
+        axes[0],
+        preferred_loc="right",
+        handles=handles if handles else None,
+        labels=labels if handles else None,
+    )
     return fig
 
 
