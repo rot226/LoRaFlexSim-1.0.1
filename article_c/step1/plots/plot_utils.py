@@ -53,7 +53,7 @@ def configure_figure(
 
     axes_list = _flatten_axes(axes)
     legend_rows = 1
-    if not fig.legends:
+    if not fig.legends and not any(ax.get_legend() is not None for ax in fig.axes):
         handles: list[object] = []
         labels: list[str] = []
         if legend_handles is not None:

@@ -667,6 +667,54 @@ def _legend_layout_for_rows(
     return _legend_layout_from_fig(fig, label_count, target_ncol)
 
 
+def _estimate_right_legend_ratio(fig: plt.Figure, labels: list[str]) -> float:
+    if not labels:
+        return 0.2
+    fig_width_in, _ = fig.get_size_inches()
+    if fig_width_in <= 0:
+        return 0.2
+    font_size = LEGEND_MIN_FONTSIZE
+    max_label_length = max(len(str(label)) for label in labels)
+    estimated_px = (max_label_length * font_size * 0.6) + (font_size * 3.0)
+    ratio = estimated_px / (fig_width_in * fig.dpi)
+    return min(max(ratio, 0.18), 0.5)
+
+
+def _right_legend_ratio_from_bbox(legend: Legend) -> float | None:
+    ratios = _legend_bbox_ratios(legend)
+    if ratios is None:
+        return None
+    width_ratio, _ = ratios
+    return min(max(width_ratio + 0.02, 0.18), 0.55)
+
+
+def _apply_right_legend_gridspec(
+    fig: plt.Figure,
+    axes: list[plt.Axes],
+    *,
+    legend_ax: plt.Axes | None,
+    width_ratio: float,
+) -> plt.Axes:
+    width_ratio = min(max(width_ratio, 0.18), 0.55)
+    gridspec = fig.add_gridspec(
+        1,
+        2,
+        width_ratios=[1.0 - width_ratio, width_ratio],
+        wspace=0.02,
+    )
+    left_spec = gridspec[0].subgridspec(1, max(1, len(axes)))
+    for idx, ax in enumerate(axes):
+        subplot_spec = left_spec[0, idx]
+        ax.set_subplotspec(subplot_spec)
+        ax.set_position(subplot_spec.get_position(fig))
+    if legend_ax is None:
+        legend_ax = fig.add_subplot(gridspec[1])
+    else:
+        legend_ax.set_subplotspec(gridspec[1])
+    legend_ax.set_position(gridspec[1].get_position(fig))
+    return legend_ax
+
+
 def place_adaptive_legend(
     fig: plt.Figure,
     ax: plt.Axes,
@@ -765,6 +813,67 @@ def place_adaptive_legend(
         legend_loc=legend_loc if not moved_to_axis else None,
     )
     return LegendPlacement(legend, final_loc, legend_rows)
+
+
+def create_right_legend_layout(
+    fig: plt.Figure,
+    axes: object,
+    *,
+    handles: list[Line2D] | None = None,
+    labels: list[str] | None = None,
+    legend_style: dict[str, object] | None = None,
+) -> plt.Axes:
+    """Place la légende dans une colonne dédiée à droite via un GridSpec."""
+    axes_list = _flatten_axes(axes)
+    if not axes_list:
+        raise ValueError("Aucun axe fourni pour la mise en page de la légende.")
+    if handles is None or labels is None:
+        handles, labels = collect_legend_entries(axes_list)
+    handles = handles or []
+    labels = labels or []
+    if handles:
+        handles, labels = deduplicate_legend_entries(handles, labels)
+    if not handles:
+        handles, labels = fallback_legend_handles()
+    clear_axis_legends(axes_list)
+
+    legend_style_payload = dict(LEGEND_STYLE)
+    if legend_style:
+        legend_style_payload.update(legend_style)
+    legend_style_payload["frameon"] = True
+    legend_style_payload.setdefault("loc", "center left")
+    legend_style_payload.setdefault("borderaxespad", 0.0)
+
+    width_ratio = _estimate_right_legend_ratio(fig, labels)
+    legend_ax = _apply_right_legend_gridspec(
+        fig,
+        axes_list,
+        legend_ax=None,
+        width_ratio=width_ratio,
+    )
+    legend_ax.set_frame_on(True)
+    legend_ax.set_xticks([])
+    legend_ax.set_yticks([])
+    legend_ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+
+    legend = legend_ax.legend(handles, labels, **legend_style_payload)
+    adjust_legend_to_fit(legend)
+
+    adjusted_ratio = _right_legend_ratio_from_bbox(legend)
+    if adjusted_ratio and abs(adjusted_ratio - width_ratio) > 0.02:
+        legend_ax = _apply_right_legend_gridspec(
+            fig,
+            axes_list,
+            legend_ax=legend_ax,
+            width_ratio=adjusted_ratio,
+        )
+        legend_ax.set_frame_on(True)
+        legend_ax.set_xticks([])
+        legend_ax.set_yticks([])
+        legend_ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        legend = legend_ax.legend(handles, labels, **legend_style_payload)
+        adjust_legend_to_fit(legend)
+    return legend_ax
 
 
 def _legend_style(
