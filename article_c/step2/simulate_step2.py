@@ -1295,6 +1295,7 @@ def _apply_congestion_and_link_quality(
     *,
     node_windows: list[dict[str, object]],
     successes_by_node: dict[int, int],
+    traffic_sent_by_node: dict[int, int],
     congestion_probability: float,
     link_success_min_ratio: float,
     rng: random.Random,
@@ -1384,22 +1385,33 @@ def _apply_congestion_and_link_quality(
         int(node_window["node_id"]): 0 for node_window in node_windows
     }
     if successes_after_congestion_total > 0 and successes_after_link_total > 0:
-        weighted_nodes = [
-            (node_id, weight)
-            for node_id, weight in per_node_after_congestion.items()
-            if weight > 0
-        ]
-        total_weight = sum(weight for _node_id, weight in weighted_nodes)
-        for _ in range(successes_after_link_total):
-            threshold = rng.random() * total_weight
-            cumulative = 0.0
-            chosen_node = weighted_nodes[-1][0]
-            for node_id, weight in weighted_nodes:
-                cumulative += weight
-                if cumulative >= threshold:
-                    chosen_node = node_id
-                    break
-            per_node_after_link[chosen_node] += 1
+        population: list[int] = []
+        for node_id, count in per_node_after_congestion.items():
+            if count > 0:
+                population.extend([node_id] * count)
+        if successes_after_link_total > len(population):
+            logger.warning(
+                "Succès après lien (%s) > population (%s), clamp au plafond.",
+                successes_after_link_total,
+                len(population),
+            )
+            successes_after_link_total = len(population)
+        for node_id in rng.sample(population, k=successes_after_link_total):
+            per_node_after_link[node_id] += 1
+    for node_id in list(per_node_after_link.keys()):
+        max_allowed = min(
+            per_node_after_congestion.get(node_id, 0),
+            traffic_sent_by_node.get(node_id, 0),
+        )
+        if per_node_after_link[node_id] > max_allowed:
+            logger.warning(
+                "Dépassement succès après lien (node_id=%s successes=%s cap=%s).",
+                node_id,
+                per_node_after_link[node_id],
+                max_allowed,
+            )
+        per_node_after_link[node_id] = min(per_node_after_link[node_id], max_allowed)
+        assert per_node_after_link[node_id] <= max_allowed
     losses_link_quality = successes_after_congestion_total - successes_after_link_total
     return (
         per_node_after_link,
@@ -2121,6 +2133,7 @@ def run_simulation(
                 _apply_congestion_and_link_quality(
                     node_windows=node_windows,
                     successes_by_node=successes_by_node,
+                    traffic_sent_by_node=traffic_sent_by_node,
                     congestion_probability=congestion_probability,
                     link_success_min_ratio=link_success_min_ratio_value,
                     rng=rng,
@@ -2661,6 +2674,7 @@ def run_simulation(
                 _apply_congestion_and_link_quality(
                     node_windows=node_windows,
                     successes_by_node=successes_by_node,
+                    traffic_sent_by_node=traffic_sent_by_node,
                     congestion_probability=congestion_probability,
                     link_success_min_ratio=link_success_min_ratio_value,
                     rng=rng,
