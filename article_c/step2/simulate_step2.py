@@ -2586,6 +2586,7 @@ def run_simulation(
             final_success_total = loss_stats["successes_after_link"]
             losses_congestion = loss_stats["losses_congestion"]
             losses_link_quality = loss_stats["losses_link_quality"]
+            losses_collisions = max(total_traffic_sent - collision_success_total, 0)
             ratio_after_collisions = (
                 collision_success_total / total_traffic_sent
                 if total_traffic_sent > 0
@@ -2758,6 +2759,9 @@ def run_simulation(
                     "ratio_successes_after_collisions": ratio_after_collisions,
                     "ratio_successes_after_congestion": ratio_after_congestion,
                     "ratio_successes_after_link": ratio_after_link,
+                    "losses_collisions": losses_collisions,
+                    "losses_congestion": losses_congestion,
+                    "losses_link_quality": losses_link_quality,
                     "reward": reward,
                     **snir_meta,
                 }
@@ -2797,7 +2801,7 @@ def run_simulation(
                 network_size=network_size_value,
                 algo_label=algo_label,
                 round_id=round_id,
-                losses_collisions=max(total_traffic_sent - collision_success_total, 0),
+                losses_collisions=losses_collisions,
                 losses_congestion=losses_congestion,
                 losses_link_quality=losses_link_quality,
             )
@@ -2809,7 +2813,7 @@ def run_simulation(
                 ratio_after_collisions=ratio_after_collisions,
                 ratio_after_congestion=ratio_after_congestion,
                 ratio_after_link=ratio_after_link,
-                losses_collisions=max(total_traffic_sent - collision_success_total, 0),
+                losses_collisions=losses_collisions,
                 losses_congestion=losses_congestion,
                 losses_link_quality=losses_link_quality,
             )
@@ -3282,6 +3286,7 @@ def run_simulation(
             final_success_total = loss_stats["successes_after_link"]
             losses_congestion = loss_stats["losses_congestion"]
             losses_link_quality = loss_stats["losses_link_quality"]
+            losses_collisions = max(total_traffic_sent - collision_success_total, 0)
             ratio_after_collisions = (
                 collision_success_total / total_traffic_sent
                 if total_traffic_sent > 0
@@ -3454,6 +3459,9 @@ def run_simulation(
                     "ratio_successes_after_collisions": ratio_after_collisions,
                     "ratio_successes_after_congestion": ratio_after_congestion,
                     "ratio_successes_after_link": ratio_after_link,
+                    "losses_collisions": losses_collisions,
+                    "losses_congestion": losses_congestion,
+                    "losses_link_quality": losses_link_quality,
                     "reward": reward,
                     **snir_meta,
                 }
@@ -3493,7 +3501,7 @@ def run_simulation(
                 network_size=network_size_value,
                 algo_label=algo_label,
                 round_id=round_id,
-                losses_collisions=max(total_traffic_sent - collision_success_total, 0),
+                losses_collisions=losses_collisions,
                 losses_congestion=losses_congestion,
                 losses_link_quality=losses_link_quality,
             )
@@ -3505,7 +3513,7 @@ def run_simulation(
                 ratio_after_collisions=ratio_after_collisions,
                 ratio_after_congestion=ratio_after_congestion,
                 ratio_after_link=ratio_after_link,
-                losses_collisions=max(total_traffic_sent - collision_success_total, 0),
+                losses_collisions=losses_collisions,
                 losses_congestion=losses_congestion,
                 losses_link_quality=losses_link_quality,
             )
