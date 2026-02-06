@@ -131,6 +131,13 @@ class MetricValues:
     status: MetricStatus
 
 
+@dataclass(frozen=True)
+class LegendPlacement:
+    legend: Legend | None
+    legend_loc: str
+    legend_rows: int
+
+
 def apply_plot_style() -> None:
     """Applique un style homogène pour les figures Step1/Step2."""
     apply_ieee_style(use_constrained_layout=False)
@@ -646,6 +653,118 @@ def place_legend(ax: plt.Axes, *, legend_loc: str | None = None) -> None:
         legend_rows=legend_rows,
         legend_loc=legend_loc,
     )
+
+
+def _legend_layout_for_rows(
+    fig: plt.Figure | None,
+    label_count: int,
+    max_rows: int,
+) -> tuple[int, int]:
+    if label_count <= 0:
+        return 1, 1
+    target_rows = max(1, max_rows)
+    target_ncol = max(1, min(label_count, int(math.ceil(label_count / target_rows))))
+    return _legend_layout_from_fig(fig, label_count, target_ncol)
+
+
+def place_adaptive_legend(
+    fig: plt.Figure,
+    ax: plt.Axes,
+    *,
+    preferred_loc: str | None = None,
+    handles: list[Line2D] | None = None,
+    labels: list[str] | None = None,
+    use_fallback: bool = True,
+    max_items_right: int = 6,
+    max_rows_above: int = 2,
+    max_rows_inside: int = 3,
+) -> LegendPlacement:
+    """Place une légende à droite si possible, sinon au-dessus ou dans l'axe."""
+    if handles is None or labels is None:
+        handles, labels = ax.get_legend_handles_labels()
+    if not handles and use_fallback:
+        handles, labels = fallback_legend_handles()
+    if handles:
+        handles, labels = deduplicate_legend_entries(handles, labels)
+    if not handles:
+        return LegendPlacement(None, "none", 0)
+
+    label_count = len(labels)
+    normalized_preferred = _normalize_legend_loc(preferred_loc or "")
+    if normalized_preferred in {"right", "above", "inside"}:
+        legend_loc = normalized_preferred
+    else:
+        legend_loc = "right" if label_count <= max_items_right else "above"
+    legend_rows = 1
+    legend_ncol = 1
+
+    if legend_loc == "right" and label_count > max_items_right:
+        legend_loc = "above"
+    if legend_loc == "above":
+        legend_ncol, legend_rows = _legend_layout_for_rows(
+            fig,
+            label_count,
+            max_rows_above,
+        )
+        if legend_rows > max_rows_above:
+            legend_loc = "inside"
+    if legend_loc == "inside":
+        legend_ncol, legend_rows = _legend_layout_for_rows(
+            fig,
+            label_count,
+            max_rows_inside,
+        )
+        clear_axis_legends([ax])
+        legend_style = dict(LEGEND_STYLE)
+        legend_style.update(
+            {
+                "loc": "upper right",
+                "frameon": True,
+                "ncol": legend_ncol,
+            }
+        )
+        legend = ax.legend(handles, labels, **legend_style)
+        apply_figure_layout(fig, margins=FIGURE_MARGINS)
+        return LegendPlacement(legend, "inside", legend_rows)
+
+    clear_axis_legends(fig.axes)
+    if legend_loc == "right":
+        legend_style = {
+            "loc": "center left",
+            "bbox_to_anchor": (1.02, 0.5),
+            "ncol": 1,
+            "frameon": False,
+        }
+        legend_rows = 1
+    else:
+        legend_style = dict(LEGEND_STYLE)
+        legend_style["ncol"] = legend_ncol
+        legend_style["bbox_to_anchor"] = legend_bbox_to_anchor(legend_rows=legend_rows)
+
+    legend = fig.legend(handles, labels, **legend_style)
+    if legend_loc == "above":
+        bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
+        legend.set_bbox_to_anchor(bbox_to_anchor)
+    legend, legend_rows, moved_to_axis = postprocess_legend(
+        legend,
+        legend_loc=legend_loc,
+        handles=handles,
+        labels=labels,
+        fig=fig,
+        legend_ncols_default=int(legend_style.get("ncol", 1)),
+        axes=[ax],
+    )
+    final_loc = "inside" if moved_to_axis else legend_loc
+    apply_figure_layout(
+        fig,
+        margins=FIGURE_MARGINS
+        if moved_to_axis
+        else legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
+        bbox_to_anchor=None if moved_to_axis else legend.get_bbox_to_anchor(),
+        legend_rows=legend_rows,
+        legend_loc=legend_loc if not moved_to_axis else None,
+    )
+    return LegendPlacement(legend, final_loc, legend_rows)
 
 
 def _legend_style(

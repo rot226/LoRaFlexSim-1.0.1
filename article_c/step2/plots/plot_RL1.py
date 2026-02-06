@@ -23,13 +23,12 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     metric_values,
     normalize_network_size_rows,
-    add_global_legend,
+    place_adaptive_legend,
     legend_handles_for_algos_snir,
     plot_metric_by_algo,
     render_metric_status,
     save_figure,
 )
-from article_c.common.plotting_style import LEGEND_STYLE
 from plot_defaults import resolve_ieee_figsize
 
 TARGET_CLUSTER = "gold"
@@ -73,17 +72,7 @@ def _plot_metric(
     series_count = len(df[algo_col].dropna().unique()) if algo_col else None
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
     width, height = fig.get_size_inches()
-    legend_rows = 1
-    if series_count:
-        legend_ncol = int(LEGEND_STYLE.get("ncol", series_count) or series_count)
-        ncol = min(series_count, legend_ncol) or 1
-        legend_rows = max(1, math.ceil(series_count / ncol))
-    apply_figure_layout(
-        fig,
-        figsize=(width, height),
-        legend_loc="right",
-        legend_rows=legend_rows,
-    )
+    apply_figure_layout(fig, figsize=(width, height))
     ensure_network_size(rows)
     if network_sizes is None:
         network_sizes = sorted(df["network_size"].unique())
@@ -109,7 +98,7 @@ def _plot_metric(
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (nodes)")
     ax.set_ylabel(f"Reward {cluster_label} (a.u., median, p10–p90)")
-    add_global_legend(fig, ax, legend_loc="right")
+    place_adaptive_legend(fig, ax, preferred_loc="right")
     return fig
 
 

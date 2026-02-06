@@ -26,11 +26,10 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     load_step2_aggregated,
     normalize_network_size_rows,
-    add_global_legend,
+    place_adaptive_legend,
     render_metric_status,
     save_figure,
 )
-from article_c.common.plotting_style import LEGEND_STYLE
 from plot_defaults import resolve_ieee_figsize
 
 ALGO_ALIASES = {
@@ -280,19 +279,8 @@ def _legend_handles_for_algos(
 def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(points)))
     width, height = fig.get_size_inches()
-    legend_loc = "right"
-    legend_rows = 1
     series_count = len(points)
-    if series_count:
-        legend_ncol = int(LEGEND_STYLE.get("ncol", series_count) or series_count)
-        ncol = min(series_count, legend_ncol) or 1
-        legend_rows = max(1, math.ceil(series_count / ncol))
-    apply_figure_layout(
-        fig,
-        figsize=(width, height),
-        legend_loc=legend_loc,
-        legend_rows=legend_rows,
-    )
+    apply_figure_layout(fig, figsize=(width, height))
     reward_values = [
         float(point["reward_mean"])
         for point in points
@@ -316,7 +304,7 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
             fig,
             ax,
             metric_state,
-            legend_loc=legend_loc,
+            legend_loc="right",
             show_fallback_legend=True,
             legend_handles=_legend_handles_for_algos(algos),
         )
@@ -335,7 +323,7 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
     ax.set_xlim(0.0, 1.05)
     ax.set_ylim(0.0, 1.05)
     ax.grid(True, linestyle=":", alpha=0.5)
-    add_global_legend(fig, ax, legend_loc=legend_loc)
+    place_adaptive_legend(fig, ax, preferred_loc="right")
     return fig
 
 

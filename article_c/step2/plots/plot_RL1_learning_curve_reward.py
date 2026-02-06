@@ -17,14 +17,13 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     apply_figure_layout,
     algo_label,
-    add_global_legend,
+    place_adaptive_legend,
     assert_legend_present,
     filter_rows_by_network_sizes,
     is_constant_metric,
     render_metric_status,
     save_figure,
 )
-from article_c.common.plotting_style import LEGEND_STYLE
 from plot_defaults import resolve_ieee_figsize
 
 
@@ -198,18 +197,7 @@ def _plot_learning_curve(
     algorithms = _select_algorithms(preferred_algos, available)
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
     width, height = fig.get_size_inches()
-    legend_loc = "right"
-    legend_rows = 1
-    if algorithms:
-        legend_ncol = int(LEGEND_STYLE.get("ncol", len(algorithms)) or len(algorithms))
-        ncol = min(len(algorithms), legend_ncol) or 1
-        legend_rows = max(1, math.ceil(len(algorithms) / ncol))
-    apply_figure_layout(
-        fig,
-        figsize=(width, height),
-        legend_loc=legend_loc,
-        legend_rows=legend_rows,
-    )
+    apply_figure_layout(fig, figsize=(width, height))
     reward_values = [
         float(row.get("avg_reward"))
         for row in rows
@@ -221,7 +209,7 @@ def _plot_learning_curve(
             fig,
             ax,
             metric_state,
-            legend_loc=legend_loc,
+            legend_loc="right",
             show_fallback_legend=True,
             legend_handles=_legend_handles_for_algos(algorithms),
         )
@@ -258,7 +246,7 @@ def _plot_learning_curve(
                 ax.plot(rounds, values, marker="o", label=label)
     ax.set_xlabel("Round (index)")
     ax.set_ylabel("Mean reward (a.u.)")
-    add_global_legend(fig, ax, legend_loc=legend_loc)
+    place_adaptive_legend(fig, ax, preferred_loc="right")
     return fig
 
 

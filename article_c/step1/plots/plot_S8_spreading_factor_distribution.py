@@ -21,7 +21,7 @@ from article_c.common.plot_helpers import (
     algo_labels,
     apply_plot_style,
     apply_figure_layout,
-    add_global_legend,
+    place_adaptive_legend,
     assert_legend_present,
     clear_axis_legends,
     ensure_network_size,
@@ -29,7 +29,6 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     filter_cluster,
     is_constant_metric,
-    legend_margins,
     load_step1_aggregated,
     render_metric_status,
     save_figure,
@@ -260,10 +259,10 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
             )
             for mode in SNIR_MODES
         ]
-        add_global_legend(
+        placement = place_adaptive_legend(
             fig,
             axes[0],
-            legend_loc="right",
+            preferred_loc="right",
             handles=snir_handles,
             labels=[handle.get_label() for handle in snir_handles],
         )
@@ -271,9 +270,8 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
             fig,
             axes,
             title=None,
-            legend_loc="right",
+            legend_loc="above" if placement.legend_loc == "above" else "right",
         )
-        apply_figure_layout(fig, margins=legend_margins("above"))
         return fig
 
     colors = [plt.get_cmap("viridis")(idx / max(1, len(sf_values) - 1)) for idx in range(len(sf_values))]
@@ -301,21 +299,22 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         ax.set_ylim(0.0, 1.0)
     handles, labels = axes[0].get_legend_handles_labels()
     clear_axis_legends(axes)
+    legend_loc = "right"
     if handles:
-        add_global_legend(
+        placement = place_adaptive_legend(
             fig,
             axes[0],
-            legend_loc="right",
+            preferred_loc="right",
             handles=handles,
             labels=labels,
         )
+        legend_loc = "above" if placement.legend_loc == "above" else "right"
     configure_figure(
         fig,
         axes,
         title=None,
-        legend_loc="right",
+        legend_loc=legend_loc,
     )
-    apply_figure_layout(fig, margins=legend_margins("above"))
     return fig
 
 

@@ -20,7 +20,7 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     load_step2_selection_probs,
     normalize_network_size_rows,
-    add_global_legend,
+    place_adaptive_legend,
     render_metric_status,
     save_figure,
 )
@@ -100,7 +100,7 @@ def _plot_selection(
             ax.fill_between(rounds, p10, p90, alpha=0.15)
     ax.set_xlabel("Round (index)")
     ax.set_ylabel("Selection prob. (prob.)")
-    add_global_legend(fig, ax, legend_loc="right")
+    place_adaptive_legend(fig, ax, preferred_loc="right")
     return fig
 
 
