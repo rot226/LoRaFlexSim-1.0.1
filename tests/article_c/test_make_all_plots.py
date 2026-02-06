@@ -10,4 +10,4 @@ def test_validate_plot_modules_ignores_utils(monkeypatch) -> None:
         {"step1": ["article_c.step1.plots.plot_S1"]},
     )
 
-    assert make_all_plots._validate_plot_modules_use_save_figure() is True
+    assert make_all_plots._validate_plot_modules_use_save_figure() == {}

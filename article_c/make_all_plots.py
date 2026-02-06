@@ -243,6 +243,8 @@ def _run_plot_module(
 
 def _validate_plot_modules_use_save_figure() -> dict[str, str]:
     missing: dict[str, str] = {}
+    missing_save_figure: list[str] = []
+    missing_plot_style: list[str] = []
     for module_paths in PLOT_MODULES.values():
         for module_path in module_paths:
             spec = find_spec(module_path)
@@ -255,12 +257,24 @@ def _validate_plot_modules_use_save_figure() -> dict[str, str]:
             except OSError as exc:
                 missing[module_path] = f"lecture impossible: {exc}"
                 continue
+            issues: list[str] = []
             if "save_figure(" not in source:
-                missing[module_path] = "ne passe pas par save_figure"
-    if missing:
+                issues.append("ne passe pas par save_figure")
+                missing_save_figure.append(module_path)
+            if "apply_plot_style(" not in source:
+                issues.append("ne respecte pas apply_plot_style")
+                missing_plot_style.append(module_path)
+            if issues:
+                missing[module_path] = ", ".join(issues)
+    if missing_save_figure:
         print(
             "ERREUR: certains scripts de plot ne passent pas par save_figure:\n"
-            + "\n".join(f"- {item}" for item in missing)
+            + "\n".join(f"- {item}" for item in missing_save_figure)
+        )
+    if missing_plot_style:
+        print(
+            "ERREUR: certains scripts de plot ne respectent pas apply_plot_style:\n"
+            + "\n".join(f"- {item}" for item in missing_plot_style)
         )
     return missing
 
