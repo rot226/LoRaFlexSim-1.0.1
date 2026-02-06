@@ -104,7 +104,7 @@ def _compute_reward(
         * traffic_factor
     )
     if max_penalty_ratio >= 0.0:
-        penalty_cap = max_penalty_ratio * success_rate * weighted_quality
+        penalty_cap = max_penalty_ratio * weighted_quality
         if collision_penalty > penalty_cap:
             logger.info(
                 "collision_penalty capped (collision_penalty=%.4f cap=%.4f).",
@@ -119,9 +119,9 @@ def _compute_reward(
             success_rate,
             weighted_quality,
         )
-    reward = success_rate * weighted_quality - collision_penalty
-    if success_rate > 0.0:
-        reward /= max(success_rate, 0.05)
+    quality_term = weighted_quality * (0.6 + 0.4 * success_rate)
+    success_term = 0.2 * success_rate
+    reward = quality_term + success_term - collision_penalty
     reward_floor = max(weights.exploration_floor, 0.0)
     if floor_on_zero_success and success_rate == 0.0 and reward_floor > 0.0:
         reward = reward_floor
@@ -886,8 +886,16 @@ def _log_reward_stats(
         if log_counts[log_key] > 1:
             return
     min_reward, median_reward, max_reward = _summarize_values(rewards)
+    std_reward = pstdev(rewards)
     alert_key = (network_size, algo_label)
     uniform_reward_alert = math.isclose(min_reward, max_reward, abs_tol=1e-6)
+    if math.isclose(std_reward, 0.0, abs_tol=1e-6):
+        logger.warning(
+            "Variance reward nulle (taille=%s algo=%s round=%s).",
+            network_size,
+            algo_label,
+            round_id,
+        )
     if uniform_reward_alert:
         if global_alert_counts is not None:
             global_alert_counts[alert_key] = global_alert_counts.get(alert_key, 0) + 1
