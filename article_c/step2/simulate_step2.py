@@ -1249,6 +1249,75 @@ def _log_success_chain(
     )
 
 
+def _log_clamp_ratio_and_adjust(
+    *,
+    network_size: int,
+    algo_label: str,
+    round_id: int,
+    clamp_ratios: list[float],
+    clamp_flags: list[bool],
+    traffic_coeff_scale: float,
+    window_duration_s: float,
+    tx_window_safety_factor: float,
+) -> tuple[float, float, float]:
+    if not clamp_ratios:
+        return traffic_coeff_scale, window_duration_s, tx_window_safety_factor
+    clamped_count = sum(1 for flagged in clamp_flags if flagged)
+    total_nodes = len(clamp_ratios)
+    clamp_share = clamped_count / max(total_nodes, 1)
+    min_ratio, median_ratio, max_ratio = _summarize_values(clamp_ratios)
+    logger.info(
+        "Clamp ratio round=%s taille=%s algo=%s ratio[min/med/max]=%.3f/%.3f/%.3f "
+        "noeuds_clampes=%s/%s (%.1f%%).",
+        round_id,
+        network_size,
+        algo_label,
+        min_ratio,
+        median_ratio,
+        max_ratio,
+        clamped_count,
+        total_nodes,
+        clamp_share * 100.0,
+    )
+    if clamp_share < 0.5:
+        return traffic_coeff_scale, window_duration_s, tx_window_safety_factor
+    logger.warning(
+        "Majorité de noeuds clampée (round=%s taille=%s algo=%s).",
+        round_id,
+        network_size,
+        algo_label,
+    )
+    adjust_factor = max(0.6, min(0.95, median_ratio))
+    new_traffic_coeff_scale = max(0.1, traffic_coeff_scale * adjust_factor)
+    new_tx_window_safety_factor = max(0.7, tx_window_safety_factor * adjust_factor)
+    window_boost = min(1.3, max(1.0, 1.0 / max(median_ratio, 0.5)))
+    new_window_duration_s = window_duration_s * window_boost
+    if (
+        math.isclose(new_traffic_coeff_scale, traffic_coeff_scale, rel_tol=1e-6)
+        and math.isclose(new_tx_window_safety_factor, tx_window_safety_factor, rel_tol=1e-6)
+        and math.isclose(new_window_duration_s, window_duration_s, rel_tol=1e-6)
+    ):
+        return traffic_coeff_scale, window_duration_s, tx_window_safety_factor
+    logger.info(
+        "Ajustement clamp round=%s taille=%s algo=%s traffic_coeff_scale=%.3f→%.3f "
+        "window_duration_s=%.2f→%.2f tx_window_safety_factor=%.2f→%.2f.",
+        round_id,
+        network_size,
+        algo_label,
+        traffic_coeff_scale,
+        new_traffic_coeff_scale,
+        window_duration_s,
+        new_window_duration_s,
+        tx_window_safety_factor,
+        new_tx_window_safety_factor,
+    )
+    return (
+        new_traffic_coeff_scale,
+        new_window_duration_s,
+        new_tx_window_safety_factor,
+    )
+
+
 def _sample_log_normal_shadowing(
     rng: random.Random, mean_db: float, sigma_db: float
 ) -> tuple[float, float]:
@@ -2127,6 +2196,8 @@ def run_simulation(
                 )
                 window_start_s += window_duration_value + delay_s
             node_windows: list[dict[str, object]] = []
+            round_clamp_ratios: list[float] = []
+            round_clamp_flags: list[bool] = []
             for node_id in range(n_nodes):
                 sf_value = sf_values[arm_index]
                 airtime_s = airtime_by_sf[sf_value]
@@ -2164,6 +2235,8 @@ def run_simulation(
                     )
                     max_tx = min(max_tx, per_node_cap, window_cap)
                 expected_sent = min(expected_sent_raw, max_tx)
+                round_clamp_ratios.append(expected_sent / max(expected_sent_raw, 1))
+                round_clamp_flags.append(expected_sent < expected_sent_raw)
                 if _should_debug_log(debug_step2, round_id):
                     logger.debug(
                         "Traffic attendu après plafonnement node=%s (sf=%s) expected_sent=%s (max_tx=%s).",
@@ -2243,6 +2316,20 @@ def run_simulation(
                         "link_quality": link_quality,
                     }
                 )
+            (
+                traffic_coeff_scale_value,
+                window_duration_value,
+                tx_window_safety_factor,
+            ) = _log_clamp_ratio_and_adjust(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                clamp_ratios=round_clamp_ratios,
+                clamp_flags=round_clamp_flags,
+                traffic_coeff_scale=traffic_coeff_scale_value,
+                window_duration_s=window_duration_value,
+                tx_window_safety_factor=tx_window_safety_factor,
+            )
             (
                 successes_by_node,
                 traffic_sent_by_node,
@@ -2762,6 +2849,8 @@ def run_simulation(
                 )
                 window_start_s += window_duration_value + delay_s
             node_windows: list[dict[str, object]] = []
+            round_clamp_ratios: list[float] = []
+            round_clamp_flags: list[bool] = []
             for node_id in range(n_nodes):
                 rate_multiplier = base_rate_multipliers[node_id]
                 cluster = node_clusters[node_id]
@@ -2830,6 +2919,8 @@ def run_simulation(
                     )
                     max_tx = min(max_tx, per_node_cap, window_cap)
                 expected_sent = min(expected_sent_raw, max_tx)
+                round_clamp_ratios.append(expected_sent / max(expected_sent_raw, 1))
+                round_clamp_flags.append(expected_sent < expected_sent_raw)
                 if _should_debug_log(debug_step2, round_id):
                     logger.debug(
                         "Traffic attendu après plafonnement node=%s expected_sent=%s (max_tx=%s).",
@@ -2891,6 +2982,20 @@ def run_simulation(
                         "link_quality": link_quality,
                     }
                 )
+            (
+                traffic_coeff_scale_value,
+                window_duration_value,
+                tx_window_safety_factor,
+            ) = _log_clamp_ratio_and_adjust(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                clamp_ratios=round_clamp_ratios,
+                clamp_flags=round_clamp_flags,
+                traffic_coeff_scale=traffic_coeff_scale_value,
+                window_duration_s=window_duration_value,
+                tx_window_safety_factor=tx_window_safety_factor,
+            )
             (
                 successes_by_node,
                 traffic_sent_by_node,
