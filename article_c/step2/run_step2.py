@@ -38,6 +38,7 @@ from article_c.step2.simulate_step2 import (
 from plot_defaults import resolve_ieee_figsize
 
 logger = logging.getLogger(__name__)
+SAFE_PROFILE_SUCCESS_THRESHOLD = 0.2
 
 
 def _aggregate_selection_probs(
@@ -153,6 +154,45 @@ def _apply_safe_profile_with_log(args: object, reason: str) -> None:
         print("Aucun paramètre modifié par le profil sécurisé.")
         return
     print("Paramètres modifiés par le profil sécurisé:")
+    for name, previous, value in sorted(changes):
+        print(f"- {name}: {previous} -> {value}")
+
+
+def _build_safe_profile_config(
+    config: dict[str, object]
+) -> tuple[dict[str, object], list[tuple[str, object, object]]]:
+    updated = dict(config)
+    changes: list[tuple[str, object, object]] = []
+
+    def _set_value(name: str, value: object) -> None:
+        previous = updated.get(name)
+        if previous != value:
+            changes.append((name, previous, value))
+        updated[name] = value
+
+    _set_value("safe_profile", True)
+    _set_value("traffic_coeff_clamp_enabled", STEP2_SAFE_CONFIG.traffic_coeff_clamp_enabled)
+    _set_value("traffic_coeff_clamp_min", STEP2_SAFE_CONFIG.traffic_coeff_clamp_min)
+    _set_value("traffic_coeff_clamp_max", STEP2_SAFE_CONFIG.traffic_coeff_clamp_max)
+    _set_value("network_load_min", STEP2_SAFE_CONFIG.network_load_min)
+    _set_value("network_load_max", STEP2_SAFE_CONFIG.network_load_max)
+    _set_value("collision_size_min", STEP2_SAFE_CONFIG.collision_size_min)
+    _set_value("collision_size_under_max", STEP2_SAFE_CONFIG.collision_size_under_max)
+    _set_value("collision_size_over_max", STEP2_SAFE_CONFIG.collision_size_over_max)
+    _set_value("reward_floor", STEP2_SAFE_CONFIG.reward_floor)
+    _set_value("max_penalty_ratio", STEP2_SAFE_CONFIG.max_penalty_ratio)
+    _set_value("shadowing_sigma_db", STEP2_SAFE_CONFIG.shadowing_sigma_db)
+    return updated, changes
+
+
+def _log_safe_profile_switch(
+    density: int, reason: str, changes: list[tuple[str, object, object]]
+) -> None:
+    print(f"Bascule profil sécurisé pour la taille {density} ({reason}).")
+    if not changes:
+        print("Aucun paramètre modifié pour la relance en profil sécurisé.")
+        return
+    print("Paramètres appliqués pour la relance en profil sécurisé:")
     for name, previous, value in sorted(changes):
         print(f"- {name}: {previous} -> {value}")
 
@@ -564,6 +604,7 @@ def _read_nested_sizes(base_results_dir: Path, replications: list[int]) -> set[i
 def _compose_post_simulation_report(
     per_size_stats: dict[int, dict[str, object]],
     per_size_diagnostics: dict[int, dict[str, float]],
+    safe_profile_sizes: Sequence[int],
 ) -> str:
     if not per_size_stats:
         return "Rapport post-simulation indisponible (aucune statistique collectée)."
@@ -760,6 +801,13 @@ def _compose_post_simulation_report(
     else:
         lines.append("- conclusion: aucun reward nul détecté.")
 
+    lines.extend(["", "Relances en profil sécurisé:"])
+    if safe_profile_sizes:
+        sizes_label = ", ".join(str(size) for size in sorted(set(safe_profile_sizes)))
+        lines.append(f"- tailles relancées: {sizes_label}")
+    else:
+        lines.append("- aucune taille relancée en profil sécurisé.")
+
     return "\n".join(lines)
 
 
@@ -810,8 +858,11 @@ def _write_post_simulation_report(
     output_dir: Path,
     per_size_stats: dict[int, dict[str, object]],
     per_size_diagnostics: dict[int, dict[str, float]],
+    safe_profile_sizes: Sequence[int],
 ) -> None:
-    report = _compose_post_simulation_report(per_size_stats, per_size_diagnostics)
+    report = _compose_post_simulation_report(
+        per_size_stats, per_size_diagnostics, safe_profile_sizes
+    )
     report_path = output_dir / "post_simulation_report.txt"
     report_path.write_text(report + "\n", encoding="utf-8")
     print(report)
@@ -836,6 +887,31 @@ def _detect_low_success_first_size(
         f"(seuil {threshold:.2f})."
     )
     return True
+
+
+def _needs_safe_profile_rerun(
+    diagnostics: dict[str, float], threshold: float = SAFE_PROFILE_SUCCESS_THRESHOLD
+) -> tuple[bool, float]:
+    success_mean = float(diagnostics.get("success_mean", 0.0))
+    return success_mean < threshold, success_mean
+
+
+def _replace_rows_for_size(
+    rows: list[dict[str, object]],
+    size: int,
+    new_rows: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    filtered = []
+    for row in rows:
+        value = row.get("network_size", row.get("density", -1))
+        try:
+            size_value = int(value)
+        except (TypeError, ValueError):
+            size_value = -1
+        if size_value != int(size):
+            filtered.append(row)
+    filtered.extend(new_rows)
+    return filtered
 
 
 def _is_non_empty_file(path: Path) -> bool:
@@ -1120,6 +1196,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     learning_curve_rows: list[dict[str, object]] = []
     size_diagnostics: dict[int, dict[str, float]] = {}
     size_post_stats: dict[int, dict[str, object]] = {}
+    safe_profile_sizes: set[int] = set()
     total_rows = 0
 
     config: dict[str, object] = {
@@ -1242,9 +1319,34 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
             result = _simulate_density(task)
             diagnostics = dict(result["diagnostics"])
+            diagnostics_for_threshold = dict(diagnostics)
             low_success = False
+            rerun_safe = False
+            if not config.get("safe_profile", False):
+                should_rerun, success_mean = _needs_safe_profile_rerun(diagnostics)
+                if should_rerun:
+                    safe_config, changes = _build_safe_profile_config(config)
+                    reason = (
+                        f"success_mean={success_mean:.4f} "
+                        f"< seuil {SAFE_PROFILE_SUCCESS_THRESHOLD:.2f}"
+                    )
+                    _log_safe_profile_switch(int(density), reason, changes)
+                    safe_task = (
+                        density,
+                        density_idx,
+                        replications,
+                        safe_config,
+                        base_results_dir,
+                        timestamp_dir,
+                        flat_output,
+                    )
+                    result = _simulate_density(safe_task)
+                    diagnostics = dict(result["diagnostics"])
+                    rerun_safe = True
             if not low_success_detected:
-                low_success = _detect_low_success_first_size(density, diagnostics)
+                low_success = _detect_low_success_first_size(
+                    density, diagnostics_for_threshold
+                )
                 if low_success and not getattr(args, "safe_profile", False):
                     if getattr(args, "auto_safe_profile", False):
                         _apply_safe_profile_with_log(
@@ -1252,12 +1354,15 @@ def main(argv: Sequence[str] | None = None) -> None:
                             "auto-safe-profile (success_rate faible détecté)",
                         )
                         _update_safe_profile_config(config, args)
-                        print(
-                            "Relance de la taille "
-                            f"{density} avec le profil sécurisé."
-                        )
-                        result = _simulate_density(task)
-                        diagnostics = dict(result["diagnostics"])
+                        if not rerun_safe:
+                            print(
+                                "Relance de la taille "
+                                f"{density} avec le profil sécurisé."
+                            )
+                            result = _simulate_density(task)
+                            diagnostics = dict(result["diagnostics"])
+                            rerun_safe = True
+                            safe_profile_sizes.add(int(result["density"]))
                     else:
                         print(
                             "Astuce: utilisez --auto-safe-profile pour basculer "
@@ -1265,10 +1370,22 @@ def main(argv: Sequence[str] | None = None) -> None:
                         )
             if low_success:
                 low_success_detected = True
-            simulated_sizes.append(int(result["density"]))
+            if int(result["density"]) not in simulated_sizes:
+                simulated_sizes.append(int(result["density"]))
             total_rows += int(result["row_count"])
-            selection_rows.extend(result["selection_rows"])
-            learning_curve_rows.extend(result["learning_curve_rows"])
+            if rerun_safe:
+                selection_rows[:] = _replace_rows_for_size(
+                    selection_rows, int(result["density"]), result["selection_rows"]
+                )
+                learning_curve_rows[:] = _replace_rows_for_size(
+                    learning_curve_rows,
+                    int(result["density"]),
+                    result["learning_curve_rows"],
+                )
+                safe_profile_sizes.add(int(result["density"]))
+            else:
+                selection_rows.extend(result["selection_rows"])
+                learning_curve_rows.extend(result["learning_curve_rows"])
             size_diagnostics[int(result["density"])] = dict(result["diagnostics"])
             size_post_stats[int(result["density"])] = dict(result["post_stats"])
     elif densities:
@@ -1333,12 +1450,68 @@ def main(argv: Sequence[str] | None = None) -> None:
                 ):
                     low_success_detected = True
                     break
+        if not config.get("safe_profile", False):
+            low_sizes = []
+            for density in densities:
+                diagnostics = size_diagnostics.get(int(density))
+                if diagnostics is None:
+                    continue
+                should_rerun, success_mean = _needs_safe_profile_rerun(diagnostics)
+                if should_rerun:
+                    low_sizes.append((int(density), success_mean))
+            if low_sizes:
+                print(
+                    "Relance séquentielle en profil sécurisé pour les tailles "
+                    "sous le seuil."
+                )
+                density_to_idx = {int(value): idx for idx, value in enumerate(densities)}
+                for density, success_mean in low_sizes:
+                    density_idx = density_to_idx.get(int(density), 0)
+                    safe_config, changes = _build_safe_profile_config(config)
+                    reason = (
+                        f"success_mean={success_mean:.4f} "
+                        f"< seuil {SAFE_PROFILE_SUCCESS_THRESHOLD:.2f}"
+                    )
+                    _log_safe_profile_switch(int(density), reason, changes)
+                    safe_task = (
+                        density,
+                        density_idx,
+                        replications,
+                        safe_config,
+                        base_results_dir,
+                        timestamp_dir,
+                        flat_output,
+                    )
+                    safe_result = _simulate_density(safe_task)
+                    total_rows += int(safe_result["row_count"])
+                    selection_rows[:] = _replace_rows_for_size(
+                        selection_rows,
+                        int(safe_result["density"]),
+                        safe_result["selection_rows"],
+                    )
+                    learning_curve_rows[:] = _replace_rows_for_size(
+                        learning_curve_rows,
+                        int(safe_result["density"]),
+                        safe_result["learning_curve_rows"],
+                    )
+                    size_diagnostics[int(safe_result["density"])] = dict(
+                        safe_result["diagnostics"]
+                    )
+                    size_post_stats[int(safe_result["density"])] = dict(
+                        safe_result["post_stats"]
+                    )
+                    safe_profile_sizes.add(int(safe_result["density"]))
 
     print(f"Rows written: {total_rows}")
     if flat_output and simulated_sizes:
         _assert_flat_output_sizes(base_results_dir, simulated_sizes)
     _verify_metric_variation(size_diagnostics)
-    _write_post_simulation_report(base_results_dir, size_post_stats, size_diagnostics)
+    _write_post_simulation_report(
+        base_results_dir,
+        size_post_stats,
+        size_diagnostics,
+        sorted(safe_profile_sizes),
+    )
     strict_mode = bool(getattr(args, "strict", False)) or not bool(
         args.allow_low_success_rate
     )
