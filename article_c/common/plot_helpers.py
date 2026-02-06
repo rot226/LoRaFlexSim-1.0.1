@@ -822,11 +822,17 @@ def create_right_legend_layout(
     handles: list[Line2D] | None = None,
     labels: list[str] | None = None,
     legend_style: dict[str, object] | None = None,
+    extra_width_factor: float | None = None,
+    right_legend_width_in: float | None = None,
 ) -> plt.Axes:
     """Place la légende dans une colonne dédiée à droite via un GridSpec."""
     axes_list = _flatten_axes(axes)
     if not axes_list:
         raise ValueError("Aucun axe fourni pour la mise en page de la légende.")
+    if extra_width_factor is not None and extra_width_factor <= 0:
+        raise ValueError("extra_width_factor doit être strictement positif.")
+    if right_legend_width_in is not None and right_legend_width_in <= 0:
+        raise ValueError("right_legend_width_in doit être strictement positif.")
     if handles is None or labels is None:
         handles, labels = collect_legend_entries(axes_list)
     handles = handles or []
@@ -845,6 +851,12 @@ def create_right_legend_layout(
     legend_style_payload.setdefault("borderaxespad", 0.0)
 
     width_ratio = _estimate_right_legend_ratio(fig, labels)
+    if right_legend_width_in is not None:
+        fig_width_in, _ = fig.get_size_inches()
+        if fig_width_in > 0:
+            width_ratio = max(width_ratio, right_legend_width_in / fig_width_in)
+    if extra_width_factor is not None:
+        width_ratio *= extra_width_factor
     legend_ax = _apply_right_legend_gridspec(
         fig,
         axes_list,
