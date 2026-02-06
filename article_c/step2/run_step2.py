@@ -414,6 +414,19 @@ def _update_collision_histogram(histogram: dict[str, int], value: float) -> None
         histogram["0.6-1.0"] += 1
 
 
+def _dominant_loss_cause(
+    losses_collisions: int, losses_congestion: int, losses_link_quality: int
+) -> str:
+    losses = {
+        "collisions": losses_collisions,
+        "congestion": losses_congestion,
+        "link_quality": losses_link_quality,
+    }
+    if sum(losses.values()) <= 0:
+        return "aucune"
+    return max(losses, key=losses.get)
+
+
 def _summarize_post_simulation(
     raw_rows: list[dict[str, object]]
 ) -> dict[str, object]:
@@ -433,9 +446,23 @@ def _summarize_post_simulation(
     reward_min: float | None = None
     reward_max: float | None = None
     reward_count = 0
+    losses_collisions_total = 0
+    losses_congestion_total = 0
+    losses_link_quality_total = 0
+    loss_keys_seen: set[tuple[object, object, object]] = set()
     for row in raw_rows:
         if str(row.get("cluster", "")) != "all":
             continue
+        loss_key = (
+            row.get("replication"),
+            row.get("algo"),
+            row.get("round"),
+        )
+        if loss_key not in loss_keys_seen:
+            loss_keys_seen.add(loss_key)
+            losses_collisions_total += int(row.get("losses_collisions", 0) or 0)
+            losses_congestion_total += int(row.get("losses_congestion", 0) or 0)
+            losses_link_quality_total += int(row.get("losses_link_quality", 0) or 0)
         success_rate = float(row.get("success_rate", 0.0) or 0.0)
         collision_norm = float(row.get("collision_norm", 0.0) or 0.0)
         link_quality = float(row.get("link_quality", 0.0) or 0.0)
@@ -481,6 +508,9 @@ def _summarize_post_simulation(
         "reward_min": 0.0 if reward_min is None else reward_min,
         "reward_max": 0.0 if reward_max is None else reward_max,
         "reward_count": reward_count,
+        "losses_collisions_total": losses_collisions_total,
+        "losses_congestion_total": losses_congestion_total,
+        "losses_link_quality_total": losses_link_quality_total,
     }
 
 
@@ -639,6 +669,9 @@ def _compose_post_simulation_report(
     reward_min: float | None = None
     reward_max: float | None = None
     reward_count = 0
+    overall_losses_collisions = 0
+    overall_losses_congestion = 0
+    overall_losses_link_quality = 0
 
     per_size_link_quality_mean: dict[int, float] = {}
     for size, stats in per_size_stats.items():
@@ -686,6 +719,9 @@ def _compose_post_simulation_report(
             else max(reward_max, float(stats.get("reward_max", 0.0)))
         )
         reward_count += int(stats.get("reward_count", 0))
+        overall_losses_collisions += int(stats.get("losses_collisions_total", 0))
+        overall_losses_congestion += int(stats.get("losses_congestion_total", 0))
+        overall_losses_link_quality += int(stats.get("losses_link_quality_total", 0))
         if link_quality_count > 0:
             per_size_link_quality_mean[size] = link_quality_sum / link_quality_count
 
@@ -804,6 +840,9 @@ def _compose_post_simulation_report(
         )
         if no_success_ratio > 0.6:
             conclusion = "Le reward nul provient majoritairement d'une absence de succès."
+            lines.append(
+                "- message: rewards nuls majoritairement dus à un success_rate nul."
+            )
         elif clipped_ratio > 0.6:
             conclusion = (
                 "Le reward nul provient majoritairement d'un écrêtage (pénalité collision)."
@@ -815,6 +854,29 @@ def _compose_post_simulation_report(
         lines.append(f"- conclusion: {conclusion}")
     else:
         lines.append("- conclusion: aucun reward nul détecté.")
+
+    total_losses = (
+        overall_losses_collisions
+        + overall_losses_congestion
+        + overall_losses_link_quality
+    )
+    lines.extend(["", "Analyse des pertes (compteurs T07):"])
+    if total_losses > 0:
+        dominant_cause = _dominant_loss_cause(
+            overall_losses_collisions,
+            overall_losses_congestion,
+            overall_losses_link_quality,
+        )
+        lines.extend(
+            [
+                f"- pertes collisions: {overall_losses_collisions}",
+                f"- pertes congestion: {overall_losses_congestion}",
+                f"- pertes link_quality: {overall_losses_link_quality}",
+                f"- cause dominante: {dominant_cause}",
+            ]
+        )
+    else:
+        lines.append("- aucune perte détectée via les compteurs T07.")
 
     lines.extend(["", "Relances en profil sécurisé:"])
     if safe_profile_sizes:
