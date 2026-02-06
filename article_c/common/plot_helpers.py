@@ -100,6 +100,7 @@ MAX_TIGHT_BBOX_SCALE = 4.0
 MAX_TIGHT_BBOX_INCHES = 30.0
 MAX_IMAGE_DIM_PX = 12000
 MAX_IMAGE_TOTAL_PIXELS = 120_000_000
+MAX_IEEE_FIGURE_SIZE_IN = (8.0, 6.0)
 AXES_TITLE_Y = 1.02
 SUPTITLE_TOP_RATIO = 0.85
 FIGURE_SUBPLOT_TOP = FIGURE_MARGINS["top"]
@@ -1039,11 +1040,15 @@ def save_figure_path(
     bbox_inches: str | bool | None = None,
 ) -> None:
     """Sauvegarde une figure en gérant l'export EPS (transparences rasterisées)."""
+    _apply_figure_size_clamp(fig)
     ensure_dir(output_path.parent)
     format_name = fmt or output_path.suffix.lstrip(".").lower()
     savefig_style = dict(SAVEFIG_STYLE)
+    avoid_tight_bbox = bool(getattr(fig, "_avoid_tight_bbox", False))
     if bbox_inches is None:
-        bbox_inches = "tight"
+        bbox_inches = "tight" if not avoid_tight_bbox else False
+    if avoid_tight_bbox and bbox_inches == "tight":
+        bbox_inches = False
     if bbox_inches is not False:
         safe_bbox = _safe_bbox_inches(fig, bbox_inches)
         savefig_style["bbox_inches"] = safe_bbox
@@ -1115,6 +1120,28 @@ def _safe_dpi(fig: plt.Figure, dpi: float) -> float:
     return max_dpi
 
 
+def _apply_figure_size_clamp(
+    fig: plt.Figure,
+    *,
+    max_size: tuple[float, float] = MAX_IEEE_FIGURE_SIZE_IN,
+) -> bool:
+    fig_width_in, fig_height_in = fig.get_size_inches()
+    max_width, max_height = max_size
+    clamped_width = min(fig_width_in, max_width)
+    clamped_height = min(fig_height_in, max_height)
+    if clamped_width == fig_width_in and clamped_height == fig_height_in:
+        return False
+    LOGGER.warning(
+        "Taille de figure clampée à %.2f x %.2f in (était %.2f x %.2f in).",
+        clamped_width,
+        clamped_height,
+        fig_width_in,
+        fig_height_in,
+    )
+    fig.set_size_inches(clamped_width, clamped_height, forward=True)
+    return True
+
+
 def apply_figure_layout(
     fig: plt.Figure,
     *,
@@ -1130,14 +1157,17 @@ def apply_figure_layout(
     reserved_top = 0.0
     if figsize is not None:
         fig.set_size_inches(*figsize, forward=True)
+    _apply_figure_size_clamp(fig)
     if margins is None:
         margins = dict(FIGURE_MARGINS)
-        if fig.legends:
-            margins["top"] = max(
-                margins.get("top", FIGURE_MARGINS["top"]),
-                _legend_top_margin(fig, legend_rows),
-            )
     normalized_legend_loc = _normalize_legend_loc(legend_loc) if legend_loc else ""
+    if normalized_legend_loc == "right":
+        margins.update(_legend_margins("right", legend_rows=legend_rows, fig=fig))
+    elif fig.legends:
+        margins["top"] = max(
+            margins.get("top", FIGURE_MARGINS["top"]),
+            _legend_top_margin(fig, legend_rows),
+        )
     if normalized_legend_loc == "right":
         right_margin = _legend_right_margin(fig)
         if "right" not in margins or margins["right"] > right_margin:
@@ -1197,6 +1227,7 @@ def apply_figure_layout(
         else:
             rect = tight_layout_rect_from_margins(margins)
             fig.tight_layout(rect=rect)
+    fig._avoid_tight_bbox = normalized_legend_loc == "right"
 
 
 def _layout_rect_from_margins(
