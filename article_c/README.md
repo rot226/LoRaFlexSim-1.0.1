@@ -186,6 +186,52 @@ Exemple CLI avec ajustement des coefficients :
 python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 --seeds_base 1000 --capture-probability 0.12 --congestion-coeff 1.0 --congestion-coeff-base 0.32 --congestion-coeff-growth 0.35 --congestion-coeff-max 0.35 --collision-size-factor 1.1
 ```
 
+### Causes fréquentes d’un `success_rate` faible et valeurs de départ recommandées
+
+Un `success_rate` bas vient généralement d’un **triptyque** : congestion excessive,
+collisions élevées et SNIR trop strict. Avant d’ajuster la récompense, stabilisez
+d’abord ces paramètres :
+
+- **Congestion** : trop de charge effective augmente la probabilité d’échec même
+  sans collisions directes.
+  - Symptôme : chute globale du succès, même à faible densité.
+  - Paramètres clés : `--congestion-coeff`, `--congestion-coeff-base`,
+    `--congestion-coeff-growth`, `--congestion-coeff-max`,
+    `--network-load-min/--network-load-max`.
+- **Collisions** : la charge radio entraîne des pertes co‑SF, surtout si la
+  probabilité de capture est faible.
+  - Symptôme : pertes en rafale quand la densité augmente.
+  - Paramètres clés : `--capture-probability`, `--collision-size-factor`,
+    `--collision-size-min/--collision-size-under-max/--collision-size-over-max`.
+- **SNIR** : un seuil trop exigeant peut invalider des réceptions pourtant
+  “proches” de la sensibilité.
+  - Symptôme : `success_rate` bas même en mode peu chargé.
+  - Paramètres clés : `--snir-threshold-db`,
+    `--snir-threshold-min-db/--snir-threshold-max-db`.
+
+**Valeurs de départ recommandées (profil standard adouci)**
+
+- **Congestion** : `--congestion-coeff 1.0`, `--congestion-coeff-base 0.32`,
+  `--congestion-coeff-growth 0.35`, `--congestion-coeff-max 0.35`,
+  `--network-load-min 0.75`, `--network-load-max 1.7`.  
+  *Justification* : garde une croissance modérée de la congestion sans écraser
+  les cas moyens.
+- **Collisions** : `--capture-probability 0.15`,
+  `--collision-size-factor 1.1`,
+  `--collision-size-min 0.75`,
+  `--collision-size-under-max 1.15`,
+  `--collision-size-over-max 1.8`.  
+  *Justification* : tolérance réaliste aux collisions et montée progressive
+  avec la densité.
+- **SNIR** : `--snir-threshold-db 4.0` avec clamp
+  `--snir-threshold-min-db 3.0` / `--snir-threshold-max-db 6.0`.  
+  *Justification* : seuil “doux” évitant des refus excessifs tout en respectant
+  l’impact des interférences.
+
+Si le `success_rate` reste trop bas, appliquez `--safe-profile` pour stabiliser
+rapidement les runs, puis augmentez progressivement `--capture-probability` ou
+relâchez le clamp de charge (`--network-load-max`) par petites touches.
+
 ### Plancher de récompense en absence de succès (étape 2)
 
 Quand les conditions sont extrêmes (ex. congestion forte), `success_rate` peut tomber à **0** et produire des rewards uniformes. L'option `--floor-on-zero-success` (config Step2 `floor_on_zero_success`) force l'application du plancher d'exploration (`reward_floor` effectif) **avant** le clip lorsque `success_rate == 0`, afin de préserver un signal d'exploration.
