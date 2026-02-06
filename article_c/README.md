@@ -95,6 +95,20 @@ Exécuter uniquement l'étape 2 :
 python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 --seeds_base 1000
 ```
 
+### Profil standard adouci (par défaut)
+
+Depuis cette version, l'étape 2 utilise un **profil standard adouci** par défaut
+pour réduire les risques de congestion extrême. Les valeurs par défaut suivantes
+servent de base lorsque `--safe-profile` n'est pas activé :
+
+- `capture_probability=0.15` (tolérance légèrement plus élevée aux collisions).
+- `network_load_min=0.75` et `network_load_max=1.7` (clamp de charge plus modéré).
+- `collision_size_min=0.75`, `collision_size_under_max=1.15`,
+  `collision_size_over_max=1.8` (facteur de taille des collisions adouci).
+
+Le profil sécurisé reste disponible pour des scénarios plus difficiles ou pour
+stabiliser rapidement des runs instables.
+
 ### Mode sécurisé (--safe-profile)
 
 Le flag `--safe-profile` active un **preset modéré** pour l'étape 2, pensé pour
@@ -104,7 +118,7 @@ automatiquement des valeurs plus douces :
 - **Charge** (clamp du facteur de charge réseau) : `network_load_min=0.8` et `network_load_max=1.6`.
 - **Collisions** (bornes du facteur de taille) : `collision_size_min=0.8`,
   `collision_size_under_max=1.2`, `collision_size_over_max=1.6`.
-- **Reward floor** : `reward_floor=0.03` (plancher appliqué dès que `success_rate > 0`).
+- **Reward floor** : `reward_floor=0.05` (plancher appliqué dès que `success_rate > 0`).
 
 Exemples :
 
@@ -112,6 +126,13 @@ Exemples :
 python article_c/step2/run_step2.py --safe-profile --network-sizes 50 100 150 --replications 5 --seeds_base 1000
 python -m article_c.run_all --safe-profile
 ```
+
+### Auto-safe-profile
+
+L'option `--auto-safe-profile` déclenche un basculement automatique vers
+`STEP2_SAFE_CONFIG` si la première taille simulée passe sous le seuil de succès
+(`success_rate` moyen < 0.2). En mode multi-process, l'exécution devient
+séquentielle pour pouvoir détecter le premier échec.
 
 ### Réduire la verbosité des alertes (étape 2)
 
@@ -148,7 +169,7 @@ python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 
 
 Ces options permettent d'ajuster finement les pertes dues aux collisions/congestion :
 
-- `--capture-probability` : probabilité qu'une collision laisse un émetteur survivre. Valeur conseillée **0.08–0.15** (défaut 0.12).
+- `--capture-probability` : probabilité qu'une collision laisse un émetteur survivre. Valeur conseillée **0.08–0.18** (défaut 0.15).
 - `--congestion-coeff` : coefficient multiplicatif appliqué à la probabilité de congestion. Valeur conseillée **0.8–1.2** (défaut 1.0).
 - `--congestion-coeff-base` : coefficient de base de la probabilité de congestion. Valeur conseillée **0.25–0.40** (défaut 0.32).
 - `--congestion-coeff-growth` : vitesse de croissance avec la surcharge. Valeur conseillée **0.25–0.50** (défaut 0.35).

@@ -41,6 +41,21 @@ logger = logging.getLogger(__name__)
 SAFE_PROFILE_SUCCESS_THRESHOLD = 0.2
 
 
+def _log_default_profile_if_needed(args: object) -> None:
+    if getattr(args, "safe_profile", False):
+        return
+    defaults = DEFAULT_CONFIG.step2
+    print(
+        "Profil standard adouci (par défaut) : "
+        f"capture_probability={defaults.capture_probability}, "
+        f"network_load_min/max={defaults.network_load_min}/{defaults.network_load_max}, "
+        f"collision_size_min/under/over="
+        f"{defaults.collision_size_min}/"
+        f"{defaults.collision_size_under_max}/"
+        f"{defaults.collision_size_over_max}."
+    )
+
+
 def _aggregate_selection_probs(
     selection_rows: list[dict[str, object]]
 ) -> list[dict[str, object]]:
@@ -1146,6 +1161,7 @@ def _simulate_density(
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_cli_args(argv)
+    _log_default_profile_if_needed(args)
     if getattr(args, "safe_profile", False):
         _apply_safe_profile_with_log(args, "demande explicite --safe-profile")
     try:
