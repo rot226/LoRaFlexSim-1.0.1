@@ -704,6 +704,8 @@ def _compute_successes_and_traffic(
     *,
     rng: random.Random,
     capture_probability: float,
+    approx_threshold: int = 5000,
+    approx_sample_size: int = 2500,
     debug_step2: bool = False,
 ) -> tuple[dict[int, int], dict[int, int], int, bool]:
     transmissions_by_channel: dict[int, dict[int, list[tuple[float, float, int]]]] = {}
@@ -721,6 +723,8 @@ def _compute_successes_and_traffic(
         _compute_collision_successes(
             transmissions_by_channel,
             rng=rng,
+            approx_threshold=approx_threshold,
+            approx_sample_size=approx_sample_size,
             capture_probability=capture_probability,
         )
     )
@@ -771,6 +775,75 @@ def _summarize_values(values: list[float]) -> tuple[float, float, float]:
     if not values:
         return 0.0, 0.0, 0.0
     return min(values), median(values), max(values)
+
+
+def _sample_node_windows(
+    node_windows: list[dict[str, object]],
+    *,
+    rng: random.Random,
+    max_nodes: int = 12,
+    min_nodes: int = 2,
+    ratio: float = 0.2,
+) -> list[dict[str, object]]:
+    if not node_windows:
+        return []
+    if len(node_windows) <= min_nodes:
+        return list(node_windows)
+    target = max(min_nodes, int(round(len(node_windows) * ratio)))
+    target = min(max_nodes, max(min_nodes, target))
+    if target >= len(node_windows):
+        return list(node_windows)
+    return rng.sample(node_windows, k=target)
+
+
+def _approx_collision_gap_ratio(
+    node_windows: list[dict[str, object]],
+    airtime_by_sf: dict[int, float],
+    *,
+    capture_probability: float,
+    approx_threshold: int,
+    approx_sample_size: int,
+    seed: int,
+    round_id: int,
+    max_rounds: int,
+) -> dict[str, float] | None:
+    if round_id >= max_rounds or not node_windows:
+        return None
+    subset_rng = random.Random(seed + 101 + round_id)
+    subset_windows = _sample_node_windows(node_windows, rng=subset_rng)
+    if not subset_windows:
+        return None
+    approx_rng = random.Random(seed + 313 + round_id)
+    exact_rng = random.Random(seed + 313 + round_id)
+    approx_successes, approx_traffic, _, _ = _compute_successes_and_traffic(
+        subset_windows,
+        airtime_by_sf,
+        rng=approx_rng,
+        capture_probability=capture_probability,
+        approx_threshold=approx_threshold,
+        approx_sample_size=approx_sample_size,
+    )
+    exact_successes, exact_traffic, _, _ = _compute_successes_and_traffic(
+        subset_windows,
+        airtime_by_sf,
+        rng=exact_rng,
+        capture_probability=capture_probability,
+        approx_threshold=10**9,
+        approx_sample_size=approx_sample_size,
+    )
+    total_traffic = sum(exact_traffic.values())
+    if total_traffic <= 0:
+        return None
+    approx_ratio = sum(approx_successes.values()) / total_traffic
+    exact_ratio = sum(exact_successes.values()) / total_traffic
+    gap = abs(approx_ratio - exact_ratio)
+    gap_ratio = gap / max(exact_ratio, 1e-6)
+    return {
+        "subset_nodes": float(len(subset_windows)),
+        "approx_ratio": approx_ratio,
+        "exact_ratio": exact_ratio,
+        "gap_ratio": gap_ratio,
+    }
 
 
 def _should_debug_log(debug_step2: bool, round_id: int, max_rounds: int = 3) -> bool:
@@ -1945,6 +2018,12 @@ def run_simulation(
     reward_log_counts: dict[tuple[int, str, int], int] = {}
     reward_alert_state: dict[tuple[int, str], RewardAlertState] = {}
     reward_alert_global_counts: dict[tuple[int, str], int] = {}
+    approx_threshold = 5000
+    approx_sample_size = 2500
+    approx_check_rounds = max(1, min(2, n_rounds))
+    approx_discrepancy_threshold = 0.2
+    approx_discrepancy_rounds = 0
+    approx_adjusted = False
 
     if algorithm == "ucb1_sf":
         bandit = BanditUCB1(
@@ -2105,6 +2184,8 @@ def run_simulation(
                 airtime_by_sf,
                 rng=rng,
                 capture_probability=capture_probability_value,
+                approx_threshold=approx_threshold,
+                approx_sample_size=approx_sample_size,
                 debug_step2=debug_step2,
             )
             link_qualities = [
@@ -2135,6 +2216,45 @@ def run_simulation(
                 logger.debug(
                     "Mode approx collisions activé (%s transmissions).",
                     transmission_count,
+                )
+                approx_gap = _approx_collision_gap_ratio(
+                    node_windows,
+                    airtime_by_sf,
+                    capture_probability=capture_probability_value,
+                    approx_threshold=approx_threshold,
+                    approx_sample_size=approx_sample_size,
+                    seed=seed,
+                    round_id=round_id,
+                    max_rounds=approx_check_rounds,
+                )
+                if approx_gap is not None:
+                    logger.info(
+                        "Validation approx/exact (round=%s subset_nodes=%s) "
+                        "ratio approx=%.4f exact=%.4f gap=%.3f.",
+                        round_id,
+                        int(approx_gap["subset_nodes"]),
+                        approx_gap["approx_ratio"],
+                        approx_gap["exact_ratio"],
+                        approx_gap["gap_ratio"],
+                    )
+                    if approx_gap["gap_ratio"] >= approx_discrepancy_threshold:
+                        approx_discrepancy_rounds += 1
+            if (
+                approx_collision_mode
+                and not approx_adjusted
+                and approx_discrepancy_rounds >= approx_check_rounds
+            ):
+                previous_threshold = approx_threshold
+                previous_sample_size = approx_sample_size
+                approx_threshold = max(1000, int(approx_threshold * 0.8))
+                approx_sample_size = min(int(approx_sample_size * 1.5), 20000)
+                approx_adjusted = True
+                logger.warning(
+                    "Ajustement approx collisions: threshold %s→%s sample_size %s→%s.",
+                    previous_threshold,
+                    approx_threshold,
+                    previous_sample_size,
+                    approx_sample_size,
                 )
             collision_success_total = sum(successes_by_node.values())
             total_traffic_sent = sum(traffic_sent_by_node.values())
@@ -2677,6 +2797,8 @@ def run_simulation(
                 airtime_by_sf,
                 rng=rng,
                 capture_probability=capture_probability_value,
+                approx_threshold=approx_threshold,
+                approx_sample_size=approx_sample_size,
                 debug_step2=debug_step2,
             )
             link_qualities = [
@@ -2707,6 +2829,45 @@ def run_simulation(
                 logger.debug(
                     "Mode approx collisions activé (%s transmissions).",
                     transmission_count,
+                )
+                approx_gap = _approx_collision_gap_ratio(
+                    node_windows,
+                    airtime_by_sf,
+                    capture_probability=capture_probability_value,
+                    approx_threshold=approx_threshold,
+                    approx_sample_size=approx_sample_size,
+                    seed=seed,
+                    round_id=round_id,
+                    max_rounds=approx_check_rounds,
+                )
+                if approx_gap is not None:
+                    logger.info(
+                        "Validation approx/exact (round=%s subset_nodes=%s) "
+                        "ratio approx=%.4f exact=%.4f gap=%.3f.",
+                        round_id,
+                        int(approx_gap["subset_nodes"]),
+                        approx_gap["approx_ratio"],
+                        approx_gap["exact_ratio"],
+                        approx_gap["gap_ratio"],
+                    )
+                    if approx_gap["gap_ratio"] >= approx_discrepancy_threshold:
+                        approx_discrepancy_rounds += 1
+            if (
+                approx_collision_mode
+                and not approx_adjusted
+                and approx_discrepancy_rounds >= approx_check_rounds
+            ):
+                previous_threshold = approx_threshold
+                previous_sample_size = approx_sample_size
+                approx_threshold = max(1000, int(approx_threshold * 0.8))
+                approx_sample_size = min(int(approx_sample_size * 1.5), 20000)
+                approx_adjusted = True
+                logger.warning(
+                    "Ajustement approx collisions: threshold %s→%s sample_size %s→%s.",
+                    previous_threshold,
+                    approx_threshold,
+                    previous_sample_size,
+                    approx_sample_size,
                 )
             collision_success_total = sum(successes_by_node.values())
             total_traffic_sent = sum(traffic_sent_by_node.values())
