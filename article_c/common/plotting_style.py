@@ -96,6 +96,16 @@ def apply_base_rcparams() -> None:
     plt.rcParams.update(BASE_RCPARAMS)
 
 
+def apply_ieee_style(*, use_constrained_layout: bool = False) -> None:
+    """Applique le style IEEE et sélectionne un seul système de layout."""
+    apply_base_rcparams()
+    plt.rcParams.update(
+        {
+            "figure.constrained_layout.use": bool(use_constrained_layout),
+        }
+    )
+
+
 def apply_output_fonttype() -> None:
     """Force l'export en police TrueType pour PS/PDF."""
     plt.rcParams.update(OUTPUT_FONT_TYPES)

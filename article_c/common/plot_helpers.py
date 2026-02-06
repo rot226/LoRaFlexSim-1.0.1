@@ -28,7 +28,7 @@ from article_c.common.plotting_style import (
     SAVEFIG_STYLE,
     SUPTITLE_Y,
     adjust_legend_to_fit,
-    apply_base_rcparams,
+    apply_ieee_style,
     apply_output_fonttype,
     legend_bbox_to_anchor,
     set_network_size_ticks,
@@ -133,7 +133,7 @@ class MetricValues:
 
 def apply_plot_style() -> None:
     """Applique un style homogène pour les figures Step1/Step2."""
-    apply_base_rcparams()
+    apply_ieee_style(use_constrained_layout=False)
     plt.rcParams.update(
         {
             "figure.figsize": FIGURE_SIZE,
