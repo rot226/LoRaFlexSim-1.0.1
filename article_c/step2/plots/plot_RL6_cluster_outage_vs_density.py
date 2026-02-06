@@ -12,7 +12,7 @@ import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
-    place_adaptive_legend,
+    create_right_legend_layout,
     algo_label,
     apply_plot_style,
     apply_figure_layout,
@@ -218,10 +218,9 @@ def _plot_metric(
         handles, labels = legend_handles_for_algos_snir(["snir_on"])
     if not handles:
         handles, labels = fallback_legend_handles()
-    place_adaptive_legend(
+    create_right_legend_layout(
         fig,
-        axes[0],
-        preferred_loc="right",
+        axes,
         handles=handles if handles else None,
         labels=labels if handles else None,
     )
@@ -372,10 +371,9 @@ def _plot_raw_metric(
         handles, labels = legend_handles_for_algos_snir(["snir_on"])
     if not handles:
         handles, labels = fallback_legend_handles()
-    place_adaptive_legend(
+    create_right_legend_layout(
         fig,
-        axes[0],
-        preferred_loc="right",
+        axes,
         handles=handles if handles else None,
         labels=labels if handles else None,
     )

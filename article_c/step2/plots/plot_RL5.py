@@ -20,7 +20,7 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     load_step2_selection_probs,
     normalize_network_size_rows,
-    place_adaptive_legend,
+    create_right_legend_layout,
     render_metric_status,
     save_figure,
 )
@@ -88,7 +88,7 @@ def _plot_selection(
             ax.plot(rounds, values, marker="o", label=label)
     ax.set_xlabel("Round (index)")
     ax.set_ylabel("Selection prob. (prob.)")
-    place_adaptive_legend(fig, ax, preferred_loc="right")
+    create_right_legend_layout(fig, ax)
     return fig
 
 

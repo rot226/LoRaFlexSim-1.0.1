@@ -21,7 +21,7 @@ from article_c.common.plot_helpers import (
     algo_labels,
     apply_plot_style,
     apply_figure_layout,
-    place_adaptive_legend,
+    create_right_legend_layout,
     assert_legend_present,
     clear_axis_legends,
     ensure_network_size,
@@ -259,10 +259,9 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
             )
             for mode in SNIR_MODES
         ]
-        placement = place_adaptive_legend(
+        create_right_legend_layout(
             fig,
-            axes[0],
-            preferred_loc="right",
+            axes,
             handles=snir_handles,
             labels=[handle.get_label() for handle in snir_handles],
         )
@@ -270,7 +269,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
             fig,
             axes,
             title=None,
-            legend_loc="above" if placement.legend_loc == "above" else "right",
+            legend_loc="right",
         )
         return fig
 
@@ -299,21 +298,18 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         ax.set_ylim(0.0, 1.0)
     handles, labels = axes[0].get_legend_handles_labels()
     clear_axis_legends(axes)
-    legend_loc = "right"
     if handles:
-        placement = place_adaptive_legend(
+        create_right_legend_layout(
             fig,
-            axes[0],
-            preferred_loc="right",
+            axes,
             handles=handles,
             labels=labels,
         )
-        legend_loc = "above" if placement.legend_loc == "above" else "right"
     configure_figure(
         fig,
         axes,
         title=None,
-        legend_loc=legend_loc,
+        legend_loc="right",
     )
     return fig
 
