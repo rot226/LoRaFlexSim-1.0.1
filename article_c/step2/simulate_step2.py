@@ -1316,6 +1316,35 @@ def _log_link_quality_size_summary(
     )
 
 
+def _log_value_distribution(
+    *,
+    label: str,
+    network_size: int,
+    algo_label: str,
+    values: list[float],
+    round_id: int | None = None,
+) -> None:
+    if not values:
+        return
+    min_value, median_value, max_value = _summarize_values(values)
+    mean_value = mean(values)
+    std_value = pstdev(values)
+    round_suffix = f" round={round_id}" if round_id is not None else ""
+    logger.info(
+        "Distribution %s - taille=%s algo=%s%s min/med/max=%.3f/%.3f/%.3f moyenne=%.3f ecart_type=%.3f n=%s",
+        label,
+        network_size,
+        algo_label,
+        round_suffix,
+        min_value,
+        median_value,
+        max_value,
+        mean_value,
+        std_value,
+        len(values),
+    )
+
+
 def _apply_link_quality_variation(
     rng: random.Random,
     link_quality: float,
@@ -1591,7 +1620,10 @@ def _snir_success_factor(
         return 1.0
     threshold_db = _clamp_range(snir_threshold_db, min_db, max_db)
     threshold_ratio = (threshold_db - min_db) / max(max_db - min_db, 1e-6)
-    return _clip(1.0 - threshold_ratio, 0.0, 1.0)
+    softened_ratio = threshold_ratio**1.2
+    attenuation = 1.0 - softened_ratio
+    min_factor = 0.15
+    return _clip(max(attenuation, min_factor), 0.0, 1.0)
 
 
 def _select_adr_arm(
@@ -1842,6 +1874,8 @@ def run_simulation(
     selection_prob_rows: list[dict[str, object]] = []
     learning_curve_rows: list[dict[str, object]] = []
     all_link_qualities: list[float] = []
+    all_snir_success_factors: list[float] = []
+    all_link_quality_snir: list[float] = []
     node_clusters = assign_clusters(n_nodes, rng=rng)
     reference_size = (
         _default_reference_size()
@@ -2240,6 +2274,13 @@ def run_simulation(
                 round_id=round_id,
                 link_qualities=link_qualities,
             )
+            _log_value_distribution(
+                label="link_quality",
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                values=link_qualities,
+            )
             _log_pre_clip_stats(
                 network_size=network_size_value,
                 algo_label=algo_label,
@@ -2348,6 +2389,24 @@ def run_simulation(
                     snir_threshold_max_db=snir_threshold_max_value,
                     debug_step2=debug_step2,
                 )
+            )
+            snir_success_factor = float(loss_stats["snir_success_factor"])
+            link_quality_snir = float(loss_stats["link_quality_snir"])
+            all_snir_success_factors.append(snir_success_factor)
+            all_link_quality_snir.append(link_quality_snir)
+            _log_value_distribution(
+                label="snir_success_factor",
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                values=[snir_success_factor],
+            )
+            _log_value_distribution(
+                label="link_quality_snir",
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                values=[link_quality_snir],
             )
             _log_success_chain(
                 network_size=network_size_value,
@@ -2863,6 +2922,13 @@ def run_simulation(
                 round_id=round_id,
                 link_qualities=link_qualities,
             )
+            _log_value_distribution(
+                label="link_quality",
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                values=link_qualities,
+            )
             _log_pre_clip_stats(
                 network_size=network_size_value,
                 algo_label=algo_label,
@@ -2971,6 +3037,24 @@ def run_simulation(
                     snir_threshold_max_db=snir_threshold_max_value,
                     debug_step2=debug_step2,
                 )
+            )
+            snir_success_factor = float(loss_stats["snir_success_factor"])
+            link_quality_snir = float(loss_stats["link_quality_snir"])
+            all_snir_success_factors.append(snir_success_factor)
+            all_link_quality_snir.append(link_quality_snir)
+            _log_value_distribution(
+                label="snir_success_factor",
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                values=[snir_success_factor],
+            )
+            _log_value_distribution(
+                label="link_quality_snir",
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                values=[link_quality_snir],
             )
             _log_success_chain(
                 network_size=network_size_value,
@@ -3271,6 +3355,18 @@ def run_simulation(
         network_size=network_size_value,
         algo_label=algo_label,
         link_qualities=all_link_qualities,
+    )
+    _log_value_distribution(
+        label="snir_success_factor",
+        network_size=network_size_value,
+        algo_label=algo_label,
+        values=all_snir_success_factors,
+    )
+    _log_value_distribution(
+        label="link_quality_snir",
+        network_size=network_size_value,
+        algo_label=algo_label,
+        values=all_link_quality_snir,
     )
 
     if output_dir is not None:
