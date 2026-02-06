@@ -994,6 +994,31 @@ def _log_round_traffic_debug(
     )
 
 
+def _log_congestion_probability(
+    *,
+    network_size: int,
+    algo_label: str,
+    round_id: int,
+    congestion_probability: float,
+    congestion_coeff: float,
+    congestion_coeff_base: float,
+    congestion_coeff_growth: float,
+    congestion_coeff_max: float,
+) -> None:
+    logger.info(
+        "Congestion (taille=%s algo=%s round=%s) p=%.3f "
+        "(coeff=%.2f base=%.3f growth=%.3f max=%.3f).",
+        network_size,
+        algo_label,
+        round_id,
+        congestion_probability,
+        congestion_coeff,
+        congestion_coeff_base,
+        congestion_coeff_growth,
+        congestion_coeff_max,
+    )
+
+
 def _log_cluster_all_diagnostics(
     *,
     network_size: int,
@@ -2046,6 +2071,16 @@ def run_simulation(
             lambda_collision_effective = _clip(
                 lambda_collision * collision_penalty_scale, 0.0, 1.0
             )
+            _log_congestion_probability(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                congestion_probability=congestion_probability,
+                congestion_coeff=congestion_coeff_value,
+                congestion_coeff_base=congestion_coeff_base_value,
+                congestion_coeff_growth=congestion_coeff_growth_value,
+                congestion_coeff_max=congestion_coeff_max_value,
+            )
             arm_index = bandit.select_arm()
             if exploration_epsilon > 0.0 and rng.random() < exploration_epsilon:
                 arm_index = rng.randrange(n_arms)
@@ -2648,6 +2683,16 @@ def run_simulation(
             )
             lambda_collision_effective = _clip(
                 lambda_collision * collision_penalty_scale, 0.0, 1.0
+            )
+            _log_congestion_probability(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                congestion_probability=congestion_probability,
+                congestion_coeff=congestion_coeff_value,
+                congestion_coeff_base=congestion_coeff_base_value,
+                congestion_coeff_growth=congestion_coeff_growth_value,
+                congestion_coeff_max=congestion_coeff_max_value,
             )
             window_rewards: list[float] = []
             if round_id > 0:

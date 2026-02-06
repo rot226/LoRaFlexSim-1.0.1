@@ -83,9 +83,9 @@ class Step2Config:
     window_delay_range_s: float = 5.0
     capture_probability: float = 0.15
     congestion_coeff: float = 1.0
-    congestion_coeff_base: float = 0.32
-    congestion_coeff_growth: float = 0.35
-    congestion_coeff_max: float = 0.35
+    congestion_coeff_base: float = 0.28
+    congestion_coeff_growth: float = 0.3
+    congestion_coeff_max: float = 0.3
     link_success_min_ratio: float = 0.02
     network_load_min: float = 0.75
     network_load_max: float = 1.7
