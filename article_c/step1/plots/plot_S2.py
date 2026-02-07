@@ -23,12 +23,12 @@ from article_c.common.plot_helpers import (
     legend_margins,
     load_step1_aggregated,
     metric_values as get_metric_values,
+    place_adaptive_legend,
     plot_metric_by_snir,
     render_metric_status,
     save_figure,
     warn_if_insufficient_network_sizes,
 )
-from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import resolve_ieee_figsize
 
 
@@ -46,11 +46,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     metric_state = is_constant_metric(get_metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
         render_metric_status(fig, ax, metric_state, legend_handles=None)
-        configure_figure(
+        placement = place_adaptive_legend(fig, ax, preferred_loc="right")
+        apply_figure_layout(
             fig,
-            ax,
-            title=None,
-            legend_loc="right",
+            margins=legend_margins(
+                placement.legend_loc,
+                legend_rows=placement.legend_rows,
+                fig=fig,
+            ),
+            legend_rows=placement.legend_rows,
+            legend_loc=placement.legend_loc,
         )
         return fig
     plot_metric_by_snir(ax, rows, metric_key)
@@ -60,14 +65,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-    configure_figure(
+    handles, labels = ax.get_legend_handles_labels()
+    placement = place_adaptive_legend(
         fig,
         ax,
-        title=None,
-        legend_loc="right",
+        preferred_loc="right",
+        handles=handles if handles else None,
+        labels=labels if handles else None,
     )
-    if fig.legends:
-        fig.legends[0].set_title("Mean ToA (s)")
+    if placement.legend is not None:
+        placement.legend.set_title("Mean ToA (s)")
     metric_series = pd.to_numeric(df[metric_key], errors="coerce").dropna()
     if not metric_series.empty:
         y_min = metric_series.min()
@@ -78,7 +85,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_ylim(y_min, y_max)
     apply_figure_layout(
         fig,
-        margins={**legend_margins("above"), "left": 0.16},
+        margins={
+            **legend_margins(
+                placement.legend_loc,
+                legend_rows=placement.legend_rows,
+                fig=fig,
+            ),
+            "left": 0.16,
+        },
+        legend_rows=placement.legend_rows,
+        legend_loc=placement.legend_loc,
     )
     return fig
 
