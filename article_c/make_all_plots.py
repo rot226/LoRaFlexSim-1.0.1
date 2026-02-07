@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import importlib
+import inspect
 import sys
 import traceback
 from dataclasses import dataclass
@@ -41,6 +42,8 @@ PLOT_MODULES = {
         "article_c.step1.plots.plot_S7_cluster_outage_vs_network_size",
         "article_c.step1.plots.plot_S8_spreading_factor_distribution",
         "article_c.step1.plots.plot_S9_latency_or_toa_vs_network_size",
+        "article_c.step1.plots.plot_S10_rssi_cdf_by_algo",
+        "article_c.step1.plots.plot_S10_rssi_or_snr_cdf",
     ],
     "step2": [
         "article_c.step2.plots.plot_RL1",
@@ -49,6 +52,7 @@ PLOT_MODULES = {
         "article_c.step2.plots.plot_RL3",
         "article_c.step2.plots.plot_RL4",
         "article_c.step2.plots.plot_RL5",
+        "article_c.step2.plots.plot_RL5_plus",
         "article_c.step2.plots.plot_RL6_cluster_outage_vs_density",
         "article_c.step2.plots.plot_RL7_reward_vs_density",
         "article_c.step2.plots.plot_RL8_reward_distribution",
@@ -89,6 +93,61 @@ SNIR_ALIASES = {
     "false": "snir_off",
     "0": "snir_off",
     "no": "snir_off",
+}
+
+RSSI_SNR_COLUMNS = (
+    "rssi_dbm",
+    "rssi_db",
+    "rssi",
+    "snr_db",
+    "snr_dbm",
+    "snr",
+)
+
+
+@dataclass(frozen=True)
+class PlotRequirements:
+    csv_name: str = "aggregated_results.csv"
+    min_network_sizes: int = 2
+    require_algo_snir: bool = True
+    required_algos: tuple[str, ...] | None = None
+    required_snir: tuple[str, ...] | None = None
+    required_any_columns: tuple[str, ...] | None = None
+    extra_csv_names: tuple[str, ...] = ()
+
+
+PLOT_REQUIREMENTS = {
+    "article_c.step1.plots.plot_S10_rssi_cdf_by_algo": PlotRequirements(
+        csv_name="raw_packets.csv",
+        min_network_sizes=1,
+        require_algo_snir=True,
+        required_algos=REQUIRED_ALGOS["step1"],
+        required_snir=REQUIRED_SNIR_MODES["step1"],
+        required_any_columns=RSSI_SNR_COLUMNS,
+    ),
+    "article_c.step1.plots.plot_S10_rssi_or_snr_cdf": PlotRequirements(
+        csv_name="raw_packets.csv",
+        min_network_sizes=1,
+        require_algo_snir=True,
+        required_algos=(),
+        required_snir=(),
+        required_any_columns=RSSI_SNR_COLUMNS,
+    ),
+    "article_c.step2.plots.plot_RL5": PlotRequirements(
+        min_network_sizes=1,
+        require_algo_snir=False,
+        extra_csv_names=("rl5_selection_prob.csv",),
+    ),
+    "article_c.step2.plots.plot_RL5_plus": PlotRequirements(
+        min_network_sizes=1,
+        require_algo_snir=False,
+        extra_csv_names=("rl5_selection_prob.csv",),
+    ),
+    "article_c.step2.plots.plot_RL9_sf_selection_entropy": PlotRequirements(
+        min_network_sizes=1,
+        require_algo_snir=False,
+        extra_csv_names=("rl5_selection_prob.csv",),
+    ),
 }
 
 
@@ -235,10 +294,63 @@ def _run_plot_module(
     module = importlib.import_module(module_path)
     if not hasattr(module, "main"):
         raise AttributeError(f"Module {module_path} sans fonction main().")
-    if network_sizes is None:
-        module.main(allow_sample=allow_sample)
-        return
-    module.main(network_sizes=network_sizes, allow_sample=allow_sample)
+    signature = inspect.signature(module.main)
+    kwargs: dict[str, object] = {}
+    parameters = signature.parameters
+    supports_kwargs = any(
+        param.kind == inspect.Parameter.VAR_KEYWORD
+        for param in parameters.values()
+    )
+    if "allow_sample" in parameters or supports_kwargs:
+        kwargs["allow_sample"] = allow_sample
+    if network_sizes is not None and ("network_sizes" in parameters or supports_kwargs):
+        kwargs["network_sizes"] = network_sizes
+    if kwargs:
+        module.main(**kwargs)
+    else:
+        module.main()
+
+
+def _resolve_plot_requirements(step: str, module_path: str) -> PlotRequirements:
+    requirements = PLOT_REQUIREMENTS.get(module_path)
+    if requirements is None:
+        return PlotRequirements(
+            required_algos=REQUIRED_ALGOS[step],
+            required_snir=REQUIRED_SNIR_MODES[step],
+        )
+    if requirements.required_algos is None and requirements.require_algo_snir:
+        requirements = PlotRequirements(
+            **{
+                **requirements.__dict__,
+                "required_algos": REQUIRED_ALGOS[step],
+            }
+        )
+    if requirements.required_snir is None and requirements.require_algo_snir:
+        requirements = PlotRequirements(
+            **{
+                **requirements.__dict__,
+                "required_snir": REQUIRED_SNIR_MODES[step],
+            }
+        )
+    return requirements
+
+
+def _resolve_csv_path(
+    *,
+    step: str,
+    requirements: PlotRequirements,
+    step1_csv: Path | None,
+    step2_csv: Path | None,
+) -> Path | None:
+    if step == "step1":
+        base_dir = STEP1_RESULTS_DIR
+        aggregated = step1_csv
+    else:
+        base_dir = STEP2_RESULTS_DIR
+        aggregated = step2_csv
+    if requirements.csv_name == "aggregated_results.csv":
+        return aggregated
+    return base_dir / requirements.csv_name
 
 
 def _validate_plot_modules_use_save_figure() -> dict[str, str]:
@@ -462,11 +574,21 @@ def _validate_plot_data(
     step: str,
     module_path: str,
     csv_path: Path,
+    requirements: PlotRequirements,
     cached_data: dict[str, tuple[list[str], list[dict[str, str]]]],
 ) -> tuple[bool, str]:
-    if step not in cached_data:
-        cached_data[step] = _load_csv_data(csv_path)
-    fieldnames, rows = cached_data[step]
+    for extra_name in requirements.extra_csv_names:
+        extra_path = csv_path.parent / extra_name
+        if not extra_path.exists():
+            print(
+                "AVERTISSEMENT: "
+                f"{module_path} nécessite {extra_name}, figure ignorée."
+            )
+            return False, f"CSV manquant ({extra_name})"
+    cache_key = str(csv_path)
+    if cache_key not in cached_data:
+        cached_data[cache_key] = _load_csv_data(csv_path)
+    fieldnames, rows = cached_data[cache_key]
     if not fieldnames:
         print(
             "AVERTISSEMENT: "
@@ -474,7 +596,7 @@ def _validate_plot_data(
         )
         return False, "CSV vide"
     sizes = _extract_network_sizes(csv_path)
-    if len(sizes) < 2:
+    if len(sizes) < requirements.min_network_sizes:
         sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
         print(
             "Tailles détectées dans "
@@ -482,55 +604,68 @@ def _validate_plot_data(
         )
         print(
             "WARNING: "
-            f"{module_path} nécessite au moins 2 tailles "
-            "disponibles, figure ignorée."
+            f"{module_path} nécessite au moins "
+            f"{requirements.min_network_sizes} taille(s) disponible(s), "
+            "figure ignorée."
         )
         print(f"CSV path: {csv_path}")
-        return False, "moins de 2 tailles de réseau"
-    algo_col = _pick_column(fieldnames, ("algo", "algorithm", "method"))
-    snir_col = _pick_column(
-        fieldnames, ("snir_mode", "snir_state", "snir", "with_snir")
-    )
-    if not algo_col or not snir_col:
-        print(
-            "AVERTISSEMENT: "
-            f"{module_path} nécessite les colonnes algo/snir_mode, "
-            "figure ignorée."
+        return False, "tailles de réseau insuffisantes"
+    if requirements.required_any_columns:
+        metric_col = _pick_column(fieldnames, requirements.required_any_columns)
+        if metric_col is None:
+            print(
+                "AVERTISSEMENT: "
+                f"{module_path} nécessite une colonne RSSI/SNR, "
+                "figure ignorée."
+            )
+            return False, "colonne RSSI/SNR manquante"
+    if requirements.require_algo_snir:
+        algo_col = _pick_column(fieldnames, ("algo", "algorithm", "method"))
+        snir_col = _pick_column(
+            fieldnames, ("snir_mode", "snir_state", "snir", "with_snir")
         )
-        return False, "colonnes algo/snir_mode manquantes"
-    available_algos = {
-        normalized
-        for row in rows
-        if (normalized := _normalize_algo(row.get(algo_col))) is not None
-    }
-    available_snir = {
-        normalized
-        for row in rows
-        if (normalized := _normalize_snir(row.get(snir_col))) is not None
-    }
-    missing_algos = [
-        algo for algo in REQUIRED_ALGOS[step] if algo not in available_algos
-    ]
-    missing_snir = [
-        mode for mode in REQUIRED_SNIR_MODES[step] if mode not in available_snir
-    ]
-    if missing_algos or missing_snir:
-        sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
-        print(
-            "Tailles détectées dans "
-            f"{csv_path}: {sizes_label}."
-        )
-        details = []
-        if missing_algos:
-            details.append(f"algos manquants: {', '.join(missing_algos)}")
-        if missing_snir:
-            details.append(f"SNIR manquants: {', '.join(missing_snir)}")
-        print(
-            "AVERTISSEMENT: "
-            f"{module_path} incomplet ({' ; '.join(details)}), "
-            "figure ignorée."
-        )
-        return False, "données incomplètes"
+        if not algo_col or not snir_col:
+            print(
+                "AVERTISSEMENT: "
+                f"{module_path} nécessite les colonnes algo/snir_mode, "
+                "figure ignorée."
+            )
+            return False, "colonnes algo/snir_mode manquantes"
+        available_algos = {
+            normalized
+            for row in rows
+            if (normalized := _normalize_algo(row.get(algo_col))) is not None
+        }
+        available_snir = {
+            normalized
+            for row in rows
+            if (normalized := _normalize_snir(row.get(snir_col))) is not None
+        }
+        required_algos = requirements.required_algos or ()
+        required_snir = requirements.required_snir or ()
+        missing_algos = [
+            algo for algo in required_algos if algo not in available_algos
+        ]
+        missing_snir = [
+            mode for mode in required_snir if mode not in available_snir
+        ]
+        if missing_algos or missing_snir:
+            sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
+            print(
+                "Tailles détectées dans "
+                f"{csv_path}: {sizes_label}."
+            )
+            details = []
+            if missing_algos:
+                details.append(f"algos manquants: {', '.join(missing_algos)}")
+            if missing_snir:
+                details.append(f"SNIR manquants: {', '.join(missing_snir)}")
+            print(
+                "AVERTISSEMENT: "
+                f"{module_path} incomplet ({' ; '.join(details)}), "
+                "figure ignorée."
+            )
+            return False, "données incomplètes"
     return True, "OK"
 
 
@@ -759,14 +894,24 @@ def main(argv: list[str] | None = None) -> None:
         for module_path in PLOT_MODULES[step]:
             if module_path in status_map and status_map[module_path].status == "FAIL":
                 continue
-            if step == "step1":
-                if step1_csv is None:
-                    continue
-                csv_path = step1_csv
-            else:
-                if step2_csv is None:
-                    continue
-                csv_path = step2_csv
+            requirements = _resolve_plot_requirements(step, module_path)
+            csv_path = _resolve_csv_path(
+                step=step,
+                requirements=requirements,
+                step1_csv=step1_csv,
+                step2_csv=step2_csv,
+            )
+            if csv_path is None:
+                continue
+            if not csv_path.exists():
+                _register_status(
+                    status_map,
+                    step=step,
+                    module_path=module_path,
+                    status="SKIP",
+                    message=f"CSV manquant ({csv_path.name})",
+                )
+                continue
             rl10_network_sizes: list[int] | None = None
             if (
                 step == "step2"
@@ -814,6 +959,7 @@ def main(argv: list[str] | None = None) -> None:
                 step=step,
                 module_path=module_path,
                 csv_path=csv_path,
+                requirements=requirements,
                 cached_data=csv_cache,
             )
             if not is_valid:
