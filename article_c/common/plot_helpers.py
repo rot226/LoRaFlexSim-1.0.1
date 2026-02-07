@@ -715,6 +715,124 @@ def _apply_right_legend_gridspec(
     return legend_ax
 
 
+def _legend_overlap_area(
+    legend_bbox: object,
+    artists: Iterable[object],
+    renderer: object,
+) -> float:
+    total_area = 0.0
+    for artist in artists:
+        try:
+            artist_bbox = artist.get_window_extent(renderer=renderer)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if artist_bbox is None:
+            continue
+        try:
+            intersection = legend_bbox.intersection(artist_bbox)
+        except AttributeError:
+            continue
+        if intersection is None:
+            continue
+        total_area += float(intersection.width) * float(intersection.height)
+    return total_area
+
+
+def _legend_overlap_score(
+    fig: plt.Figure,
+    legend: Legend,
+    artists: Iterable[object],
+) -> float:
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    legend_bbox = legend.get_window_extent(renderer=renderer)
+    return _legend_overlap_area(legend_bbox, artists, renderer)
+
+
+def choose_legend_location(
+    fig: plt.Figure,
+    ax: plt.Axes,
+    handles: list[Line2D],
+    labels: list[str],
+    *,
+    preferred_loc: str | None = None,
+    max_items_right: int = 6,
+    max_rows_above: int = 2,
+    max_rows_inside: int = 3,
+) -> tuple[str, int, int] | None:
+    """Choisit la position de légende qui minimise les collisions avec les artistes."""
+    label_count = len(labels)
+    candidates: list[tuple[str, int, int]] = []
+    if label_count <= max_items_right:
+        candidates.append(("right", 1, 1))
+    if label_count > 0:
+        legend_ncol, legend_rows = _legend_layout_for_rows(
+            fig,
+            label_count,
+            max_rows_above,
+        )
+        if legend_rows <= max_rows_above:
+            candidates.append(("above", legend_ncol, legend_rows))
+        inside_ncol, inside_rows = _legend_layout_for_rows(
+            fig,
+            label_count,
+            max_rows_inside,
+        )
+        candidates.append(("inside", inside_ncol, inside_rows))
+
+    if not candidates:
+        return None
+
+    artists: list[object] = list(ax.lines) + list(ax.collections)
+    preferred = _normalize_legend_loc(preferred_loc or "")
+    preferred_rank = {loc: idx for idx, loc in enumerate(["right", "above", "inside"])}
+    if preferred in preferred_rank:
+        preferred_rank[preferred] = -1
+
+    evaluated: list[tuple[float, int, tuple[str, int, int]]] = []
+    for legend_loc, legend_ncol, legend_rows in candidates:
+        clear_axis_legends([ax])
+        legend_style = dict(LEGEND_STYLE)
+        legend: Legend
+        if legend_loc == "inside":
+            legend_style.update(
+                {
+                    "loc": "upper right",
+                    "frameon": True,
+                    "ncol": legend_ncol,
+                }
+            )
+            legend = ax.legend(handles, labels, **legend_style)
+        elif legend_loc == "right":
+            legend_style = {
+                "loc": "center left",
+                "bbox_to_anchor": (1.02, 0.5),
+                "ncol": 1,
+                "frameon": False,
+            }
+            legend = fig.legend(handles, labels, **legend_style)
+        else:
+            legend_style["ncol"] = legend_ncol
+            legend_style["bbox_to_anchor"] = legend_bbox_to_anchor(
+                legend_rows=legend_rows,
+            )
+            legend = fig.legend(handles, labels, **legend_style)
+            bbox_to_anchor = legend_bbox_to_anchor(
+                legend=legend,
+                legend_rows=legend_rows,
+            )
+            legend.set_bbox_to_anchor(bbox_to_anchor)
+        overlap = _legend_overlap_score(fig, legend, artists)
+        legend.remove()
+        evaluated.append((overlap, preferred_rank.get(legend_loc, 0), (legend_loc, legend_ncol, legend_rows)))
+
+    viable = [item for item in evaluated if item[0] == 0.0]
+    if not viable:
+        return None
+    viable.sort(key=lambda item: (item[0], item[1]))
+    return viable[0][2]
+
+
 def place_adaptive_legend(
     fig: plt.Figure,
     ax: plt.Axes,
@@ -738,30 +856,26 @@ def place_adaptive_legend(
         return LegendPlacement(None, "none", 0)
 
     label_count = len(labels)
-    normalized_preferred = _normalize_legend_loc(preferred_loc or "")
-    if normalized_preferred in {"right", "above", "inside"}:
-        legend_loc = normalized_preferred
-    else:
-        legend_loc = "right" if label_count <= max_items_right else "above"
-    legend_rows = 1
-    legend_ncol = 1
-
-    if legend_loc == "right" and label_count > max_items_right:
-        legend_loc = "above"
-    if legend_loc == "above":
-        legend_ncol, legend_rows = _legend_layout_for_rows(
-            fig,
-            label_count,
-            max_rows_above,
-        )
-        if legend_rows > max_rows_above:
-            legend_loc = "inside"
-    if legend_loc == "inside":
+    chosen = choose_legend_location(
+        fig,
+        ax,
+        handles,
+        labels,
+        preferred_loc=preferred_loc,
+        max_items_right=max_items_right,
+        max_rows_above=max_rows_above,
+        max_rows_inside=max_rows_inside,
+    )
+    if chosen is None:
+        legend_loc = "inside"
         legend_ncol, legend_rows = _legend_layout_for_rows(
             fig,
             label_count,
             max_rows_inside,
         )
+    else:
+        legend_loc, legend_ncol, legend_rows = chosen
+    if legend_loc == "inside":
         clear_axis_legends([ax])
         legend_style = dict(LEGEND_STYLE)
         legend_style.update(
@@ -773,7 +887,7 @@ def place_adaptive_legend(
         )
         legend = ax.legend(handles, labels, **legend_style)
         apply_figure_layout(fig, margins=FIGURE_MARGINS)
-        return LegendPlacement(legend, "inside", legend_rows)
+        return LegendPlacement(legend, legend_loc, legend_rows)
 
     clear_axis_legends(fig.axes)
     if legend_loc == "right":

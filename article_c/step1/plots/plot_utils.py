@@ -83,6 +83,7 @@ def configure_figure(
                 labels=labels,
             )
             legend_rows = placement.legend_rows
+            legend_loc = placement.legend_loc
     legend_in_figure = bool(fig.legends)
     legend_entry_count = 0
     if legend_in_figure:
@@ -114,17 +115,17 @@ def configure_figure(
             legend_loc=legend_loc,
         )
     else:
-        apply_figure_layout(
-            fig,
-            margins=(
+        if legend_loc == "right":
+            margins = (
                 {
                     **legend_margins("right"),
                     "bottom": FIGURE_MARGINS["bottom"],
                 }
                 if adjust_layout_for_legend
                 else FIGURE_MARGINS
-            ),
-            legend_loc=legend_loc,
-        )
+            )
+            apply_figure_layout(fig, margins=margins, legend_loc=legend_loc)
+        else:
+            apply_figure_layout(fig, margins=FIGURE_MARGINS)
     if title:
         fig.suptitle(title, y=suptitle_y_from_top(fig))
