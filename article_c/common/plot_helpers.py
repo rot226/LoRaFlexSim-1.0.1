@@ -1593,9 +1593,13 @@ def apply_figure_layout(
     if margins is None:
         margins = dict(FIGURE_MARGINS)
     normalized_legend_loc = _normalize_legend_loc(legend_loc) if legend_loc else ""
+    has_fig_legend = bool(fig.legends)
+    has_axis_legend = any(ax.get_legend() is not None for ax in fig.axes)
+    if normalized_legend_loc in {"right", "above"} and not has_fig_legend and has_axis_legend:
+        normalized_legend_loc = ""
     if normalized_legend_loc == "right":
         margins.update(_legend_margins("right", legend_rows=legend_rows, fig=fig))
-    elif fig.legends:
+    elif has_fig_legend:
         margins["top"] = max(
             margins.get("top", FIGURE_MARGINS["top"]),
             _legend_top_margin(fig, legend_rows),
