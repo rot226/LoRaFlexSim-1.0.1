@@ -61,6 +61,21 @@ PLOT_MODULES = {
     ],
 }
 
+MIN_NETWORK_SIZES_PER_PLOT = {
+    "article_c.step2.plots.plot_RL1": 1,
+    "article_c.step2.plots.plot_RL1_learning_curve_reward": 1,
+    "article_c.step2.plots.plot_RL2": 1,
+    "article_c.step2.plots.plot_RL3": 1,
+    "article_c.step2.plots.plot_RL4": 1,
+    "article_c.step2.plots.plot_RL5": 1,
+    "article_c.step2.plots.plot_RL5_plus": 1,
+    "article_c.step2.plots.plot_RL6_cluster_outage_vs_density": 1,
+    "article_c.step2.plots.plot_RL7_reward_vs_density": 1,
+    "article_c.step2.plots.plot_RL8_reward_distribution": 1,
+    "article_c.step2.plots.plot_RL9_sf_selection_entropy": 1,
+    "article_c.step2.plots.plot_RL10_reward_vs_pdr_scatter": 2,
+}
+
 REQUIRED_ALGOS = {
     "step1": ("adr", "mixra_h", "mixra_opt"),
     "step2": ("adr", "mixra_h", "mixra_opt", "ucb1_sf"),
@@ -596,7 +611,10 @@ def _validate_plot_data(
         )
         return False, "CSV vide"
     sizes = _extract_network_sizes(csv_path)
-    if len(sizes) < requirements.min_network_sizes:
+    min_network_sizes = MIN_NETWORK_SIZES_PER_PLOT.get(
+        module_path, requirements.min_network_sizes
+    )
+    if len(sizes) < min_network_sizes:
         sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
         print(
             "Tailles détectées dans "
@@ -605,11 +623,18 @@ def _validate_plot_data(
         print(
             "WARNING: "
             f"{module_path} nécessite au moins "
-            f"{requirements.min_network_sizes} taille(s) disponible(s), "
+            f"{min_network_sizes} taille(s) disponible(s), "
             "figure ignorée."
         )
         print(f"CSV path: {csv_path}")
         return False, "tailles de réseau insuffisantes"
+    if len(sizes) == 1 and min_network_sizes == 1:
+        sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
+        print(
+            "AVERTISSEMENT: "
+            f"{module_path} est généré avec une seule taille "
+            f"({sizes_label})."
+        )
     if requirements.required_any_columns:
         metric_col = _pick_column(fieldnames, requirements.required_any_columns)
         if metric_col is None:
@@ -828,40 +853,31 @@ def main(argv: list[str] | None = None) -> None:
                 "step2",
                 "aucune taille de réseau détectée",
             )
-    skip_step2_plots = False
     if "step2" in steps:
         step2_sizes = step_network_sizes.get("step2", [])
         if len(step2_sizes) < 2:
             print(
-                "WARNING: Step2 doit contenir au moins 2 tailles "
-                "pour générer les plots RL. Aucun plot RL ne sera généré."
+                "AVERTISSEMENT: Step2 contient moins de 2 tailles. "
+                "Certains plots RL pourront être ignorés."
             )
             print(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
-            expected_sizes = args.network_sizes or step_network_sizes.get(
-                "step1", step2_sizes
-            )
-            if expected_sizes:
+        if args.network_sizes:
+            expected_sizes = args.network_sizes
+        elif step1_csv is not None and step1_csv.exists():
+            expected_sizes = _load_network_sizes_from_csvs([step1_csv])
+        else:
+            expected_sizes = []
+        if expected_sizes:
+            missing_sizes = sorted(set(expected_sizes) - set(step2_sizes))
+            if missing_sizes:
+                missing_label = ", ".join(str(size) for size in missing_sizes)
+                print(
+                    "WARNING: Step2 ne contient pas toutes les tailles attendues."
+                )
+                print(f"Tailles attendues manquantes: {missing_label}")
+                print(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
                 print("Commande PowerShell pour terminer Step2 (mode reprise):")
                 print(_suggest_step2_resume_command(expected_sizes))
-            skip_step2_plots = True
-        else:
-            if args.network_sizes:
-                expected_sizes = args.network_sizes
-            elif step1_csv is not None and step1_csv.exists():
-                expected_sizes = _load_network_sizes_from_csvs([step1_csv])
-            else:
-                expected_sizes = []
-            if expected_sizes:
-                missing_sizes = sorted(set(expected_sizes) - set(step2_sizes))
-                if missing_sizes:
-                    missing_label = ", ".join(str(size) for size in missing_sizes)
-                    print(
-                        "WARNING: Step2 ne contient pas toutes les tailles attendues."
-                    )
-                    print(f"Tailles attendues manquantes: {missing_label}")
-                    print(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
-                    print("Commande PowerShell pour terminer Step2 (mode reprise):")
-                    print(_suggest_step2_resume_command(expected_sizes))
     csv_cache: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
     for step, module_paths in PLOT_MODULES.items():
         if step not in steps:
@@ -876,20 +892,8 @@ def main(argv: list[str] | None = None) -> None:
                         status="SKIP",
                         message=step_errors[step],
                     )
-    if skip_step2_plots and "step2" in steps:
-        for module_path in PLOT_MODULES["step2"]:
-            if module_path not in status_map:
-                _register_status(
-                    status_map,
-                    step="step2",
-                    module_path=module_path,
-                    status="SKIP",
-                    message="Step2 incomplet (moins de 2 tailles)",
-                )
     for step in steps:
         if step in step_errors:
-            continue
-        if step == "step2" and skip_step2_plots:
             continue
         for module_path in PLOT_MODULES[step]:
             if module_path in status_map and status_map[module_path].status == "FAIL":
@@ -1050,7 +1054,7 @@ def main(argv: list[str] | None = None) -> None:
             "Step1",
             list(export_formats),
         )
-    if "step2" in steps and not skip_step2_plots:
+    if "step2" in steps:
         _inspect_plot_outputs(
             ARTICLE_DIR / "step2" / "plots" / "output",
             "Step2",
