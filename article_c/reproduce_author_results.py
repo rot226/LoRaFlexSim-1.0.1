@@ -2,6 +2,9 @@
 
 Le script charge les résultats agrégés LoRaFlexSim (step1/step2) et superpose,
 si disponibles, les courbes des auteurs à partir d'un CSV dédié.
+
+Optionnellement, il peut exporter les points tracés sous forme de CSV structurés
+pour faciliter la vérification des figures.
 """
 
 from __future__ import annotations
@@ -50,6 +53,18 @@ from article_c.common.plotting_style import (
 )
 
 LOGGER = logging.getLogger(__name__)
+
+EXPORT_FIELDS = (
+    "figure",
+    "metric",
+    "profile",
+    "cluster",
+    "source",
+    "x",
+    "x_label",
+    "y",
+    "label",
+)
 
 
 @dataclass(frozen=True)
@@ -262,6 +277,80 @@ def _plot_author_overlay(
     )
 
 
+def _append_export_row(
+    export_rows: list[dict[str, object]] | None,
+    *,
+    figure: int,
+    metric: str,
+    profile: str,
+    cluster: str,
+    source: str,
+    x: float,
+    y: float,
+    label: str,
+    x_label: str | None = None,
+) -> None:
+    if export_rows is None:
+        return
+    export_rows.append(
+        {
+            "figure": figure,
+            "metric": metric,
+            "profile": profile,
+            "cluster": cluster,
+            "source": source,
+            "x": x,
+            "x_label": x_label or "",
+            "y": y,
+            "label": label,
+        }
+    )
+
+
+def _export_author_curves(
+    export_rows: list[dict[str, object]] | None,
+    *,
+    curves: list[AuthorCurve],
+    figure: int,
+    metric: str,
+    profile: str,
+    cluster: str,
+    label_prefix: str,
+) -> None:
+    if export_rows is None or not curves:
+        return
+    label = curves[0].label or f"{label_prefix} (auteurs)"
+    for curve in curves:
+        _append_export_row(
+            export_rows,
+            figure=figure,
+            metric=metric,
+            profile=profile,
+            cluster=cluster,
+            source="author",
+            x=curve.x,
+            y=curve.y,
+            label=label,
+        )
+
+
+def _write_plot_csv(
+    output_dir: Path,
+    stem: str,
+    rows: list[dict[str, object]],
+) -> None:
+    if not rows:
+        LOGGER.info("Aucune donnée CSV à écrire pour %s.", stem)
+        return
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / f"{stem}.csv"
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=EXPORT_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+    LOGGER.info("CSV exporté: %s", path)
+
+
 def _resolve_snir_mode(rows: list[dict[str, object]]) -> str | None:
     modes = {str(row.get("snir_mode", "")) for row in rows if row.get("snir_mode")}
     if "snir_on" in modes:
@@ -329,6 +418,7 @@ def plot_fig4(
     rows: list[dict[str, object]],
     profiles: list[QoSProfile],
     author_curves: list[AuthorCurve],
+    export_rows: list[dict[str, object]] | None = None,
 ) -> plt.Figure | None:
     cluster_names = [
         cluster
@@ -363,6 +453,18 @@ def plot_fig4(
                 label=profile.label,
                 color=profile.color,
             )
+            for size, value in zip(sizes, der_values, strict=False):
+                _append_export_row(
+                    export_rows,
+                    figure=4,
+                    metric="der",
+                    profile=profile.key,
+                    cluster=cluster,
+                    source="loraflexsim",
+                    x=float(size),
+                    y=float(value),
+                    label=profile.label,
+                )
             overlay = _group_author_curves(
                 author_curves,
                 figure=4,
@@ -370,6 +472,15 @@ def plot_fig4(
                 cluster=cluster,
             )
             _plot_author_overlay(ax, overlay, profile.label, profile.color)
+            _export_author_curves(
+                export_rows,
+                curves=overlay,
+                figure=4,
+                metric="der",
+                profile=profile.key,
+                cluster=cluster,
+                label_prefix=profile.label,
+            )
         ax.set_title(f"Cluster {cluster}")
         ax.set_xlabel("Nombre de nœuds")
         ax.set_ylabel("DER")
@@ -406,6 +517,7 @@ def plot_fig5(
     rows: list[dict[str, object]],
     profiles: list[QoSProfile],
     author_curves: list[AuthorCurve],
+    export_rows: list[dict[str, object]] | None = None,
 ) -> plt.Figure | None:
     load_key = _resolve_load_key(rows)
     if load_key is None:
@@ -446,6 +558,26 @@ def plot_fig5(
             label=profile.label,
             color=profile.color,
         )
+        for x_value, y_value, label in zip(
+            x_positions,
+            y_values,
+            load_labels,
+            strict=False,
+        ):
+            if math.isnan(y_value):
+                continue
+            _append_export_row(
+                export_rows,
+                figure=5,
+                metric="der",
+                profile=profile.key,
+                cluster="all",
+                source="loraflexsim",
+                x=float(x_value),
+                x_label=label,
+                y=float(y_value),
+                label=profile.label,
+            )
         overlay = _group_author_curves(
             author_curves,
             figure=5,
@@ -453,6 +585,15 @@ def plot_fig5(
             cluster="all",
         )
         _plot_author_overlay(ax, overlay, profile.label, profile.color)
+        _export_author_curves(
+            export_rows,
+            curves=overlay,
+            figure=5,
+            metric="der",
+            profile=profile.key,
+            cluster="all",
+            label_prefix=profile.label,
+        )
 
     ax.set_xticks(x_positions)
     ax.set_xticklabels([label.capitalize() for label in load_labels])
@@ -468,6 +609,7 @@ def plot_fig7(
     rows: list[dict[str, object]],
     profiles: list[QoSProfile],
     author_curves: list[AuthorCurve],
+    export_rows: list[dict[str, object]] | None = None,
 ) -> plt.Figure | None:
     if not rows:
         LOGGER.warning("Aucune donnée disponible pour la Fig.7.")
@@ -524,6 +666,20 @@ def plot_fig7(
             label=profile.label,
             color=profile.color,
         )
+        for size, value in zip(sizes, sacrifices, strict=False):
+            if math.isnan(value):
+                continue
+            _append_export_row(
+                export_rows,
+                figure=7,
+                metric="sacrifice",
+                profile=profile.key,
+                cluster="all",
+                source="loraflexsim",
+                x=float(size),
+                y=float(value),
+                label=profile.label,
+            )
         overlay = _group_author_curves(
             author_curves,
             figure=7,
@@ -531,6 +687,15 @@ def plot_fig7(
             cluster="all",
         )
         _plot_author_overlay(ax, overlay, profile.label, profile.color)
+        _export_author_curves(
+            export_rows,
+            curves=overlay,
+            figure=7,
+            metric="sacrifice",
+            profile=profile.key,
+            cluster="all",
+            label_prefix=profile.label,
+        )
 
     ax.set_xlabel("Nombre de nœuds")
     ax.set_ylabel("Sacrifice de trafic (ratio)")
@@ -545,6 +710,7 @@ def plot_fig8(
     rows: list[dict[str, object]],
     profiles: list[QoSProfile],
     author_curves: list[AuthorCurve],
+    export_rows: list[dict[str, object]] | None = None,
 ) -> plt.Figure | None:
     if not rows:
         LOGGER.warning("Aucune donnée disponible pour la Fig.8.")
@@ -584,6 +750,18 @@ def plot_fig8(
                 label=profile.label,
                 color=profile.color,
             )
+            for size, value in zip(sizes, values, strict=False):
+                _append_export_row(
+                    export_rows,
+                    figure=8,
+                    metric="throughput",
+                    profile=profile.key,
+                    cluster=cluster,
+                    source="loraflexsim",
+                    x=float(size),
+                    y=float(value),
+                    label=profile.label,
+                )
             overlay = _group_author_curves(
                 author_curves,
                 figure=8,
@@ -591,6 +769,15 @@ def plot_fig8(
                 cluster=cluster,
             )
             _plot_author_overlay(ax, overlay, profile.label, profile.color)
+            _export_author_curves(
+                export_rows,
+                curves=overlay,
+                figure=8,
+                metric="throughput",
+                profile=profile.key,
+                cluster=cluster,
+                label_prefix=profile.label,
+            )
         ax.set_title("Global" if cluster == "all" else f"Cluster {cluster}")
         ax.set_xlabel("Nombre de nœuds")
         ax.set_ylabel("Throughput (paquets reçus)")
@@ -660,6 +847,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Dossier de sortie des figures.",
     )
     parser.add_argument(
+        "--export-csv",
+        action="store_true",
+        help="Exporte les points des figures (CSV structurés).",
+    )
+    parser.add_argument(
+        "--csv-output-dir",
+        type=Path,
+        default=None,
+        help="Dossier de sortie pour les CSV (défaut: output-dir).",
+    )
+    parser.add_argument(
         "--formats",
         type=str,
         default=None,
@@ -717,31 +915,60 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
         )
 
     author_curves = _load_author_curves(args.author_curves)
+    export_dir = args.csv_output_dir or args.output_dir
+    export_data: dict[int, list[dict[str, object]]] = {}
 
     if 4 in figures:
-        fig4 = plot_fig4(step1_rows, profiles, author_curves)
+        export_rows = [] if args.export_csv else None
+        fig4 = plot_fig4(step1_rows, profiles, author_curves, export_rows)
         if fig4 is not None:
             save_figure(fig4, args.output_dir, "fig4_der_by_cluster")
             if close_figures:
                 plt.close(fig4)
+        if args.export_csv and export_rows is not None:
+            export_data[4] = export_rows
     if 5 in figures:
-        fig5 = plot_fig5(step2_rows or step1_rows, profiles, author_curves)
+        export_rows = [] if args.export_csv else None
+        fig5 = plot_fig5(
+            step2_rows or step1_rows,
+            profiles,
+            author_curves,
+            export_rows,
+        )
         if fig5 is not None:
             save_figure(fig5, args.output_dir, "fig5_der_by_load")
             if close_figures:
                 plt.close(fig5)
+        if args.export_csv and export_rows is not None:
+            export_data[5] = export_rows
     if 7 in figures:
-        fig7 = plot_fig7(step1_rows, profiles, author_curves)
+        export_rows = [] if args.export_csv else None
+        fig7 = plot_fig7(step1_rows, profiles, author_curves, export_rows)
         if fig7 is not None:
             save_figure(fig7, args.output_dir, "fig7_traffic_sacrifice")
             if close_figures:
                 plt.close(fig7)
+        if args.export_csv and export_rows is not None:
+            export_data[7] = export_rows
     if 8 in figures:
-        fig8 = plot_fig8(step1_rows, profiles, author_curves)
+        export_rows = [] if args.export_csv else None
+        fig8 = plot_fig8(step1_rows, profiles, author_curves, export_rows)
         if fig8 is not None:
             save_figure(fig8, args.output_dir, "fig8_throughput_clusters")
             if close_figures:
                 plt.close(fig8)
+        if args.export_csv and export_rows is not None:
+            export_data[8] = export_rows
+
+    if args.export_csv:
+        stems = {
+            4: "fig4_der_by_cluster",
+            5: "fig5_der_by_load",
+            7: "fig7_traffic_sacrifice",
+            8: "fig8_throughput_clusters",
+        }
+        for figure, rows in export_data.items():
+            _write_plot_csv(export_dir, stems[figure], rows)
 
 
 if __name__ == "__main__":

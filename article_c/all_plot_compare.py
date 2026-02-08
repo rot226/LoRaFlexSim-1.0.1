@@ -43,6 +43,15 @@ def _collect_outputs(output_dir: Path, formats: list[str]) -> list[str]:
     return files
 
 
+def _collect_csv_outputs(output_dir: Path) -> list[str]:
+    if not output_dir.exists():
+        return []
+    return [
+        str(path.relative_to(output_dir))
+        for path in sorted(output_dir.rglob("*.csv"))
+    ]
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Lance les scripts de comparaison des plots article C."
@@ -70,6 +79,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default="png,eps",
         help="Formats d'export (ex: png,eps).",
+    )
+    parser.add_argument(
+        "--export-csv",
+        action="store_true",
+        help="Exporte les points CSV pour reproduce_author_results.",
     )
     parser.add_argument(
         "--snir-modes",
@@ -126,11 +140,14 @@ def main(argv: list[str] | None = None) -> None:
     output_author = output_root / "reproduce_author_results"
     output_snir = output_root / "compare_with_snir"
     output_cluster = output_root / "plot_cluster_der"
+    output_csv = output_root / "csv"
 
     output_root.mkdir(parents=True, exist_ok=True)
     output_author.mkdir(parents=True, exist_ok=True)
     output_snir.mkdir(parents=True, exist_ok=True)
     output_cluster.mkdir(parents=True, exist_ok=True)
+    if args.export_csv:
+        output_csv.mkdir(parents=True, exist_ok=True)
 
     reproduce_cmd = [
         sys.executable,
@@ -144,6 +161,8 @@ def main(argv: list[str] | None = None) -> None:
         "--formats",
         ",".join(formats),
     ]
+    if args.export_csv:
+        reproduce_cmd += ["--export-csv", "--csv-output-dir", str(output_csv)]
     compare_cmd = [
         sys.executable,
         str(SCRIPT_DIR / "compare_with_snir.py"),
@@ -195,6 +214,7 @@ def main(argv: list[str] | None = None) -> None:
             "reproduce_author_results": _collect_outputs(output_author, formats),
             "compare_with_snir": _collect_outputs(output_snir, formats),
             "plot_cluster_der": _collect_outputs(output_cluster, formats),
+            "csv": _collect_csv_outputs(output_csv) if args.export_csv else [],
         },
     }
     summary["all_files"] = sorted(
