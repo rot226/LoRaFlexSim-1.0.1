@@ -144,6 +144,7 @@ class LegendPlacement:
     legend: Legend | None
     legend_loc: str
     legend_rows: int
+    legend_inside_loc: str | None = None
 
 
 def apply_plot_style() -> None:
@@ -723,11 +724,18 @@ def _apply_right_legend_gridspec(
     return legend_ax
 
 
-def _legend_overlap_area(
-    legend_bbox: object,
+def _evaluate_legend_overlap(
+    fig: plt.Figure,
+    legend: Legend,
     artists: Iterable[object],
-    renderer: object,
-) -> float:
+) -> tuple[float, float]:
+    """Évalue le chevauchement entre la légende et les artistes."""
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    legend_bbox = legend.get_window_extent(renderer=renderer)
+    legend_area = float(legend_bbox.width) * float(legend_bbox.height)
+    if legend_area <= 0.0:
+        return math.inf, math.inf
     total_area = 0.0
     for artist in artists:
         try:
@@ -743,7 +751,7 @@ def _legend_overlap_area(
         if intersection is None:
             continue
         total_area += float(intersection.width) * float(intersection.height)
-    return total_area
+    return total_area / legend_area, total_area
 
 
 def _legend_overlap_score(
@@ -751,10 +759,8 @@ def _legend_overlap_score(
     legend: Legend,
     artists: Iterable[object],
 ) -> float:
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    legend_bbox = legend.get_window_extent(renderer=renderer)
-    return _legend_overlap_area(legend_bbox, artists, renderer)
+    _, overlap_area = _evaluate_legend_overlap(fig, legend, artists)
+    return overlap_area
 
 
 def _legend_overlap_ratio(
@@ -762,14 +768,7 @@ def _legend_overlap_ratio(
     legend: Legend,
     artists: Iterable[object],
 ) -> tuple[float, float]:
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    legend_bbox = legend.get_window_extent(renderer=renderer)
-    legend_area = float(legend_bbox.width) * float(legend_bbox.height)
-    if legend_area <= 0.0:
-        return math.inf, math.inf
-    overlap_area = _legend_overlap_area(legend_bbox, artists, renderer)
-    return overlap_area / legend_area, overlap_area
+    return _evaluate_legend_overlap(fig, legend, artists)
 
 
 def choose_legend_location(
@@ -902,7 +901,7 @@ def place_adaptive_legend(
     if handles:
         handles, labels = deduplicate_legend_entries(handles, labels)
     if not handles:
-        return LegendPlacement(None, "none", 0)
+        return LegendPlacement(None, "none", 0, None)
 
     label_count = len(labels)
     chosen = choose_legend_location(
@@ -937,7 +936,7 @@ def place_adaptive_legend(
         )
         legend = ax.legend(handles, labels, **legend_style)
         apply_figure_layout(fig, margins=FIGURE_MARGINS)
-        return LegendPlacement(legend, legend_loc, legend_rows)
+        return LegendPlacement(legend, legend_loc, legend_rows, inside_loc)
 
     clear_axis_legends(fig.axes)
     if legend_loc == "right":
@@ -976,7 +975,12 @@ def place_adaptive_legend(
         legend_rows=legend_rows,
         legend_loc=legend_loc if not moved_to_axis else None,
     )
-    return LegendPlacement(legend, final_loc, legend_rows)
+    return LegendPlacement(
+        legend,
+        final_loc,
+        legend_rows,
+        inside_loc if final_loc == "inside" else None,
+    )
 
 
 def create_right_legend_layout(
