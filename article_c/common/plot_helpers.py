@@ -17,6 +17,7 @@ from typing import Callable, Iterable
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.legend import Legend
+from matplotlib.transforms import BboxBase
 
 from article_c.common.plotting_style import (
     FIGURE_MARGINS,
@@ -754,8 +755,8 @@ def _evaluate_legend_overlap(
         if artist_bbox is None:
             continue
         try:
-            intersection = legend_bbox.intersection(artist_bbox)
-        except AttributeError:
+            intersection = BboxBase.intersection(legend_bbox, artist_bbox)
+        except (AttributeError, TypeError):
             continue
         if intersection is None:
             continue
