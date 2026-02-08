@@ -850,6 +850,10 @@ def choose_legend_location(
 
     artists = _collect_overlap_artists(fig)
     preferred = _normalize_legend_loc(preferred_loc or "")
+    if preferred == "right":
+        for legend_loc, legend_ncol, legend_rows in candidates:
+            if legend_loc == "right":
+                return (legend_loc, legend_ncol, legend_rows, None)
     preferred_rank = {loc: idx for idx, loc in enumerate(["right", "above", "inside"])}
     if preferred in preferred_rank:
         preferred_rank[preferred] = -1
@@ -934,7 +938,7 @@ def place_adaptive_legend(
     fig: plt.Figure,
     ax: plt.Axes,
     *,
-    preferred_loc: str | None = None,
+    preferred_loc: str | None = "right",
     handles: list[Line2D] | None = None,
     labels: list[str] | None = None,
     use_fallback: bool = True,
