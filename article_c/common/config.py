@@ -121,15 +121,31 @@ class AppConfig:
 DEFAULT_CONFIG = AppConfig()
 
 STEP2_SAFE_CONFIG = Step2Config(
-    traffic_coeff_clamp_min=0.5,
+    capture_probability=0.25,
+    traffic_coeff_clamp_min=0.6,
     traffic_coeff_clamp_max=2.2,
     traffic_coeff_clamp_enabled=True,
     network_load_min=0.8,
-    network_load_max=1.6,
-    collision_size_min=0.8,
-    collision_size_under_max=1.2,
-    collision_size_over_max=1.6,
+    network_load_max=1.4,
+    collision_size_min=0.85,
+    collision_size_under_max=1.1,
+    collision_size_over_max=1.4,
     reward_floor=0.05,
     max_penalty_ratio=0.5,
     shadowing_sigma_db=8.0,
+)
+
+STEP2_SUPER_SAFE_CONFIG = Step2Config(
+    capture_probability=0.3,
+    traffic_coeff_clamp_min=0.7,
+    traffic_coeff_clamp_max=2.0,
+    traffic_coeff_clamp_enabled=True,
+    network_load_min=0.9,
+    network_load_max=1.2,
+    collision_size_min=0.9,
+    collision_size_under_max=1.0,
+    collision_size_over_max=1.2,
+    reward_floor=0.06,
+    max_penalty_ratio=0.4,
+    shadowing_sigma_db=9.0,
 )

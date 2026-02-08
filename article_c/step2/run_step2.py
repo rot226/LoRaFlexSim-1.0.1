@@ -11,7 +11,11 @@ from pathlib import Path
 from statistics import median
 from typing import Sequence
 
-from article_c.common.config import DEFAULT_CONFIG, STEP2_SAFE_CONFIG
+from article_c.common.config import (
+    DEFAULT_CONFIG,
+    STEP2_SAFE_CONFIG,
+    STEP2_SUPER_SAFE_CONFIG,
+)
 from article_c.common.csv_io import write_rows, write_simulation_results
 from article_c.common.plot_helpers import (
     place_adaptive_legend,
@@ -39,6 +43,7 @@ from plot_defaults import resolve_ieee_figsize
 
 logger = logging.getLogger(__name__)
 SAFE_PROFILE_SUCCESS_THRESHOLD = 0.2
+SUPER_SAFE_PROFILE_SUCCESS_THRESHOLD = 0.05
 
 
 def _log_default_profile_if_needed(args: object) -> None:
@@ -152,6 +157,7 @@ def _apply_safe_profile_with_log(args: object, reason: str) -> None:
         setattr(args, name, value)
 
     _set_value("safe_profile", True)
+    _set_value("capture_probability", STEP2_SAFE_CONFIG.capture_probability)
     _set_value("traffic_coeff_clamp_enabled", STEP2_SAFE_CONFIG.traffic_coeff_clamp_enabled)
     _set_value("traffic_coeff_clamp_min", STEP2_SAFE_CONFIG.traffic_coeff_clamp_min)
     _set_value("traffic_coeff_clamp_max", STEP2_SAFE_CONFIG.traffic_coeff_clamp_max)
@@ -186,6 +192,7 @@ def _build_safe_profile_config(
         updated[name] = value
 
     _set_value("safe_profile", True)
+    _set_value("capture_probability", STEP2_SAFE_CONFIG.capture_probability)
     _set_value("traffic_coeff_clamp_enabled", STEP2_SAFE_CONFIG.traffic_coeff_clamp_enabled)
     _set_value("traffic_coeff_clamp_min", STEP2_SAFE_CONFIG.traffic_coeff_clamp_min)
     _set_value("traffic_coeff_clamp_max", STEP2_SAFE_CONFIG.traffic_coeff_clamp_max)
@@ -197,6 +204,39 @@ def _build_safe_profile_config(
     _set_value("reward_floor", STEP2_SAFE_CONFIG.reward_floor)
     _set_value("max_penalty_ratio", STEP2_SAFE_CONFIG.max_penalty_ratio)
     _set_value("shadowing_sigma_db", STEP2_SAFE_CONFIG.shadowing_sigma_db)
+    return updated, changes
+
+
+def _build_super_safe_profile_config(
+    config: dict[str, object]
+) -> tuple[dict[str, object], list[tuple[str, object, object]]]:
+    updated = dict(config)
+    changes: list[tuple[str, object, object]] = []
+
+    def _set_value(name: str, value: object) -> None:
+        previous = updated.get(name)
+        if previous != value:
+            changes.append((name, previous, value))
+        updated[name] = value
+
+    _set_value("safe_profile", True)
+    _set_value("capture_probability", STEP2_SUPER_SAFE_CONFIG.capture_probability)
+    _set_value(
+        "traffic_coeff_clamp_enabled",
+        STEP2_SUPER_SAFE_CONFIG.traffic_coeff_clamp_enabled,
+    )
+    _set_value("traffic_coeff_clamp_min", STEP2_SUPER_SAFE_CONFIG.traffic_coeff_clamp_min)
+    _set_value("traffic_coeff_clamp_max", STEP2_SUPER_SAFE_CONFIG.traffic_coeff_clamp_max)
+    _set_value("network_load_min", STEP2_SUPER_SAFE_CONFIG.network_load_min)
+    _set_value("network_load_max", STEP2_SUPER_SAFE_CONFIG.network_load_max)
+    _set_value("collision_size_min", STEP2_SUPER_SAFE_CONFIG.collision_size_min)
+    _set_value(
+        "collision_size_under_max", STEP2_SUPER_SAFE_CONFIG.collision_size_under_max
+    )
+    _set_value("collision_size_over_max", STEP2_SUPER_SAFE_CONFIG.collision_size_over_max)
+    _set_value("reward_floor", STEP2_SUPER_SAFE_CONFIG.reward_floor)
+    _set_value("max_penalty_ratio", STEP2_SUPER_SAFE_CONFIG.max_penalty_ratio)
+    _set_value("shadowing_sigma_db", STEP2_SUPER_SAFE_CONFIG.shadowing_sigma_db)
     return updated, changes
 
 
@@ -212,10 +252,23 @@ def _log_safe_profile_switch(
         print(f"- {name}: {previous} -> {value}")
 
 
+def _log_super_safe_profile_switch(
+    density: int, reason: str, changes: list[tuple[str, object, object]]
+) -> None:
+    print(f"Bascule profil super sécurisé pour la taille {density} ({reason}).")
+    if not changes:
+        print("Aucun paramètre modifié pour la relance super sécurisée.")
+        return
+    print("Paramètres appliqués pour la relance super sécurisée:")
+    for name, previous, value in sorted(changes):
+        print(f"- {name}: {previous} -> {value}")
+
+
 def _update_safe_profile_config(config: dict[str, object], args: object) -> None:
     config.update(
         {
             "safe_profile": bool(getattr(args, "safe_profile", False)),
+            "capture_probability": getattr(args, "capture_probability", None),
             "traffic_coeff_clamp_enabled": args.traffic_coeff_clamp_enabled,
             "traffic_coeff_clamp_min": args.traffic_coeff_clamp_min,
             "traffic_coeff_clamp_max": args.traffic_coeff_clamp_max,
@@ -973,6 +1026,14 @@ def _needs_safe_profile_rerun(
     return success_mean < threshold, success_mean
 
 
+def _needs_super_safe_profile_rerun(
+    diagnostics: dict[str, float],
+    threshold: float = SUPER_SAFE_PROFILE_SUCCESS_THRESHOLD,
+) -> tuple[bool, float]:
+    success_mean = float(diagnostics.get("success_mean", 0.0))
+    return success_mean < threshold, success_mean
+
+
 def _replace_rows_for_size(
     rows: list[dict[str, object]],
     size: int,
@@ -1400,6 +1461,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             diagnostics_for_threshold = dict(diagnostics)
             low_success = False
             rerun_safe = False
+            rerun_super_safe = False
             if not config.get("safe_profile", False):
                 should_rerun, success_mean = _needs_safe_profile_rerun(diagnostics)
                 if should_rerun:
@@ -1421,6 +1483,32 @@ def main(argv: Sequence[str] | None = None) -> None:
                     result = _simulate_density(safe_task)
                     diagnostics = dict(result["diagnostics"])
                     rerun_safe = True
+                    should_super_safe, super_success_mean = (
+                        _needs_super_safe_profile_rerun(diagnostics)
+                    )
+                    if should_super_safe:
+                        super_config, super_changes = _build_super_safe_profile_config(
+                            safe_config
+                        )
+                        super_reason = (
+                            f"success_mean={super_success_mean:.4f} "
+                            f"< seuil {SUPER_SAFE_PROFILE_SUCCESS_THRESHOLD:.2f}"
+                        )
+                        _log_super_safe_profile_switch(
+                            int(density), super_reason, super_changes
+                        )
+                        super_task = (
+                            density,
+                            density_idx,
+                            replications,
+                            super_config,
+                            base_results_dir,
+                            timestamp_dir,
+                            flat_output,
+                        )
+                        result = _simulate_density(super_task)
+                        diagnostics = dict(result["diagnostics"])
+                        rerun_super_safe = True
             if not low_success_detected:
                 low_success = _detect_low_success_first_size(
                     density, diagnostics_for_threshold
@@ -1440,6 +1528,32 @@ def main(argv: Sequence[str] | None = None) -> None:
                             result = _simulate_density(task)
                             diagnostics = dict(result["diagnostics"])
                             rerun_safe = True
+                            should_super_safe, super_success_mean = (
+                                _needs_super_safe_profile_rerun(diagnostics)
+                            )
+                            if should_super_safe:
+                                super_config, super_changes = (
+                                    _build_super_safe_profile_config(config)
+                                )
+                                super_reason = (
+                                    f"success_mean={super_success_mean:.4f} "
+                                    f"< seuil {SUPER_SAFE_PROFILE_SUCCESS_THRESHOLD:.2f}"
+                                )
+                                _log_super_safe_profile_switch(
+                                    int(density), super_reason, super_changes
+                                )
+                                super_task = (
+                                    density,
+                                    density_idx,
+                                    replications,
+                                    super_config,
+                                    base_results_dir,
+                                    timestamp_dir,
+                                    flat_output,
+                                )
+                                result = _simulate_density(super_task)
+                                diagnostics = dict(result["diagnostics"])
+                                rerun_super_safe = True
                             safe_profile_sizes.add(int(result["density"]))
                     else:
                         print(
@@ -1451,7 +1565,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             if int(result["density"]) not in simulated_sizes:
                 simulated_sizes.append(int(result["density"]))
             total_rows += int(result["row_count"])
-            if rerun_safe:
+            if rerun_safe or rerun_super_safe:
                 selection_rows[:] = _replace_rows_for_size(
                     selection_rows, int(result["density"]), result["selection_rows"]
                 )
@@ -1561,24 +1675,52 @@ def main(argv: Sequence[str] | None = None) -> None:
                         flat_output,
                     )
                     safe_result = _simulate_density(safe_task)
-                    total_rows += int(safe_result["row_count"])
+                    rerun_super_safe = False
+                    super_result = None
+                    should_super_safe, super_success_mean = _needs_super_safe_profile_rerun(
+                        safe_result["diagnostics"]
+                    )
+                    if should_super_safe:
+                        super_config, super_changes = _build_super_safe_profile_config(
+                            safe_config
+                        )
+                        super_reason = (
+                            f"success_mean={super_success_mean:.4f} "
+                            f"< seuil {SUPER_SAFE_PROFILE_SUCCESS_THRESHOLD:.2f}"
+                        )
+                        _log_super_safe_profile_switch(
+                            int(density), super_reason, super_changes
+                        )
+                        super_task = (
+                            density,
+                            density_idx,
+                            replications,
+                            super_config,
+                            base_results_dir,
+                            timestamp_dir,
+                            flat_output,
+                        )
+                        super_result = _simulate_density(super_task)
+                        rerun_super_safe = True
+                    final_result = super_result if rerun_super_safe else safe_result
+                    total_rows += int(final_result["row_count"])
                     selection_rows[:] = _replace_rows_for_size(
                         selection_rows,
-                        int(safe_result["density"]),
-                        safe_result["selection_rows"],
+                        int(final_result["density"]),
+                        final_result["selection_rows"],
                     )
                     learning_curve_rows[:] = _replace_rows_for_size(
                         learning_curve_rows,
-                        int(safe_result["density"]),
-                        safe_result["learning_curve_rows"],
+                        int(final_result["density"]),
+                        final_result["learning_curve_rows"],
                     )
-                    size_diagnostics[int(safe_result["density"])] = dict(
-                        safe_result["diagnostics"]
+                    size_diagnostics[int(final_result["density"])] = dict(
+                        final_result["diagnostics"]
                     )
-                    size_post_stats[int(safe_result["density"])] = dict(
-                        safe_result["post_stats"]
+                    size_post_stats[int(final_result["density"])] = dict(
+                        final_result["post_stats"]
                     )
-                    safe_profile_sizes.add(int(safe_result["density"]))
+                    safe_profile_sizes.add(int(final_result["density"]))
 
     print(f"Rows written: {total_rows}")
     if flat_output and simulated_sizes:
