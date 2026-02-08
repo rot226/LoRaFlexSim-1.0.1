@@ -716,12 +716,25 @@ def _apply_right_legend_gridspec(
     legend_ax: plt.Axes | None,
     width_ratio: float,
 ) -> plt.Axes:
-    width_ratio = min(max(width_ratio, 0.18), 0.55)
+    subplotpars = fig.subplotpars
+    left = getattr(subplotpars, "left", 0.1)
+    right = getattr(subplotpars, "right", 0.98)
+    top = getattr(subplotpars, "top", 0.9)
+    bottom = getattr(subplotpars, "bottom", 0.1)
+    reserved_ratio = 0.0
+    if right < 1.0 and left < 1.0:
+        available_width = max(1e-6, 1.0 - left)
+        reserved_ratio = (1.0 - right) / available_width
+    width_ratio = min(max(max(width_ratio, reserved_ratio), 0.18), 0.55)
     gridspec = fig.add_gridspec(
         1,
         2,
         width_ratios=[1.0 - width_ratio, width_ratio],
         wspace=0.02,
+        left=left,
+        right=1.0,
+        top=top,
+        bottom=bottom,
     )
     left_spec = gridspec[0].subgridspec(1, max(1, len(axes)))
     for idx, ax in enumerate(axes):
@@ -976,9 +989,11 @@ def place_adaptive_legend(
 
     clear_axis_legends(fig.axes)
     if legend_loc == "right":
+        right_margin = FIGURE_MARGINS.get("right", 0.98)
+        anchor_x = min(0.98, max(right_margin + 0.02, 0.0))
         legend_style = {
             "loc": "center left",
-            "bbox_to_anchor": (1.02, 0.5),
+            "bbox_to_anchor": (anchor_x, 0.5),
             "ncol": 1,
             "frameon": False,
         }
