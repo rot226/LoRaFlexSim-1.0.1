@@ -653,6 +653,7 @@ def _validate_plot_data(
     module_path: str,
     csv_path: Path,
     requirements: PlotRequirements,
+    expected_sizes: list[int] | None,
     cached_data: dict[str, tuple[list[str], list[dict[str, str]]]],
 ) -> tuple[bool, str]:
     for extra_name in requirements.extra_csv_names:
@@ -674,9 +675,12 @@ def _validate_plot_data(
         )
         return False, "CSV vide"
     sizes = _extract_network_sizes(csv_path)
-    min_network_sizes = MIN_NETWORK_SIZES_PER_PLOT.get(
-        module_path, requirements.min_network_sizes
-    )
+    if module_path in MIN_NETWORK_SIZES_PER_PLOT:
+        min_network_sizes = MIN_NETWORK_SIZES_PER_PLOT[module_path]
+    elif step == "step2":
+        min_network_sizes = 1
+    else:
+        min_network_sizes = requirements.min_network_sizes
     if len(sizes) < min_network_sizes:
         sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
         print(
@@ -691,6 +695,16 @@ def _validate_plot_data(
         )
         print(f"CSV path: {csv_path}")
         return False, "tailles de réseau insuffisantes"
+    if expected_sizes:
+        expected_set = {int(size) for size in expected_sizes}
+        if sizes and sizes < expected_set:
+            expected_label = ", ".join(str(size) for size in expected_sizes)
+            sizes_label = ", ".join(str(size) for size in sorted(sizes))
+            print(
+                "AVERTISSEMENT: "
+                f"{module_path} est généré avec un jeu réduit "
+                f"({sizes_label}) au lieu de {expected_label}."
+            )
     if len(sizes) == 1 and min_network_sizes == 1:
         sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
         print(
@@ -1014,11 +1028,17 @@ def main(argv: list[str] | None = None) -> None:
                     )
                     continue
                 rl10_network_sizes = intersection
+            expected_sizes = (
+                args.network_sizes
+                or step_network_sizes.get(step)
+                or network_sizes
+            )
             is_valid, reason = _validate_plot_data(
                 step=step,
                 module_path=module_path,
                 csv_path=csv_path,
                 requirements=requirements,
+                expected_sizes=expected_sizes,
                 cached_data=csv_cache,
             )
             if not is_valid:
@@ -1047,6 +1067,17 @@ def main(argv: list[str] | None = None) -> None:
                 )
                 print(f"Detected sizes: {sizes_label}")
                 print(f"Plotting Step2: {figure}")
+                if expected_sizes and step2_sizes:
+                    expected_set = {int(size) for size in expected_sizes}
+                    step2_set = {int(size) for size in step2_sizes}
+                    if step2_set < expected_set:
+                        expected_label = ", ".join(str(size) for size in expected_sizes)
+                        reduced_label = ", ".join(str(size) for size in step2_sizes)
+                        print(
+                            "WARNING: "
+                            f"{module_path} utilise un jeu réduit "
+                            f"({reduced_label}) au lieu de {expected_label}."
+                        )
             if step == "step2":
                 step2_network_sizes = (
                     rl10_network_sizes
