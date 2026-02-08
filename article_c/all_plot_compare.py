@@ -181,7 +181,8 @@ def main(argv: list[str] | None = None) -> None:
     ]
     plot_cluster_cmd = [
         sys.executable,
-        str(SCRIPT_DIR / "plot_cluster_der.py"),
+        "-m",
+        "article_c.plot_cluster_der",
         "--output-dir",
         str(output_cluster),
         "--formats",
