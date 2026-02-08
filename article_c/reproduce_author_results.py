@@ -30,6 +30,7 @@ from article_c.common.plot_helpers import (
     ALGO_COLORS,
     MetricStatus,
     add_global_legend,
+    apply_suptitle,
     apply_figure_layout,
     apply_plot_style,
     collect_legend_entries,
@@ -410,8 +411,7 @@ def _render_legend(fig: plt.Figure, axes: Iterable[plt.Axes]) -> None:
 
 
 def _finalize_figure(fig: plt.Figure, title: str, *, show_header: bool = True) -> None:
-    if show_header:
-        fig.suptitle(title, y=SUPTITLE_Y)
+    apply_suptitle(fig, title, enable_suptitle=show_header, y=SUPTITLE_Y)
     apply_figure_layout(fig, margins=legend_margins("above"))
 
 

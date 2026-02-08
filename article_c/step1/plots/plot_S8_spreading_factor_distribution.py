@@ -199,7 +199,11 @@ def _aggregate_distributions(
     return aggregated
 
 
-def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
+def _plot_distribution(
+    rows: list[dict[str, object]],
+    *,
+    enable_suptitle: bool = True,
+) -> plt.Figure:
     rows = [
         row
         for row in rows
@@ -273,6 +277,7 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
             axes,
             title=None,
             legend_loc="right",
+            enable_suptitle=enable_suptitle,
         )
         return fig
 
@@ -313,11 +318,16 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
         axes,
         title=None,
         legend_loc="right",
+        enable_suptitle=enable_suptitle,
     )
     return fig
 
 
-def main(argv: list[str] | None = None, allow_sample: bool = False) -> None:
+def main(
+    argv: list[str] | None = None,
+    allow_sample: bool = False,
+    enable_suptitle: bool = True,
+) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -325,7 +335,13 @@ def main(argv: list[str] | None = None, allow_sample: bool = False) -> None:
         nargs="+",
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
     )
+    parser.add_argument(
+        "--no-suptitle",
+        action="store_true",
+        help="Désactive le titre global (suptitle) des figures.",
+    )
     args = parser.parse_args(argv)
+    enable_suptitle = enable_suptitle and not args.no_suptitle
     apply_plot_style()
     logger = logging.getLogger(__name__)
     if allow_sample:
@@ -392,7 +408,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = False) -> None:
     network_sizes = sorted(df["network_size"].unique())
     warn_if_insufficient_network_sizes(network_sizes)
 
-    fig = _plot_distribution(rows)
+    fig = _plot_distribution(rows, enable_suptitle=enable_suptitle)
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_S8", use_tight=False)
     assert_legend_present(fig, "plot_S8")

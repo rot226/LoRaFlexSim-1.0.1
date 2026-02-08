@@ -68,7 +68,12 @@ def _warn_if_low_algo_variance(
         )
 
 
-def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
+def _plot_metric(
+    rows: list[dict[str, object]],
+    metric_key: str,
+    *,
+    enable_suptitle: bool = True,
+) -> plt.Figure:
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
     series_count = (
@@ -88,6 +93,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             ax,
             title=None,
             legend_loc="right",
+            enable_suptitle=enable_suptitle,
         )
         return fig
     _warn_if_low_algo_variance(rows, metric_key)
@@ -101,11 +107,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax,
         title=None,
         legend_loc="right",
+        enable_suptitle=enable_suptitle,
     )
     return fig
 
 
-def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
+def main(
+    argv: list[str] | None = None,
+    allow_sample: bool = True,
+    enable_suptitle: bool = True,
+) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -113,7 +124,13 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
         nargs="+",
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
     )
+    parser.add_argument(
+        "--no-suptitle",
+        action="store_true",
+        help="Désactive le titre global (suptitle) des figures.",
+    )
     args = parser.parse_args(argv)
+    enable_suptitle = enable_suptitle and not args.no_suptitle
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "aggregated_results.csv"
@@ -125,7 +142,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     rows, _ = filter_rows_by_network_sizes(rows, args.network_sizes)
     rows = filter_mixra_opt_fallback(rows)
 
-    fig = _plot_metric(rows, "received_mean")
+    fig = _plot_metric(rows, "received_mean", enable_suptitle=enable_suptitle)
     output_dir = step_dir / "plots" / "output"
     save_figure(fig, output_dir, "plot_S3", use_tight=False)
     assert_legend_present(fig, "plot_S3")

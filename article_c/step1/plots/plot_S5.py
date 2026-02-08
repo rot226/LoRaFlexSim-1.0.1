@@ -375,6 +375,8 @@ def _plot_pdr_distribution(
 def _plot_pdr_distributions(
     values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]],
     network_sizes: list[int],
+    *,
+    enable_suptitle: bool = True,
 ) -> list[plt.Figure]:
     legend_handles = [
         Patch(facecolor="#4c78a8", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_on"]),
@@ -409,6 +411,7 @@ def _plot_pdr_distributions(
             legend_loc="right",
             legend_handles=legend_handles,
             legend_labels=legend_labels,
+            enable_suptitle=enable_suptitle,
         )
         layout_margins = legend_margins(final_loc, legend_rows=final_rows)
         legend_bbox = None
@@ -466,6 +469,7 @@ def _plot_pdr_distributions(
             legend_labels=legend_labels,
             legend_rows=legend_rows,
             title_suffix=title_suffix,
+            enable_suptitle=enable_suptitle,
         )
         figures.append(fig)
     return figures
@@ -479,6 +483,7 @@ def _plot_pdr_distribution_page(
     legend_labels: list[str],
     legend_rows: int,
     title_suffix: str,
+    enable_suptitle: bool = True,
 ) -> plt.Figure:
     ncols = 2
     nrows = max(1, len(row_specs))
@@ -533,6 +538,7 @@ def _plot_pdr_distribution_page(
         legend_loc="right",
         legend_handles=legend_handles,
         legend_labels=legend_labels,
+        enable_suptitle=enable_suptitle,
     )
     layout_margins = {
         **legend_margins(final_loc, legend_rows=final_rows),
@@ -587,7 +593,11 @@ def _resolve_step1_intermediate_path(base_path: Path) -> Path | None:
     return None
 
 
-def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
+def main(
+    argv: list[str] | None = None,
+    allow_sample: bool = True,
+    enable_suptitle: bool = True,
+) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -595,7 +605,13 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
         nargs="+",
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
     )
+    parser.add_argument(
+        "--no-suptitle",
+        action="store_true",
+        help="Désactive le titre global (suptitle) des figures.",
+    )
     args = parser.parse_args(argv)
+    enable_suptitle = enable_suptitle and not args.no_suptitle
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     raw_results_path = step_dir / "results" / "raw_metrics.csv"
@@ -648,7 +664,11 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
 
     warn_if_insufficient_network_sizes(network_sizes)
 
-    figures = _plot_pdr_distributions(values_by_size, network_sizes)
+    figures = _plot_pdr_distributions(
+        values_by_size,
+        network_sizes,
+        enable_suptitle=enable_suptitle,
+    )
     output_dir = step_dir / "plots" / "output"
     if len(figures) == 1:
         save_figure(figures[0], output_dir, "plot_S5", use_tight=False)

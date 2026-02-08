@@ -131,6 +131,8 @@ def plot_cdf_by_algo(
     rows: list[dict[str, str]],
     metric: str,
     output_dir: Path,
+    *,
+    enable_suptitle: bool = True,
 ) -> None:
     if not rows:
         raise ValueError("Aucune ligne trouvée dans le CSV.")
@@ -175,6 +177,7 @@ def plot_cdf_by_algo(
             [ax],
             title=None,
             legend_loc="right",
+            enable_suptitle=enable_suptitle,
         )
         save_figure(fig, output_dir, "plot_S10")
         assert_legend_present(fig, "plot_S10")
@@ -216,6 +219,7 @@ def plot_cdf_by_algo(
         [ax],
         title=None,
         legend_loc="right",
+        enable_suptitle=enable_suptitle,
     )
 
     save_figure(fig, output_dir, "plot_S10")
@@ -251,11 +255,17 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
     )
+    parser.add_argument(
+        "--no-suptitle",
+        action="store_true",
+        help="Désactive le titre global (suptitle) des figures.",
+    )
     return parser.parse_args()
 
 
-def main() -> None:
+def main(enable_suptitle: bool = True) -> None:
     args = parse_args()
+    enable_suptitle = enable_suptitle and not args.no_suptitle
     apply_plot_style()
     rows = _read_rows(args.input)
     ensure_network_size(rows)
@@ -268,7 +278,12 @@ def main() -> None:
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
     warn_if_insufficient_network_sizes(network_sizes)
-    plot_cdf_by_algo(rows, args.metric, args.output_dir)
+    plot_cdf_by_algo(
+        rows,
+        args.metric,
+        args.output_dir,
+        enable_suptitle=enable_suptitle,
+    )
 
 
 if __name__ == "__main__":
