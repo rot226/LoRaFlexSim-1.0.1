@@ -111,6 +111,24 @@ def apply_output_fonttype() -> None:
     plt.rcParams.update(OUTPUT_FONT_TYPES)
 
 
+def parse_export_formats(value: str | None) -> tuple[str, ...]:
+    """Expose parse_export_formats via plot_helpers (compatibilité)."""
+    from article_c.common.plot_helpers import (
+        parse_export_formats as _parse_export_formats,
+    )
+
+    return _parse_export_formats(value)
+
+
+def set_default_export_formats(formats: Iterable[str]) -> tuple[str, ...]:
+    """Expose set_default_export_formats via plot_helpers (compatibilité)."""
+    from article_c.common.plot_helpers import (
+        set_default_export_formats as _set_default_export_formats,
+    )
+
+    return _set_default_export_formats(formats)
+
+
 def _legend_height_in_figure(legend: Legend) -> float | None:
     fig = legend.figure
     if fig is None or fig.canvas is None:
