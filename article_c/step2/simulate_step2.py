@@ -2068,6 +2068,8 @@ def run_simulation(
             traffic_coeff_clamp_max_value,
         )
     traffic_coeffs = []
+    traffic_coeffs_raw: list[float] = []
+    traffic_coeff_clamp_flags: list[bool] = []
     for node_id in range(n_nodes):
         traffic_value = (
             rng.uniform(traffic_coeff_min_scaled, traffic_coeff_max_scaled)
@@ -2077,13 +2079,36 @@ def run_simulation(
         traffic_value *= (
             traffic_size_factor * _cluster_traffic_factor(node_clusters[node_id], qos_clusters)
         )
+        traffic_coeffs_raw.append(traffic_value)
         if traffic_coeff_clamp_enabled_value:
-            traffic_value = _clamp_range(
-                traffic_value,
-                traffic_coeff_clamp_min_value,
-                traffic_coeff_clamp_max_value,
+            traffic_coeff_clamp_flags.append(
+                traffic_value < traffic_coeff_clamp_min_value
+                or traffic_value > traffic_coeff_clamp_max_value
             )
-        traffic_coeffs.append(traffic_value)
+        else:
+            traffic_coeff_clamp_flags.append(False)
+    if traffic_coeff_clamp_enabled_value:
+        clamped_count = sum(1 for flag in traffic_coeff_clamp_flags if flag)
+        clamp_share = clamped_count / max(len(traffic_coeff_clamp_flags), 1)
+        if clamp_share >= 0.8:
+            logger.warning(
+                "Clamping traffic_coeff ignoré (noeuds_clampes=%s/%s %.1f%%).",
+                clamped_count,
+                len(traffic_coeff_clamp_flags),
+                clamp_share * 100.0,
+            )
+            traffic_coeffs = list(traffic_coeffs_raw)
+        else:
+            traffic_coeffs = [
+                _clamp_range(
+                    traffic_value,
+                    traffic_coeff_clamp_min_value,
+                    traffic_coeff_clamp_max_value,
+                )
+                for traffic_value in traffic_coeffs_raw
+            ]
+    else:
+        traffic_coeffs = list(traffic_coeffs_raw)
     base_rate_multipliers = [rng.uniform(0.7, 1.3) for _ in range(n_nodes)]
 
     sf_values = list(SF_VALUES)
