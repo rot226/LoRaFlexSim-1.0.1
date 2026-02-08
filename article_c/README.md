@@ -56,6 +56,24 @@ python -m article_c.run_all --flat-output
 python -m article_c.make_all_plots
 ```
 
+### Pipeline de comparaison (fig. 4/5/7/8 + SNIR + DER par cluster)
+
+Pour centraliser les sorties des scripts de comparaison (figures 4/5/7/8,
+comparaison SNIR et DER par cluster), utilisez :
+
+```powershell
+python -m article_c.all_plot_compare --output-dir article_c/plots/output/compare_all
+```
+
+Exporter également des **CSV structurés** (points des figures 4/5/7/8) :
+
+```powershell
+python -m article_c.all_plot_compare --export-csv --output-dir article_c/plots/output/compare_all
+```
+
+Les CSV sont écrits dans `article_c/plots/output/compare_all/csv` et peuvent être
+chargés dans Excel/Power BI pour vérification ou post-traitement.
+
 Exécuter toutes les étapes en sautant l'étape 1 :
 
 ```powershell
