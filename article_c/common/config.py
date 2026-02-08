@@ -121,8 +121,8 @@ class AppConfig:
 DEFAULT_CONFIG = AppConfig()
 
 STEP2_SAFE_CONFIG = Step2Config(
-    traffic_coeff_clamp_min=0.7,
-    traffic_coeff_clamp_max=1.3,
+    traffic_coeff_clamp_min=0.5,
+    traffic_coeff_clamp_max=2.2,
     traffic_coeff_clamp_enabled=True,
     network_load_min=0.8,
     network_load_max=1.6,
