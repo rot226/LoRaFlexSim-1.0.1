@@ -409,8 +409,9 @@ def _render_legend(fig: plt.Figure, axes: Iterable[plt.Axes]) -> None:
     )
 
 
-def _finalize_figure(fig: plt.Figure, title: str) -> None:
-    fig.suptitle(title, y=SUPTITLE_Y)
+def _finalize_figure(fig: plt.Figure, title: str, *, show_header: bool = True) -> None:
+    if show_header:
+        fig.suptitle(title, y=SUPTITLE_Y)
     apply_figure_layout(fig, margins=legend_margins("above"))
 
 
@@ -419,6 +420,8 @@ def plot_fig4(
     profiles: list[QoSProfile],
     author_curves: list[AuthorCurve],
     export_rows: list[dict[str, object]] | None = None,
+    *,
+    show_header: bool = True,
 ) -> plt.Figure | None:
     cluster_names = [
         cluster
@@ -434,7 +437,11 @@ def plot_fig4(
         axes = [axes]
     if metric_status is not MetricStatus.OK:
         render_metric_status(fig, axes, metric_status)
-        _finalize_figure(fig, "Fig.4 - DER par cluster vs taille du réseau")
+        _finalize_figure(
+            fig,
+            "Fig.4 - DER par cluster vs taille du réseau",
+            show_header=show_header,
+        )
         return fig
 
     for ax, cluster in zip(axes, cluster_names, strict=False):
@@ -488,7 +495,11 @@ def plot_fig4(
         set_network_size_ticks(ax, sorted({int(row["network_size"]) for row in cluster_rows}))
 
     _render_legend(fig, axes)
-    _finalize_figure(fig, "Fig.4 - DER par cluster vs taille du réseau")
+    _finalize_figure(
+        fig,
+        "Fig.4 - DER par cluster vs taille du réseau",
+        show_header=show_header,
+    )
     return fig
 
 
@@ -518,6 +529,8 @@ def plot_fig5(
     profiles: list[QoSProfile],
     author_curves: list[AuthorCurve],
     export_rows: list[dict[str, object]] | None = None,
+    *,
+    show_header: bool = True,
 ) -> plt.Figure | None:
     load_key = _resolve_load_key(rows)
     if load_key is None:
@@ -527,7 +540,11 @@ def plot_fig5(
     fig, ax = plt.subplots(1, 1)
     if metric_status is not MetricStatus.OK:
         render_metric_status(fig, ax, metric_status)
-        _finalize_figure(fig, "Fig.5 - DER selon la charge")
+        _finalize_figure(
+            fig,
+            "Fig.5 - DER selon la charge",
+            show_header=show_header,
+        )
         return fig
 
     load_labels = [label for label, _ in TRAFFIC_LOAD_LEVELS]
@@ -601,7 +618,7 @@ def plot_fig5(
     ax.set_ylabel("DER")
     ax.set_ylim(0.0, 1.0)
     _render_legend(fig, [ax])
-    _finalize_figure(fig, "Fig.5 - DER selon la charge")
+    _finalize_figure(fig, "Fig.5 - DER selon la charge", show_header=show_header)
     return fig
 
 
@@ -610,6 +627,8 @@ def plot_fig7(
     profiles: list[QoSProfile],
     author_curves: list[AuthorCurve],
     export_rows: list[dict[str, object]] | None = None,
+    *,
+    show_header: bool = True,
 ) -> plt.Figure | None:
     if not rows:
         LOGGER.warning("Aucune donnée disponible pour la Fig.7.")
@@ -618,7 +637,11 @@ def plot_fig7(
     fig, ax = plt.subplots(1, 1)
     if metric_status is not MetricStatus.OK:
         render_metric_status(fig, ax, metric_status)
-        _finalize_figure(fig, "Fig.7 - Sacrifice d'offre de trafic")
+        _finalize_figure(
+            fig,
+            "Fig.7 - Sacrifice d'offre de trafic",
+            show_header=show_header,
+        )
         return fig
 
     sizes = sorted(
@@ -702,7 +725,11 @@ def plot_fig7(
     ax.set_ylim(0.0, 1.0)
     set_network_size_ticks(ax, sizes)
     _render_legend(fig, [ax])
-    _finalize_figure(fig, "Fig.7 - Sacrifice d'offre de trafic")
+    _finalize_figure(
+        fig,
+        "Fig.7 - Sacrifice d'offre de trafic",
+        show_header=show_header,
+    )
     return fig
 
 
@@ -711,6 +738,8 @@ def plot_fig8(
     profiles: list[QoSProfile],
     author_curves: list[AuthorCurve],
     export_rows: list[dict[str, object]] | None = None,
+    *,
+    show_header: bool = True,
 ) -> plt.Figure | None:
     if not rows:
         LOGGER.warning("Aucune donnée disponible pour la Fig.8.")
@@ -731,7 +760,11 @@ def plot_fig8(
         axes = [axes]
     if metric_status is not MetricStatus.OK:
         render_metric_status(fig, axes, metric_status)
-        _finalize_figure(fig, "Fig.8 - Throughput par cluster")
+        _finalize_figure(
+            fig,
+            "Fig.8 - Throughput par cluster",
+            show_header=show_header,
+        )
         return fig
 
     for ax, cluster in zip(axes, clusters, strict=False):
@@ -792,7 +825,11 @@ def plot_fig8(
             set_network_size_ticks(ax, sizes)
 
     _render_legend(fig, axes)
-    _finalize_figure(fig, "Fig.8 - Throughput par cluster")
+    _finalize_figure(
+        fig,
+        "Fig.8 - Throughput par cluster",
+        show_header=show_header,
+    )
     return fig
 
 
@@ -881,6 +918,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=Path("article_c/common/data/author_curves.csv"),
         help="CSV contenant les courbes auteurs.",
     )
+    parser.add_argument(
+        "--no-header",
+        action="store_true",
+        help="Désactive le titre global (suptitle) des figures.",
+    )
     return parser
 
 
@@ -920,7 +962,13 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
 
     if 4 in figures:
         export_rows = [] if args.export_csv else None
-        fig4 = plot_fig4(step1_rows, profiles, author_curves, export_rows)
+        fig4 = plot_fig4(
+            step1_rows,
+            profiles,
+            author_curves,
+            export_rows,
+            show_header=not args.no_header,
+        )
         if fig4 is not None:
             save_figure(fig4, args.output_dir, "fig4_der_by_cluster")
             if close_figures:
@@ -934,6 +982,7 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
             profiles,
             author_curves,
             export_rows,
+            show_header=not args.no_header,
         )
         if fig5 is not None:
             save_figure(fig5, args.output_dir, "fig5_der_by_load")
@@ -943,7 +992,13 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
             export_data[5] = export_rows
     if 7 in figures:
         export_rows = [] if args.export_csv else None
-        fig7 = plot_fig7(step1_rows, profiles, author_curves, export_rows)
+        fig7 = plot_fig7(
+            step1_rows,
+            profiles,
+            author_curves,
+            export_rows,
+            show_header=not args.no_header,
+        )
         if fig7 is not None:
             save_figure(fig7, args.output_dir, "fig7_traffic_sacrifice")
             if close_figures:
@@ -952,7 +1007,13 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
             export_data[7] = export_rows
     if 8 in figures:
         export_rows = [] if args.export_csv else None
-        fig8 = plot_fig8(step1_rows, profiles, author_curves, export_rows)
+        fig8 = plot_fig8(
+            step1_rows,
+            profiles,
+            author_curves,
+            export_rows,
+            show_header=not args.no_header,
+        )
         if fig8 is not None:
             save_figure(fig8, args.output_dir, "fig8_throughput_clusters")
             if close_figures:
