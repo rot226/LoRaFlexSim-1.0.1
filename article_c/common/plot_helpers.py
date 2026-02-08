@@ -367,6 +367,21 @@ def postprocess_legend(
     """Ajuste la légende et bascule dans l'axe si nécessaire."""
     legend_cols = legend_ncols(legend, legend_ncols_default)
     legend_rows = max(1, math.ceil(len(labels) / max(1, legend_cols)))
+    if _legend_needs_reflow(legend):
+        font_size: float | None = None
+        texts = legend.get_texts()
+        if texts:
+            font_size = max(LEGEND_MIN_FONTSIZE, float(texts[0].get_fontsize()))
+        legend.remove()
+        fallback_legend = _legend_fallback_in_axis(
+            axes=axes or fig.axes,
+            handles=handles,
+            labels=labels,
+            fontsize=font_size,
+        )
+        if fallback_legend is None:
+            return legend, legend_rows, False
+        return fallback_legend, 1, True
     if adjust_legend_to_fit(legend):
         legend_cols = legend_ncols(legend, legend_ncols_default)
         legend_rows = max(1, math.ceil(len(labels) / max(1, legend_cols)))
