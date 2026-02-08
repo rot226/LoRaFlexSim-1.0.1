@@ -204,7 +204,7 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--formats",
-        help="Formats d'export (ex: png,pdf,eps).",
+        help="Formats d'export (ex: png,eps).",
     )
     parser.add_argument(
         "--output-dir",

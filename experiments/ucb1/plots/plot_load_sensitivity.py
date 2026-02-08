@@ -18,9 +18,9 @@ from typing import Dict, Iterable, List, Mapping, MutableMapping
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from article_c.common.plot_helpers import apply_figure_layout
+from article_c.common.plot_helpers import apply_figure_layout, save_figure
 from plot_defaults import resolve_ieee_figsize
-from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups
+from experiments.ucb1.plots.plot_style import apply_plot_style, filter_top_groups
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_STEP1 = ROOT_DIR / "results" / "step1" / "summary.csv"
@@ -231,14 +231,13 @@ def _plot(df: pd.DataFrame, output: Path) -> None:
     ax.legend()
     ax.set_title("Sensibilité à la charge")
 
-    output.parent.mkdir(parents=True, exist_ok=True)
     apply_figure_layout(fig, tight_layout=True)
-    fig.savefig(output, dpi=300)
-    print(f"Figure enregistrée dans {output}")
+    save_figure(fig, output.parent, output.stem)
+    print(f"Figure enregistrée dans {output.parent / f'{output.stem}.png'}")
 
 
 def main() -> None:
-    apply_ieee_style()
+    apply_plot_style()
     args = parse_args()
     summary_path = _resolve_summary_path(args.step1_csv)
     baseline_summary = _load_mixra_opt_baseline_from_summary(summary_path)

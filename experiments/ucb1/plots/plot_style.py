@@ -27,6 +27,11 @@ def apply_ieee_style() -> None:
     )
 
 
+def apply_plot_style() -> None:
+    """Alias pour appliquer un style IEEE homogène."""
+    apply_ieee_style()
+
+
 def top_groups(df: pd.DataFrame, group_cols: Iterable[str], max_groups: int = 3) -> list[tuple]:
     """Retourne les groupes les plus fréquents (max 3) pour limiter le nombre de courbes."""
     if df.empty:

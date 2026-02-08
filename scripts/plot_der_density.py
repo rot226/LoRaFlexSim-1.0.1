@@ -153,13 +153,16 @@ def plot_der_density(
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     pdr_target: float = 0.9,
     *,
-    formats: Sequence[str] = ("png", "pdf"),
+    formats: Sequence[str] = ("png", "eps"),
     double_column: bool = False,
     ieee_style: bool = False,
     network_sizes: Sequence[int] | None = None,
 ) -> List[Path]:
-    formats = [ext.lower().lstrip(".") for ext in formats if ext]
-    if not formats:
+    normalized_formats = [ext.lower().lstrip(".") for ext in formats if ext]
+    ordered_formats = ["png", "eps"] + [
+        fmt for fmt in normalized_formats if fmt not in {"png", "eps"}
+    ]
+    if not ordered_formats:
         raise ValueError("Aucun format de sortie fourni.")
 
     if ieee_style:
@@ -191,7 +194,7 @@ def plot_der_density(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     saved_paths: List[Path] = []
-    for fmt in dict.fromkeys(formats):
+    for fmt in dict.fromkeys(ordered_formats):
         suffix = f".{fmt}"
         output_path = output_dir / f"der_density{suffix}"
         fig.savefig(output_path, dpi=150, format=fmt)
@@ -217,8 +220,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--formats",
         type=str,
-        default="png,pdf",
-        help="Formats de sortie séparés par des virgules (ex: png,pdf,eps).",
+        default="png,eps",
+        help="Formats de sortie séparés par des virgules (ex: png,eps).",
     )
     parser.add_argument(
         "--double-column",

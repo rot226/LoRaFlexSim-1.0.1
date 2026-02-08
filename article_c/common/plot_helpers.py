@@ -115,7 +115,7 @@ DEFAULT_LEGEND_LOC = "right"
 CONSTANT_METRIC_VARIANCE_THRESHOLD = 1e-6
 CONSTANT_METRIC_MESSAGE = "métrique constante – à investiguer"
 MISSING_METRIC_MESSAGE = "données manquantes"
-DEFAULT_EXPORT_FORMATS = ("png", "pdf")
+DEFAULT_EXPORT_FORMATS = ("png", "eps")
 INSIDE_LEGEND_LOCATIONS = (
     "upper right",
     "upper left",
@@ -173,6 +173,15 @@ def _normalize_export_formats(formats: Iterable[str]) -> tuple[str, ...]:
     if not normalized:
         raise ValueError("La liste des formats d'export est vide.")
     return tuple(dict.fromkeys(normalized))
+
+
+def _enforce_png_eps_order(formats: Iterable[str]) -> tuple[str, ...]:
+    normalized = _normalize_export_formats(formats)
+    ordered = [fmt for fmt in normalized if fmt not in {"png", "eps"}]
+    prefix = []
+    prefix.append("png")
+    prefix.append("eps")
+    return tuple(prefix + ordered)
 
 
 def parse_export_formats(value: str | None) -> tuple[str, ...]:
@@ -1386,6 +1395,7 @@ def save_figure(
     if use_tight:
         apply_figure_layout(fig, tight_layout=True)
     selected_formats = _EXPORT_FORMATS if formats is None else _normalize_export_formats(formats)
+    selected_formats = _enforce_png_eps_order(selected_formats)
     effective_bbox = bbox_inches
     if effective_bbox is None:
         effective_bbox = "tight"

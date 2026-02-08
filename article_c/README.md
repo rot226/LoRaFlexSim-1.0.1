@@ -248,10 +248,10 @@ Générer toutes les figures :
 python -m article_c.make_all_plots
 ```
 
-Contrôler les formats d'export (PNG/PDF, EPS optionnel) :
+Contrôler les formats d'export (PNG/EPS, PDF optionnel) :
 
 ```powershell
-python -m article_c.make_all_plots --formats png,pdf,eps
+python -m article_c.make_all_plots --formats png,eps
 ```
 
 Régénérer toutes les figures (Windows 11) :
@@ -308,11 +308,11 @@ format **flat** dans `article_c/step*/results/`.
 - (optionnel) `article_c/common/data/author_curves.csv` pour les courbes auteurs QoS.
 - (optionnel) `article_c/common/data/author_curves_snir.csv` pour la comparaison SNIR.
 
-### Sorties générées (PNG/PDF, EPS optionnel)
+### Sorties générées (PNG/EPS, PDF optionnel)
 
 Les scripts produisent des fichiers dans les répertoires ci‑dessous, avec les
-extensions demandées (par défaut PNG/PDF). Pour un rendu IEEE, activer l'EPS via
-`--formats`.
+extensions demandées (par défaut PNG/EPS). Pour inclure le PDF, ajouter
+`--formats png,eps,pdf`.
 
 - `article_c/plots/output/` :
   - `fig4_der_by_cluster.*`
@@ -334,36 +334,36 @@ extensions demandées (par défaut PNG/PDF). Pour un rendu IEEE, activer l'EPS v
 Reproduire les figures QoS (figures 4/5/7/8) :
 
 ```powershell
-python -m article_c.reproduce_author_results --formats png,pdf,eps
+python -m article_c.reproduce_author_results --formats png,eps
 ```
 
 Comparer SNIR ON/OFF (PDR/DER/Throughput) :
 
 ```powershell
-python -m article_c.compare_with_snir --formats png,pdf,eps
+python -m article_c.compare_with_snir --formats png,eps
 ```
 
 Tracer le DER par cluster :
 
 ```powershell
-python -m article_c.plot_cluster_der --formats png,pdf,eps
+python -m article_c.plot_cluster_der --formats png,eps
 ```
 
 ### Style IEEE et option `--formats`
 
 - **Taille/Légende** : les scripts appliquent les recommandations IEEE
   (dimensions et légende en haut) via les helpers de style.
-- **Export EPS** : pour une soumission IEEE, ajouter `--formats png,pdf,eps` (ou
-  `--formats eps`) afin de produire des figures vectorielles.
+- **Export PDF** : pour inclure le PDF en plus du PNG/EPS, ajouter
+  `--formats png,eps,pdf`.
 - **Formats multiples** : `--formats` accepte une liste séparée par des virgules
-  (ex. `png,pdf,eps`).
+  (ex. `png,eps,pdf`).
 
 ### Script d'orchestration (optionnel)
 
 Si un script d'orchestration est ajouté (ex. `all_plot_compare.py`), documentez
 ici :
 
-- **Commande Windows 11** (ex. `python -m article_c.all_plot_compare --formats png,pdf`).
+- **Commande Windows 11** (ex. `python -m article_c.all_plot_compare --formats png,eps`).
 - **Entrées attendues** (CSV agrégés flat dans `article_c/step*/results/`).
 - **Sorties** (liste des fichiers générés et répertoires de sortie).
 
@@ -389,7 +389,7 @@ Ces tailles permettent de conserver des polices lisibles et des épaisseurs de t
 ### Export EPS
 
 - **Format EPS** : activer l'export EPS pour les soumissions IEEE qui exigent des figures vectorielles.
-- **CLI** : ajouter `eps` à `--formats` si nécessaire (ex. `png,pdf,eps`).
+- **CLI** : ajouter `pdf` à `--formats` si nécessaire (ex. `png,eps,pdf`).
 
 ## Figures disponibles
 

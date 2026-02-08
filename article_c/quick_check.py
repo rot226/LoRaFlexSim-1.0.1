@@ -36,7 +36,7 @@ class MetricCheck:
 class FigureCheck:
     output_dir: Path
     png_files: dict[str, Path] = field(default_factory=dict)
-    pdf_files: dict[str, Path] = field(default_factory=dict)
+    eps_files: dict[str, Path] = field(default_factory=dict)
     issues: list[str] = field(default_factory=list)
 
 
@@ -101,13 +101,13 @@ def _collect_figures(output_dir: Path) -> FigureCheck:
         check.issues.append(f"répertoire manquant: {output_dir}.")
         return check
     png_paths = sorted(output_dir.rglob("*.png"))
-    pdf_paths = sorted(output_dir.rglob("*.pdf"))
+    eps_paths = sorted(output_dir.rglob("*.eps"))
     check.png_files = {path.stem: path for path in png_paths}
-    check.pdf_files = {path.stem: path for path in pdf_paths}
+    check.eps_files = {path.stem: path for path in eps_paths}
     if not png_paths:
         check.issues.append("aucun PNG trouvé.")
-    if not pdf_paths:
-        check.issues.append("aucun PDF trouvé.")
+    if not eps_paths:
+        check.issues.append("aucun EPS trouvé.")
     return check
 
 
@@ -123,21 +123,21 @@ def _read_png_dimensions(path: Path) -> tuple[int, int] | None:
         return None
 
 
-_MEDIABOX_PATTERN = re.compile(
-    rb"/MediaBox\s*\[\s*([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+"
-    rb"([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s*\]"
+_BOUNDING_BOX_PATTERN = re.compile(
+    rb"%%BoundingBox:\s*([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+"
+    rb"([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)"
 )
 
 
-def _read_pdf_dimensions(path: Path) -> tuple[float, float] | None:
+def _read_eps_dimensions(path: Path) -> tuple[float, float] | None:
     try:
         data = path.read_bytes()
     except OSError:
         return None
-    match = _MEDIABOX_PATTERN.search(data)
-    if not match:
+    matches = list(_BOUNDING_BOX_PATTERN.finditer(data))
+    if not matches:
         return None
-    x0, y0, x1, y1 = (float(group) for group in match.groups())
+    x0, y0, x1, y1 = (float(group) for group in matches[-1].groups())
     width = x1 - x0
     height = y1 - y0
     if width <= 0 or height <= 0:
@@ -148,34 +148,34 @@ def _read_pdf_dimensions(path: Path) -> tuple[float, float] | None:
 def _check_figure_dimensions(check: FigureCheck, aspect_tolerance: float) -> None:
     if check.issues:
         return
-    if not check.png_files or not check.pdf_files:
+    if not check.png_files or not check.eps_files:
         return
     for stem, png_path in check.png_files.items():
-        pdf_path = check.pdf_files.get(stem)
-        if pdf_path is None:
-            check.issues.append(f"PDF manquant pour {png_path.name}.")
+        eps_path = check.eps_files.get(stem)
+        if eps_path is None:
+            check.issues.append(f"EPS manquant pour {png_path.name}.")
             continue
         png_dims = _read_png_dimensions(png_path)
-        pdf_dims = _read_pdf_dimensions(pdf_path)
+        eps_dims = _read_eps_dimensions(eps_path)
         if png_dims is None:
             check.issues.append(f"dimensions PNG illisibles: {png_path.name}.")
             continue
-        if pdf_dims is None:
-            check.issues.append(f"dimensions PDF illisibles: {pdf_path.name}.")
+        if eps_dims is None:
+            check.issues.append(f"dimensions EPS illisibles: {eps_path.name}.")
             continue
         png_ratio = png_dims[0] / png_dims[1] if png_dims[1] else 0.0
-        pdf_ratio = pdf_dims[0] / pdf_dims[1] if pdf_dims[1] else 0.0
-        if not math.isfinite(png_ratio) or not math.isfinite(pdf_ratio):
+        eps_ratio = eps_dims[0] / eps_dims[1] if eps_dims[1] else 0.0
+        if not math.isfinite(png_ratio) or not math.isfinite(eps_ratio):
             check.issues.append(f"ratio invalide pour {stem}.")
             continue
-        if abs(png_ratio - pdf_ratio) > aspect_tolerance:
+        if abs(png_ratio - eps_ratio) > aspect_tolerance:
             check.issues.append(
-                f"ratio PNG/PDF divergent pour {stem} "
-                f"(png={png_ratio:.3f}, pdf={pdf_ratio:.3f})."
+                f"ratio PNG/EPS divergent pour {stem} "
+                f"(png={png_ratio:.3f}, eps={eps_ratio:.3f})."
             )
-    for stem, pdf_path in check.pdf_files.items():
+    for stem, eps_path in check.eps_files.items():
         if stem not in check.png_files:
-            check.issues.append(f"PNG manquant pour {pdf_path.name}.")
+            check.issues.append(f"PNG manquant pour {eps_path.name}.")
 
 
 def _check_step(
@@ -239,7 +239,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Contrôle rapide des CSV agrégés (variance reward/success_rate) "
-            "et des exports PNG/PDF."
+            "et des exports PNG/EPS."
         )
     )
     parser.add_argument(
@@ -276,7 +276,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--aspect-tolerance",
         type=float,
         default=0.02,
-        help="Tolérance sur le ratio largeur/hauteur PNG vs PDF.",
+        help="Tolérance sur le ratio largeur/hauteur PNG vs EPS.",
     )
     return parser
 

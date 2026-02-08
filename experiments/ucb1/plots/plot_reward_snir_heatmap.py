@@ -8,9 +8,9 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from article_c.common.plot_helpers import apply_figure_layout
+from article_c.common.plot_helpers import apply_figure_layout, save_figure
 from plot_defaults import resolve_ieee_figsize
-from experiments.ucb1.plots.plot_style import apply_ieee_style
+from experiments.ucb1.plots.plot_style import apply_plot_style
 
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "plots"
@@ -150,9 +150,8 @@ def _plot_heatmaps(
     fig.suptitle(f"UCB1 – {SNIR_LABELS.get(snir_state, snir_state)}")
     apply_figure_layout(fig, tight_layout={"rect": [0, 0, 1, 0.93]})
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"ucb1_reward_snir_der_heatmap_{snir_state}.png"
-    fig.savefig(output_path, dpi=150)
+    stem = f"ucb1_reward_snir_der_heatmap_{snir_state}"
+    save_figure(fig, output_dir, stem)
     plt.close(fig)
 
 
@@ -193,7 +192,7 @@ def run_plots(*, csv_path: Path, output_dir: Path) -> None:
 
 
 def main() -> None:
-    apply_ieee_style()
+    apply_plot_style()
     args = parse_args()
     run_plots(csv_path=args.ucb1_csv, output_dir=args.output_dir)
 

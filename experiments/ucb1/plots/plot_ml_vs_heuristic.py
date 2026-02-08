@@ -9,9 +9,9 @@ import warnings
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from article_c.common.plot_helpers import apply_figure_layout
+from article_c.common.plot_helpers import apply_figure_layout, save_figure
 from plot_defaults import resolve_ieee_figsize
-from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups
+from experiments.ucb1.plots.plot_style import apply_plot_style, filter_top_groups
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_DECISION_CSV = Path(__file__).resolve().parents[1] / "ucb1_baseline_decision_log.csv"
@@ -72,11 +72,11 @@ def _ensure_columns(df: pd.DataFrame, required: Iterable[str], path: Path) -> No
 
 def _save_plot(fig: plt.Figure, output_dir: Path, name: str) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / name
+    stem = Path(name).stem
     apply_figure_layout(fig, tight_layout=True)
-    fig.savefig(path, dpi=150)
+    save_figure(fig, output_dir, stem)
     plt.close(fig)
-    return path
+    return output_dir / f"{stem}.png"
 
 
 def _jain_fairness(values: list[float]) -> float:
@@ -94,7 +94,7 @@ def _resolve_time_column(df: pd.DataFrame) -> str:
 
 
 def main() -> None:
-    apply_ieee_style()
+    apply_plot_style()
     args = parse_args()
     df = pd.read_csv(args.decision_csv)
     _ensure_columns(
