@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from importlib.util import find_spec
 from pathlib import Path
 
+import matplotlib.pyplot as plt
+
 
 if find_spec("article_c") is None:
     repo_root = Path(__file__).resolve().parents[1]
@@ -305,7 +307,7 @@ def _run_plot_module(
     *,
     network_sizes: list[int] | None = None,
     allow_sample: bool = True,
-) -> None:
+) -> object:
     module = importlib.import_module(module_path)
     if not hasattr(module, "main"):
         raise AttributeError(f"Module {module_path} sans fonction main().")
@@ -324,6 +326,44 @@ def _run_plot_module(
         module.main(**kwargs)
     else:
         module.main()
+    return module
+
+
+def _figure_has_legend(fig: plt.Figure) -> bool:
+    if fig.legends:
+        return True
+    return any(ax.get_legend() is not None for ax in fig.axes)
+
+
+def _check_legends_for_module(
+    *,
+    module_path: str,
+    module: object,
+    previous_figures: set[int],
+) -> None:
+    from article_c.common.plot_helpers import assert_legend_present
+
+    new_fig_numbers = [
+        num for num in plt.get_fignums() if num not in previous_figures
+    ]
+    if not new_fig_numbers:
+        return
+    source_file = getattr(module, "__file__", None)
+    source_path = (
+        Path(source_file).resolve()
+        if source_file
+        else "source inconnue"
+    )
+    for index, fig_number in enumerate(new_fig_numbers, start=1):
+        fig = plt.figure(fig_number)
+        context = f"{module_path} (figure {index})"
+        assert_legend_present(fig, context)
+        if not _figure_has_legend(fig):
+            print(
+                "AVERTISSEMENT: "
+                f"légende absente pour {context}. "
+                f"Source: {source_path}"
+            )
 
 
 def _resolve_plot_requirements(step: str, module_path: str) -> PlotRequirements:
@@ -1017,10 +1057,16 @@ def main(argv: list[str] | None = None) -> None:
                     )
                 )
                 try:
-                    _run_plot_module(
+                    previous_figures = set(plt.get_fignums())
+                    module = _run_plot_module(
                         module_path,
                         network_sizes=step2_network_sizes,
                         allow_sample=False,
+                    )
+                    _check_legends_for_module(
+                        module_path=module_path,
+                        module=module,
+                        previous_figures=previous_figures,
                     )
                     _register_status(
                         status_map,
@@ -1043,7 +1089,13 @@ def main(argv: list[str] | None = None) -> None:
                     )
             else:
                 try:
-                    _run_plot_module(module_path, allow_sample=False)
+                    previous_figures = set(plt.get_fignums())
+                    module = _run_plot_module(module_path, allow_sample=False)
+                    _check_legends_for_module(
+                        module_path=module_path,
+                        module=module,
+                        previous_figures=previous_figures,
+                    )
                     _register_status(
                         status_map,
                         step=step,
