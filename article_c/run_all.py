@@ -105,6 +105,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Active le profil sécurisé pour l'étape 2.",
     )
     parser.add_argument(
+        "--auto-safe-profile",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Active/désactive le profil sécurisé automatique pour l'étape 2 "
+            "(activé par défaut)."
+        ),
+    )
+    parser.add_argument(
         "--allow-low-success-rate",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -514,6 +523,8 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         step2_args.append("--timestamp")
     if args.safe_profile:
         step2_args.append("--safe-profile")
+    if args.auto_safe_profile:
+        step2_args.append("--auto-safe-profile")
     if args.strict:
         step2_args.append("--strict")
     elif args.allow_low_success_rate is False:
@@ -612,6 +623,11 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    if not args.auto_safe_profile:
+        print(
+            "Recommandation: activez --auto-safe-profile pour éviter un "
+            "success_rate trop faible à l'étape 2."
+        )
     if args.step1_outdir is not None:
         default_step1_dir = (
             Path(__file__).resolve().parent / "step1" / "results"
