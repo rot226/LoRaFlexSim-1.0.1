@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import logging
 import math
 import random
+from statistics import mean
 from time import perf_counter
 from typing import Iterable
 
@@ -69,6 +70,8 @@ class Step1Result:
     toa_s_by_node: list[float]
     packet_ids: list[int]
     sf_selected_by_node: list[int]
+    snr_by_node: list[float]
+    rssi_by_node: list[float]
     mixra_opt_fallback: bool
     timing_s: dict[str, float] | None = None
 
@@ -83,6 +86,8 @@ class Step1Result:
             "pdr": self.pdr,
             "mean_toa_s": self.mean_toa_s,
             "energy_per_success_bit": self.energy_per_success_bit,
+            "snr_db": mean(self.snr_by_node) if self.snr_by_node else 0.0,
+            "rssi_dbm": mean(self.rssi_by_node) if self.rssi_by_node else 0.0,
             "mixra_opt_fallback": self.mixra_opt_fallback,
         }
 
@@ -869,6 +874,8 @@ def run_simulation(
         toa_s_by_node=toa_s_by_node,
         packet_ids=packet_ids,
         sf_selected_by_node=list(assignments),
+        snr_by_node=[node.snr for node in nodes],
+        rssi_by_node=[node.rssi for node in nodes],
         mixra_opt_fallback=mixra_opt_fallback,
         timing_s=timings,
     )
