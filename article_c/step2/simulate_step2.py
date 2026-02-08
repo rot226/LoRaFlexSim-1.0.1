@@ -1354,6 +1354,52 @@ def _log_clamp_ratio_and_adjust(
     )
 
 
+def _apply_collision_control(
+    *,
+    network_size: int,
+    algo_label: str,
+    round_id: int,
+    collision_norms: list[float],
+    traffic_coeff_scale: float,
+    window_duration_s: float,
+    threshold: float = 0.65,
+    traffic_scale_floor: float = 0.2,
+    traffic_scale_ceiling: float = 2.5,
+    window_boost_max: float = 1.5,
+) -> tuple[float, float]:
+    if not collision_norms:
+        return traffic_coeff_scale, window_duration_s
+    avg_collision = mean(collision_norms)
+    if avg_collision <= threshold:
+        return traffic_coeff_scale, window_duration_s
+    severity = _clip((avg_collision - threshold) / max(1.0 - threshold, 1e-6), 0.0, 1.0)
+    reduction = 1.0 - 0.2 * severity
+    increase = 1.0 + 0.25 * severity
+    new_traffic_coeff_scale = _clamp_range(
+        traffic_coeff_scale * reduction, traffic_scale_floor, traffic_scale_ceiling
+    )
+    new_window_duration_s = min(window_duration_s * increase, window_duration_s * window_boost_max)
+    if (
+        math.isclose(new_traffic_coeff_scale, traffic_coeff_scale, rel_tol=1e-6)
+        and math.isclose(new_window_duration_s, window_duration_s, rel_tol=1e-6)
+    ):
+        return traffic_coeff_scale, window_duration_s
+    logger.warning(
+        "Contrôle collisions (round=%s taille=%s algo=%s collision_norm_moy=%.3f "
+        "seuil=%.2f): traffic_coeff_scale=%.3f→%.3f window_duration_s=%.2f→%.2f.",
+        round_id,
+        network_size,
+        algo_label,
+        avg_collision,
+        threshold,
+        traffic_coeff_scale,
+        new_traffic_coeff_scale,
+        window_duration_s,
+        new_window_duration_s,
+    )
+    return new_traffic_coeff_scale, new_window_duration_s
+
+
 def _sample_log_normal_shadowing(
     rng: random.Random, mean_db: float, sigma_db: float
 ) -> tuple[float, float]:
@@ -2802,6 +2848,14 @@ def run_simulation(
                         "cluster": "all",
                     }
                 )
+            traffic_coeff_scale_value, window_duration_value = _apply_collision_control(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                collision_norms=round_collision_norms,
+                traffic_coeff_scale=traffic_coeff_scale_value,
+                window_duration_s=window_duration_value,
+            )
             _log_cluster_all_diagnostics(
                 network_size=network_size_value,
                 algo_label=algo_label,
@@ -3502,6 +3556,14 @@ def run_simulation(
                         "cluster": "all",
                     }
                 )
+            traffic_coeff_scale_value, window_duration_value = _apply_collision_control(
+                network_size=network_size_value,
+                algo_label=algo_label,
+                round_id=round_id,
+                collision_norms=round_collision_norms,
+                traffic_coeff_scale=traffic_coeff_scale_value,
+                window_duration_s=window_duration_value,
+            )
             _log_cluster_all_diagnostics(
                 network_size=network_size_value,
                 algo_label=algo_label,
