@@ -8,9 +8,9 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from article_c.common.plot_helpers import apply_figure_layout
+from article_c.common.plot_helpers import apply_figure_layout, save_figure
 from plot_defaults import resolve_ieee_figsize
-from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups, top_groups
+from experiments.ucb1.plots.plot_style import apply_plot_style, filter_top_groups, top_groups
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
@@ -115,11 +115,11 @@ def _style_maps(clusters: list[int], intervals: list[float]) -> tuple[dict[int, 
 
 def _save_plot(fig: plt.Figure, output_dir: Path, name: str) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / name
+    stem = Path(name).stem
     apply_figure_layout(fig, tight_layout=True)
-    fig.savefig(path, dpi=150)
+    save_figure(fig, output_dir, stem)
     plt.close(fig)
-    return path
+    return output_dir / f"{stem}.png"
 
 
 def _plot_metric(
@@ -362,7 +362,7 @@ def run_plots(*, csv_path: Path, output_dir: Path, packet_intervals: list[float]
 
 
 def main() -> None:
-    apply_ieee_style()
+    apply_plot_style()
     args = parse_args()
     run_plots(
         csv_path=args.ucb1_csv,

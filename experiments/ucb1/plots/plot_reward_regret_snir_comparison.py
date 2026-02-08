@@ -8,9 +8,9 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from article_c.common.plot_helpers import apply_figure_layout
+from article_c.common.plot_helpers import apply_figure_layout, save_figure
 from plot_defaults import resolve_ieee_figsize
-from experiments.ucb1.plots.plot_style import apply_ieee_style
+from experiments.ucb1.plots.plot_style import apply_plot_style
 
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "plots" / "ucb1_reward_regret_snir_comparison.png"
@@ -82,7 +82,7 @@ def _resolve_reward_col(df: pd.DataFrame) -> str:
 
 
 def main() -> None:
-    apply_ieee_style()
+    apply_plot_style()
     args = parse_args()
     if not args.ucb1_csv.exists():
         raise FileNotFoundError(f"CSV introuvable: {args.ucb1_csv}")
@@ -148,9 +148,8 @@ def main() -> None:
     axes[1].grid(True, linestyle=":", alpha=0.5)
 
     fig.suptitle("Comparaison SNIR on/off")
-    args.output.parent.mkdir(parents=True, exist_ok=True)
     apply_figure_layout(fig, tight_layout=True)
-    fig.savefig(args.output, dpi=150)
+    save_figure(fig, args.output.parent, args.output.stem)
     plt.close(fig)
 
 

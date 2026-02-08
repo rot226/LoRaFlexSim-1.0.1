@@ -9,8 +9,7 @@ from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 
-from article_c.common.plotting_style import apply_base_rcparams
-from article_c.common.plot_helpers import apply_figure_layout
+from article_c.common.plot_helpers import apply_figure_layout, apply_plot_style, save_figure
 from metrics import RunMetrics, load_cluster_ids
 from plot_defaults import resolve_ieee_figsize
 
@@ -172,7 +171,7 @@ def _plot_pdr_by_cluster(
         fig.suptitle(subtitle)
     apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.08, 1.0, 0.88)})
     output_path = output_dir / "pdr_clusters.png"
-    fig.savefig(output_path, dpi=150)
+    save_figure(fig, output_dir, "pdr_clusters")
     plt.close(fig)
     return output_path
 
@@ -223,7 +222,7 @@ def _plot_pdr_global(
         fig.suptitle(subtitle)
     apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "pdr_global.png"
-    fig.savefig(output_path, dpi=150)
+    save_figure(fig, output_dir, "pdr_global")
     plt.close(fig)
     return output_path
 
@@ -278,7 +277,7 @@ def _plot_der_global(
         fig.suptitle(subtitle)
     apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "der_global.png"
-    fig.savefig(output_path, dpi=150)
+    save_figure(fig, output_dir, "der_global")
     plt.close(fig)
     return output_path
 
@@ -345,7 +344,7 @@ def _plot_der_global_log(
         fig.suptitle(subtitle)
     apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "der_global_log.png"
-    fig.savefig(output_path, dpi=150)
+    save_figure(fig, output_dir, "der_global_log")
     plt.close(fig)
     return output_path
 
@@ -376,7 +375,7 @@ def _plot_snir_cdf(
     ax.legend(loc="lower right")
     apply_figure_layout(fig, tight_layout=True)
     output_path = output_dir / "snir_cdf.png"
-    fig.savefig(output_path, dpi=150)
+    save_figure(fig, output_dir, "snir_cdf")
     plt.close(fig)
     return output_path
 
@@ -443,7 +442,7 @@ def _plot_snir_distributions(
         fig.suptitle(subtitle)
     apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "snir_distributions.png"
-    fig.savefig(output_path, dpi=150)
+    save_figure(fig, output_dir, "snir_distributions")
     plt.close(fig)
     return output_path
 
@@ -521,7 +520,7 @@ def _plot_rates_vs_snir(
         fig.suptitle(subtitle)
     apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "pdr_vs_snir.png"
-    fig.savefig(output_path, dpi=150)
+    save_figure(fig, output_dir, "pdr_vs_snir")
     plt.close(fig)
     return output_path
 
@@ -567,7 +566,7 @@ def _plot_collisions_vs_load(
         fig.suptitle(subtitle)
     apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "collisions_vs_charge.png"
-    fig.savefig(output_path, dpi=150)
+    save_figure(fig, output_dir, "collisions_vs_charge")
     plt.close(fig)
     return output_path
 
@@ -621,7 +620,7 @@ def _plot_collisions_vs_load_log(
         fig.suptitle(subtitle)
     apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "collisions_vs_charge_log.png"
-    fig.savefig(output_path, dpi=150)
+    save_figure(fig, output_dir, "collisions_vs_charge_log")
     plt.close(fig)
     return output_path
 
@@ -691,7 +690,7 @@ def _plot_delivery_breakdown(
         fig.suptitle(subtitle)
     apply_figure_layout(fig, tight_layout={"rect": (0.0, 0.05, 1.0, 0.88)})
     output_path = output_dir / "breakdown_tentatives.png"
-    fig.savefig(output_path, dpi=150)
+    save_figure(fig, output_dir, "breakdown_tentatives")
     plt.close(fig)
     return output_path
 
@@ -708,7 +707,7 @@ def generate_plots(
 
     if not results:
         return []
-    apply_base_rcparams()
+    apply_plot_style()
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     mapping = _index_results(results)

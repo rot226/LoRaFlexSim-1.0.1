@@ -7,9 +7,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from article_c.common.plot_helpers import apply_figure_layout
+from article_c.common.plot_helpers import apply_figure_layout, save_figure
 from plot_defaults import resolve_ieee_figsize
-from experiments.ucb1.plots.plot_style import apply_ieee_style, top_groups
+from experiments.ucb1.plots.plot_style import apply_plot_style, top_groups
 
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "plots" / "ucb1_regret_snir_overlay.png"
@@ -145,15 +145,14 @@ def plot_regret(*, csv_path: Path, output_path: Path, packet_intervals: list[flo
     if ax.get_legend_handles_labels()[1]:
         ax.legend(fontsize=8, ncol=2)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     apply_figure_layout(fig, tight_layout=True)
-    fig.savefig(output_path, dpi=150)
+    save_figure(fig, output_path.parent, output_path.stem)
     plt.close(fig)
-    return output_path
+    return output_path.parent / f"{output_path.stem}.png"
 
 
 def main() -> None:
-    apply_ieee_style()
+    apply_plot_style()
     args = parse_args()
     plot_regret(
         csv_path=args.ucb1_csv,
