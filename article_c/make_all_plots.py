@@ -406,6 +406,28 @@ def _validate_plot_modules_use_save_figure() -> dict[str, str]:
     return missing
 
 
+def _validate_step2_plot_module_registry() -> list[str]:
+    step2_dir = ARTICLE_DIR / "step2" / "plots"
+    if not step2_dir.exists():
+        print(
+            "AVERTISSEMENT: dossier Step2 plots introuvable, "
+            "impossible de vérifier la liste PLOT_MODULES."
+        )
+        return []
+    discovered = {
+        f"article_c.step2.plots.{path.stem}"
+        for path in step2_dir.glob("plot_*.py")
+    }
+    missing = sorted(discovered - set(PLOT_MODULES["step2"]))
+    if missing:
+        print(
+            "AVERTISSEMENT: certains modules Step2 ne sont pas listés "
+            "dans PLOT_MODULES['step2']:\n"
+            + "\n".join(f"- {module}" for module in missing)
+        )
+    return missing
+
+
 def _inspect_plot_outputs(
     output_dir: Path,
     label: str,
@@ -555,16 +577,20 @@ def _suggest_step2_resume_command(expected_sizes: list[int]) -> str:
     )
 
 
-def _validate_network_sizes(paths: list[Path], expected_sizes: list[int]) -> bool:
+def _validate_network_sizes(
+    paths: list[Path],
+    expected_sizes: list[int],
+) -> dict[Path, list[int]]:
     expected_set = {int(size) for size in expected_sizes}
-    errors: list[str] = []
+    missing_by_path: dict[Path, list[int]] = {}
     for path in paths:
         found_sizes = _extract_network_sizes(path)
         missing = sorted(expected_set - found_sizes)
         if missing:
+            missing_by_path[path] = missing
             missing_list = ", ".join(str(size) for size in missing)
             message_lines = [
-                "ERREUR: tailles de réseau manquantes dans les résultats.",
+                "AVERTISSEMENT: tailles de réseau manquantes dans les résultats.",
                 f"CSV: {path}",
                 f"Tailles attendues manquantes: {missing_list}.",
             ]
@@ -574,14 +600,11 @@ def _validate_network_sizes(paths: list[Path], expected_sizes: list[int]) -> boo
                     "Commande PowerShell pour régénérer les résultats:"
                 )
                 message_lines.append(command)
-            errors.append("\n".join(message_lines))
-    if errors:
-        print(
-            "\n\n".join(errors)
-            + "\nAucun plot n'a été généré afin d'éviter des figures partielles."
-        )
-        return False
-    return True
+            message_lines.append(
+                "Les plots compatibles seront générés malgré tout."
+            )
+            print("\n".join(message_lines))
+    return missing_by_path
 
 
 def _validate_plot_data(
@@ -760,6 +783,7 @@ def main(argv: list[str] | None = None) -> None:
     set_default_export_formats(export_formats)
     status_map: dict[str, PlotStatus] = {}
     invalid_modules = _validate_plot_modules_use_save_figure()
+    _validate_step2_plot_module_registry()
     if invalid_modules:
         for step, module_paths in PLOT_MODULES.items():
             for module_path in module_paths:
@@ -822,16 +846,7 @@ def main(argv: list[str] | None = None) -> None:
         step_network_sizes["step2"] = _load_network_sizes_from_csvs([step2_csv])
     if args.network_sizes:
         network_sizes = args.network_sizes
-        if not _validate_network_sizes(csv_paths, network_sizes):
-            step_errors.setdefault(
-                "step1",
-                "validation des tailles de réseau échouée",
-            )
-            step_errors.setdefault(
-                "step2",
-                "validation des tailles de réseau échouée",
-            )
-            network_sizes = []
+        _validate_network_sizes(csv_paths, network_sizes)
     else:
         network_sizes = sorted(
             {
@@ -858,7 +873,7 @@ def main(argv: list[str] | None = None) -> None:
         if len(step2_sizes) < 2:
             print(
                 "AVERTISSEMENT: Step2 contient moins de 2 tailles. "
-                "Certains plots RL pourront être ignorés."
+                "Les plots seront validés individuellement."
             )
             print(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
         if args.network_sizes:
