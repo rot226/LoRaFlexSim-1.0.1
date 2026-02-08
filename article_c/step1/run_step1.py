@@ -510,6 +510,8 @@ def _simulate_density(
                     cluster: {"sent": 0, "received": 0} for cluster in cluster_ids
                 }
                 cluster_toa: dict[str, list[float]] = {cluster: [] for cluster in cluster_ids}
+                cluster_snr: dict[str, list[float]] = {cluster: [] for cluster in cluster_ids}
+                cluster_rssi: dict[str, list[float]] = {cluster: [] for cluster in cluster_ids}
                 for cluster, delivered in zip(
                     result.node_clusters, result.node_received, strict=True
                 ):
@@ -520,11 +522,21 @@ def _simulate_density(
                     result.node_clusters, result.toa_s_by_node, strict=True
                 ):
                     cluster_toa[cluster].append(toa_s)
-                for node_id, (packet_id, cluster, sf_selected) in enumerate(
+                for cluster, snr_db, rssi_dbm in zip(
+                    result.node_clusters,
+                    result.snr_by_node,
+                    result.rssi_by_node,
+                    strict=True,
+                ):
+                    cluster_snr[cluster].append(snr_db)
+                    cluster_rssi[cluster].append(rssi_dbm)
+                for node_id, (packet_id, cluster, sf_selected, snr_db, rssi_dbm) in enumerate(
                     zip(
                         result.packet_ids,
                         result.node_clusters,
                         result.sf_selected_by_node,
+                        result.snr_by_node,
+                        result.rssi_by_node,
                         strict=True,
                     )
                 ):
@@ -539,6 +551,8 @@ def _simulate_density(
                         "node_id": node_id,
                         "packet_id": packet_id,
                         "sf_selected": sf_selected,
+                        "snr_db": snr_db,
+                        "rssi_dbm": rssi_dbm,
                         **snir_meta,
                     }
                     raw_rows.append(packet_row)
@@ -550,6 +564,8 @@ def _simulate_density(
                     received_cluster = stats["received"]
                     pdr_cluster = received_cluster / sent_cluster if sent_cluster > 0 else 0.0
                     mean_toa_s = mean(cluster_toa[cluster]) if cluster_toa[cluster] else 0.0
+                    mean_snr = mean(cluster_snr[cluster]) if cluster_snr[cluster] else 0.0
+                    mean_rssi = mean(cluster_rssi[cluster]) if cluster_rssi[cluster] else 0.0
                     (
                         received_cluster,
                         pdr_cluster,
@@ -586,12 +602,16 @@ def _simulate_density(
                         "received": received_cluster,
                         "pdr": pdr_cluster,
                         "mean_toa_s": mean_toa_s,
+                        "snr_db": mean_snr,
+                        "rssi_dbm": mean_rssi,
                         **snir_meta,
                     }
                     raw_rows.append(metric_row)
                     metric_rows.append(metric_row)
                     per_rep_rows[replication].append(metric_row)
                     per_rep_metric_rows[replication].append(metric_row)
+                mean_snr_all = mean(result.snr_by_node) if result.snr_by_node else 0.0
+                mean_rssi_all = mean(result.rssi_by_node) if result.rssi_by_node else 0.0
                 received_all, pdr_all, mean_toa_all = _apply_congestion_effects(
                     algo,
                     network_size=network_size,
@@ -620,6 +640,8 @@ def _simulate_density(
                     "received": received_all,
                     "pdr": pdr_all,
                     "mean_toa_s": mean_toa_all,
+                    "snr_db": mean_snr_all,
+                    "rssi_dbm": mean_rssi_all,
                     **snir_meta,
                 }
                 raw_rows.append(summary_row)
