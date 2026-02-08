@@ -686,7 +686,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = build_arg_parser().parse_args(argv)
 
@@ -722,22 +722,26 @@ def main(argv: list[str] | None = None) -> None:
         fig4 = plot_fig4(step1_rows, profiles, author_curves)
         if fig4 is not None:
             save_figure(fig4, args.output_dir, "fig4_der_by_cluster")
-            plt.close(fig4)
+            if close_figures:
+                plt.close(fig4)
     if 5 in figures:
         fig5 = plot_fig5(step2_rows or step1_rows, profiles, author_curves)
         if fig5 is not None:
             save_figure(fig5, args.output_dir, "fig5_der_by_load")
-            plt.close(fig5)
+            if close_figures:
+                plt.close(fig5)
     if 7 in figures:
         fig7 = plot_fig7(step1_rows, profiles, author_curves)
         if fig7 is not None:
             save_figure(fig7, args.output_dir, "fig7_traffic_sacrifice")
-            plt.close(fig7)
+            if close_figures:
+                plt.close(fig7)
     if 8 in figures:
         fig8 = plot_fig8(step1_rows, profiles, author_curves)
         if fig8 is not None:
             save_figure(fig8, args.output_dir, "fig8_throughput_clusters")
-            plt.close(fig8)
+            if close_figures:
+                plt.close(fig8)
 
 
 if __name__ == "__main__":

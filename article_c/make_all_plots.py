@@ -63,6 +63,12 @@ PLOT_MODULES = {
     ],
 }
 
+POST_PLOT_MODULES = [
+    "article_c.reproduce_author_results",
+    "article_c.compare_with_snir",
+    "article_c.plot_cluster_der",
+]
+
 MIN_NETWORK_SIZES_PER_PLOT = {
     "article_c.step2.plots.plot_RL1": 1,
     "article_c.step2.plots.plot_RL1_learning_curve_reward": 1,
@@ -412,27 +418,30 @@ def _validate_plot_modules_use_save_figure() -> dict[str, str]:
     missing: dict[str, str] = {}
     missing_save_figure: list[str] = []
     missing_plot_style: list[str] = []
-    for module_paths in PLOT_MODULES.values():
-        for module_path in module_paths:
-            spec = find_spec(module_path)
-            if spec is None or spec.origin is None:
-                missing[module_path] = "module introuvable"
-                continue
-            source_path = Path(spec.origin)
-            try:
-                source = source_path.read_text(encoding="utf-8")
-            except OSError as exc:
-                missing[module_path] = f"lecture impossible: {exc}"
-                continue
-            issues: list[str] = []
-            if "save_figure(" not in source:
-                issues.append("ne passe pas par save_figure")
-                missing_save_figure.append(module_path)
-            if "apply_plot_style(" not in source:
-                issues.append("ne respecte pas apply_plot_style")
-                missing_plot_style.append(module_path)
-            if issues:
-                missing[module_path] = ", ".join(issues)
+    module_paths = [
+        *[path for paths in PLOT_MODULES.values() for path in paths],
+        *POST_PLOT_MODULES,
+    ]
+    for module_path in module_paths:
+        spec = find_spec(module_path)
+        if spec is None or spec.origin is None:
+            missing[module_path] = "module introuvable"
+            continue
+        source_path = Path(spec.origin)
+        try:
+            source = source_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            missing[module_path] = f"lecture impossible: {exc}"
+            continue
+        issues: list[str] = []
+        if "save_figure(" not in source:
+            issues.append("ne passe pas par save_figure")
+            missing_save_figure.append(module_path)
+        if "apply_plot_style(" not in source:
+            issues.append("ne respecte pas apply_plot_style")
+            missing_plot_style.append(module_path)
+        if issues:
+            missing[module_path] = ", ".join(issues)
     if missing_save_figure:
         print(
             "ERREUR: certains scripts de plot ne passent pas par save_figure:\n"
@@ -798,12 +807,25 @@ def _register_status(
 def _summarize_statuses(
     status_map: dict[str, PlotStatus],
     steps: list[str],
+    post_modules: list[str],
 ) -> dict[str, int]:
     counts = {"OK": 0, "FAIL": 0, "SKIP": 0}
     print("\nRésumé d'exécution des plots:")
     for step in steps:
         print(f"\n{step.upper()}:")
         for module_path in PLOT_MODULES[step]:
+            entry = status_map.get(module_path)
+            if entry is None:
+                status_label = "SKIP"
+                message = "Non exécuté."
+            else:
+                status_label = entry.status
+                message = entry.message
+            counts[status_label] = counts.get(status_label, 0) + 1
+            print(f"- {module_path}: {status_label} ({message})")
+    if post_modules:
+        print("\nPOST:")
+        for module_path in post_modules:
             entry = status_map.get(module_path)
             if entry is None:
                 status_label = "SKIP"
@@ -820,6 +842,33 @@ def _summarize_statuses(
         f"{counts['SKIP']} SKIP (total {total})."
     )
     return counts
+
+
+def _run_post_module(
+    module_path: str,
+    args_list: list[str],
+    *,
+    close_figures: bool,
+) -> object:
+    module = importlib.import_module(module_path)
+    if not hasattr(module, "main"):
+        raise AttributeError(f"Module {module_path} sans fonction main().")
+    signature = inspect.signature(module.main)
+    parameters = signature.parameters
+    supports_kwargs = any(
+        param.kind == inspect.Parameter.VAR_KEYWORD
+        for param in parameters.values()
+    )
+    kwargs: dict[str, object] = {}
+    if "argv" in parameters or supports_kwargs:
+        kwargs["argv"] = args_list
+    if "close_figures" in parameters or supports_kwargs:
+        kwargs["close_figures"] = close_figures
+    if kwargs:
+        module.main(**kwargs)
+    else:
+        module.main()
+    return module
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -849,6 +898,15 @@ def main(argv: list[str] | None = None) -> None:
                         status="FAIL",
                         message=invalid_modules[module_path],
                     )
+        for module_path in POST_PLOT_MODULES:
+            if module_path in invalid_modules:
+                _register_status(
+                    status_map,
+                    step="post",
+                    module_path=module_path,
+                    status="FAIL",
+                    message=invalid_modules[module_path],
+                )
     try:
         steps = _parse_steps(args.steps)
     except ValueError as exc:
@@ -1118,34 +1176,90 @@ def main(argv: list[str] | None = None) -> None:
                         status="FAIL",
                         message=str(exc),
                     )
-            else:
-                try:
-                    previous_figures = set(plt.get_fignums())
-                    module = _run_plot_module(module_path, allow_sample=False)
-                    _check_legends_for_module(
-                        module_path=module_path,
-                        module=module,
-                        previous_figures=previous_figures,
-                    )
-                    _register_status(
-                        status_map,
-                        step=step,
-                        module_path=module_path,
-                        status="OK",
-                        message="plot généré",
-                    )
-                except Exception as exc:
-                    print(
-                        f"ERREUR: échec du plot {module_path}: {exc}"
-                    )
-                    traceback.print_exc()
-                    _register_status(
-                        status_map,
-                        step=step,
-                        module_path=module_path,
-                        status="FAIL",
-                        message=str(exc),
-                    )
+    post_ready = (
+        "step1" in steps
+        and "step2" in steps
+        and "step1" not in step_errors
+        and "step2" not in step_errors
+        and step1_csv is not None
+        and step2_csv is not None
+    )
+    if post_ready:
+        post_formats = ",".join(export_formats)
+        post_args: dict[str, list[str]] = {
+            "article_c.reproduce_author_results": [
+                "--step1-results",
+                str(step1_csv),
+                "--step2-results",
+                str(step2_csv),
+                "--formats",
+                post_formats,
+            ],
+            "article_c.compare_with_snir": [
+                "--step1-csv",
+                str(step1_csv),
+                "--step2-csv",
+                str(step2_csv),
+                "--formats",
+                post_formats,
+            ],
+            "article_c.plot_cluster_der": [
+                "--formats",
+                post_formats,
+            ],
+        }
+        if args.network_sizes:
+            post_args["article_c.plot_cluster_der"].extend(
+                ["--network-sizes", *map(str, args.network_sizes)]
+            )
+        for module_path in POST_PLOT_MODULES:
+            if (
+                module_path in status_map
+                and status_map[module_path].status == "FAIL"
+            ):
+                continue
+            try:
+                previous_figures = set(plt.get_fignums())
+                module = _run_post_module(
+                    module_path,
+                    post_args.get(module_path, []),
+                    close_figures=False,
+                )
+                _check_legends_for_module(
+                    module_path=module_path,
+                    module=module,
+                    previous_figures=previous_figures,
+                )
+                _register_status(
+                    status_map,
+                    step="post",
+                    module_path=module_path,
+                    status="OK",
+                    message="plot généré",
+                )
+            except Exception as exc:
+                print(
+                    f"ERREUR: échec du plot {module_path}: {exc}"
+                )
+                traceback.print_exc()
+                _register_status(
+                    status_map,
+                    step="post",
+                    module_path=module_path,
+                    status="FAIL",
+                    message=str(exc),
+                )
+    else:
+        skip_reason = "comparaisons ignorées (Step1/Step2 indisponibles)"
+        for module_path in POST_PLOT_MODULES:
+            if module_path not in status_map:
+                _register_status(
+                    status_map,
+                    step="post",
+                    module_path=module_path,
+                    status="SKIP",
+                    message=skip_reason,
+                )
     if "step1" in steps:
         _inspect_plot_outputs(
             ARTICLE_DIR / "step1" / "plots" / "output",
@@ -1158,7 +1272,7 @@ def main(argv: list[str] | None = None) -> None:
             "Step2",
             list(export_formats),
         )
-    counts = _summarize_statuses(status_map, steps)
+    counts = _summarize_statuses(status_map, steps, POST_PLOT_MODULES)
     if args.fail_on_error and counts.get("FAIL", 0) > 0:
         sys.exit(1)
 

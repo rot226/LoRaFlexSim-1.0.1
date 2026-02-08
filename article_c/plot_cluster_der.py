@@ -200,7 +200,7 @@ def _plot_der_by_cluster(df: pd.DataFrame, clusters: list[str]) -> plt.Figure:
     return fig
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--formats",
@@ -255,7 +255,8 @@ def main(argv: list[str] | None = None) -> None:
     output_dir = args.output_dir or (base_dir / "plots" / "output")
     save_figure(fig, output_dir, "plot_cluster_der", use_tight=False)
     assert_legend_present(fig, "plot_cluster_der")
-    plt.close(fig)
+    if close_figures:
+        plt.close(fig)
 
 
 if __name__ == "__main__":

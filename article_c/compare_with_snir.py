@@ -303,6 +303,8 @@ def _render_metric_plot(
     output_dir: Path,
     author_curves: list[AuthorCurve],
     y_limits: tuple[float, float] | None = None,
+    *,
+    close_figures: bool = True,
 ) -> None:
     fig, ax = plt.subplots(1, 1)
     status = is_constant_metric(metric_values(rows, metric_key))
@@ -325,7 +327,8 @@ def _render_metric_plot(
         add_global_legend(fig, ax, legend_loc="above", handles=handles, labels=labels)
     apply_figure_layout(fig, margins=legend_margins("above"))
     save_figure(fig, output_dir, output_stem)
-    plt.close(fig)
+    if close_figures:
+        plt.close(fig)
 
 
 def _parse_snir_modes(value: str) -> list[str]:
@@ -407,9 +410,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
+def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    args = build_parser().parse_args()
+    args = build_parser().parse_args(argv)
 
     export_formats = parse_export_formats(args.formats)
     set_default_export_formats(export_formats)
@@ -464,6 +467,7 @@ def main() -> None:
         args.output_dir,
         author_curves,
         y_limits=(0.0, 1.0),
+        close_figures=close_figures,
     )
     _render_metric_plot(
         step1_rows,
@@ -473,6 +477,7 @@ def main() -> None:
         args.output_dir,
         author_curves,
         y_limits=(0.0, 1.0),
+        close_figures=close_figures,
     )
     _render_metric_plot(
         step2_rows,
@@ -481,6 +486,7 @@ def main() -> None:
         "compare_throughput_snir",
         args.output_dir,
         author_curves,
+        close_figures=close_figures,
     )
 
 
