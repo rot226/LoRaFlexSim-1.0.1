@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from article_c.common.plot_helpers import apply_figure_layout
+from plot_defaults import resolve_ieee_figsize
 from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -93,7 +94,13 @@ def main() -> None:
     )
 
     cluster_colors = {cluster: PALETTE[index % len(PALETTE)] for index, cluster in enumerate(clusters)}
-    fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(7.5, 9.5), sharex=True)
+    base_width, base_height = resolve_ieee_figsize(max(1, len(clusters)))
+    fig, axes = plt.subplots(
+        nrows=3,
+        ncols=1,
+        figsize=(base_width, base_height * 3),
+        sharex=True,
+    )
     metrics = [
         ("reward", "Récompense moyenne"),
         ("pdr", "PDR cumulée"),

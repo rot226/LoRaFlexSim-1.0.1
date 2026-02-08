@@ -20,7 +20,6 @@ from article_c.common.plot_helpers import (
     MetricStatus,
     algo_labels,
     apply_plot_style,
-    apply_figure_layout,
     create_right_legend_layout,
     assert_legend_present,
     clear_axis_legends,
@@ -228,8 +227,12 @@ def _plot_distribution(rows: list[dict[str, object]]) -> plt.Figure:
     )
     distribution_by_group = _aggregate_distributions(rows, sf_values)
 
-    fig, axes = plt.subplots(1, len(snir_modes), sharey=True)
-    apply_figure_layout(fig, figsize=resolve_ieee_figsize(len(snir_modes)))
+    fig, axes = plt.subplots(
+        1,
+        len(snir_modes),
+        sharey=True,
+        figsize=resolve_ieee_figsize(len(snir_modes)),
+    )
     if len(snir_modes) == 1:
         axes = [axes]
 

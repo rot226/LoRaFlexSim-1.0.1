@@ -13,7 +13,6 @@ import pandas as pd
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
     apply_plot_style,
-    apply_figure_layout,
     place_adaptive_legend,
     assert_legend_present,
     MetricStatus,
@@ -87,8 +86,12 @@ def _plot_metric_page(
     metric_state: MetricStatus,
     title_suffix: str = "",
 ) -> plt.Figure:
-    fig, axes = plt.subplots(1, len(clusters), sharey=True)
-    apply_figure_layout(fig, figsize=resolve_ieee_figsize(len(clusters)))
+    fig, axes = plt.subplots(
+        1,
+        len(clusters),
+        sharey=True,
+        figsize=resolve_ieee_figsize(len(clusters)),
+    )
     if len(clusters) == 1:
         axes = [axes]
 

@@ -15,7 +15,6 @@ from article_c.common.plot_helpers import (
     create_right_legend_layout,
     algo_label,
     apply_plot_style,
-    apply_figure_layout,
     assert_legend_present,
     clear_axis_legends,
     collect_legend_entries,
@@ -175,8 +174,7 @@ def _plot_metric(
         return None
     cluster_labels = _cluster_labels(clusters)
 
-    fig, axes = plt.subplots(1, len(clusters), sharey=True)
-    apply_figure_layout(fig, figsize=_right_legend_figsize(len(clusters)))
+    fig, axes = plt.subplots(1, len(clusters), sharey=True, figsize=_right_legend_figsize(len(clusters)))
     if len(clusters) == 1:
         axes = [axes]
 
@@ -336,7 +334,7 @@ def _plot_raw_metric(
         return None
     cluster_labels = _cluster_labels(clusters)
     fig, axes = plt.subplots(1, len(clusters), sharey=True)
-    apply_figure_layout(fig, figsize=_right_legend_figsize(len(clusters)))
+    fig.set_size_inches(*_right_legend_figsize(len(clusters)), forward=True)
     if len(clusters) == 1:
         axes = [axes]
     algorithms = sorted({row["algo"] for row in rows})

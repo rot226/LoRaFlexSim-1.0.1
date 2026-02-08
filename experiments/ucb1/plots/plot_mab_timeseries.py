@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from article_c.common.plot_helpers import apply_figure_layout
+from plot_defaults import resolve_ieee_figsize
 from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups, top_groups
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -134,7 +135,7 @@ def _plot_metric(
     styles: dict[float, str],
     output_dir: Path,
 ) -> None:
-    fig, ax = plt.subplots(figsize=(7.0, 4.2))
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(max(1, len(clusters))))
     for cluster in clusters:
         for interval in intervals:
             subset = df[(df["cluster"] == cluster) & (df["packet_interval_s"] == interval)]
@@ -172,7 +173,7 @@ def _plot_metric_snir_overlay(
     intervals: list[float],
     output_dir: Path,
 ) -> None:
-    fig, ax = plt.subplots(figsize=(7.0, 4.2))
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(max(1, len(clusters))))
     for cluster in clusters:
         for interval in intervals:
             for snir_state in ("snir_off", "snir_on"):

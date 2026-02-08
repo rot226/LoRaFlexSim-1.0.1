@@ -13,7 +13,6 @@ import pandas as pd
 
 from article_c.common.plot_helpers import (
     apply_plot_style,
-    apply_figure_layout,
     assert_legend_present,
     MetricStatus,
     ensure_network_size,
@@ -68,8 +67,6 @@ def _plot_metric(
         algo_col = None
     series_count = len(df[algo_col].dropna().unique()) if algo_col else None
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
-    width, height = fig.get_size_inches()
-    apply_figure_layout(fig, figsize=(width, height))
     ensure_network_size(rows)
     if network_sizes is None:
         network_sizes = sorted(df["network_size"].unique())

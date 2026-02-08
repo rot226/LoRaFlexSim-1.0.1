@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from article_c.common.plot_helpers import apply_figure_layout
+from plot_defaults import resolve_ieee_figsize
 from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -90,7 +91,13 @@ def main() -> None:
     if "policy" not in df.columns:
         df["policy"] = "all"
 
-    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(7.5, 8.0), sharex=True)
+    base_width, base_height = resolve_ieee_figsize(max(1, len(policies)))
+    fig, axes = plt.subplots(
+        nrows=2,
+        ncols=1,
+        figsize=(base_width, base_height * 2),
+        sharex=True,
+    )
     metrics = [("sf", "SF moyen"), ("tx_power", "Puissance d'émission (dBm)")]
 
     for idx, (metric, ylabel) in enumerate(metrics):

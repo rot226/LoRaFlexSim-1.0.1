@@ -13,7 +13,6 @@ import pandas as pd
 
 from article_c.common.plot_helpers import (
     apply_plot_style,
-    apply_figure_layout,
     assert_legend_present,
     MetricStatus,
     fallback_legend_handles,
@@ -69,8 +68,6 @@ def _plot_entropy(
     network_sizes = sorted(network_sizes)
     series_count = len(network_sizes)
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(network_sizes)))
-    width, height = fig.get_size_inches()
-    apply_figure_layout(fig, figsize=(width, height))
     all_entropy_values: list[float] = []
     for network_size in network_sizes:
         size_rows = [row for row in rows if row["network_size"] == network_size]

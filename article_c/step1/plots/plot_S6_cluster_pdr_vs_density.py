@@ -18,7 +18,6 @@ from article_c.common.plot_helpers import (
     MetricStatus,
     algo_label,
     apply_plot_style,
-    apply_figure_layout,
     place_adaptive_legend,
     assert_legend_present,
     ensure_network_size,
@@ -86,7 +85,6 @@ def _plot_metric_page(
         sharex=True,
         sharey=True,
     )
-    apply_figure_layout(fig, figsize=figsize)
     if len(algorithms) == 1 and len(clusters) == 1:
         axes = [[axes]]
     elif len(algorithms) == 1:

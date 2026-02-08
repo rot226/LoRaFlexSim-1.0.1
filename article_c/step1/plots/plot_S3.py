@@ -13,7 +13,6 @@ import pandas as pd
 
 from article_c.common.plot_helpers import (
     apply_plot_style,
-    apply_figure_layout,
     assert_legend_present,
     MetricStatus,
     ensure_network_size,
@@ -78,7 +77,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         else len(df.dropna().drop_duplicates())
     )
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
-    apply_figure_layout(fig, figsize=tuple(fig.get_size_inches()))
     network_sizes = sorted(df["network_size"].unique())
     warn_if_insufficient_network_sizes(network_sizes)
     metric_key = select_received_metric_key(rows, metric_key)
