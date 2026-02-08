@@ -1861,6 +1861,9 @@ def run_simulation(
     rng = random.Random(seed)
     step2_defaults = DEFAULT_CONFIG.step2
     snir_defaults = DEFAULT_CONFIG.snir
+    reward_floor_value = reward_floor
+    if safe_profile and reward_floor_value is None:
+        reward_floor_value = STEP2_SAFE_CONFIG.reward_floor
     traffic_mode_value = "poisson" if traffic_mode is None else traffic_mode
     reward_alert_level_value = (
         logging.WARNING if str(reward_alert_level).upper() == "WARNING" else logging.INFO
@@ -1947,11 +1950,14 @@ def run_simulation(
         if traffic_coeff_clamp_enabled is None
         else traffic_coeff_clamp_enabled
     )
-    floor_on_zero_success_value = (
-        step2_defaults.floor_on_zero_success
-        if floor_on_zero_success is None
-        else floor_on_zero_success
-    )
+    if floor_on_zero_success is None:
+        floor_on_zero_success_value = (
+            STEP2_SAFE_CONFIG.floor_on_zero_success
+            if safe_profile
+            else step2_defaults.floor_on_zero_success
+        )
+    else:
+        floor_on_zero_success_value = floor_on_zero_success
     window_delay_enabled_value = (
         step2_defaults.window_delay_enabled
         if window_delay_enabled is None
@@ -2244,7 +2250,7 @@ def run_simulation(
     if max_penalty_ratio_value < 0.0:
         raise ValueError("max_penalty_ratio doit être positif ou nul.")
     reward_weights = _reward_weights_for_algo(
-        algorithm, reward_floor=reward_floor
+        algorithm, reward_floor=reward_floor_value
     )
     sf_norm_by_sf = {
         sf: _normalize(sf, min(sf_values), max(sf_values)) for sf in sf_values
