@@ -830,14 +830,20 @@ def choose_legend_location(
                 overlap_ratio, overlap_area = _legend_overlap_ratio(fig, legend, artists)
                 overlaps.append((overlap_ratio, overlap_area, inside_loc))
                 legend.remove()
-            overlaps.sort(key=lambda item: (item[0], item[1]))
-            best_ratio, best_area, best_loc = overlaps[0]
-            if all(item[0] >= INSIDE_OVERLAP_STRONG_RATIO for item in overlaps):
-                best_loc = "upper right"
-                for ratio, area, loc in overlaps:
-                    if loc == best_loc:
-                        best_ratio, best_area = ratio, area
-                        break
+            inside_order = {loc: idx for idx, loc in enumerate(INSIDE_LEGEND_LOCATIONS)}
+            viable = [
+                item for item in overlaps if item[0] < INSIDE_OVERLAP_STRONG_RATIO
+            ]
+            if viable:
+                viable.sort(key=lambda item: (item[0], item[1], inside_order[item[2]]))
+                best_ratio, best_area, best_loc = viable[0]
+            else:
+                fallback_loc = INSIDE_LEGEND_LOCATIONS[0]
+                best_ratio, best_area, best_loc = next(
+                    (ratio, area, loc)
+                    for ratio, area, loc in overlaps
+                    if loc == fallback_loc
+                )
             evaluated.append(
                 (
                     best_ratio,
