@@ -754,6 +754,24 @@ def _evaluate_legend_overlap(
     return total_area / legend_area, total_area
 
 
+def _collect_overlap_artists(
+    fig: plt.Figure,
+    axes: Iterable[plt.Axes] | None = None,
+) -> list[object]:
+    axes_list = list(axes or fig.axes)
+    artists: list[object] = []
+    for ax in axes_list:
+        if ax is None:
+            continue
+        if ax.patch is not None:
+            artists.append(ax.patch)
+        artists.extend(list(ax.patches))
+        artists.extend(list(ax.lines))
+        artists.extend(list(ax.collections))
+        artists.extend(list(ax.images))
+    return artists
+
+
 def _legend_overlap_score(
     fig: plt.Figure,
     legend: Legend,
@@ -782,7 +800,7 @@ def choose_legend_location(
     max_rows_above: int = 2,
     max_rows_inside: int = 3,
 ) -> tuple[str, int, int, str | None] | None:
-    """Choisit la position de légende qui minimise les collisions avec les artistes."""
+    """Choisit la position de légende qui minimise les collisions avec les tracés."""
     label_count = len(labels)
     candidates: list[tuple[str, int, int]] = []
     if label_count <= max_items_right:
@@ -805,7 +823,7 @@ def choose_legend_location(
     if not candidates:
         return None
 
-    artists: list[object] = list(ax.lines) + list(ax.collections)
+    artists = _collect_overlap_artists(fig)
     preferred = _normalize_legend_loc(preferred_loc or "")
     preferred_rank = {loc: idx for idx, loc in enumerate(["right", "above", "inside"])}
     if preferred in preferred_rank:
