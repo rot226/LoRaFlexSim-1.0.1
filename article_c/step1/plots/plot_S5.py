@@ -393,7 +393,6 @@ def _plot_pdr_distributions(
     metric_state = is_constant_metric(all_values)
     if metric_state is not MetricStatus.OK:
         fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(legend_handles)))
-        legend_bbox = _legend_bbox(fig, legend_rows)
         apply_figure_layout(fig)
         render_metric_status(
             fig,
@@ -403,9 +402,8 @@ def _plot_pdr_distributions(
             legend_handles=(legend_handles, legend_labels),
         )
         configure_axes = ax
-        layout_margins = legend_margins("above", legend_rows=legend_rows)
         clear_axis_legends(configure_axes)
-        configure_figure(
+        final_loc, final_rows = configure_figure(
             fig,
             configure_axes,
             title=None,
@@ -413,13 +411,16 @@ def _plot_pdr_distributions(
             legend_handles=legend_handles,
             legend_labels=legend_labels,
         )
-        if fig.legends:
+        layout_margins = legend_margins(final_loc, legend_rows=final_rows)
+        legend_bbox = None
+        if fig.legends and final_loc == "above":
+            legend_bbox = _legend_bbox(fig, final_rows)
             fig.legends[0].set_bbox_to_anchor(legend_bbox)
         apply_figure_layout(
             fig,
             margins=layout_margins,
             bbox_to_anchor=legend_bbox,
-            legend_rows=legend_rows,
+            legend_rows=final_rows,
         )
         return [fig]
 
@@ -524,15 +525,10 @@ def _plot_pdr_distribution_page(
                 bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.0},
             )
 
-    layout_margins = {
-        **legend_margins("above", legend_rows=legend_rows),
-        "hspace": 0.95,
-        "wspace": 0.25,
-    }
     base_title = "Figure S5 — PDR par algorithme et mode SNIR (tailles indiquées)"
     title = f"{base_title} ({title_suffix})" if title_suffix else base_title
     clear_axis_legends(axes)
-    configure_figure(
+    final_loc, final_rows = configure_figure(
         fig,
         axes,
         title=None,
@@ -540,13 +536,18 @@ def _plot_pdr_distribution_page(
         legend_handles=legend_handles,
         legend_labels=legend_labels,
     )
-    if fig.legends:
+    layout_margins = {
+        **legend_margins(final_loc, legend_rows=final_rows),
+        "hspace": 0.95,
+        "wspace": 0.25,
+    }
+    if fig.legends and final_loc == "above":
         fig.legends[0].set_bbox_to_anchor(legend_bbox)
     apply_figure_layout(
         fig,
         margins=layout_margins,
-        bbox_to_anchor=legend_bbox,
-        legend_rows=legend_rows,
+        bbox_to_anchor=legend_bbox if final_loc == "above" else None,
+        legend_rows=final_rows,
     )
     return fig
 
