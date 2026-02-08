@@ -116,7 +116,7 @@ DEFAULT_LEGEND_LOC = "right"
 CONSTANT_METRIC_VARIANCE_THRESHOLD = 1e-6
 CONSTANT_METRIC_MESSAGE = "métrique constante – à investiguer"
 MISSING_METRIC_MESSAGE = "données manquantes"
-DEFAULT_EXPORT_FORMATS = ("png", "eps")
+DEFAULT_EXPORT_FORMATS = ("png",)
 INSIDE_LEGEND_LOCATIONS = (
     "upper right",
     "upper left",
@@ -180,8 +180,10 @@ def _enforce_png_eps_order(formats: Iterable[str]) -> tuple[str, ...]:
     normalized = _normalize_export_formats(formats)
     ordered = [fmt for fmt in normalized if fmt not in {"png", "eps"}]
     prefix = []
-    prefix.append("png")
-    prefix.append("eps")
+    if "png" in normalized:
+        prefix.append("png")
+    if "eps" in normalized:
+        prefix.append("eps")
     return tuple(prefix + ordered)
 
 

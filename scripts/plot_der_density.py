@@ -220,7 +220,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--formats",
         type=str,
-        default="png,eps",
+        default="png",
         help="Formats de sortie séparés par des virgules (ex: png,eps).",
     )
     parser.add_argument(
