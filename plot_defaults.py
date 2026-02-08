@@ -17,6 +17,7 @@ DEFAULT_FIGSIZE_MULTI: Tuple[float, float] = DOUBLE_COLUMN_FIGSIZE
 IEEE_SINGLE_COLUMN_WIDTH: float = SINGLE_COLUMN_WIDTH
 IEEE_DOUBLE_COLUMN_WIDTH: float = DOUBLE_COLUMN_WIDTH
 IEEE_HEIGHT_RATIO: float = SINGLE_COLUMN_FIGSIZE[1] / SINGLE_COLUMN_FIGSIZE[0]
+RL_FIGURE_SCALE: float = 1.15
 
 
 def resolve_figsize(num_series: int | None = None) -> Tuple[float, float]:
@@ -28,14 +29,20 @@ def resolve_figsize(num_series: int | None = None) -> Tuple[float, float]:
     return (width, height)
 
 
-def resolve_ieee_figsize(num_series: int | None = None) -> Tuple[float, float]:
+def resolve_ieee_figsize(
+    num_series: int | None = None,
+    *,
+    scale: float = 1.0,
+) -> Tuple[float, float]:
     """Retourne la taille IEEE (simple/double colonne) selon le nombre de séries."""
+    if scale <= 0:
+        raise ValueError("scale doit être strictement positif.")
     if num_series and num_series > 1:
         return (
-            IEEE_DOUBLE_COLUMN_WIDTH,
-            IEEE_DOUBLE_COLUMN_WIDTH * IEEE_HEIGHT_RATIO,
+            IEEE_DOUBLE_COLUMN_WIDTH * scale,
+            IEEE_DOUBLE_COLUMN_WIDTH * IEEE_HEIGHT_RATIO * scale,
         )
     return (
-        IEEE_SINGLE_COLUMN_WIDTH,
-        IEEE_SINGLE_COLUMN_WIDTH * IEEE_HEIGHT_RATIO,
+        IEEE_SINGLE_COLUMN_WIDTH * scale,
+        IEEE_SINGLE_COLUMN_WIDTH * IEEE_HEIGHT_RATIO * scale,
     )

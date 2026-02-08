@@ -23,7 +23,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     save_figure,
 )
-from plot_defaults import resolve_ieee_figsize
+from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
@@ -194,7 +194,9 @@ def _plot_learning_curve(
     preferred_algos = ["ADR", "UCB1-SF"]
     available = _available_algorithms(rows)
     algorithms = _select_algorithms(preferred_algos, available)
-    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
+    fig, ax = plt.subplots(
+        figsize=resolve_ieee_figsize(len(algorithms), scale=RL_FIGURE_SCALE)
+    )
     reward_values = [
         float(row.get("avg_reward"))
         for row in rows

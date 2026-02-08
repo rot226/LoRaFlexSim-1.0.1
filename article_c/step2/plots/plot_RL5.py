@@ -19,11 +19,11 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     load_step2_selection_probs,
     normalize_network_size_rows,
-    create_right_legend_layout,
+    place_adaptive_legend,
     render_metric_status,
     save_figure,
 )
-from plot_defaults import resolve_ieee_figsize
+from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
@@ -55,7 +55,9 @@ def _plot_selection(
     network_sizes = sorted(network_sizes)
     sfs = sorted({row["sf"] for row in rows})
     series_count = len(sfs) * len(network_sizes) if sfs and network_sizes else None
-    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
+    fig, ax = plt.subplots(
+        figsize=resolve_ieee_figsize(series_count, scale=RL_FIGURE_SCALE)
+    )
     selection_values = [
         float(row.get("selection_prob"))
         for row in rows
@@ -86,7 +88,7 @@ def _plot_selection(
             ax.plot(rounds, values, marker="o", label=label)
     ax.set_xlabel("Round (index)")
     ax.set_ylabel("Selection prob. (prob.)")
-    create_right_legend_layout(fig, ax)
+    place_adaptive_legend(fig, ax, preferred_loc="right")
     return fig
 
 

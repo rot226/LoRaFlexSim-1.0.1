@@ -29,7 +29,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     save_figure,
 )
-from plot_defaults import resolve_ieee_figsize
+from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
 ALGO_ALIASES = {
     "adr": "adr",
@@ -276,7 +276,9 @@ def _legend_handles_for_algos(
 
 
 def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(points)))
+    fig, ax = plt.subplots(
+        figsize=resolve_ieee_figsize(len(points), scale=RL_FIGURE_SCALE)
+    )
     reward_values = [
         float(point["reward_mean"])
         for point in points

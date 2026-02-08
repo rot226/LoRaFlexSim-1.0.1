@@ -24,7 +24,7 @@ from article_c.common.plot_helpers import (
     place_adaptive_legend,
     save_figure,
 )
-from plot_defaults import resolve_ieee_figsize
+from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
 
 _DENSITY_CONSTANT_WARNED = False
@@ -91,7 +91,9 @@ def _plot_distribution(
     network_sizes: list[int],
 ) -> plt.Figure:
     algorithms = sorted({row["algo"] for row in rows})
-    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
+    fig, ax = plt.subplots(
+        figsize=resolve_ieee_figsize(len(algorithms), scale=RL_FIGURE_SCALE)
+    )
     algo_colors = [ALGO_COLORS.get(str(algo), "#333333") for algo in algorithms]
     rewards_by_algo = [
         [row["reward"] for row in rows if row["algo"] == algo]
@@ -211,7 +213,7 @@ def _plot_diagnostics(
     df = pd.DataFrame(rows)
     if df.empty:
         return
-    base_width, base_height = resolve_ieee_figsize(2)
+    base_width, base_height = resolve_ieee_figsize(2, scale=RL_FIGURE_SCALE)
     figsize = (base_width, base_height * 2)
     fig, axes = plt.subplots(2, 2, figsize=figsize)
     axes = axes.flatten()

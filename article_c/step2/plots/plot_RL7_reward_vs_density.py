@@ -30,7 +30,7 @@ from article_c.common.plot_helpers import (
     resolve_percentile_keys,
     save_figure,
 )
-from plot_defaults import resolve_ieee_figsize
+from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
 ALGO_ALIASES = {
     "adr": "adr",
@@ -112,7 +112,7 @@ def _plot_metric(
         if row.get("algo") is not None
     }
     series_count = len({name for name in algo_names if name}) or None
-    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count, scale=RL_FIGURE_SCALE))
     ensure_network_size(rows)
     if network_sizes is None:
         network_sizes = sorted(df["network_size"].unique())
@@ -347,7 +347,7 @@ def _plot_diagnostics(
         return
     metric_values, metric_label = _extract_metric_values(rows, metric_key)
     display_label = "Reward (a.u.)"
-    base_width, base_height = resolve_ieee_figsize(2)
+    base_width, base_height = resolve_ieee_figsize(2, scale=RL_FIGURE_SCALE)
     figsize = (base_width, base_height * 2)
     fig, axes = plt.subplots(2, 2, figsize=figsize)
     axes = axes.flatten()

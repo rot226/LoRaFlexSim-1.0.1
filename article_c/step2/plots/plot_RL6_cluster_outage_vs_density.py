@@ -12,7 +12,6 @@ import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
-    create_right_legend_layout,
     algo_label,
     apply_plot_style,
     assert_legend_present,
@@ -28,11 +27,11 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     metric_values,
     normalize_network_size_rows,
+    place_adaptive_legend,
     render_metric_status,
     save_figure,
-    suptitle_y_from_top,
 )
-from plot_defaults import resolve_ieee_figsize
+from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
 ALGO_ALIASES = {
     "adr": "adr",
@@ -46,11 +45,10 @@ ALGO_ALIASES = {
 }
 TARGET_ALGOS = {"adr", "loba", "mixra_h", "mixra_opt", "ucb1_sf"}
 RIGHT_LEGEND_WIDTH_FACTOR = 1.3
-RIGHT_LEGEND_RATIO_FACTOR = 1.15
 
 
 def _right_legend_figsize(cluster_count: int) -> tuple[float, float]:
-    width, height = resolve_ieee_figsize(cluster_count)
+    width, height = resolve_ieee_figsize(cluster_count, scale=RL_FIGURE_SCALE)
     return (width * RIGHT_LEGEND_WIDTH_FACTOR, height)
 
 
@@ -223,12 +221,13 @@ def _plot_metric(
         handles, labels = legend_handles_for_algos_snir(["snir_on"])
     if not handles:
         handles, labels = fallback_legend_handles()
-    create_right_legend_layout(
+    place_adaptive_legend(
         fig,
-        axes,
+        axes[0],
+        preferred_loc="right",
         handles=handles if handles else None,
         labels=labels if handles else None,
-        extra_width_factor=RIGHT_LEGEND_RATIO_FACTOR,
+        use_fallback=False,
     )
     return fig
 
@@ -377,12 +376,13 @@ def _plot_raw_metric(
         handles, labels = legend_handles_for_algos_snir(["snir_on"])
     if not handles:
         handles, labels = fallback_legend_handles()
-    create_right_legend_layout(
+    place_adaptive_legend(
         fig,
-        axes,
+        axes[0],
+        preferred_loc="right",
         handles=handles if handles else None,
         labels=labels if handles else None,
-        extra_width_factor=RIGHT_LEGEND_RATIO_FACTOR,
+        use_fallback=False,
     )
     return fig
 

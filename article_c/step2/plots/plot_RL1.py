@@ -28,7 +28,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     save_figure,
 )
-from plot_defaults import resolve_ieee_figsize
+from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
 TARGET_CLUSTER = "gold"
 
@@ -69,7 +69,7 @@ def _plot_metric(
     else:
         algo_col = None
     series_count = len(df[algo_col].dropna().unique()) if algo_col else None
-    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count, scale=RL_FIGURE_SCALE))
     ensure_network_size(rows)
     if network_sizes is None:
         network_sizes = sorted(df["network_size"].unique())
