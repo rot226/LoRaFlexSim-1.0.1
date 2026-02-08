@@ -18,7 +18,6 @@ from article_c.common.plot_helpers import (
     MetricStatus,
     algo_label,
     apply_plot_style,
-    apply_figure_layout,
     assert_legend_present,
     filter_cluster,
     filter_rows_by_network_sizes,
@@ -278,9 +277,6 @@ def _legend_handles_for_algos(
 
 def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(points)))
-    width, height = fig.get_size_inches()
-    series_count = len(points)
-    apply_figure_layout(fig, figsize=(width, height))
     reward_values = [
         float(point["reward_mean"])
         for point in points

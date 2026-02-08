@@ -14,7 +14,6 @@ import pandas as pd
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
-    apply_figure_layout,
     assert_legend_present,
     ensure_network_size,
     filter_rows_by_network_sizes,
@@ -114,8 +113,6 @@ def _plot_metric(
     }
     series_count = len({name for name in algo_names if name}) or None
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
-    width, height = fig.get_size_inches()
-    apply_figure_layout(fig, figsize=(width, height))
     ensure_network_size(rows)
     if network_sizes is None:
         network_sizes = sorted(df["network_size"].unique())
@@ -353,7 +350,6 @@ def _plot_diagnostics(
     base_width, base_height = resolve_ieee_figsize(2)
     figsize = (base_width, base_height * 2)
     fig, axes = plt.subplots(2, 2, figsize=figsize)
-    apply_figure_layout(fig, figsize=figsize)
     axes = axes.flatten()
 
     network_sizes = pd.to_numeric(df.get("network_size"), errors="coerce").dropna()

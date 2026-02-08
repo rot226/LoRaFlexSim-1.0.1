@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from article_c.common.plot_helpers import apply_figure_layout
+from plot_defaults import resolve_ieee_figsize
 from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -373,7 +374,8 @@ def _filter_windows(
 
 def _plot_der(df: pd.DataFrame, output: Path) -> None:
     df = filter_top_groups(df, ["source", "snir_state", "cluster"], max_groups=3)
-    fig, ax = plt.subplots(figsize=(8, 5))
+    series_count = max(1, df["source"].nunique())
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
     style_by_source = {
         "Step1/QoS": {"linestyle": "-", "marker": "o"},
         "UCB1": {"linestyle": "--", "marker": "D"},

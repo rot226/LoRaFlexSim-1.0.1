@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from article_c.common.plot_helpers import apply_figure_layout
+from plot_defaults import resolve_ieee_figsize
 from experiments.ucb1.plots.plot_style import apply_ieee_style, filter_top_groups
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -140,7 +141,12 @@ def main() -> None:
         )
     fairness_df = pd.DataFrame(fairness_rows)
 
-    fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(7.5, 10.5))
+    base_width, base_height = resolve_ieee_figsize(max(1, len(policies)))
+    fig, axes = plt.subplots(
+        nrows=3,
+        ncols=1,
+        figsize=(base_width, base_height * 3),
+    )
 
     ax = axes[0]
     for policy in policies:

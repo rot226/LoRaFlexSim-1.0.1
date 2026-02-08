@@ -14,7 +14,6 @@ from matplotlib.lines import Line2D
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
-    apply_figure_layout,
     ALGO_COLORS,
     MetricStatus,
     assert_legend_present,
@@ -93,7 +92,6 @@ def _plot_distribution(
 ) -> plt.Figure:
     algorithms = sorted({row["algo"] for row in rows})
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
-    width, height = fig.get_size_inches()
     algo_colors = [ALGO_COLORS.get(str(algo), "#333333") for algo in algorithms]
     rewards_by_algo = [
         [row["reward"] for row in rows if row["algo"] == algo]
@@ -127,7 +125,6 @@ def _plot_distribution(
     ax.set_xticklabels([algo_label(str(algo)) for algo in algorithms])
     ax.set_xlabel("Algorithm")
     ax.set_ylabel("Reward (a.u.)")
-    apply_figure_layout(fig, figsize=(width, height))
     place_adaptive_legend(fig, ax, preferred_loc="right")
     return fig
 
@@ -217,7 +214,6 @@ def _plot_diagnostics(
     base_width, base_height = resolve_ieee_figsize(2)
     figsize = (base_width, base_height * 2)
     fig, axes = plt.subplots(2, 2, figsize=figsize)
-    apply_figure_layout(fig, figsize=figsize)
     axes = axes.flatten()
 
     network_sizes = pd.to_numeric(df.get("network_size"), errors="coerce").dropna()

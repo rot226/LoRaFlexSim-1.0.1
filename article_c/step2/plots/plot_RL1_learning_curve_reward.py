@@ -15,7 +15,6 @@ from article_c.common.plot_helpers import (
     ALGO_MARKERS,
     MetricStatus,
     apply_plot_style,
-    apply_figure_layout,
     algo_label,
     place_adaptive_legend,
     assert_legend_present,
@@ -196,8 +195,6 @@ def _plot_learning_curve(
     available = _available_algorithms(rows)
     algorithms = _select_algorithms(preferred_algos, available)
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
-    width, height = fig.get_size_inches()
-    apply_figure_layout(fig, figsize=(width, height))
     reward_values = [
         float(row.get("avg_reward"))
         for row in rows

@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from article_c.common.plotting_style import apply_base_rcparams
 from article_c.common.plot_helpers import apply_figure_layout
 from metrics import RunMetrics, load_cluster_ids
+from plot_defaults import resolve_ieee_figsize
 
 
 DEFAULT_ALGORITHMS = [
@@ -122,7 +123,13 @@ def _plot_pdr_by_cluster(
     cluster_ids = load_cluster_ids(results)
     if not cluster_ids:
         return None
-    fig, axes = plt.subplots(1, len(cluster_ids), figsize=(5.0 * len(cluster_ids), 4.5), sharey=True)
+    base_width, base_height = resolve_ieee_figsize(len(algorithms))
+    fig, axes = plt.subplots(
+        1,
+        len(cluster_ids),
+        figsize=(base_width, base_height),
+        sharey=True,
+    )
     if len(cluster_ids) == 1:
         axes = [axes]  # type: ignore[list-item]
     hline_added = False
@@ -177,7 +184,7 @@ def _plot_pdr_global(
     algorithms: Sequence[str],
     subtitle: str,
 ) -> Path | None:
-    fig, ax = plt.subplots(figsize=(6.0, 4.2))
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
     plotted = False
     styles = _style_mapping(algorithms)
     bar_width = 0.8 / max(len(algorithms), 1)
@@ -228,7 +235,7 @@ def _plot_der_global(
     algorithms: Sequence[str],
     subtitle: str,
 ) -> Path | None:
-    fig, ax = plt.subplots(figsize=(6.0, 4.2))
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
     plotted = False
     styles = _style_mapping(algorithms)
     bar_width = 0.8 / max(len(algorithms), 1)
@@ -283,7 +290,7 @@ def _plot_der_global_log(
     algorithms: Sequence[str],
     subtitle: str,
 ) -> Path | None:
-    fig, ax = plt.subplots(figsize=(6.0, 4.2))
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
     plotted = False
     styles = _style_mapping(algorithms)
     bar_width = 0.8 / max(len(algorithms), 1)
@@ -349,7 +356,7 @@ def _plot_snir_cdf(
     scenario: str,
     algorithms: Sequence[str],
 ) -> Path | None:
-    fig, ax = plt.subplots(figsize=(6.0, 4.0))
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
     plotted = False
     for algorithm in algorithms:
         metrics = mapping.get((scenario, algorithm))
@@ -383,10 +390,11 @@ def _plot_snir_distributions(
 ) -> Path | None:
     if not scenarios:
         return None
+    base_width, base_height = resolve_ieee_figsize(len(algorithms))
     fig, axes = plt.subplots(
         len(scenarios),
         2,
-        figsize=(10.0, 3.5 * len(scenarios)),
+        figsize=(base_width, base_height * len(scenarios)),
         sharex="col",
         squeeze=False,
     )
@@ -466,7 +474,13 @@ def _plot_rates_vs_snir(
     algorithms: Sequence[str],
     subtitle: str,
 ) -> Path | None:
-    fig, axes = plt.subplots(len(scenarios), 1, figsize=(7.5, 3.2 * len(scenarios)), sharex=True)
+    base_width, base_height = resolve_ieee_figsize(len(algorithms))
+    fig, axes = plt.subplots(
+        len(scenarios),
+        1,
+        figsize=(base_width, base_height * len(scenarios)),
+        sharex=True,
+    )
     if len(scenarios) == 1:
         axes = [axes]  # type: ignore[list-item]
     styles = _style_mapping(algorithms)
@@ -519,7 +533,7 @@ def _plot_collisions_vs_load(
     algorithms: Sequence[str],
     subtitle: str,
 ) -> Path | None:
-    fig, ax = plt.subplots(figsize=(6.5, 4.5))
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
     styles = _style_mapping(algorithms)
     plotted = False
     all_rates: List[float] = []
@@ -565,7 +579,7 @@ def _plot_collisions_vs_load_log(
     algorithms: Sequence[str],
     subtitle: str,
 ) -> Path | None:
-    fig, ax = plt.subplots(figsize=(6.5, 4.5))
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
     styles = _style_mapping(algorithms)
     plotted = False
     all_rates: List[float] = []
@@ -619,7 +633,7 @@ def _plot_delivery_breakdown(
     algorithms: Sequence[str],
     subtitle: str,
 ) -> Path | None:
-    fig, ax = plt.subplots(figsize=(7.0, 4.5))
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(algorithms)))
     styles = _style_mapping(algorithms)
     x_positions = list(range(len(scenarios)))
     bar_width = 0.8 / max(len(algorithms), 1)

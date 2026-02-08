@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from article_c.common.plot_helpers import apply_figure_layout
+from plot_defaults import resolve_ieee_figsize
 from experiments.ucb1.plots.plot_style import apply_ieee_style
 
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
@@ -125,7 +126,12 @@ def _plot_heatmaps(
         "der": "DER",
     }
 
-    fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(12, 4))
+    base_width, base_height = resolve_ieee_figsize(max(1, len(clusters)))
+    fig, axes = plt.subplots(
+        nrows=1,
+        ncols=3,
+        figsize=(base_width * 1.5, base_height),
+    )
     interval_labels = _format_intervals(intervals)
 
     for axis, key in zip(axes, ["reward", "snir", "der"], strict=True):

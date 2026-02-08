@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from article_c.common.plot_helpers import apply_figure_layout
+from plot_defaults import resolve_ieee_figsize
 from experiments.ucb1.plots.plot_style import apply_ieee_style
 
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
@@ -103,7 +104,13 @@ def main() -> None:
         .sort_values("time_s")
     )
 
-    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(7.0, 6.2), sharex=True)
+    base_width, base_height = resolve_ieee_figsize(2)
+    fig, axes = plt.subplots(
+        nrows=2,
+        ncols=1,
+        figsize=(base_width, base_height * 2),
+        sharex=True,
+    )
     for snir_state in ("snir_off", "snir_on"):
         subset = reward_by_time[reward_by_time["snir_state"] == snir_state]
         if subset.empty:

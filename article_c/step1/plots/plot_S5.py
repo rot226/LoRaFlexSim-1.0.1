@@ -393,7 +393,6 @@ def _plot_pdr_distributions(
     metric_state = is_constant_metric(all_values)
     if metric_state is not MetricStatus.OK:
         fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(legend_handles)))
-        apply_figure_layout(fig)
         render_metric_status(
             fig,
             ax,
@@ -488,7 +487,6 @@ def _plot_pdr_distribution_page(
     figsize = (base_width, height_per_row * nrows)
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize, sharey=True)
     legend_bbox = _legend_bbox(fig, legend_rows)
-    apply_figure_layout(fig, figsize=figsize)
     if nrows == 1 and ncols == 1:
         axes = [[axes]]
     elif nrows == 1:

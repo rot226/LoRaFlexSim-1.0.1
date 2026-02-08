@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from article_c.common.plot_helpers import apply_figure_layout
+from plot_defaults import resolve_ieee_figsize
 from experiments.ucb1.plots.plot_style import apply_ieee_style, top_groups
 
 DEFAULT_UCB1 = Path(__file__).resolve().parents[1] / "ucb1_load_metrics.csv"
@@ -111,8 +112,8 @@ def plot_regret(*, csv_path: Path, output_path: Path, packet_intervals: list[flo
             how="inner",
         )
 
-    fig, ax = plt.subplots(figsize=(7.0, 4.2))
     clusters = sorted(df["cluster"].unique().tolist())
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(max(1, len(clusters))))
     intervals = sorted(df["packet_interval_s"].unique().tolist())
 
     for cluster in clusters:

@@ -18,7 +18,6 @@ from article_c.common.plot_helpers import (
     SNIR_MODES,
     MetricStatus,
     apply_plot_style,
-    apply_figure_layout,
     place_adaptive_legend,
     assert_legend_present,
     filter_mixra_opt_fallback,
@@ -74,8 +73,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     cluster_labels = _cluster_labels(clusters)
     cluster_targets = _cluster_targets(clusters)
 
-    fig, axes = plt.subplots(1, len(SNIR_MODES), sharey=True)
-    apply_figure_layout(fig, figsize=resolve_ieee_figsize(len(SNIR_MODES)))
+    fig, axes = plt.subplots(
+        1,
+        len(SNIR_MODES),
+        sharey=True,
+        figsize=resolve_ieee_figsize(len(SNIR_MODES)),
+    )
     if len(SNIR_MODES) == 1:
         axes = [axes]
 
