@@ -131,6 +131,7 @@ STEP2_SAFE_CONFIG = Step2Config(
     collision_size_under_max=1.1,
     collision_size_over_max=1.4,
     reward_floor=0.05,
+    floor_on_zero_success=True,
     max_penalty_ratio=0.5,
     shadowing_sigma_db=8.0,
 )
@@ -146,6 +147,7 @@ STEP2_SUPER_SAFE_CONFIG = Step2Config(
     collision_size_under_max=1.0,
     collision_size_over_max=1.2,
     reward_floor=0.06,
+    floor_on_zero_success=True,
     max_penalty_ratio=0.4,
     shadowing_sigma_db=9.0,
 )
