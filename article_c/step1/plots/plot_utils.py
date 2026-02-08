@@ -43,7 +43,7 @@ def configure_figure(
     legend_loc: str = "right",
     legend_handles: list[object] | None = None,
     legend_labels: list[str] | None = None,
-) -> None:
+) -> tuple[str, int]:
     """Configure le titre, la légende et les marges de la figure.
 
     legend_loc doit valoir "above" (légende au-dessus) ou "right" (à droite).
@@ -53,6 +53,7 @@ def configure_figure(
 
     axes_list = _flatten_axes(axes)
     legend_rows = 1
+    final_legend_loc = legend_loc
     if not fig.legends and not any(ax.get_legend() is not None for ax in fig.axes):
         handles: list[object] = []
         labels: list[str] = []
@@ -83,7 +84,7 @@ def configure_figure(
                 labels=labels,
             )
             legend_rows = placement.legend_rows
-            legend_loc = placement.legend_loc
+            final_legend_loc = placement.legend_loc
     legend_in_figure = bool(fig.legends)
     legend_entry_count = 0
     if legend_in_figure:
@@ -99,7 +100,7 @@ def configure_figure(
         legend_rows = 1
     adjust_layout_for_legend = legend_in_figure and legend_entry_count > 1
 
-    if legend_loc == "above":
+    if final_legend_loc == "above":
         above_margins = (
             {
                 **legend_margins("above", legend_rows=legend_rows),
@@ -112,10 +113,10 @@ def configure_figure(
             fig,
             margins=above_margins,
             legend_rows=legend_rows,
-            legend_loc=legend_loc,
+            legend_loc=final_legend_loc,
         )
     else:
-        if legend_loc == "right":
+        if final_legend_loc == "right":
             margins = (
                 {
                     **legend_margins("right"),
@@ -124,8 +125,9 @@ def configure_figure(
                 if adjust_layout_for_legend
                 else FIGURE_MARGINS
             )
-            apply_figure_layout(fig, margins=margins, legend_loc=legend_loc)
+            apply_figure_layout(fig, margins=margins, legend_loc=final_legend_loc)
         else:
             apply_figure_layout(fig, margins=FIGURE_MARGINS)
     if title:
         fig.suptitle(title, y=suptitle_y_from_top(fig))
+    return final_legend_loc, legend_rows
