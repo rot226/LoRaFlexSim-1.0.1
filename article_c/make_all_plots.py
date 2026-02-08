@@ -297,6 +297,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "sans interrompre l'exécution."
         ),
     )
+    parser.add_argument(
+        "--no-suptitle",
+        action="store_true",
+        help="Désactive le titre global (suptitle) des figures.",
+    )
     return parser
 
 
@@ -313,6 +318,7 @@ def _run_plot_module(
     *,
     network_sizes: list[int] | None = None,
     allow_sample: bool = True,
+    enable_suptitle: bool = True,
 ) -> object:
     module = importlib.import_module(module_path)
     if not hasattr(module, "main"):
@@ -328,6 +334,8 @@ def _run_plot_module(
         kwargs["allow_sample"] = allow_sample
     if network_sizes is not None and ("network_sizes" in parameters or supports_kwargs):
         kwargs["network_sizes"] = network_sizes
+    if "enable_suptitle" in parameters or supports_kwargs:
+        kwargs["enable_suptitle"] = enable_suptitle
     if kwargs:
         module.main(**kwargs)
     else:
@@ -879,6 +887,7 @@ def main(argv: list[str] | None = None) -> None:
 
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    enable_suptitle = not args.no_suptitle
     try:
         export_formats = parse_export_formats(args.formats)
     except ValueError as exc:
@@ -1151,6 +1160,7 @@ def main(argv: list[str] | None = None) -> None:
                         module_path,
                         network_sizes=step2_network_sizes,
                         allow_sample=False,
+                        enable_suptitle=enable_suptitle,
                     )
                     _check_legends_for_module(
                         module_path=module_path,
@@ -1208,6 +1218,9 @@ def main(argv: list[str] | None = None) -> None:
                 post_formats,
             ],
         }
+        if not enable_suptitle:
+            post_args["article_c.reproduce_author_results"].append("--no-header")
+            post_args["article_c.compare_with_snir"].append("--no-suptitle")
         if args.network_sizes:
             post_args["article_c.plot_cluster_der"].extend(
                 ["--network-sizes", *map(str, args.network_sizes)]

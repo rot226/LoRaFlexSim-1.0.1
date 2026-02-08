@@ -8,6 +8,7 @@ from collections.abc import Iterable
 import matplotlib.pyplot as plt
 
 from article_c.common.plot_helpers import (
+    apply_suptitle,
     apply_figure_layout,
     deduplicate_legend_entries,
     fallback_legend_handles,
@@ -43,6 +44,7 @@ def configure_figure(
     legend_loc: str = "right",
     legend_handles: list[object] | None = None,
     legend_labels: list[str] | None = None,
+    enable_suptitle: bool = True,
 ) -> tuple[str, int]:
     """Configure le titre, la légende et les marges de la figure.
 
@@ -128,6 +130,10 @@ def configure_figure(
             apply_figure_layout(fig, margins=margins, legend_loc=final_legend_loc)
         else:
             apply_figure_layout(fig, margins=FIGURE_MARGINS)
-    if title:
-        fig.suptitle(title, y=suptitle_y_from_top(fig))
+    apply_suptitle(
+        fig,
+        title,
+        enable_suptitle=enable_suptitle,
+        y=suptitle_y_from_top(fig),
+    )
     return final_legend_loc, legend_rows

@@ -1239,6 +1239,22 @@ def suptitle_y_from_top(
     return min(0.99, top + (1.0 - top) * ratio)
 
 
+def apply_suptitle(
+    fig: plt.Figure,
+    title: str | None,
+    *,
+    enable_suptitle: bool = True,
+    y: float | None = None,
+) -> None:
+    """Ajoute un suptitle à la figure si activé."""
+    if not enable_suptitle or not title:
+        return
+    if y is None:
+        fig.suptitle(title)
+    else:
+        fig.suptitle(title, y=y)
+
+
 def _normalize_legend_loc(legend_loc: str) -> str:
     normalized = str(legend_loc or "").strip().lower()
     if normalized in {"haut", "top", "above"}:

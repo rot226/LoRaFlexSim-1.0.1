@@ -49,6 +49,7 @@ from article_c.common.plot_helpers import (
     SNIR_MODES,
     add_global_legend,
     algo_label,
+    apply_suptitle,
     apply_figure_layout,
     apply_plot_style,
     collect_legend_entries,
@@ -305,6 +306,7 @@ def _render_metric_plot(
     y_limits: tuple[float, float] | None = None,
     *,
     close_figures: bool = True,
+    enable_suptitle: bool = True,
 ) -> None:
     fig, ax = plt.subplots(1, 1)
     status = is_constant_metric(metric_values(rows, metric_key))
@@ -317,8 +319,10 @@ def _render_metric_plot(
     ax.set_ylabel(metric_label)
     if y_limits:
         ax.set_ylim(*y_limits)
-    fig.suptitle(
+    apply_suptitle(
+        fig,
         f"{metric_label} vs taille du réseau (SNIR on/off)",
+        enable_suptitle=enable_suptitle,
         y=SUPTITLE_Y,
     )
     handles, labels = collect_legend_entries(ax)
@@ -407,6 +411,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Formats d'export séparés par des virgules (ex: png,eps).",
     )
+    parser.add_argument(
+        "--no-suptitle",
+        action="store_true",
+        help="Désactive le titre global (suptitle) des figures.",
+    )
     return parser
 
 
@@ -459,6 +468,7 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
         "throughput",
     )
 
+    enable_suptitle = not args.no_suptitle
     _render_metric_plot(
         step1_rows,
         pdr_key,
@@ -468,6 +478,7 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
         author_curves,
         y_limits=(0.0, 1.0),
         close_figures=close_figures,
+        enable_suptitle=enable_suptitle,
     )
     _render_metric_plot(
         step1_rows,
@@ -478,6 +489,7 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
         author_curves,
         y_limits=(0.0, 1.0),
         close_figures=close_figures,
+        enable_suptitle=enable_suptitle,
     )
     _render_metric_plot(
         step2_rows,
@@ -487,6 +499,7 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
         args.output_dir,
         author_curves,
         close_figures=close_figures,
+        enable_suptitle=enable_suptitle,
     )
 
 
