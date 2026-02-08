@@ -40,16 +40,16 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     load_step2_aggregated,
     metric_values,
+    parse_export_formats,
     render_metric_status,
     save_figure,
     select_received_metric_key,
+    set_default_export_formats,
     set_network_size_ticks,
 )
 from article_c.common.plotting_style import (
     SUPTITLE_Y,
     apply_output_fonttype,
-    parse_export_formats,
-    set_default_export_formats,
 )
 
 LOGGER = logging.getLogger(__name__)
