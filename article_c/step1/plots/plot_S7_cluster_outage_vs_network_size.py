@@ -23,7 +23,6 @@ from article_c.common.plot_helpers import (
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     is_constant_metric,
-    legend_handles_for_algos_snir,
     load_step1_aggregated,
     metric_values,
     render_metric_status,
@@ -124,7 +123,10 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             values = [points.get(size, float("nan")) for size in network_sizes]
             target = cluster_targets.get(cluster)
             target_label = f" (target {target:.2f})" if target is not None else ""
-            label = f"Cluster {cluster_labels.get(cluster, cluster)}{target_label}"
+            label = (
+                f"Cluster {cluster_labels.get(cluster, cluster)}"
+                f"{target_label} ({SNIR_LABELS[snir_mode]})"
+            )
             ax.plot(
                 network_sizes,
                 values,
@@ -139,7 +141,12 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
-    handles, labels = legend_handles_for_algos_snir()
+    handles: list[plt.Line2D] = []
+    labels: list[str] = []
+    for ax in axes:
+        series_handles, series_labels = ax.get_legend_handles_labels()
+        handles.extend(series_handles)
+        labels.extend(series_labels)
     place_adaptive_legend(
         fig,
         axes[0],
