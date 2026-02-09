@@ -11,6 +11,7 @@ from traffic.numpy_compat import create_generator
 from .obstacle_loss import ObstacleLoss
 from .omnet_model import OmnetModel
 from .propagation_cache import PropagationCache
+from .snir_kappa import default_kappa_matrix
 
 
 def path_loss_hata_okumura(distance: float, k1: float, k2: float) -> float:
@@ -253,6 +254,8 @@ class Channel:
         channel_index: int = 0,
         orthogonal_sf: bool = True,
         alpha_isf: float = 0.0,
+        snir_model: bool = False,
+        kappa_isf: object | None = None,
         rng: np.random.Generator | None = None,
     ):
         """
@@ -391,6 +394,11 @@ class Channel:
         :param alpha_isf: Coefficient appliqué aux interférences inter-SF lorsque
             ``orthogonal_sf`` est désactivé (0 signifie SF parfaitement
             orthogonaux).
+        :param snir_model: Active un calcul SNIR enrichi tenant compte des
+            coefficients de corrélation ``κ(SF,SFk)`` entre interférences.
+        :param kappa_isf: Matrice ou dictionnaire optionnel de coefficients
+            ``κ(SF,SFk)``. Si ``None`` et ``snir_model`` est activé, une matrice
+            par défaut basée sur ``alpha_isf`` est générée.
         :param flora_noise_path: Chemin vers un fichier ``LoRaAnalogModel.cc``
             pour charger la table de bruit FLoRa.
         :param obstacle_map: Chemin vers une carte d'obstacles (GeoJSON ou raster)
@@ -608,6 +616,10 @@ class Channel:
         self.capture_window_symbols = int(capture_window_symbols)
         self.orthogonal_sf = orthogonal_sf
         self.alpha_isf = float(alpha_isf)
+        self.snir_model = bool(snir_model)
+        self.kappa_isf = kappa_isf
+        if self.snir_model and self.kappa_isf is None:
+            self.kappa_isf = default_kappa_matrix(self.alpha_isf)
         self.last_rssi_dBm = 0.0
         self.last_noise_dBm = float("nan")
         self.last_filter_att_dB = 0.0

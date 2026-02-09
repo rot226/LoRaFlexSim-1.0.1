@@ -6,6 +6,7 @@ from .non_orth_delta import (
     DEFAULT_NON_ORTH_DELTA as FLORA_NON_ORTH_DELTA,
     load_non_orth_delta,
 )
+from .snir_kappa import kappa_factor
 from .energy_profiles import EnergyProfile, FLORA_PROFILE, EnergyAccumulator
 from .server import REQUIRED_SNR
 
@@ -147,6 +148,9 @@ class Gateway:
         baseline_collision_rate: float = 0.0,
         use_snir: bool = True,
         snir_off_noise_prob: float = 0.0,
+        snir_model: bool = False,
+        kappa_isf: object | None = None,
+        alpha_isf: float = 0.0,
     ):
         """
         Tente de démarrer la réception d'une nouvelle transmission sur cette passerelle.
@@ -197,6 +201,10 @@ class Gateway:
         :param use_snir: Indique si le calcul SNIR est actif sur ce canal.
         :param snir_off_noise_prob: Probabilité minimale de perte aléatoire
             lorsque ``use_snir`` est désactivé.
+        :param snir_model: Active le calcul SNIR avec coefficients ``κ(SF,SFk)``.
+        :param kappa_isf: Matrice ou dictionnaire de coefficients ``κ(SF,SFk)``.
+        :param alpha_isf: Couplage inter-SF utilisé en fallback si ``kappa_isf``
+            est absent.
         """
         if rssi < getattr(self, "energy_detection_dBm", -float("inf")):
             logger.debug(
@@ -403,11 +411,21 @@ class Gateway:
                     pen = _penalty(colliders[i], other)
                     if pen == float('inf'):
                         continue
+                    kappa = 1.0
+                    if snir_model:
+                        kappa = kappa_factor(
+                            colliders[i].get('sf'),
+                            other.get('sf'),
+                            alpha_isf=alpha_isf,
+                            kappa_isf=kappa_isf,
+                        )
+                        if kappa == 0.0:
+                            continue
                     overlap = min(end_i, other['end_time']) - max(start_i, other['start_time'])
                     if overlap <= 0.0:
                         continue
                     weight = overlap / duration_i
-                    total += weight * 10 ** ((other['rssi'] - pen) / 10)
+                    total += weight * kappa * 10 ** ((other['rssi'] - pen) / 10)
                 return rssi_i - 10 * math.log10(total)
 
             snrs = [_snr(i) for i in range(len(colliders))]
