@@ -1562,6 +1562,8 @@ def _safe_bbox_inches(
 ) -> str | None:
     if bbox_inches is False:
         return None
+    if bool(getattr(fig, "_avoid_tight_bbox", False)):
+        return None
     if bbox_inches != "tight":
         return bbox_inches if isinstance(bbox_inches, str) or bbox_inches is None else None
     if fig.canvas is None:
