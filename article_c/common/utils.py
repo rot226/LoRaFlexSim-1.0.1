@@ -199,6 +199,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--auto-collision-control",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Active l'ajustement automatique de traffic_coeff_scale et window_duration_s "
+            "en cas de collisions élevées."
+        ),
+    )
+    parser.add_argument(
         "--capture-probability",
         type=float,
         default=step2_defaults.capture_probability,
