@@ -44,6 +44,7 @@ class ClusterRunMetrics:
     der: float
     snir_mean_db: float | None
     snir_samples: int
+    throughput_bps: float
     sf_distribution: Dict[int, float]
     reward_total: float
 
@@ -56,6 +57,8 @@ class ClusterAggregate:
     snir_std: float
     snir_available: bool
     snir_samples: int
+    throughput_mean: float
+    throughput_std: float
     reward_mean: float
     reward_std: float
     sf_distribution_mean: Dict[int, float]
@@ -67,6 +70,7 @@ class GlobalRunMetrics:
     der: float
     snir_mean_db: float | None
     snir_samples: int
+    throughput_bps: float
     sf_distribution: Dict[int, float]
     reward_total: float
 
@@ -79,6 +83,8 @@ class GlobalAggregate:
     snir_std: float
     snir_available: bool
     snir_samples: int
+    throughput_mean: float
+    throughput_std: float
     reward_mean: float
     reward_std: float
     sf_distribution_mean: Dict[int, float]
@@ -260,12 +266,14 @@ def _collect_cluster_metrics(
     metrics: Mapping[str, object],
 ) -> Dict[int, ClusterRunMetrics]:
     qos_pdr = metrics.get("qos_cluster_pdr", {}) or {}
+    qos_throughput = metrics.get("qos_cluster_throughput_bps", {}) or {}
     snir_data = _snir_by_cluster(simulator)
     reward_data = _cumulative_reward_by_cluster(simulator)
 
     cluster_metrics: Dict[int, ClusterRunMetrics] = {}
     for cluster_id in _cluster_ids(manager):
         der = float(qos_pdr.get(cluster_id, 0.0) or 0.0)
+        throughput_bps = float(qos_throughput.get(cluster_id, 0.0) or 0.0)
         snir_total, snir_count = snir_data.get(cluster_id, (0.0, 0))
         snir_mean = snir_total / snir_count if snir_count > 0 else None
         sf_distribution = _sf_distribution_from_cluster(metrics, cluster_id)
@@ -275,6 +283,7 @@ def _collect_cluster_metrics(
             der=der,
             snir_mean_db=snir_mean,
             snir_samples=snir_count,
+            throughput_bps=throughput_bps,
             sf_distribution=sf_distribution,
             reward_total=reward_total,
         )
@@ -286,6 +295,7 @@ def _collect_global_metrics(
     metrics: Mapping[str, object],
 ) -> GlobalRunMetrics:
     der = float(metrics.get("PDR", 0.0) or 0.0)
+    throughput_bps = float(metrics.get("throughput_bps", 0.0) or 0.0)
     snir_total, snir_count = _snir_global(simulator)
     snir_mean = snir_total / snir_count if snir_count > 0 else None
     sf_distribution = _sf_distribution_global(metrics, simulator.num_nodes)
@@ -295,6 +305,7 @@ def _collect_global_metrics(
         der=der,
         snir_mean_db=snir_mean,
         snir_samples=snir_count,
+        throughput_bps=throughput_bps,
         sf_distribution=sf_distribution,
         reward_total=reward_total,
     )
@@ -326,6 +337,7 @@ def _aggregate_cluster_runs(runs: Iterable[ClusterRunMetrics]) -> ClusterAggrega
     ders = [run.der for run in runs]
     snir_values = [run.snir_mean_db for run in runs if run.snir_mean_db is not None]
     snir_samples_total = sum(run.snir_samples for run in runs)
+    throughputs = [run.throughput_bps for run in runs]
     rewards = [run.reward_total for run in runs]
     sf_mean, sf_std = _aggregate_distributions(run.sf_distribution for run in runs)
 
@@ -336,6 +348,7 @@ def _aggregate_cluster_runs(runs: Iterable[ClusterRunMetrics]) -> ClusterAggrega
     else:
         snir_mean, snir_std = 0.0, 0.0
         snir_available = False
+    throughput_mean, throughput_std = _mean_std(throughputs)
     reward_mean, reward_std = _mean_std(rewards)
 
     return ClusterAggregate(
@@ -345,6 +358,8 @@ def _aggregate_cluster_runs(runs: Iterable[ClusterRunMetrics]) -> ClusterAggrega
         snir_std=snir_std,
         snir_available=snir_available,
         snir_samples=snir_samples_total,
+        throughput_mean=throughput_mean,
+        throughput_std=throughput_std,
         reward_mean=reward_mean,
         reward_std=reward_std,
         sf_distribution_mean=sf_mean,
@@ -356,6 +371,7 @@ def _aggregate_global_runs(runs: Iterable[GlobalRunMetrics]) -> GlobalAggregate:
     ders = [run.der for run in runs]
     snir_values = [run.snir_mean_db for run in runs if run.snir_mean_db is not None]
     snir_samples_total = sum(run.snir_samples for run in runs)
+    throughputs = [run.throughput_bps for run in runs]
     rewards = [run.reward_total for run in runs]
     sf_mean, sf_std = _aggregate_distributions(run.sf_distribution for run in runs)
 
@@ -366,6 +382,7 @@ def _aggregate_global_runs(runs: Iterable[GlobalRunMetrics]) -> GlobalAggregate:
     else:
         snir_mean, snir_std = 0.0, 0.0
         snir_available = False
+    throughput_mean, throughput_std = _mean_std(throughputs)
     reward_mean, reward_std = _mean_std(rewards)
 
     return GlobalAggregate(
@@ -375,6 +392,8 @@ def _aggregate_global_runs(runs: Iterable[GlobalRunMetrics]) -> GlobalAggregate:
         snir_std=snir_std,
         snir_available=snir_available,
         snir_samples=snir_samples_total,
+        throughput_mean=throughput_mean,
+        throughput_std=throughput_std,
         reward_mean=reward_mean,
         reward_std=reward_std,
         sf_distribution_mean=sf_mean,
@@ -456,6 +475,8 @@ def run_ucb1(
             "snir_std_db": aggregate.snir_std,
             "snir_available": aggregate.snir_available,
             "snir_samples": aggregate.snir_samples,
+            "throughput_mean_bps": aggregate.throughput_mean,
+            "throughput_std_bps": aggregate.throughput_std,
             "reward_mean": aggregate.reward_mean,
             "reward_std": aggregate.reward_std,
             "runs": runs,
@@ -477,6 +498,8 @@ def run_ucb1(
             "snir_std_db": aggregate.snir_std,
             "snir_available": aggregate.snir_available,
             "snir_samples": aggregate.snir_samples,
+            "throughput_mean_bps": aggregate.throughput_mean,
+            "throughput_std_bps": aggregate.throughput_std,
             "reward_mean": aggregate.reward_mean,
             "reward_std": aggregate.reward_std,
             "runs": runs,
