@@ -84,6 +84,7 @@ def configure_figure(
                 preferred_loc=legend_loc,
                 handles=handles,
                 labels=labels,
+                enable_suptitle=enable_suptitle,
             )
             legend_rows = placement.legend_rows
             final_legend_loc = placement.legend_loc
