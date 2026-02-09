@@ -1145,7 +1145,45 @@ def main(argv: list[str] | None = None) -> None:
                             f"{module_path} utilise un jeu réduit "
                             f"({reduced_label}) au lieu de {expected_label}."
                         )
-            if step == "step2":
+            if step == "step1":
+                step1_network_sizes = (
+                    network_sizes
+                    if args.network_sizes
+                    else step_network_sizes.get("step1") or network_sizes
+                )
+                try:
+                    previous_figures = set(plt.get_fignums())
+                    module = _run_plot_module(
+                        module_path,
+                        network_sizes=step1_network_sizes,
+                        allow_sample=False,
+                        enable_suptitle=enable_suptitle,
+                    )
+                    _check_legends_for_module(
+                        module_path=module_path,
+                        module=module,
+                        previous_figures=previous_figures,
+                    )
+                    _register_status(
+                        status_map,
+                        step=step,
+                        module_path=module_path,
+                        status="OK",
+                        message="plot généré",
+                    )
+                except Exception as exc:
+                    print(
+                        f"ERREUR: échec du plot {module_path}: {exc}"
+                    )
+                    traceback.print_exc()
+                    _register_status(
+                        status_map,
+                        step=step,
+                        module_path=module_path,
+                        status="FAIL",
+                        message=str(exc),
+                    )
+            elif step == "step2":
                 step2_network_sizes = (
                     rl10_network_sizes
                     or (
