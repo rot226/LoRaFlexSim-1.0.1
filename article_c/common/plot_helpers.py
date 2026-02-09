@@ -101,7 +101,7 @@ MAX_TIGHT_BBOX_SCALE = 4.0
 MAX_TIGHT_BBOX_INCHES = 30.0
 MAX_IMAGE_DIM_PX = 12000
 MAX_IMAGE_TOTAL_PIXELS = 120_000_000
-MAX_IEEE_FIGURE_SIZE_IN = (8.0, 6.0)
+MAX_IEEE_FIGURE_SIZE_IN = (50.0, 50.0)
 AXES_TITLE_Y = 1.02
 SUPTITLE_TOP_RATIO = 0.85
 FIGURE_SUBPLOT_TOP = FIGURE_MARGINS["top"]
@@ -1520,7 +1520,6 @@ def save_figure_path(
     bbox_inches: str | bool | None = None,
 ) -> None:
     """Sauvegarde une figure en gérant l'export EPS (transparences rasterisées)."""
-    _apply_figure_size_clamp(fig)
     ensure_dir(output_path.parent)
     format_name = fmt or output_path.suffix.lstrip(".").lower()
     savefig_style = dict(SAVEFIG_STYLE)
@@ -1637,7 +1636,6 @@ def apply_figure_layout(
     reserved_top = 0.0
     if figsize is not None:
         fig.set_size_inches(*figsize, forward=True)
-    _apply_figure_size_clamp(fig)
     if margins is None:
         margins = dict(FIGURE_MARGINS)
     normalized_legend_loc = _normalize_legend_loc(legend_loc) if legend_loc else ""
