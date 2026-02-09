@@ -357,7 +357,7 @@ def _plot_pdr_distribution(
                 color=color,
                 alpha=0.6,
                 zorder=3,
-                label=label if not label_added else None,
+                label=label if not label_added else "_nolegend_",
             )
             label_added = True
 

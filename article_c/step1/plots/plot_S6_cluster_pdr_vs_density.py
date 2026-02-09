@@ -21,6 +21,7 @@ from article_c.common.plot_helpers import (
     place_adaptive_legend,
     assert_legend_present,
     ensure_network_size,
+    fallback_legend_handles,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     is_constant_metric,
@@ -148,12 +149,14 @@ def _plot_metric_page(
             series_handles, series_labels = ax.get_legend_handles_labels()
             handles.extend(series_handles)
             labels.extend(series_labels)
+    if not handles:
+        handles, labels = fallback_legend_handles()
     place_adaptive_legend(
         fig,
         axes[0][0],
         preferred_loc="right",
-        handles=handles if handles else None,
-        labels=labels if handles else None,
+        handles=handles,
+        labels=labels,
     )
     return fig
 

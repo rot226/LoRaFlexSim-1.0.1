@@ -20,6 +20,7 @@ from article_c.common.plot_helpers import (
     filter_cluster,
     filter_mixra_opt_fallback,
     is_constant_metric,
+    fallback_legend_handles,
     legend_margins,
     load_step1_aggregated,
     metric_values as get_metric_values,
@@ -66,12 +67,14 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     handles, labels = ax.get_legend_handles_labels()
+    if not handles:
+        handles, labels = fallback_legend_handles()
     placement = place_adaptive_legend(
         fig,
         ax,
         preferred_loc="right",
-        handles=handles if handles else None,
-        labels=labels if handles else None,
+        handles=handles,
+        labels=labels,
     )
     if placement.legend is not None:
         placement.legend.set_title("Mean ToA (s)")
