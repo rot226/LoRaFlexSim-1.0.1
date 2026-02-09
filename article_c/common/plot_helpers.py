@@ -988,10 +988,9 @@ def place_adaptive_legend(
         return LegendPlacement(None, "none", 0, None)
 
     label_count = len(labels)
-    if not preferred_loc:
-        preferred_loc = DEFAULT_LEGEND_LOC
+    preferred_loc = "right"
+    max_items_right = max(max_items_right, label_count)
     if enable_suptitle is False:
-        preferred_loc = "right"
         max_items_right = max(max_items_right, label_count)
     chosen = choose_legend_location(
         fig,
@@ -1056,15 +1055,20 @@ def place_adaptive_legend(
         legend_ncols_default=int(legend_style.get("ncol", 1)),
         axes=[ax],
     )
+    if legend_loc == "right" and not moved_to_axis:
+        _update_right_margin_for_legend(fig, legend)
     final_loc = "inside" if moved_to_axis else legend_loc
+    layout_legend_loc = (
+        None if legend_loc == "right" and not moved_to_axis else legend_loc
+    )
     apply_figure_layout(
         fig,
         margins=FIGURE_MARGINS
-        if moved_to_axis
+        if moved_to_axis or (legend_loc == "right" and not moved_to_axis)
         else legend_margins(legend_loc, legend_rows=legend_rows, fig=fig),
         bbox_to_anchor=None if moved_to_axis else legend.get_bbox_to_anchor(),
         legend_rows=legend_rows,
-        legend_loc=legend_loc if not moved_to_axis else None,
+        legend_loc=layout_legend_loc if not moved_to_axis else None,
     )
     return LegendPlacement(
         legend,
@@ -1240,6 +1244,29 @@ def _legend_right_margin(fig: plt.Figure | None) -> float:
     reserved_inches = reserved_ratio * base_width
     right = FIGURE_SUBPLOT_RIGHT - reserved_inches / fig_width
     return max(0.0, min(FIGURE_SUBPLOT_RIGHT, right))
+
+
+def _update_right_margin_for_legend(
+    fig: plt.Figure,
+    legend: Legend,
+    *,
+    padding: float = 0.01,
+) -> None:
+    try:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        legend_bbox = legend.get_window_extent(renderer=renderer)
+    except (AttributeError, TypeError, ValueError):
+        return
+    if legend_bbox is None:
+        return
+    legend_bbox_fig = legend_bbox.transformed(fig.transFigure.inverted())
+    candidate_right = max(0.0, min(1.0, legend_bbox_fig.x0 - padding))
+    current_right = float(FIGURE_MARGINS.get("right", 0.98))
+    if candidate_right < current_right:
+        FIGURE_MARGINS["right"] = candidate_right
+        global FIGURE_SUBPLOT_RIGHT
+        FIGURE_SUBPLOT_RIGHT = candidate_right
 
 
 def _legend_margins(
