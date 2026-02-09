@@ -30,7 +30,11 @@ from article_c.common.plot_helpers import (
     save_figure,
     warn_if_insufficient_network_sizes,
 )
-from plot_defaults import resolve_ieee_figsize
+from plot_defaults import (
+    WIDE_SERIES_THRESHOLD,
+    WIDE_SERIES_WSPACE,
+    resolve_ieee_figsize_for_series,
+)
 
 
 def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
@@ -41,20 +45,24 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         if {"algo", "snir_mode"}.issubset(df.columns)
         else len(df.dropna().drop_duplicates())
     )
-    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize_for_series(series_count))
+    wide_series = series_count >= WIDE_SERIES_THRESHOLD
     network_sizes = sorted(df["network_size"].unique())
     warn_if_insufficient_network_sizes(network_sizes)
     metric_state = is_constant_metric(get_metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
         render_metric_status(fig, ax, metric_state, legend_handles=None)
         placement = place_adaptive_legend(fig, ax, preferred_loc="right")
+        margins = legend_margins(
+            placement.legend_loc,
+            legend_rows=placement.legend_rows,
+            fig=fig,
+        )
+        if wide_series:
+            margins = {**margins, "wspace": WIDE_SERIES_WSPACE}
         apply_figure_layout(
             fig,
-            margins=legend_margins(
-                placement.legend_loc,
-                legend_rows=placement.legend_rows,
-                fig=fig,
-            ),
+            margins=margins,
             legend_rows=placement.legend_rows,
             legend_loc=placement.legend_loc,
         )
@@ -86,16 +94,19 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         y_min = 0.0 if y_min >= 0 else y_min - padding
         y_max = y_max + padding
         ax.set_ylim(y_min, y_max)
+    margins = {
+        **legend_margins(
+            placement.legend_loc,
+            legend_rows=placement.legend_rows,
+            fig=fig,
+        ),
+        "left": 0.16,
+    }
+    if wide_series:
+        margins["wspace"] = WIDE_SERIES_WSPACE
     apply_figure_layout(
         fig,
-        margins={
-            **legend_margins(
-                placement.legend_loc,
-                legend_rows=placement.legend_rows,
-                fig=fig,
-            ),
-            "left": 0.16,
-        },
+        margins=margins,
         legend_rows=placement.legend_rows,
         legend_loc=placement.legend_loc,
     )

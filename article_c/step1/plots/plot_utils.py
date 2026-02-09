@@ -45,6 +45,7 @@ def configure_figure(
     legend_handles: list[object] | None = None,
     legend_labels: list[str] | None = None,
     enable_suptitle: bool = True,
+    wspace: float | None = None,
 ) -> tuple[str, int]:
     """Configure le titre, la légende et les marges de la figure.
 
@@ -112,6 +113,8 @@ def configure_figure(
             if adjust_layout_for_legend
             else FIGURE_MARGINS
         )
+        if wspace is not None:
+            above_margins = {**above_margins, "wspace": wspace}
         apply_figure_layout(
             fig,
             margins=above_margins,
@@ -128,9 +131,14 @@ def configure_figure(
                 if adjust_layout_for_legend
                 else FIGURE_MARGINS
             )
+            if wspace is not None:
+                margins = {**margins, "wspace": wspace}
             apply_figure_layout(fig, margins=margins, legend_loc=final_legend_loc)
         else:
-            apply_figure_layout(fig, margins=FIGURE_MARGINS)
+            margins = FIGURE_MARGINS
+            if wspace is not None:
+                margins = {**margins, "wspace": wspace}
+            apply_figure_layout(fig, margins=margins)
     apply_suptitle(
         fig,
         title,

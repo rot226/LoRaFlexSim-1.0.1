@@ -1709,6 +1709,11 @@ def apply_figure_layout(
         _apply_figure_size_clamp(fig)
     if margins is None:
         margins = dict(FIGURE_MARGINS)
+    else:
+        margins = dict(margins)
+    margins.setdefault("left", FIGURE_MARGINS.get("left", 0.12))
+    margins.setdefault("right", FIGURE_MARGINS.get("right", 0.98))
+    margins.setdefault("wspace", FIGURE_MARGINS.get("wspace", 0.3))
     normalized_legend_loc = _normalize_legend_loc(legend_loc) if legend_loc else ""
     has_fig_legend = bool(fig.legends)
     has_axis_legend = any(ax.get_legend() is not None for ax in fig.axes)
