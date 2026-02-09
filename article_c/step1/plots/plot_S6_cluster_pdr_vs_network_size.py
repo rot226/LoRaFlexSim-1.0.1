@@ -20,6 +20,7 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     place_adaptive_legend,
     assert_legend_present,
+    fallback_legend_handles,
     filter_mixra_opt_fallback,
     is_constant_metric,
     legend_handles_for_algos_snir,
@@ -130,12 +131,14 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
+    if not cluster_handles:
+        cluster_handles, legend_labels = fallback_legend_handles()
     placement = place_adaptive_legend(
         fig,
         axes[0],
         preferred_loc="right",
-        handles=cluster_handles if cluster_handles else None,
-        labels=legend_labels if cluster_handles else None,
+        handles=cluster_handles,
+        labels=legend_labels,
     )
     if placement.legend is not None:
         placement.legend.set_title("Clusters")

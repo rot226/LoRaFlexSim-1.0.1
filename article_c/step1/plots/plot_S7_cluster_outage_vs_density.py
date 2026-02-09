@@ -20,6 +20,7 @@ from article_c.common.plot_helpers import (
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     is_constant_metric,
+    fallback_legend_handles,
     legend_handles_for_algos_snir,
     load_step1_aggregated,
     metric_values,
@@ -117,12 +118,14 @@ def _plot_metric_page(
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.set_xticks(network_sizes)
     handles, labels = legend_handles_for_algos_snir()
+    if not handles:
+        handles, labels = fallback_legend_handles()
     place_adaptive_legend(
         fig,
         axes[0],
         preferred_loc="right",
-        handles=handles if handles else None,
-        labels=labels if handles else None,
+        handles=handles,
+        labels=labels,
     )
     return fig
 

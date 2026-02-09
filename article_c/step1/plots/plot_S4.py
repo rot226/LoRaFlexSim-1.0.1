@@ -29,6 +29,7 @@ from article_c.common.plot_helpers import (
     filter_cluster,
     filter_mixra_opt_fallback,
     is_constant_metric,
+    fallback_legend_handles,
     legend_margins,
     load_step1_aggregated,
     metric_values,
@@ -171,6 +172,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     handles, labels = ax.get_legend_handles_labels()
     if handles:
         clear_axis_legends(ax)
+    else:
+        handles, labels = fallback_legend_handles()
     ax.set_xlabel("Network size (nodes)")
     ax.set_ylabel("Tx frames (count, median, p10–p90)")
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
@@ -181,8 +184,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         fig,
         ax,
         preferred_loc="right",
-        handles=handles if handles else None,
-        labels=labels if handles else None,
+        handles=handles,
+        labels=labels,
     )
     apply_figure_layout(
         fig,
@@ -233,12 +236,14 @@ def _plot_summary_metric(rows: list[dict[str, object]], metric_key: str) -> plt.
     if summary_handles:
         handles = [*handles, *summary_handles]
         labels = [*labels, *summary_labels]
+    if not handles:
+        handles, labels = fallback_legend_handles()
     placement = place_adaptive_legend(
         fig,
         ax,
         preferred_loc="right",
-        handles=handles if handles else None,
-        labels=labels if handles else None,
+        handles=handles,
+        labels=labels,
     )
     apply_figure_layout(
         fig,
