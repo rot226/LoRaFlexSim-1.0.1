@@ -143,7 +143,7 @@ def _compute_reward(
             weighted_quality,
         )
     quality_term = weighted_quality * (0.6 + 0.4 * success_rate)
-    success_term = 0.2 * success_rate
+    success_term = 0.35 * success_rate
     reward = quality_term + success_term - collision_penalty
     reward_floor = max(weights.exploration_floor, 0.0)
     if floor_on_zero_success and success_rate == 0.0 and reward_floor > 0.0:
@@ -1558,21 +1558,21 @@ def _reward_weights_for_algo(
             sf_weight=0.45,
             latency_weight=0.32,
             energy_weight=0.23,
-            collision_weight=0.14,
+            collision_weight=0.1,
         )
     elif algorithm == "mixra_h":
         weights = AlgoRewardWeights(
             sf_weight=0.28,
             latency_weight=0.27,
             energy_weight=0.45,
-            collision_weight=0.22,
+            collision_weight=0.16,
         )
     elif algorithm == "mixra_opt":
         weights = AlgoRewardWeights(
             sf_weight=0.23,
             latency_weight=0.22,
             energy_weight=0.55,
-            collision_weight=0.18,
+            collision_weight=0.13,
         )
     else:
         default_floor = 0.1
@@ -1580,7 +1580,7 @@ def _reward_weights_for_algo(
             sf_weight=0.38,
             latency_weight=0.32,
             energy_weight=0.3,
-            collision_weight=0.18,
+            collision_weight=0.13,
         )
     selected_floor = default_floor if reward_floor is None else reward_floor
     if selected_floor > 0.0:
@@ -1975,11 +1975,14 @@ def run_simulation(
     if no_clamp:
         traffic_coeff_clamp_enabled_value = False
     if floor_on_zero_success is None:
-        floor_on_zero_success_value = (
-            STEP2_SAFE_CONFIG.floor_on_zero_success
-            if safe_profile
-            else step2_defaults.floor_on_zero_success
-        )
+        if debug_step2:
+            floor_on_zero_success_value = True
+        else:
+            floor_on_zero_success_value = (
+                STEP2_SAFE_CONFIG.floor_on_zero_success
+                if safe_profile
+                else step2_defaults.floor_on_zero_success
+            )
     else:
         floor_on_zero_success_value = floor_on_zero_success
     window_delay_enabled_value = (

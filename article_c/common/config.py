@@ -93,7 +93,7 @@ class Step2Config:
     collision_size_under_max: float = 1.25
     collision_size_over_max: float = 1.5
     collision_size_factor: float | None = None
-    lambda_collision_base: float = 0.12
+    lambda_collision_base: float = 0.1
     lambda_collision_min: float = 0.06
     lambda_collision_max: float = 0.6
     lambda_collision_overload_scale: float = 0.35
