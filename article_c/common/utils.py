@@ -360,6 +360,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Formats d'export des figures (ex: png,eps).",
     )
     parser.add_argument(
+        "--no-clamp",
+        action="store_true",
+        help=(
+            "Désactive les clamps (plages réseau/collision, coefficients de trafic "
+            "et bornes internes)."
+        ),
+    )
+    parser.add_argument(
         "--no-figure-clamp",
         action="store_true",
         help="Désactive le clamp de taille des figures.",
