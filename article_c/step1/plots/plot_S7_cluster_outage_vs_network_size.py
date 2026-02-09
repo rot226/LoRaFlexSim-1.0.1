@@ -26,6 +26,7 @@ from article_c.common.plot_helpers import (
     is_constant_metric,
     load_step1_aggregated,
     metric_values,
+    pad_axes,
     render_metric_status,
     save_figure,
     suptitle_y_from_top,
@@ -149,6 +150,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         ax.set_xlabel("Network size (nodes)")
         ax.set_ylabel("Outage (prob.)")
         ax.set_ylim(0.0, 1.0)
+        pad_axes(ax, ypad=0.03)
         ax.grid(True, linestyle=":", alpha=0.4)
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))

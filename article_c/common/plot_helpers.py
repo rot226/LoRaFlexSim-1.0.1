@@ -239,6 +239,29 @@ def flatten_axes(axes: object) -> list[plt.Axes]:
     return _flatten_axes(axes)
 
 
+def pad_axes(ax: plt.Axes, xpad: float = 0.05, ypad: float = 0.05) -> None:
+    """Ajoute un padding relatif autour des limites des axes."""
+    xpad = max(0.0, float(xpad))
+    ypad = max(0.0, float(ypad))
+
+    xmin, xmax = ax.get_xlim()
+    ymin, ymax = ax.get_ylim()
+
+    if xpad > 0.0 and math.isfinite(xmin) and math.isfinite(xmax):
+        xspan = xmax - xmin
+        if xspan == 0.0:
+            xspan = abs(xmin) if xmin != 0.0 else 1.0
+        xpadding = xspan * xpad
+        ax.set_xlim(xmin - xpadding, xmax + xpadding)
+
+    if ypad > 0.0 and math.isfinite(ymin) and math.isfinite(ymax):
+        yspan = ymax - ymin
+        if yspan == 0.0:
+            yspan = abs(ymin) if ymin != 0.0 else 1.0
+        ypadding = yspan * ypad
+        ax.set_ylim(ymin - ypadding, ymax + ypadding)
+
+
 def clear_axis_legends(axes: object) -> None:
     """Supprime proprement les légendes attachées aux axes."""
     for ax in _flatten_axes(axes):
