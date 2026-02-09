@@ -1950,6 +1950,10 @@ def run_simulation(
         if traffic_coeff_clamp_enabled is None
         else traffic_coeff_clamp_enabled
     )
+    if traffic_coeff_clamp_enabled is True and not step2_defaults.traffic_coeff_clamp_enabled:
+        logger.warning(
+            "Le clamp des coefficients de trafic a été réactivé par l'utilisateur."
+        )
     if floor_on_zero_success is None:
         floor_on_zero_success_value = (
             STEP2_SAFE_CONFIG.floor_on_zero_success
