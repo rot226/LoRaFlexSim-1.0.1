@@ -614,6 +614,127 @@ def render_metric_status(
     )
 
 
+def warn_metric_checks(
+    values: Iterable[float],
+    label: str,
+    *,
+    min_value: float | None = None,
+    max_value: float | None = None,
+    expected_monotonic: str | None = None,
+    monotonic_tolerance: float = 0.0,
+    variance_threshold: float = CONSTANT_METRIC_VARIANCE_THRESHOLD,
+) -> MetricStatus:
+    cleaned: list[float] = []
+    for value in values:
+        if isinstance(value, (int, float)) and not math.isnan(value):
+            cleaned.append(float(value))
+    if not cleaned:
+        warnings.warn(
+            f"Aucune valeur exploitable pour {label} (données manquantes).",
+            stacklevel=2,
+        )
+        return MetricStatus.MISSING
+    observed_min = min(cleaned)
+    observed_max = max(cleaned)
+    if min_value is not None and observed_min < min_value:
+        warnings.warn(
+            f"{label}: minimum observé {observed_min:.6g} < borne min {min_value:.6g}.",
+            stacklevel=2,
+        )
+    if max_value is not None and observed_max > max_value:
+        warnings.warn(
+            f"{label}: maximum observé {observed_max:.6g} > borne max {max_value:.6g}.",
+            stacklevel=2,
+        )
+    metric_state = is_constant_metric(cleaned, threshold=variance_threshold)
+    if metric_state is MetricStatus.CONSTANT:
+        warnings.warn(
+            f"{label}: variance nulle ou quasi nulle détectée.",
+            stacklevel=2,
+        )
+        return MetricStatus.CONSTANT
+    if expected_monotonic:
+        direction = expected_monotonic.lower()
+        deltas = [
+            current - previous for previous, current in zip(cleaned, cleaned[1:], strict=False)
+        ]
+        if direction in {"increasing", "nondecreasing", "croissante"}:
+            violated = [delta for delta in deltas if delta < -monotonic_tolerance]
+            direction_label = "croissante"
+        elif direction in {"decreasing", "nonincreasing", "decroissante", "décroissante"}:
+            violated = [delta for delta in deltas if delta > monotonic_tolerance]
+            direction_label = "décroissante"
+        else:
+            violated = []
+            direction_label = direction
+        if violated:
+            warnings.warn(
+                f"{label}: séquence non monotone (attendu {direction_label}).",
+                stacklevel=2,
+            )
+    return MetricStatus.OK
+
+
+def warn_metric_checks_by_group(
+    rows: list[dict[str, object]],
+    metric_key: str,
+    *,
+    x_key: str,
+    label: str,
+    min_value: float | None = None,
+    max_value: float | None = None,
+    expected_monotonic: str | None = None,
+    group_keys: Iterable[str] | None = None,
+    monotonic_tolerance: float = 0.0,
+    variance_threshold: float = CONSTANT_METRIC_VARIANCE_THRESHOLD,
+) -> None:
+    if not rows:
+        warnings.warn(
+            f"Aucune donnée disponible pour {label} (liste vide).",
+            stacklevel=2,
+        )
+        return
+    median_key, _, _ = resolve_percentile_keys(rows, metric_key)
+    group_keys_list = list(group_keys) if group_keys else []
+    grouped: dict[tuple[object, ...], list[tuple[float, float]]] = {}
+    for row in rows:
+        x_val = row.get(x_key)
+        y_val = row.get(median_key)
+        if not isinstance(x_val, (int, float)) or math.isnan(float(x_val)):
+            continue
+        if not isinstance(y_val, (int, float)) or math.isnan(float(y_val)):
+            continue
+        key = tuple(row.get(name) for name in group_keys_list)
+        grouped.setdefault(key, []).append((float(x_val), float(y_val)))
+    if not grouped:
+        warnings.warn(
+            f"Aucune valeur utilisable pour {label} (clé {median_key}).",
+            stacklevel=2,
+        )
+        return
+    for key, points in grouped.items():
+        if not points:
+            continue
+        points.sort(key=lambda item: item[0])
+        series_values = [value for _, value in points]
+        if group_keys_list:
+            details = ", ".join(
+                f"{name}={value}" for name, value in zip(group_keys_list, key, strict=False)
+            )
+            series_label = f"{label} ({details})"
+        else:
+            series_label = label
+        warn_metric_checks(
+            series_values,
+            series_label,
+            min_value=min_value,
+            max_value=max_value,
+            expected_monotonic=expected_monotonic,
+            monotonic_tolerance=monotonic_tolerance,
+            variance_threshold=variance_threshold,
+        )
+
+
 def select_received_metric_key(
     rows: list[dict[str, object]],
     metric_key: str,

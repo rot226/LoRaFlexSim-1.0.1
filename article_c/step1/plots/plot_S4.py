@@ -39,6 +39,7 @@ from article_c.common.plot_helpers import (
     select_received_metric_key,
     resolve_percentile_keys,
     save_figure,
+    warn_metric_checks_by_group,
     warn_if_insufficient_network_sizes,
 )
 from plot_defaults import (
@@ -147,6 +148,15 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     network_sizes = sorted(df["network_size"].unique())
     warn_if_insufficient_network_sizes(network_sizes)
     metric_key = select_received_metric_key(rows, metric_key)
+    warn_metric_checks_by_group(
+        rows,
+        metric_key,
+        x_key="network_size",
+        label="Trames envoyées",
+        min_value=0.0,
+        expected_monotonic="nondecreasing",
+        group_keys=("algo", "snir_mode"),
+    )
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
         render_metric_status(fig, ax, metric_state, legend_handles=None)
@@ -225,6 +235,15 @@ def _plot_summary_metric(rows: list[dict[str, object]], metric_key: str) -> plt.
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize_for_series(series_count))
     wide_series = series_count >= WIDE_SERIES_THRESHOLD
     metric_key = select_received_metric_key(rows, metric_key)
+    warn_metric_checks_by_group(
+        rows,
+        metric_key,
+        x_key="network_size",
+        label="Trames envoyées",
+        min_value=0.0,
+        expected_monotonic="nondecreasing",
+        group_keys=("algo", "snir_mode"),
+    )
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
         render_metric_status(fig, ax, metric_state, legend_handles=None)

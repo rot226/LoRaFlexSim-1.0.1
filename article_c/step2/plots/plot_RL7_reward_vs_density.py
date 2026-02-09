@@ -29,6 +29,8 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     resolve_percentile_keys,
     save_figure,
+    warn_metric_checks,
+    warn_metric_checks_by_group,
 )
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
@@ -123,6 +125,14 @@ def _plot_metric(
             f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
             stacklevel=2,
         )
+    warn_metric_checks_by_group(
+        rows,
+        metric_key,
+        x_key="network_size",
+        label="Reward",
+        expected_monotonic="nonincreasing",
+        group_keys=("algo",),
+    )
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
         render_metric_status(
@@ -163,7 +173,15 @@ def _extract_metric_values(
     return values, median_key
 
 
-def _metric_status(series: pd.Series, label: str) -> MetricStatus:
+def _metric_status(
+    series: pd.Series,
+    label: str,
+    *,
+    min_value: float | None = None,
+    max_value: float | None = None,
+    expected_monotonic: str | None = None,
+    sort_before: bool = False,
+) -> MetricStatus:
     if series.empty:
         warnings.warn(f"Aucune valeur disponible pour {label} (données absentes).", stacklevel=2)
         return MetricStatus.MISSING
@@ -171,14 +189,15 @@ def _metric_status(series: pd.Series, label: str) -> MetricStatus:
     if not values:
         warnings.warn(f"Aucune valeur disponible pour {label} (données absentes).", stacklevel=2)
         return MetricStatus.MISSING
-    metric_state = is_constant_metric(values)
-    if metric_state is MetricStatus.CONSTANT:
-        warnings.warn(
-            f"Valeurs constantes détectées pour {label} (variance faible).",
-            stacklevel=2,
-        )
-        return MetricStatus.CONSTANT
-    return MetricStatus.OK
+    if sort_before:
+        values = sorted(values)
+    return warn_metric_checks(
+        values,
+        label,
+        min_value=min_value,
+        max_value=max_value,
+        expected_monotonic=expected_monotonic,
+    )
 
 
 def _density_series(rows: list[dict[str, object]]) -> pd.Series:
@@ -325,7 +344,13 @@ def _diagnose_density(rows: list[dict[str, object]]) -> None:
         _warn_if_constant_density(rows)
         return
     density = pd.to_numeric(df["density"], errors="coerce").dropna()
-    density_status = _metric_status(density, "density")
+    density_status = _metric_status(
+        density,
+        "density",
+        min_value=0.0,
+        expected_monotonic="nondecreasing",
+        sort_before=True,
+    )
     if "network_size" in df.columns:
         network_size = pd.to_numeric(df["network_size"], errors="coerce").dropna()
         aligned = pd.concat([network_size, density], axis=1).dropna()
@@ -333,7 +358,13 @@ def _diagnose_density(rows: list[dict[str, object]]) -> None:
             area = aligned.iloc[:, 0] / aligned.iloc[:, 1].replace(0, pd.NA)
             area = area.dropna()
             if density_status is MetricStatus.CONSTANT:
-                _metric_status(area, "area (network_size / density)")
+                _metric_status(
+                    area,
+                    "area (network_size / density)",
+                    min_value=0.0,
+                    expected_monotonic="nondecreasing",
+                    sort_before=True,
+                )
 
 
 def _plot_diagnostics(

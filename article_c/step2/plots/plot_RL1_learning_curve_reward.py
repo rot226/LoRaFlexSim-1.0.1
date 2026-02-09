@@ -22,6 +22,7 @@ from article_c.common.plot_helpers import (
     is_constant_metric,
     render_metric_status,
     save_figure,
+    warn_metric_checks,
 )
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
@@ -202,6 +203,10 @@ def _plot_learning_curve(
         for row in rows
         if isinstance(row.get("avg_reward"), (int, float))
     ]
+    warn_metric_checks(
+        reward_values,
+        "Récompense moyenne",
+    )
     metric_state = is_constant_metric(reward_values)
     if metric_state is not MetricStatus.OK:
         render_metric_status(
@@ -232,6 +237,11 @@ def _plot_learning_curve(
                     continue
                 rounds = sorted(points)
                 values = [points[round_id] for round_id in rounds]
+                warn_metric_checks(
+                    values,
+                    f"Récompense moyenne ({algo_label(algo)} - N={network_size})",
+                    expected_monotonic="nondecreasing",
+                )
                 ax.plot(rounds, values, marker="o", label=algo)
     else:
         for algo in algorithms:
@@ -242,6 +252,11 @@ def _plot_learning_curve(
                 rounds = sorted(points)
                 values = [points[round_id] for round_id in rounds]
                 label = f"{algo_label(algo)} - Taille {network_size}"
+                warn_metric_checks(
+                    values,
+                    f"Récompense moyenne ({label})",
+                    expected_monotonic="nondecreasing",
+                )
                 ax.plot(rounds, values, marker="o", label=label)
     ax.set_xlabel("Round (index)")
     ax.set_ylabel("Mean reward (a.u.)")

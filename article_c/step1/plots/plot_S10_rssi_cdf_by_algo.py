@@ -23,6 +23,7 @@ from article_c.common.plot_helpers import (
     is_constant_metric,
     render_metric_status,
     save_figure,
+    warn_metric_checks,
     warn_if_insufficient_network_sizes,
 )
 from plot_defaults import resolve_ieee_figsize
@@ -202,6 +203,13 @@ def plot_cdf_by_algo(
                 continue
             xs, ys = _compute_cdf(values)
             label = f"{algo_label(algo, fallback)} ({SNIR_LABELS[snir_mode]})"
+            warn_metric_checks(
+                ys,
+                f"CDF {metric_label} ({algo_label(algo, fallback)} - {SNIR_LABELS[snir_mode]})",
+                min_value=0.0,
+                max_value=1.0,
+                expected_monotonic="nondecreasing",
+            )
             ax.step(
                 xs,
                 ys,

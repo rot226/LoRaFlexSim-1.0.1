@@ -28,6 +28,7 @@ from article_c.common.plot_helpers import (
     place_adaptive_legend,
     render_metric_status,
     save_figure,
+    warn_metric_checks,
 )
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
@@ -289,6 +290,17 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
         for point in points
         if isinstance(point.get("pdr_mean"), (int, float))
     ]
+    warn_metric_checks(
+        reward_values,
+        "Reward moyen",
+    )
+    warn_metric_checks(
+        sorted(pdr_values),
+        "PDR agrégé",
+        min_value=0.0,
+        max_value=1.0,
+        expected_monotonic="nondecreasing",
+    )
     reward_state = is_constant_metric(reward_values)
     pdr_state = is_constant_metric(pdr_values)
     if reward_state is not MetricStatus.OK or pdr_state is not MetricStatus.OK:

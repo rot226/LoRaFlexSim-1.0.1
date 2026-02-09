@@ -18,6 +18,7 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     place_legend,
     save_figure,
+    warn_metric_checks,
 )
 from plot_defaults import resolve_ieee_figsize
 
@@ -253,6 +254,19 @@ def _apply_jitter(
 def _plot_scatter(points: list[dict[str, float | int | str]]) -> plt.Figure:
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize(len(TARGET_ALGOS)))
     size_values = [float(point["size_value"]) for point in points]
+    pdr_values = [float(point["pdr"]) for point in points]
+    reward_values = [float(point["reward_mean"]) for point in points]
+    warn_metric_checks(
+        reward_values,
+        "Récompense moyenne",
+    )
+    warn_metric_checks(
+        sorted(pdr_values),
+        "PDR (raw_all)",
+        min_value=0.0,
+        max_value=1.0,
+        expected_monotonic="nondecreasing",
+    )
     sizes = _scale_sizes(size_values)
     labeled_algos: set[str] = set()
     rng = random.Random(7)

@@ -38,6 +38,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     resolve_percentile_keys,
     save_figure,
+    warn_metric_checks_by_group,
     warn_if_insufficient_network_sizes,
 )
 from plot_defaults import (
@@ -142,6 +143,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     wide_series = num_series is not None and num_series >= WIDE_SERIES_THRESHOLD
     network_sizes = sorted(df["network_size"].unique())
     warn_if_insufficient_network_sizes(network_sizes)
+    warn_metric_checks_by_group(
+        rows,
+        metric_key,
+        x_key="network_size",
+        label="PDR",
+        min_value=0.0,
+        max_value=1.0,
+        expected_monotonic="nonincreasing",
+        group_keys=("algo", "snir_mode"),
+    )
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
         render_metric_status(fig, ax, metric_state, legend_handles=None)
@@ -210,6 +221,16 @@ def _plot_summary_metric(rows: list[dict[str, object]], metric_key: str) -> plt.
     num_series = len(algos) * len(SNIR_MODES) if algos else None
     fig, ax = plt.subplots(figsize=resolve_ieee_figsize_for_series(num_series))
     wide_series = num_series is not None and num_series >= WIDE_SERIES_THRESHOLD
+    warn_metric_checks_by_group(
+        rows,
+        metric_key,
+        x_key="network_size",
+        label="PDR",
+        min_value=0.0,
+        max_value=1.0,
+        expected_monotonic="nonincreasing",
+        group_keys=("algo", "snir_mode"),
+    )
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
         render_metric_status(fig, ax, metric_state, legend_handles=None)

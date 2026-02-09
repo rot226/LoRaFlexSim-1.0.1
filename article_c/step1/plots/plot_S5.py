@@ -31,6 +31,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     select_received_metric_key,
     save_figure,
+    warn_metric_checks,
     warn_if_insufficient_network_sizes,
 )
 from article_c.common.utils import ensure_dir
@@ -292,6 +293,13 @@ def _plot_pdr_distribution(
     snir_mode: str,
 ) -> None:
     color = "#4c78a8" if snir_mode == "snir_on" else "#f58518"
+    warn_metric_checks(
+        sorted(values),
+        f"PDR ({SNIR_LABELS[snir_mode]})",
+        min_value=0.0,
+        max_value=1.0,
+        expected_monotonic="nondecreasing",
+    )
     if not values:
         ax.text(
             0.5,

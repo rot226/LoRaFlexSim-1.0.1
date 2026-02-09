@@ -22,6 +22,7 @@ from article_c.common.plot_helpers import (
     place_adaptive_legend,
     render_metric_status,
     save_figure,
+    warn_metric_checks,
 )
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
@@ -63,6 +64,31 @@ def _plot_selection(
         for row in rows
         if isinstance(row.get("selection_prob"), (int, float))
     ]
+    warn_metric_checks(
+        selection_values,
+        "Probabilité de sélection",
+        min_value=0.0,
+        max_value=1.0,
+    )
+    for network_size in network_sizes:
+        size_rows = [row for row in rows if row["network_size"] == network_size]
+        ordered_probs = [
+            float(row.get("selection_prob"))
+            for row in sorted(size_rows, key=lambda item: item.get("sf"))
+            if isinstance(row.get("selection_prob"), (int, float))
+        ]
+        cumulative = 0.0
+        cdf_values = []
+        for value in ordered_probs:
+            cumulative += value
+            cdf_values.append(cumulative)
+        warn_metric_checks(
+            cdf_values,
+            f"CDF sélection SF (N={network_size})",
+            min_value=0.0,
+            max_value=1.0,
+            expected_monotonic="nondecreasing",
+        )
     metric_state = is_constant_metric(selection_values)
     if metric_state is not MetricStatus.OK:
         render_metric_status(

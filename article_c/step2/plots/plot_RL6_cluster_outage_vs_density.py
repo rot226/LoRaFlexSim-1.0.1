@@ -30,6 +30,7 @@ from article_c.common.plot_helpers import (
     place_adaptive_legend,
     render_metric_status,
     save_figure,
+    warn_metric_checks_by_group,
 )
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
@@ -176,6 +177,16 @@ def _plot_metric(
     if len(clusters) == 1:
         axes = [axes]
 
+    warn_metric_checks_by_group(
+        rows,
+        metric_key,
+        x_key="network_size",
+        label="Outage",
+        min_value=0.0,
+        max_value=1.0,
+        expected_monotonic="nondecreasing",
+        group_keys=("cluster", "algo", "snir_mode"),
+    )
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
         render_metric_status(

@@ -9,6 +9,7 @@ from typing import Iterable
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from article_c.common.plot_helpers import warn_metric_checks
 
 def _ensure_output_dir(output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -82,6 +83,30 @@ def plot_figure(
         raise ValueError(f"Aucune donnée pour la figure {figure_id} dans {csv_path}.")
 
     aggregates = _prepare_aggregates(df)
+    achieved_values = pd.to_numeric(aggregates["pdr_achieved"], errors="coerce").dropna().tolist()
+    target_values = pd.to_numeric(aggregates["pdr_target"], errors="coerce").dropna().tolist()
+    warn_metric_checks(
+        achieved_values,
+        f"PDR atteinte {figure_id}",
+        min_value=0.0,
+        max_value=1.0,
+    )
+    warn_metric_checks(
+        target_values,
+        f"PDR cible {figure_id}",
+        min_value=0.0,
+        max_value=1.0,
+    )
+    if achieved_values:
+        sorted_values = sorted(achieved_values)
+        cdf_values = [(idx + 1) / len(sorted_values) for idx in range(len(sorted_values))]
+        warn_metric_checks(
+            cdf_values,
+            f"CDF PDR atteinte {figure_id}",
+            min_value=0.0,
+            max_value=1.0,
+            expected_monotonic="nondecreasing",
+        )
     cluster_ids = sorted(aggregates["cluster_id"].unique())
     algorithms = sorted(aggregates["algorithm"].unique())
     color_map = plt.get_cmap("tab10")
@@ -159,4 +184,3 @@ def main_for_figure(figure_id: str) -> None:
         csv_path=args.csv,
         output_dir=args.output_dir,
     )
-
