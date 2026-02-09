@@ -6,6 +6,7 @@ import argparse
 import csv
 import importlib
 import inspect
+import statistics
 import sys
 import traceback
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from importlib.util import find_spec
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from PIL import Image
 
 
 if find_spec("article_c") is None:
@@ -360,6 +362,7 @@ def _check_legends_for_module(
     module: object,
     previous_figures: set[int],
     fail_on_missing_legends: bool = False,
+    legend_status: dict[str, bool] | None = None,
 ) -> list[str]:
     from article_c.common.plot_helpers import assert_legend_present
 
@@ -375,6 +378,7 @@ def _check_legends_for_module(
         if source_file
         else "source inconnue"
     )
+    all_figs_have_legends = True
     place_adaptive_legend = getattr(module, "place_adaptive_legend", None)
     for index, fig_number in enumerate(new_fig_numbers, start=1):
         fig = plt.figure(fig_number)
@@ -396,6 +400,7 @@ def _check_legends_for_module(
             )
         assert_legend_present(fig, context)
         if not _figure_has_legend(fig):
+            all_figs_have_legends = False
             print(
                 "AVERTISSEMENT: "
                 f"légende absente pour {context}. "
@@ -448,6 +453,9 @@ def _check_legends_for_module(
                 )
         if fail_on_missing_legends and not _figure_has_legend(fig):
             missing_contexts.append(context)
+    if legend_status is not None:
+        module_key = module_path.split(".")[-1]
+        legend_status[module_key] = all_figs_have_legends
     return missing_contexts
 
 
@@ -607,6 +615,121 @@ def _inspect_plot_outputs(
             f"Test visuel: fichiers {formats_label} présents "
             f"pour {label} dans {output_dir}."
         )
+
+
+def _resolve_module_key_for_stem(
+    stem: str,
+    known_modules: dict[str, bool],
+) -> str | None:
+    matches = [
+        module_key for module_key in known_modules if stem.startswith(module_key)
+    ]
+    if not matches:
+        return None
+    return max(matches, key=len)
+
+
+def _analyze_step1_pngs(
+    output_dir: Path,
+    legend_status_by_module: dict[str, bool],
+) -> None:
+    png_files = sorted(output_dir.glob("*.png"))
+    if not png_files:
+        print("INFO: aucun PNG Step1 à analyser pour le rapport.")
+        return
+    sizes = []
+    for path in png_files:
+        try:
+            with Image.open(path) as img:
+                sizes.append(img.size)
+        except OSError:
+            continue
+    if not sizes:
+        print("AVERTISSEMENT: impossible de lire les tailles des PNG Step1.")
+        return
+    widths = [width for width, _ in sizes]
+    heights = [height for _, height in sizes]
+    median_width = statistics.median(widths)
+    median_height = statistics.median(heights)
+    width_range = (median_width * 0.85, median_width * 1.15)
+    height_range = (median_height * 0.85, median_height * 1.15)
+    legend_ok = 0
+    legend_missing = 0
+    legend_unknown = 0
+    size_ok = 0
+    size_outliers: list[str] = []
+    axes_ok = 0
+    axes_unknown: list[str] = []
+    for path in png_files:
+        stem = path.stem
+        module_key = _resolve_module_key_for_stem(stem, legend_status_by_module)
+        legend_status = (
+            legend_status_by_module.get(module_key)
+            if module_key is not None
+            else None
+        )
+        if legend_status is True:
+            legend_ok += 1
+        elif legend_status is False:
+            legend_missing += 1
+        else:
+            legend_unknown += 1
+        try:
+            with Image.open(path) as img:
+                width, height = img.size
+                dpi = img.info.get("dpi")
+        except OSError:
+            size_outliers.append(f"{path.name} (lecture impossible)")
+            axes_unknown.append(path.name)
+            continue
+        if (
+            width_range[0] <= width <= width_range[1]
+            and height_range[0] <= height <= height_range[1]
+        ):
+            size_ok += 1
+        else:
+            size_outliers.append(f"{path.name} ({width}x{height}px)")
+        dpi_ok = False
+        if dpi:
+            try:
+                dpi_x, dpi_y = dpi
+                dpi_ok = min(float(dpi_x), float(dpi_y)) >= 90
+            except (TypeError, ValueError):
+                dpi_ok = False
+        naming_ok = any(
+            token in stem.lower()
+            for token in ("axis", "axes", "xlabel", "ylabel")
+        )
+        if dpi_ok or (width >= 800 and height >= 600) or naming_ok:
+            axes_ok += 1
+        else:
+            axes_unknown.append(path.name)
+    total = len(png_files)
+    print("\nRapport Step1 (PNG):")
+    print(
+        f"- Légendes: {legend_ok} OK / {legend_missing} manquantes / "
+        f"{legend_unknown} inconnues (total {total})."
+    )
+    print(
+        f"- Tailles: médiane {int(median_width)}x{int(median_height)}px, "
+        f"{size_ok} conformes / {len(size_outliers)} atypiques."
+    )
+    print(
+        f"- Axes lisibles: {axes_ok} OK / {len(axes_unknown)} à vérifier."
+    )
+    if size_outliers:
+        print("Détails tailles atypiques:")
+        for item in size_outliers:
+            print(f"  - {item}")
+    if legend_missing:
+        print(
+            "Détails légendes manquantes: "
+            "voir les logs de génération Step1 pour la liste complète."
+        )
+    if axes_unknown:
+        print("Détails axes à vérifier:")
+        for item in axes_unknown:
+            print(f"  - {item}")
 
 
 def _pick_column(fieldnames: list[str], candidates: tuple[str, ...]) -> str | None:
@@ -978,6 +1101,7 @@ def main(argv: list[str] | None = None) -> None:
     set_default_export_formats(export_formats)
     set_default_figure_clamp_enabled(not args.no_figure_clamp)
     status_map: dict[str, PlotStatus] = {}
+    step1_legend_status: dict[str, bool] = {}
     invalid_modules = _validate_plot_modules_use_save_figure()
     _validate_step2_plot_module_registry()
     if invalid_modules:
@@ -1265,6 +1389,7 @@ def main(argv: list[str] | None = None) -> None:
                         module=module,
                         previous_figures=previous_figures,
                         fail_on_missing_legends=True,
+                        legend_status=step1_legend_status,
                     )
                     if missing_legends:
                         message = (
@@ -1320,6 +1445,7 @@ def main(argv: list[str] | None = None) -> None:
                         module_path=module_path,
                         module=module,
                         previous_figures=previous_figures,
+                        legend_status=step1_legend_status,
                     )
                     _register_status(
                         status_map,
@@ -1400,6 +1526,7 @@ def main(argv: list[str] | None = None) -> None:
                     module_path=module_path,
                     module=module,
                     previous_figures=previous_figures,
+                    legend_status=step1_legend_status,
                 )
                 _register_status(
                     status_map,
@@ -1436,6 +1563,10 @@ def main(argv: list[str] | None = None) -> None:
             ARTICLE_DIR / "step1" / "plots" / "output",
             "Step1",
             list(export_formats),
+        )
+        _analyze_step1_pngs(
+            ARTICLE_DIR / "step1" / "plots" / "output",
+            step1_legend_status,
         )
     if "step2" in steps:
         _inspect_plot_outputs(
