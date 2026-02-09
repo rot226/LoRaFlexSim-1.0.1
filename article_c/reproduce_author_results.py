@@ -401,8 +401,6 @@ def _collect_metric_points(
 def _render_legend(fig: plt.Figure, axes: Iterable[plt.Axes]) -> None:
     handles, labels = collect_legend_entries(list(axes))
     handles, labels = deduplicate_legend_entries(handles, labels)
-    if not handles:
-        return
     add_global_legend(
         fig,
         list(axes)[0],
