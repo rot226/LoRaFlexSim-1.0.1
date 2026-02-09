@@ -1554,35 +1554,19 @@ def _reward_weights_for_algo(
     algorithm: str, reward_floor: float | None = None
 ) -> AlgoRewardWeights:
     default_floor = 0.02
-    if algorithm == "adr":
-        weights = AlgoRewardWeights(
-            sf_weight=0.45,
-            latency_weight=0.32,
-            energy_weight=0.23,
-            collision_weight=0.1,
-        )
-    elif algorithm == "mixra_h":
-        weights = AlgoRewardWeights(
-            sf_weight=0.28,
-            latency_weight=0.27,
-            energy_weight=0.45,
-            collision_weight=0.16,
-        )
-    elif algorithm == "mixra_opt":
-        weights = AlgoRewardWeights(
-            sf_weight=0.23,
-            latency_weight=0.22,
-            energy_weight=0.55,
-            collision_weight=0.13,
-        )
-    else:
+    # Poids harmonisés pour limiter les incohérences entre algorithmes :
+    # - sf_weight : privilégie un SF faible (meilleur débit, moins d'airtime).
+    # - latency_weight : pénalise la latence (fenêtres plus lentes, congestion).
+    # - energy_weight : pénalise la consommation énergétique (airtime/puissance).
+    # - collision_weight : renforce la pénalité sur les collisions.
+    weights = AlgoRewardWeights(
+        sf_weight=0.36,
+        latency_weight=0.3,
+        energy_weight=0.34,
+        collision_weight=0.14,
+    )
+    if algorithm not in ("adr", "mixra_h", "mixra_opt"):
         default_floor = 0.1
-        weights = AlgoRewardWeights(
-            sf_weight=0.38,
-            latency_weight=0.32,
-            energy_weight=0.3,
-            collision_weight=0.13,
-        )
     selected_floor = default_floor if reward_floor is None else reward_floor
     if selected_floor > 0.0:
         return AlgoRewardWeights(
