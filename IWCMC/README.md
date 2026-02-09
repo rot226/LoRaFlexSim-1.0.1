@@ -67,6 +67,27 @@ python IWCMC/rl_static/plots/plot_rl_static.py IWCMC/rl_static/data/rl_rewards.c
 > Remarque : adaptez les noms de scripts et chemins de sortie aux fichiers
 > placés dans `scenarios/` et `plots/`.
 
+## Modèle SNIR κ (snir_model)
+
+Le cœur LoRaFlexSim supporte un calcul SNIR enrichi qui pondère la somme des
+interférences par les coefficients de corrélation κ(SF,SFk). Pour l’activer,
+vérifiez que `snir_model=True` est bien transmis au canal.
+
+### Via configuration (INI)
+
+Ajoutez/activez l’option dans la section `[channel]` du fichier de configuration
+utilisé par vos scripts :
+
+```ini
+[channel]
+snir_model = true
+```
+
+### Via CLI QoS (profil SNIR)
+
+Dans les campagnes QoS, le profil `snir_enhanced` (sélectionné via `--snir on`)
+active automatiquement `snir_model` et le calcul SNIR avancé.
+
 ## Phases de travail (1–4)
 
 Les phases reprennent les recommandations du runbook SNIR et des scénarios

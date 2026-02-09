@@ -30,6 +30,7 @@ except Exception:  # pragma: no cover - pandas optional
 
 from .node import Node
 from .gateway import Gateway, FLORA_NON_ORTH_DELTA
+from .snir_kappa import default_kappa_matrix, kappa_factor
 from .channel import Channel
 from .multichannel import MultiChannel
 from .server import NetworkServer, REQUIRED_SNR
@@ -65,7 +66,7 @@ logger = logging.getLogger(__name__)
 diag_logger = logging.getLogger("diagnostics")
 
 
-def _load_channel_overrides(path: str | Path | None) -> dict[str, float]:
+def _load_channel_overrides(path: str | Path | None) -> dict[str, float | bool]:
     """Return channel override values defined in ``path`` if present."""
 
     overrides: dict[str, float] = {}
@@ -97,6 +98,13 @@ def _load_channel_overrides(path: str | Path | None) -> dict[str, float]:
     for key in keys:
         try:
             value = cp.getfloat("channel", key)
+        except Exception:
+            continue
+        overrides[key] = value
+    bool_keys = ("snir_model",)
+    for key in bool_keys:
+        try:
+            value = cp.getboolean("channel", key)
         except Exception:
             continue
         overrides[key] = value
@@ -152,6 +160,7 @@ class _PowerTimeline:
         *,
         target_sf: int | None = None,
         alpha_isf: float = 0.0,
+        kappa_isf: object | None = None,
         exclude_event_id: int | None = None,
     ) -> float:
         if end <= start:
@@ -167,7 +176,9 @@ class _PowerTimeline:
             overlap_end = min(end, e)
             if overlap_end <= overlap_start:
                 continue
-            factor = 1.0 if target_sf is None or sf == target_sf else alpha_isf
+            factor = kappa_factor(
+                target_sf, sf, alpha_isf=alpha_isf, kappa_isf=kappa_isf
+            )
             if factor == 0.0:
                 continue
             weighted = p * factor
@@ -196,6 +207,7 @@ class _PowerTimeline:
         *,
         target_sf: int | None = None,
         alpha_isf: float = 0.0,
+        kappa_isf: object | None = None,
         exclude_event_id: int | None = None,
     ) -> float:
         """Retourne la puissance moyenne totale sur l'intervalle demandé."""
@@ -206,6 +218,7 @@ class _PowerTimeline:
             base_power,
             target_sf=target_sf,
             alpha_isf=alpha_isf,
+            kappa_isf=kappa_isf,
             exclude_event_id=exclude_event_id,
         )
 
@@ -217,6 +230,7 @@ class _PowerTimeline:
         *,
         target_sf: int | None = None,
         alpha_isf: float = 0.0,
+        kappa_isf: object | None = None,
     ) -> dict[float, float]:
         events: dict[float, float] = {}
         if base_power != 0.0:
@@ -227,7 +241,9 @@ class _PowerTimeline:
             overlap_end = min(end, e)
             if overlap_end <= overlap_start:
                 continue
-            factor = 1.0 if target_sf is None or sf == target_sf else alpha_isf
+            factor = kappa_factor(
+                target_sf, sf, alpha_isf=alpha_isf, kappa_isf=kappa_isf
+            )
             if factor == 0.0:
                 continue
             weighted = p * factor
@@ -268,6 +284,7 @@ class InterferenceTracker:
         *,
         base_noise_mW: float = 0.0,
         alpha_isf: float = 0.0,
+        kappa_isf: object | None = None,
     ) -> float:
         key = (gateway_id, frequency)
         timeline = self.active.get(key)
@@ -283,6 +300,7 @@ class InterferenceTracker:
             base_noise_mW,
             target_sf=sf,
             alpha_isf=alpha_isf,
+            kappa_isf=kappa_isf,
         )
 
     def total_interference(
@@ -295,6 +313,7 @@ class InterferenceTracker:
         *,
         base_noise_mW: float = 0.0,
         alpha_isf: float = 0.0,
+        kappa_isf: object | None = None,
         fading_std: float = 0.0,
         exclude_event_id: int | None = None,
         window_s: float | None = None,
@@ -320,6 +339,7 @@ class InterferenceTracker:
                 base_power=base_noise_mW,
                 target_sf=sf,
                 alpha_isf=alpha_isf,
+                kappa_isf=kappa_isf,
             )
             candidates = [t for t in sorted(change_points) if t <= end_time - window]
             if not candidates or candidates[0] > start_time:
@@ -336,6 +356,7 @@ class InterferenceTracker:
                     base_power=base_noise_mW,
                     target_sf=sf,
                     alpha_isf=alpha_isf,
+                    kappa_isf=kappa_isf,
                     exclude_event_id=exclude_event_id,
                 )
                 if avg_power > total_power:
@@ -347,6 +368,7 @@ class InterferenceTracker:
                 base_power=base_noise_mW,
                 target_sf=sf,
                 alpha_isf=alpha_isf,
+                kappa_isf=kappa_isf,
                 exclude_event_id=exclude_event_id,
             )
         interference = max(total_power - base_noise_mW, 0.0)
@@ -365,6 +387,7 @@ class InterferenceTracker:
         *,
         base_noise_mW: float = 0.0,
         alpha_isf: float = 0.0,
+        kappa_isf: object | None = None,
     ) -> dict[float, float]:
         key = (gateway_id, frequency)
         timeline = self.active.get(key)
@@ -378,6 +401,7 @@ class InterferenceTracker:
             base_noise_mW,
             target_sf=sf,
             alpha_isf=alpha_isf,
+            kappa_isf=kappa_isf,
         )
 
     def remove(self, event_id: int) -> None:
@@ -483,6 +507,7 @@ class Simulator:
         marginal_snir_margin_db: float | None = None,
         marginal_snir_drop_prob: float | None = None,
         snir_penalty_strength: float | None = None,
+        snir_model: bool | None = None,
         debug_rx: bool = False,
         dump_intervals: bool = False,
         pure_poisson_mode: bool = False,
@@ -751,6 +776,7 @@ class Simulator:
             "marginal_snir_margin_db": marginal_snir_margin_db,
             "marginal_snir_drop_prob": marginal_snir_drop_prob,
             "snir_penalty_strength": snir_penalty_strength,
+            "snir_model": snir_model,
         }
         for key, value in manual_overrides.items():
             if value is not None:
@@ -785,6 +811,10 @@ class Simulator:
                 channel.residual_collision_prob = channel_overrides["residual_collision_prob"]
             if "snir_off_noise_prob" in channel_overrides:
                 channel.snir_off_noise_prob = channel_overrides["snir_off_noise_prob"]
+            if "snir_model" in channel_overrides:
+                channel.snir_model = bool(channel_overrides["snir_model"])
+                if channel.snir_model and getattr(channel, "kappa_isf", None) is None:
+                    channel.kappa_isf = default_kappa_matrix(channel.alpha_isf)
 
         channel_kwargs = {
             key: value
@@ -803,6 +833,7 @@ class Simulator:
                 "baseline_collision_rate",
                 "residual_collision_prob",
                 "snir_off_noise_prob",
+                "snir_model",
             }
         }
         # Activation ou non de la mobilité des nœuds
@@ -1770,6 +1801,13 @@ class Simulator:
                         sf, end_time - time
                     )
                 if use_snir:
+                    kappa_isf = None
+                    if getattr(node.channel, "snir_model", False):
+                        kappa_isf = getattr(node.channel, "kappa_isf", None)
+                        if kappa_isf is None:
+                            kappa_isf = default_kappa_matrix(
+                                getattr(node.channel, "alpha_isf", 0.0)
+                            )
                     interference_mw = self._interference_tracker.total_interference(
                         gw.id,
                         freq_hz,
@@ -1778,6 +1816,7 @@ class Simulator:
                         end_time,
                         base_noise_mW=noise_lin,
                         alpha_isf=getattr(node.channel, "alpha_isf", 0.0),
+                        kappa_isf=kappa_isf,
                         fading_std=getattr(node.channel, "snir_fading_std", 0.0),
                         window_s=window_s,
                     )
@@ -1900,6 +1939,9 @@ class Simulator:
                     snir_off_noise_prob=getattr(
                         node.channel, "snir_off_noise_prob", 0.0
                     ),
+                    snir_model=getattr(node.channel, "snir_model", False),
+                    kappa_isf=getattr(node.channel, "kappa_isf", None),
+                    alpha_isf=getattr(node.channel, "alpha_isf", 0.0),
                 )
 
             # Retenir le meilleur RSSI/SNR mesuré pour cette transmission
