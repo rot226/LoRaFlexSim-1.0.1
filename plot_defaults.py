@@ -18,6 +18,9 @@ IEEE_SINGLE_COLUMN_WIDTH: float = SINGLE_COLUMN_WIDTH
 IEEE_DOUBLE_COLUMN_WIDTH: float = DOUBLE_COLUMN_WIDTH
 IEEE_HEIGHT_RATIO: float = SINGLE_COLUMN_FIGSIZE[1] / SINGLE_COLUMN_FIGSIZE[0]
 RL_FIGURE_SCALE: float = 1.15
+WIDE_SERIES_THRESHOLD: int = 3
+WIDE_SERIES_WIDTH_SCALE: float = 1.12
+WIDE_SERIES_WSPACE: float = 0.32
 
 
 def resolve_figsize(num_series: int | None = None) -> Tuple[float, float]:
@@ -46,3 +49,17 @@ def resolve_ieee_figsize(
         IEEE_SINGLE_COLUMN_WIDTH * scale,
         IEEE_SINGLE_COLUMN_WIDTH * IEEE_HEIGHT_RATIO * scale,
     )
+
+
+def resolve_ieee_figsize_for_series(
+    num_series: int | None = None,
+    *,
+    scale: float = 1.0,
+    wide_series_threshold: int = WIDE_SERIES_THRESHOLD,
+    wide_width_scale: float = WIDE_SERIES_WIDTH_SCALE,
+) -> Tuple[float, float]:
+    """Retourne la taille IEEE en élargissant si plusieurs séries sont superposées."""
+    width, height = resolve_ieee_figsize(num_series, scale=scale)
+    if num_series and num_series >= wide_series_threshold:
+        width *= wide_width_scale
+    return (width, height)

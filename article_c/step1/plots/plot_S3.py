@@ -29,7 +29,11 @@ from article_c.common.plot_helpers import (
     warn_if_insufficient_network_sizes,
 )
 from article_c.step1.plots.plot_utils import configure_figure
-from plot_defaults import resolve_ieee_figsize
+from plot_defaults import (
+    WIDE_SERIES_THRESHOLD,
+    WIDE_SERIES_WSPACE,
+    resolve_ieee_figsize_for_series,
+)
 
 _ALGO_SPECIFIC_TOL = 1e-6
 
@@ -81,7 +85,8 @@ def _plot_metric(
         if {"algo", "snir_mode"}.issubset(df.columns)
         else len(df.dropna().drop_duplicates())
     )
-    fig, ax = plt.subplots(figsize=resolve_ieee_figsize(series_count))
+    fig, ax = plt.subplots(figsize=resolve_ieee_figsize_for_series(series_count))
+    wide_series = series_count >= WIDE_SERIES_THRESHOLD
     network_sizes = sorted(df["network_size"].unique())
     warn_if_insufficient_network_sizes(network_sizes)
     metric_key = select_received_metric_key(rows, metric_key)
@@ -94,6 +99,7 @@ def _plot_metric(
             title=None,
             legend_loc="right",
             enable_suptitle=enable_suptitle,
+            wspace=WIDE_SERIES_WSPACE if wide_series else None,
         )
         return fig
     _warn_if_low_algo_variance(rows, metric_key)
@@ -108,6 +114,7 @@ def _plot_metric(
         title=None,
         legend_loc="right",
         enable_suptitle=enable_suptitle,
+        wspace=WIDE_SERIES_WSPACE if wide_series else None,
     )
     return fig
 
