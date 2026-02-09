@@ -2196,6 +2196,7 @@ def plot_metric_by_snir(
 ) -> None:
     network_sizes = sorted({_network_size_value(row) for row in rows})
     median_key, lower_key, upper_key = resolve_percentile_keys(rows, metric_key)
+    trace_count = 0
 
     def _algo_key(row: dict[str, object]) -> tuple[str, bool]:
         algo_value = str(row.get("algo", ""))
@@ -2234,6 +2235,7 @@ def plot_metric_by_snir(
                 linewidth=line_width,
                 markersize=marker_size,
             )[0]
+            trace_count += 1
             if lower_key and upper_key:
                 lower_points = {
                     _network_size_value(row): row.get(lower_key)
@@ -2273,6 +2275,8 @@ def plot_metric_by_snir(
                     label=f"{label} (P90)" if label_percentiles else None,
                 )
     set_network_size_ticks(ax, network_sizes)
+    if trace_count == 1:
+        auto_zoom(ax)
 
 
 def resolve_percentile_keys(
@@ -2308,6 +2312,7 @@ def plot_metric_by_algo(
     single_size = len(network_sizes) == 1
     only_size = network_sizes[0] if single_size else None
     label_fn = label_fn or (lambda algo: algo_label(str(algo)))
+    trace_count = 0
     for algo in algorithms:
         points = {
             int(row["network_size"]): row.get(median_key)
@@ -2343,12 +2348,22 @@ def plot_metric_by_algo(
                 )
                 if not _is_invalid_value(low) and not _is_invalid_value(high):
                     yerr = [[value - low], [high - value]]
-                    ax.errorbar([only_size], [value], yerr=yerr, fmt="o", label=label_fn(algo))
+                    ax.errorbar(
+                        [only_size],
+                        [value],
+                        yerr=yerr,
+                        fmt="o",
+                        label=label_fn(algo),
+                    )
+                    trace_count += 1
                     continue
             ax.scatter([only_size], [value], label=label_fn(algo))
+            trace_count += 1
             continue
         values = [_value_or_nan(points.get(size, float("nan"))) for size in network_sizes]
         line = ax.plot(network_sizes, values, marker="o", label=label_fn(algo))[0]
+        if any(math.isfinite(value) for value in values):
+            trace_count += 1
         if lower_key and upper_key:
             lower_points = {
                 int(row["network_size"]): row.get(lower_key)
@@ -2371,6 +2386,8 @@ def plot_metric_by_algo(
             color = line.get_color()
             ax.plot(network_sizes, lower_values, linestyle=":", color=color, alpha=0.6)
             ax.plot(network_sizes, upper_values, linestyle=":", color=color, alpha=0.6)
+    if trace_count == 1:
+        auto_zoom(ax)
 
 
 def _is_invalid_value(value: object) -> bool:
@@ -2381,6 +2398,67 @@ def _value_or_nan(value: object) -> float:
     if isinstance(value, (int, float)):
         return float(value)
     return float("nan")
+
+
+def _collect_axis_y_values(ax: plt.Axes) -> list[float]:
+    values: list[float] = []
+    for line in ax.lines:
+        ydata = line.get_ydata()
+        if ydata is None:
+            continue
+        for value in ydata:
+            if isinstance(value, (int, float)) and math.isfinite(value):
+                values.append(float(value))
+    for collection in ax.collections:
+        offsets = collection.get_offsets()
+        if offsets is None:
+            continue
+        try:
+            for _, y_value in offsets:
+                if isinstance(y_value, (int, float)) and math.isfinite(y_value):
+                    values.append(float(y_value))
+        except (TypeError, ValueError):
+            continue
+    return values
+
+
+def _percentile(values: list[float], percent: float) -> float:
+    if not values:
+        return float("nan")
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    clamped = min(100.0, max(0.0, percent))
+    position = (len(ordered) - 1) * (clamped / 100.0)
+    lower = int(math.floor(position))
+    upper = int(math.ceil(position))
+    if lower == upper:
+        return ordered[lower]
+    weight = position - lower
+    return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
+
+
+def auto_zoom(ax: plt.Axes, y_percentile: tuple[float, float] = (5, 95)) -> None:
+    """Resserre l'axe Y autour des valeurs pertinentes."""
+    if len(y_percentile) != 2:
+        raise ValueError("y_percentile doit contenir deux valeurs (min, max).")
+    low_p, high_p = y_percentile
+    if low_p >= high_p:
+        raise ValueError("y_percentile doit être strictement croissant.")
+    values = _collect_axis_y_values(ax)
+    if not values:
+        return
+    low = _percentile(values, low_p)
+    high = _percentile(values, high_p)
+    if not (math.isfinite(low) and math.isfinite(high)):
+        return
+    if low == high:
+        span = abs(low) if low else 1.0
+        pad = span * 0.05
+    else:
+        span = high - low
+        pad = span * 0.05
+    ax.set_ylim(low - pad, high + pad)
 
 
 def _sample_step1_rows() -> list[dict[str, object]]:
