@@ -1689,18 +1689,23 @@ def apply_figure_layout(
     *,
     figsize: tuple[float, float] | None = None,
     tight_layout: bool | Mapping[str, object] = False,
+    full_canvas: bool = False,
     bbox_to_anchor: tuple[float, float] | None = None,
     margins: dict[str, float] | None = None,
     legend_rows: int = 1,
     legend_loc: str | None = None,
     figure_clamp: bool | None = None,
 ) -> None:
-    """Applique taille, marges, légendes et tight_layout sur une figure."""
+    """Applique taille, marges, légendes et tight_layout sur une figure.
+
+    Quand full_canvas est activé, on évite tight_layout, bbox_inches="tight"
+    (via _avoid_tight_bbox) et les limitations de taille.
+    """
     extra_legend_rows = max(0, legend_rows - 1)
     reserved_top = 0.0
     if figsize is not None:
         fig.set_size_inches(*figsize, forward=True)
-    if _resolve_figure_clamp(figure_clamp):
+    if not full_canvas and _resolve_figure_clamp(figure_clamp):
         _apply_figure_size_clamp(fig)
     if margins is None:
         margins = dict(FIGURE_MARGINS)
@@ -1736,7 +1741,7 @@ def apply_figure_layout(
                 legends.append(legend)
         for legend in legends:
             legend.set_bbox_to_anchor(bbox_to_anchor)
-    if tight_layout:
+    if tight_layout and not full_canvas:
         if isinstance(tight_layout, Mapping):
             adjusted_tight = dict(tight_layout)
             rect = adjusted_tight.get("rect")
@@ -1781,7 +1786,7 @@ def apply_figure_layout(
                 left, bottom, right, top = rect
                 rect = (left, bottom, min(right, _legend_right_margin(fig)), top)
             fig.tight_layout(rect=rect)
-    fig._avoid_tight_bbox = normalized_legend_loc == "right"
+    fig._avoid_tight_bbox = normalized_legend_loc == "right" or full_canvas
 
 
 def _layout_rect_from_margins(
