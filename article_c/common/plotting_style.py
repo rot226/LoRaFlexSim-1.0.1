@@ -38,7 +38,7 @@ BASE_FIGURE_MARGINS = {
 IEEE_FIGURE_MARGINS = {
     "top": 0.84,
     "bottom": 0.14,
-    "right": 0.72,
+    "right": 0.78,
 }
 BASE_TIGHT_LAYOUT_RECT = (0.08, 0.12, 0.98, 0.92)
 IEEE_TIGHT_LAYOUT_RECT = (0.07, 0.12, 0.74, 0.9)
