@@ -20,7 +20,7 @@ from typing import Iterable
 
 import matplotlib.pyplot as plt
 
-from plot_defaults import resolve_ieee_figsize
+from article_c.plot_defaults import resolve_ieee_figsize
 
 if __name__ == "__main__":
     repo_root = Path(__file__).resolve().parents[1]
