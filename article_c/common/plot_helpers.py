@@ -958,6 +958,7 @@ def place_adaptive_legend(
     max_items_right: int = 6,
     max_rows_above: int = 2,
     max_rows_inside: int = 3,
+    enable_suptitle: bool | None = None,
 ) -> LegendPlacement:
     """Place une légende à droite si possible, sinon au-dessus ou dans l'axe."""
     if handles is None or labels is None:
@@ -983,6 +984,11 @@ def place_adaptive_legend(
         return LegendPlacement(None, "none", 0, None)
 
     label_count = len(labels)
+    if not preferred_loc:
+        preferred_loc = DEFAULT_LEGEND_LOC
+    if enable_suptitle is False:
+        preferred_loc = "right"
+        max_items_right = max(max_items_right, label_count)
     chosen = choose_legend_location(
         fig,
         ax,
