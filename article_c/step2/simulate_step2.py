@@ -117,7 +117,7 @@ def _compute_reward(
     ) / total_weight
     traffic_factor = 0.0
     if traffic_sent > 0:
-        traffic_factor = _clip(traffic_sent / (traffic_sent + 4.0), 0.0, 1.0)
+        traffic_factor = _clip(traffic_sent / (traffic_sent + 20.0), 0.0, 1.0)
     collision_penalty = (
         lambda_collision
         * weights.collision_weight
