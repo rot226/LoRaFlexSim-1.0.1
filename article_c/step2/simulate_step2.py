@@ -144,7 +144,8 @@ def _compute_reward(
         )
     quality_term = weighted_quality * (0.6 + 0.4 * success_rate)
     success_term = 0.35 * success_rate
-    reward = quality_term + success_term - collision_penalty
+    bonus_quality_term = 0.05 * weighted_quality
+    reward = quality_term + success_term + bonus_quality_term - collision_penalty
     reward_floor = max(weights.exploration_floor, 0.0)
     if floor_on_zero_success and success_rate == 0.0 and reward_floor > 0.0:
         reward = reward_floor
