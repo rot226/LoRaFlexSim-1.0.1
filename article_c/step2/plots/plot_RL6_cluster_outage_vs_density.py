@@ -357,7 +357,7 @@ def _plot_raw_metric(
                 if not points:
                     continue
                 values = [points.get(size, float("nan")) for size in network_sizes]
-                label = _label_for_algo(str(algo)) if rep_idx == 0 else None
+                label = f"{_label_for_algo(str(algo))} ({replication_key} {replication})"
                 ax.plot(
                     network_sizes,
                     values,
