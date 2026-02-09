@@ -1641,15 +1641,23 @@ def save_figure(
         _apply_figure_size_clamp(fig)
     selected_formats = _EXPORT_FORMATS if formats is None else _normalize_export_formats(formats)
     selected_formats = _enforce_png_eps_order(selected_formats)
+    has_external_legend = bool(getattr(fig, "_external_legend", False))
     effective_bbox = bbox_inches
     if effective_bbox is None:
-        effective_bbox = "tight"
+        effective_bbox = False if has_external_legend else "tight"
+    default_pad = float(SAVEFIG_STYLE.get("pad_inches", 0.0))
+    pad_inches = default_pad
+    if effective_bbox == "tight":
+        pad_inches = max(default_pad, 0.06)
+    elif has_external_legend:
+        pad_inches = max(default_pad, 0.02)
     for ext in selected_formats:
         save_figure_path(
             fig,
             output_dir / f"{stem}.{ext}",
             fmt=ext,
             bbox_inches=effective_bbox,
+            pad_inches=pad_inches,
         )
 
 
@@ -1725,11 +1733,14 @@ def save_figure_path(
     *,
     fmt: str | None = None,
     bbox_inches: str | bool | None = None,
+    pad_inches: float | None = None,
 ) -> None:
     """Sauvegarde une figure en gérant l'export EPS (transparences rasterisées)."""
     ensure_dir(output_path.parent)
     format_name = fmt or output_path.suffix.lstrip(".").lower()
     savefig_style = dict(SAVEFIG_STYLE)
+    if pad_inches is not None:
+        savefig_style["pad_inches"] = float(pad_inches)
     avoid_tight_bbox = bool(getattr(fig, "_avoid_tight_bbox", False))
     if bbox_inches is None:
         bbox_inches = "tight" if not avoid_tight_bbox else False
@@ -1939,6 +1950,8 @@ def apply_figure_layout(
                 left, bottom, right, top = rect
                 rect = (left, bottom, min(right, _legend_right_margin(fig)), top)
             fig.tight_layout(rect=rect)
+    has_external_legend = normalized_legend_loc in {"right", "above"}
+    fig._external_legend = has_external_legend
     fig._avoid_tight_bbox = normalized_legend_loc == "right" or full_canvas
 
 
