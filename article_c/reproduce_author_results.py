@@ -20,6 +20,7 @@ from typing import Iterable
 
 import matplotlib.pyplot as plt
 
+from plot_defaults import resolve_ieee_figsize
 
 if __name__ == "__main__":
     repo_root = Path(__file__).resolve().parents[1]
@@ -413,7 +414,12 @@ def _render_legend(fig: plt.Figure, axes: Iterable[plt.Axes]) -> None:
 
 def _finalize_figure(fig: plt.Figure, title: str, *, show_header: bool = True) -> None:
     apply_suptitle(fig, title, enable_suptitle=show_header, y=SUPTITLE_Y)
-    apply_figure_layout(fig, margins=legend_margins("above"))
+    apply_figure_layout(
+        fig,
+        figsize=resolve_ieee_figsize(len(fig.axes)),
+        margins=legend_margins("above"),
+        figure_clamp=False,
+    )
 
 
 def plot_fig4(
