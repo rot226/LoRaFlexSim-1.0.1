@@ -2335,6 +2335,7 @@ def run_simulation(
                 )
                 window_start_s += window_duration_value + delay_s
             node_windows: list[dict[str, object]] = []
+            clamp_tracking_enabled = not no_clamp
             round_clamp_ratios: list[float] = []
             round_clamp_flags: list[bool] = []
             for node_id in range(n_nodes):
@@ -2374,8 +2375,9 @@ def run_simulation(
                     )
                     max_tx = min(max_tx, per_node_cap, window_cap)
                 expected_sent = min(expected_sent_raw, max_tx)
-                round_clamp_ratios.append(expected_sent / max(expected_sent_raw, 1))
-                round_clamp_flags.append(expected_sent < expected_sent_raw)
+                if clamp_tracking_enabled:
+                    round_clamp_ratios.append(expected_sent / max(expected_sent_raw, 1))
+                    round_clamp_flags.append(expected_sent < expected_sent_raw)
                 if _should_debug_log(debug_step2, round_id):
                     logger.debug(
                         "Traffic attendu après plafonnement node=%s (sf=%s) expected_sent=%s (max_tx=%s).",
@@ -2455,20 +2457,21 @@ def run_simulation(
                         "link_quality": link_quality,
                     }
                 )
-            (
-                traffic_coeff_scale_value,
-                window_duration_value,
-                tx_window_safety_factor,
-            ) = _log_clamp_ratio_and_adjust(
-                network_size=network_size_value,
-                algo_label=algo_label,
-                round_id=round_id,
-                clamp_ratios=round_clamp_ratios,
-                clamp_flags=round_clamp_flags,
-                traffic_coeff_scale=traffic_coeff_scale_value,
-                window_duration_s=window_duration_value,
-                tx_window_safety_factor=tx_window_safety_factor,
-            )
+            if clamp_tracking_enabled:
+                (
+                    traffic_coeff_scale_value,
+                    window_duration_value,
+                    tx_window_safety_factor,
+                ) = _log_clamp_ratio_and_adjust(
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    clamp_ratios=round_clamp_ratios,
+                    clamp_flags=round_clamp_flags,
+                    traffic_coeff_scale=traffic_coeff_scale_value,
+                    window_duration_s=window_duration_value,
+                    tx_window_safety_factor=tx_window_safety_factor,
+                )
             (
                 successes_by_node,
                 traffic_sent_by_node,
@@ -3045,6 +3048,7 @@ def run_simulation(
                 )
                 window_start_s += window_duration_value + delay_s
             node_windows: list[dict[str, object]] = []
+            clamp_tracking_enabled = not no_clamp
             round_clamp_ratios: list[float] = []
             round_clamp_flags: list[bool] = []
             for node_id in range(n_nodes):
@@ -3115,8 +3119,9 @@ def run_simulation(
                     )
                     max_tx = min(max_tx, per_node_cap, window_cap)
                 expected_sent = min(expected_sent_raw, max_tx)
-                round_clamp_ratios.append(expected_sent / max(expected_sent_raw, 1))
-                round_clamp_flags.append(expected_sent < expected_sent_raw)
+                if clamp_tracking_enabled:
+                    round_clamp_ratios.append(expected_sent / max(expected_sent_raw, 1))
+                    round_clamp_flags.append(expected_sent < expected_sent_raw)
                 if _should_debug_log(debug_step2, round_id):
                     logger.debug(
                         "Traffic attendu après plafonnement node=%s expected_sent=%s (max_tx=%s).",
@@ -3178,20 +3183,21 @@ def run_simulation(
                         "link_quality": link_quality,
                     }
                 )
-            (
-                traffic_coeff_scale_value,
-                window_duration_value,
-                tx_window_safety_factor,
-            ) = _log_clamp_ratio_and_adjust(
-                network_size=network_size_value,
-                algo_label=algo_label,
-                round_id=round_id,
-                clamp_ratios=round_clamp_ratios,
-                clamp_flags=round_clamp_flags,
-                traffic_coeff_scale=traffic_coeff_scale_value,
-                window_duration_s=window_duration_value,
-                tx_window_safety_factor=tx_window_safety_factor,
-            )
+            if clamp_tracking_enabled:
+                (
+                    traffic_coeff_scale_value,
+                    window_duration_value,
+                    tx_window_safety_factor,
+                ) = _log_clamp_ratio_and_adjust(
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    clamp_ratios=round_clamp_ratios,
+                    clamp_flags=round_clamp_flags,
+                    traffic_coeff_scale=traffic_coeff_scale_value,
+                    window_duration_s=window_duration_value,
+                    tx_window_safety_factor=tx_window_safety_factor,
+                )
             (
                 successes_by_node,
                 traffic_sent_by_node,
