@@ -979,7 +979,11 @@ def place_adaptive_legend(
                 for _ in labels
             ]
     if handles:
-        handles, labels = deduplicate_legend_entries(handles, labels)
+        if len(labels) == 1:
+            handles = handles[:1]
+            labels = labels[:1]
+        else:
+            handles, labels = deduplicate_legend_entries(handles, labels)
     if not handles:
         return LegendPlacement(None, "none", 0, None)
 
