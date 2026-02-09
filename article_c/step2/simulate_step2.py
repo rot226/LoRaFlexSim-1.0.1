@@ -55,6 +55,7 @@ class RewardAlertState:
 
 
 logger = logging.getLogger(__name__)
+_NO_CLAMP = False
 
 
 def _clip(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float:
@@ -196,6 +197,8 @@ def _compute_reward(
 
 
 def _clamp_range(value: float, min_value: float, max_value: float) -> float:
+    if _NO_CLAMP:
+        return value
     return max(min_value, min(max_value, value))
 
 
@@ -402,6 +405,7 @@ def _resolve_load_clamps(
     network_load_max: float | None,
     *,
     safe_profile: bool,
+    no_clamp: bool = False,
 ) -> tuple[float, float]:
     load_clamp_min_value = (
         step2_defaults.network_load_min
@@ -418,6 +422,8 @@ def _resolve_load_clamps(
             load_clamp_max_value,
             load_clamp_min_value,
         )
+    if no_clamp:
+        return load_clamp_min_value, load_clamp_max_value
     if safe_profile:
         load_clamp_min_value = max(
             load_clamp_min_value, STEP2_SAFE_CONFIG.network_load_min
@@ -438,6 +444,7 @@ def _resolve_collision_clamps(
     collision_size_over_max: float | None,
     *,
     safe_profile: bool,
+    no_clamp: bool = False,
 ) -> tuple[float, float, float]:
     collision_clamp_min_value = (
         step2_defaults.collision_size_min
@@ -463,6 +470,12 @@ def _resolve_collision_clamps(
         collision_clamp_under_max_value, collision_clamp_over_max_value = (
             collision_clamp_over_max_value,
             collision_clamp_under_max_value,
+        )
+    if no_clamp:
+        return (
+            collision_clamp_min_value,
+            collision_clamp_under_max_value,
+            collision_clamp_over_max_value,
         )
     if safe_profile:
         collision_clamp_min_value = max(
@@ -1856,8 +1869,12 @@ def run_simulation(
     debug_step2: bool = False,
     reward_alert_level: str = "INFO",
     safe_profile: bool = False,
+    no_clamp: bool = False,
 ) -> Step2Result:
     """Exécute une simulation proxy de l'étape 2."""
+    global _NO_CLAMP
+    previous_no_clamp = _NO_CLAMP
+    _NO_CLAMP = bool(no_clamp)
     rng = random.Random(seed)
     step2_defaults = DEFAULT_CONFIG.step2
     snir_defaults = DEFAULT_CONFIG.snir
@@ -1954,6 +1971,8 @@ def run_simulation(
         logger.warning(
             "Le clamp des coefficients de trafic a été réactivé par l'utilisateur."
         )
+    if no_clamp:
+        traffic_coeff_clamp_enabled_value = False
     if floor_on_zero_success is None:
         floor_on_zero_success_value = (
             STEP2_SAFE_CONFIG.floor_on_zero_success
@@ -2072,6 +2091,7 @@ def run_simulation(
         network_load_min,
         network_load_max,
         safe_profile=bool(safe_profile),
+        no_clamp=no_clamp,
     )
     (
         collision_clamp_min_value,
@@ -2083,6 +2103,7 @@ def run_simulation(
         collision_size_under_max,
         collision_size_over_max,
         safe_profile=bool(safe_profile),
+        no_clamp=no_clamp,
     )
     load_factor = _network_load_factor(
         n_nodes, reference_size, load_clamp_min_value, load_clamp_max_value
@@ -3716,8 +3737,10 @@ def run_simulation(
             ],
         )
 
-    return Step2Result(
+    result = Step2Result(
         raw_rows=raw_rows,
         selection_prob_rows=selection_prob_rows,
         learning_curve_rows=learning_curve_rows,
     )
+    _NO_CLAMP = previous_no_clamp
+    return result

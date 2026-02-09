@@ -1227,6 +1227,7 @@ def _simulate_density(
                 debug_step2=bool(config.get("debug_step2", False)),
                 reward_alert_level=str(config.get("reward_alert_level", "WARNING")),
                 safe_profile=bool(config.get("safe_profile", False)),
+                no_clamp=bool(config.get("no_clamp", False)),
             )
             for row in result.raw_rows:
                 row["replication"] = replication
@@ -1285,6 +1286,10 @@ def _simulate_density(
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_cli_args(argv)
+    if getattr(args, "no_clamp", False):
+        if getattr(args, "traffic_coeff_clamp_enabled", False):
+            print("Option --no-clamp: désactivation du clamp traffic_coeff.")
+        args.traffic_coeff_clamp_enabled = False
     _log_default_profile_if_needed(args)
     if getattr(args, "safe_profile", False):
         _apply_safe_profile_with_log(args, "demande explicite --safe-profile")
@@ -1342,6 +1347,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     config: dict[str, object] = {
         "base_seed": base_seed,
+        "no_clamp": getattr(args, "no_clamp", False),
         "safe_profile": bool(getattr(args, "safe_profile", False)),
         "traffic_mode": args.traffic_mode,
         "jitter_range_s": args.jitter_range_s,
@@ -1408,6 +1414,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         args.network_load_min,
         args.network_load_max,
         safe_profile=safe_profile_active,
+        no_clamp=getattr(args, "no_clamp", False),
     )
     (
         collision_clamp_min,
@@ -1419,6 +1426,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         args.collision_size_under_max,
         args.collision_size_over_max,
         safe_profile=safe_profile_active,
+        no_clamp=getattr(args, "no_clamp", False),
     )
     table = _format_size_factor_table(
         sorted(set(requested_sizes)),
