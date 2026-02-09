@@ -373,6 +373,7 @@ def _check_legends_for_module(
         if source_file
         else "source inconnue"
     )
+    place_adaptive_legend = getattr(module, "place_adaptive_legend", None)
     for index, fig_number in enumerate(new_fig_numbers, start=1):
         fig = plt.figure(fig_number)
         context = f"{module_path} (figure {index})"
@@ -383,6 +384,51 @@ def _check_legends_for_module(
                 f"légende absente pour {context}. "
                 f"Source: {source_path}"
             )
+            if callable(place_adaptive_legend):
+                best_ax = None
+                best_count = 0
+                for ax in fig.axes:
+                    handles, labels = ax.get_legend_handles_labels()
+                    if handles and len(handles) > best_count:
+                        best_ax = ax
+                        best_count = len(handles)
+                if best_ax is None:
+                    print(
+                        "AVERTISSEMENT: "
+                        f"aucune entrée de légende détectée pour {context}; "
+                        "place_adaptive_legend ignoré."
+                    )
+                else:
+                    print(
+                        "AVERTISSEMENT: "
+                        f"tentative de placement automatique de légende pour "
+                        f"{context}."
+                    )
+                    try:
+                        place_adaptive_legend(fig, best_ax)
+                    except Exception as exc:
+                        print(
+                            "AVERTISSEMENT: "
+                            f"place_adaptive_legend a échoué pour {context}: {exc}"
+                        )
+                    else:
+                        if _figure_has_legend(fig):
+                            print(
+                                "INFO: "
+                                f"légende ajoutée pour {context}."
+                            )
+                        else:
+                            print(
+                                "AVERTISSEMENT: "
+                                f"place_adaptive_legend n'a pas créé de légende "
+                                f"pour {context}."
+                            )
+            else:
+                print(
+                    "AVERTISSEMENT: "
+                    f"place_adaptive_legend non exposé par {module_path}; "
+                    f"légende absente pour {context}."
+                )
 
 
 def _resolve_plot_requirements(step: str, module_path: str) -> PlotRequirements:
