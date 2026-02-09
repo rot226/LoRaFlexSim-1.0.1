@@ -1732,6 +1732,9 @@ def apply_figure_layout(
         if isinstance(tight_layout, Mapping):
             adjusted_tight = dict(tight_layout)
             rect = adjusted_tight.get("rect")
+            if normalized_legend_loc == "right" and rect is None:
+                rect = tight_layout_rect_from_margins(margins)
+                adjusted_tight["rect"] = rect
             if extra_legend_rows and rect:
                 left, bottom, right, top = rect
                 adjusted_tight["rect"] = (
@@ -1766,6 +1769,9 @@ def apply_figure_layout(
             fig.tight_layout(**adjusted_tight)
         else:
             rect = tight_layout_rect_from_margins(margins)
+            if normalized_legend_loc == "right":
+                left, bottom, right, top = rect
+                rect = (left, bottom, min(right, _legend_right_margin(fig)), top)
             fig.tight_layout(rect=rect)
     fig._avoid_tight_bbox = normalized_legend_loc == "right"
 
