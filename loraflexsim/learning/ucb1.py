@@ -130,6 +130,7 @@ class LoRaSFSelectorUCB1:
         energy_normalization: float | None = None,
         reward_window: int = 20,
         traffic_weighted_mean: bool = False,
+        reward_mode: str = "snir_binary",
     ) -> None:
         self.reward_window = max(1, reward_window)
         self.bandit = UCB1Bandit(
@@ -143,9 +144,19 @@ class LoRaSFSelectorUCB1:
         self.collision_penalty = collision_penalty
         self.snir_threshold_db = snir_threshold_db
         self.energy_normalization = energy_normalization
+        self.reward_mode = reward_mode.lower()
         self._qos_windows: List[Deque[RewardSample]] = [
             deque(maxlen=self.reward_window) for _ in range(self.bandit.n_arms)
         ]
+
+    def _binary_snir_reward(
+        self,
+        snir_db: float | None,
+        snir_threshold_db: float | None,
+    ) -> float:
+        if snir_db is None or snir_threshold_db is None:
+            return 0.0
+        return 1.0 if snir_db >= snir_threshold_db else 0.0
 
     def _compute_components(
         self,
@@ -316,6 +327,12 @@ class LoRaSFSelectorUCB1:
         """Met à jour l'état du bandit à partir du facteur d'étalement choisi."""
 
         arm = self.SF_TO_ARM[sf]
+        if self.reward_mode == "snir_binary":
+            threshold = self.snir_threshold_db if snir_threshold_db is None else snir_threshold_db
+            reward = self._binary_snir_reward(snir_db, threshold)
+            weight = max(traffic_volume, 0.0) if traffic_volume is not None else 1.0
+            self.bandit.update(arm, reward, weight=weight)
+            return reward
         sample = self._compute_components(
             success,
             snir_db=snir_db,
