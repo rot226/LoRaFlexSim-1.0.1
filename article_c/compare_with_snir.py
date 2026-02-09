@@ -313,7 +313,13 @@ def _render_metric_plot(
     if status is not MetricStatus.OK:
         render_metric_status(fig, ax, status)
     else:
-        plot_metric_by_snir(ax, rows, metric_key, use_algo_styles=True)
+        plot_metric_by_snir(
+            ax,
+            rows,
+            metric_key,
+            use_algo_styles=True,
+            label_percentiles=True,
+        )
         _plot_author_overlays(ax, author_curves, metric_label.lower())
     ax.set_xlabel("Nombre de nœuds")
     ax.set_ylabel(metric_label)

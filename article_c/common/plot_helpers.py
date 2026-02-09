@@ -2187,6 +2187,7 @@ def plot_metric_by_snir(
     line_width: float = 1.6,
     marker_size: float = 5.5,
     percentile_line_width: float = 1.1,
+    label_percentiles: bool = False,
 ) -> None:
     network_sizes = sorted({_network_size_value(row) for row in rows})
     median_key, lower_key, upper_key = resolve_percentile_keys(rows, metric_key)
@@ -2255,6 +2256,7 @@ def plot_metric_by_snir(
                     color=color,
                     alpha=0.6,
                     linewidth=percentile_line_width,
+                    label=f"{label} (P10)" if label_percentiles else None,
                 )
                 ax.plot(
                     densities,
@@ -2263,6 +2265,7 @@ def plot_metric_by_snir(
                     color=color,
                     alpha=0.6,
                     linewidth=percentile_line_width,
+                    label=f"{label} (P90)" if label_percentiles else None,
                 )
     set_network_size_ticks(ax, network_sizes)
 
