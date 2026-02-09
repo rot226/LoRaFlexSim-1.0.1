@@ -23,6 +23,7 @@ from article_c.common.plot_helpers import (
     parse_export_formats,
     plot_metric_by_snir,
     save_figure,
+    set_default_figure_clamp_enabled,
     set_default_export_formats,
 )
 from plot_defaults import resolve_ieee_figsize
@@ -276,6 +277,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default="png",
         help="Formats d'export des figures (ex: png,eps).",
+    )
+    parser.add_argument(
+        "--no-figure-clamp",
+        action="store_true",
+        help="Désactive le clamp de taille des figures.",
     )
     parser.add_argument(
         "--noise-floor-dbm",
@@ -899,6 +905,7 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:
         parser.error(str(exc))
     set_default_export_formats(export_formats)
+    set_default_figure_clamp_enabled(not args.no_figure_clamp)
 
     # Compat: "density" est déprécié, utiliser "network_size".
     network_sizes = parse_network_size_list(args.network_sizes)

@@ -45,6 +45,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     save_figure,
     select_received_metric_key,
+    set_default_figure_clamp_enabled,
     set_default_export_formats,
     set_network_size_ticks,
 )
@@ -901,6 +902,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Formats d'export (ex: png,eps).",
     )
     parser.add_argument(
+        "--no-figure-clamp",
+        action="store_true",
+        help="Désactive le clamp de taille des figures.",
+    )
+    parser.add_argument(
         "--profiles",
         type=str,
         default="mixra,apra,aimi",
@@ -934,6 +940,7 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
     figures = {int(fig.strip()) for fig in args.figures.split(",") if fig.strip()}
     formats = parse_export_formats(args.formats)
     set_default_export_formats(formats)
+    set_default_figure_clamp_enabled(not args.no_figure_clamp)
     apply_output_fonttype()
     apply_plot_style()
 

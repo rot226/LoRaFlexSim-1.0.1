@@ -302,6 +302,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Désactive le titre global (suptitle) des figures.",
     )
+    parser.add_argument(
+        "--no-figure-clamp",
+        action="store_true",
+        help="Désactive le clamp de taille des figures.",
+    )
     return parser
 
 
@@ -882,6 +887,7 @@ def _run_post_module(
 def main(argv: list[str] | None = None) -> None:
     from article_c.common.plot_helpers import (
         parse_export_formats,
+        set_default_figure_clamp_enabled,
         set_default_export_formats,
     )
 
@@ -893,6 +899,7 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:
         parser.error(str(exc))
     set_default_export_formats(export_formats)
+    set_default_figure_clamp_enabled(not args.no_figure_clamp)
     status_map: dict[str, PlotStatus] = {}
     invalid_modules = _validate_plot_modules_use_save_figure()
     _validate_step2_plot_module_registry()
@@ -1276,6 +1283,10 @@ def main(argv: list[str] | None = None) -> None:
         if not enable_suptitle:
             post_args["article_c.reproduce_author_results"].append("--no-header")
             post_args["article_c.compare_with_snir"].append("--no-suptitle")
+        if args.no_figure_clamp:
+            post_args["article_c.reproduce_author_results"].append(
+                "--no-figure-clamp"
+            )
         if args.network_sizes:
             post_args["article_c.plot_cluster_der"].extend(
                 ["--network-sizes", *map(str, args.network_sizes)]
