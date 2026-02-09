@@ -1397,6 +1397,8 @@ def add_global_legend(
         handles, labels = fallback_legend_handles()
     if handles:
         handles, labels = deduplicate_legend_entries(handles, labels)
+    if not handles and use_fallback:
+        handles, labels = fallback_legend_handles()
     if not handles:
         return
     legend_style, legend_rows = _legend_style(
