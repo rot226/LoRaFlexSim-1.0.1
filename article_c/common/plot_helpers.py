@@ -1629,7 +1629,7 @@ def save_figure_path(
 def _safe_bbox_inches(
     fig: plt.Figure,
     bbox_inches: str | bool | None,
-) -> str | None:
+) -> str | bool | None:
     if bbox_inches is False:
         return None
     if bool(getattr(fig, "_avoid_tight_bbox", False)):
@@ -1661,7 +1661,7 @@ def _safe_bbox_inches(
             max_width_in,
             max_height_in,
         )
-        return None
+        return False
     return bbox_inches
 
 
