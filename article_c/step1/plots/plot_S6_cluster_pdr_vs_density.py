@@ -17,8 +17,8 @@ from article_c.common.plot_helpers import (
     SNIR_MODES,
     MetricStatus,
     algo_label,
+    add_global_legend,
     apply_plot_style,
-    place_adaptive_legend,
     assert_legend_present,
     ensure_network_size,
     fallback_legend_handles,
@@ -152,12 +152,13 @@ def _plot_metric_page(
             labels.extend(series_labels)
     if not handles:
         handles, labels = fallback_legend_handles()
-    place_adaptive_legend(
+    add_global_legend(
         fig,
-        axes[0][0],
-        preferred_loc="right",
+        axes,
+        legend_loc="right",
         handles=handles,
         labels=labels,
+        use_fallback=False,
     )
     return fig
 
