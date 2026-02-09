@@ -28,6 +28,7 @@ from article_c.common.plot_helpers import (
     is_constant_metric,
     legend_margins,
     load_step1_aggregated,
+    pad_axes,
     render_metric_status,
     select_received_metric_key,
     save_figure,
@@ -313,6 +314,7 @@ def _plot_pdr_distribution(
         )
         ax.set_xticks([])
         ax.set_ylim(0.0, 1.0)
+        pad_axes(ax, ypad=0.03)
         return
 
     data = [values]
@@ -372,6 +374,7 @@ def _plot_pdr_distribution(
     ax.set_xlim(-0.6, 0.6)
     ax.set_xticks([])
     ax.set_ylim(0.0, 1.0)
+    pad_axes(ax, ypad=0.03)
     ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
 
 

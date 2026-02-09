@@ -33,6 +33,7 @@ from article_c.common.plot_helpers import (
     legend_margins,
     load_step1_aggregated,
     metric_values,
+    pad_axes,
     place_adaptive_legend,
     plot_metric_by_snir,
     render_metric_status,
@@ -102,6 +103,7 @@ def _add_summary_plot(
     ax.set_xticklabels([algo_label(str(algo)) for algo in algos])
     ax.set_ylabel("PDR (prob.)\n(median ± min/max)")
     ax.set_ylim(0.0, 1.0)
+    pad_axes(ax, ypad=0.03)
     summary_handles = [
         Line2D(
             [],
@@ -188,6 +190,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_ylim(0.0, 1.0)
+    pad_axes(ax, ypad=0.03)
     handles, labels = ax.get_legend_handles_labels()
     if not handles:
         handles, labels = fallback_legend_handles()
