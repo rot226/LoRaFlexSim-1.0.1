@@ -101,7 +101,7 @@ MAX_TIGHT_BBOX_SCALE = 4.0
 MAX_TIGHT_BBOX_INCHES = 30.0
 MAX_IMAGE_DIM_PX = 12000
 MAX_IMAGE_TOTAL_PIXELS = 120_000_000
-MAX_IEEE_FIGURE_SIZE_IN = (50.0, 50.0)
+MAX_IEEE_FIGURE_SIZE_IN = (60.0, 40.0)
 AXES_TITLE_Y = 1.02
 SUPTITLE_TOP_RATIO = 0.85
 FIGURE_SUBPLOT_TOP = FIGURE_MARGINS["top"]
@@ -1672,9 +1672,11 @@ def _apply_figure_size_clamp(
     if clamped_width == fig_width_in and clamped_height == fig_height_in:
         return False
     LOGGER.warning(
-        "Taille de figure clampée à %.2f x %.2f in (était %.2f x %.2f in).",
+        "Taille de figure clampée à %.2f x %.2f in (plafond %.2f x %.2f, était %.2f x %.2f in).",
         clamped_width,
         clamped_height,
+        max_width,
+        max_height,
         fig_width_in,
         fig_height_in,
     )
