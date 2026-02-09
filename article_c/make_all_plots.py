@@ -377,6 +377,21 @@ def _check_legends_for_module(
     for index, fig_number in enumerate(new_fig_numbers, start=1):
         fig = plt.figure(fig_number)
         context = f"{module_path} (figure {index})"
+        legend_count = 0
+        for ax in fig.axes:
+            _, labels = ax.get_legend_handles_labels()
+            legend_count += len([label for label in labels if label])
+        print(
+            "INFO: "
+            f"module {module_path} - {context}: "
+            f"{legend_count} légende(s) trouvée(s)."
+        )
+        if legend_count == 0:
+            print(
+                "SUGGESTION: "
+                f"aucune légende détectée pour {context}; "
+                "ajoutez des labels manquants (label=...) aux courbes."
+            )
         assert_legend_present(fig, context)
         if not _figure_has_legend(fig):
             print(
