@@ -1870,6 +1870,7 @@ def run_simulation(
     reward_alert_level: str = "INFO",
     safe_profile: bool = False,
     no_clamp: bool = False,
+    auto_collision_control: bool = False,
 ) -> Step2Result:
     """Exécute une simulation proxy de l'étape 2."""
     global _NO_CLAMP
@@ -2879,14 +2880,15 @@ def run_simulation(
                         "cluster": "all",
                     }
                 )
-            traffic_coeff_scale_value, window_duration_value = _apply_collision_control(
-                network_size=network_size_value,
-                algo_label=algo_label,
-                round_id=round_id,
-                collision_norms=round_collision_norms,
-                traffic_coeff_scale=traffic_coeff_scale_value,
-                window_duration_s=window_duration_value,
-            )
+            if auto_collision_control:
+                traffic_coeff_scale_value, window_duration_value = _apply_collision_control(
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    collision_norms=round_collision_norms,
+                    traffic_coeff_scale=traffic_coeff_scale_value,
+                    window_duration_s=window_duration_value,
+                )
             _log_cluster_all_diagnostics(
                 network_size=network_size_value,
                 algo_label=algo_label,
@@ -3587,14 +3589,15 @@ def run_simulation(
                         "cluster": "all",
                     }
                 )
-            traffic_coeff_scale_value, window_duration_value = _apply_collision_control(
-                network_size=network_size_value,
-                algo_label=algo_label,
-                round_id=round_id,
-                collision_norms=round_collision_norms,
-                traffic_coeff_scale=traffic_coeff_scale_value,
-                window_duration_s=window_duration_value,
-            )
+            if auto_collision_control:
+                traffic_coeff_scale_value, window_duration_value = _apply_collision_control(
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    collision_norms=round_collision_norms,
+                    traffic_coeff_scale=traffic_coeff_scale_value,
+                    window_duration_s=window_duration_value,
+                )
             _log_cluster_all_diagnostics(
                 network_size=network_size_value,
                 algo_label=algo_label,
