@@ -26,6 +26,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     select_received_metric_key,
     save_figure,
+    warn_metric_checks_by_group,
     warn_if_insufficient_network_sizes,
 )
 from article_c.step1.plots.plot_utils import configure_figure
@@ -90,6 +91,15 @@ def _plot_metric(
     network_sizes = sorted(df["network_size"].unique())
     warn_if_insufficient_network_sizes(network_sizes)
     metric_key = select_received_metric_key(rows, metric_key)
+    warn_metric_checks_by_group(
+        rows,
+        metric_key,
+        x_key="network_size",
+        label="Réceptions",
+        min_value=0.0,
+        expected_monotonic="nondecreasing",
+        group_keys=("algo", "snir_mode"),
+    )
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
         render_metric_status(fig, ax, metric_state, legend_handles=None)

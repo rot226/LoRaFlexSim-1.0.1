@@ -31,6 +31,7 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     save_figure,
     suptitle_y_from_top,
+    warn_metric_checks_by_group,
     warn_if_insufficient_network_sizes,
 )
 from plot_defaults import resolve_ieee_figsize
@@ -166,6 +167,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> list[plt.Fig
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
     warn_if_insufficient_network_sizes(network_sizes)
+    warn_metric_checks_by_group(
+        rows,
+        metric_key,
+        x_key="network_size",
+        label="PDR",
+        min_value=0.0,
+        max_value=1.0,
+        expected_monotonic="nonincreasing",
+        group_keys=("cluster", "algo", "snir_mode"),
+    )
     available_clusters = {
         row["cluster"] for row in rows if row.get("cluster") not in (None, "all")
     }

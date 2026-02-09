@@ -24,6 +24,7 @@ from article_c.common.plot_helpers import (
     place_adaptive_legend,
     render_metric_status,
     save_figure,
+    warn_metric_checks,
 )
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
@@ -70,6 +71,8 @@ def _plot_entropy(
     fig, ax = plt.subplots(
         figsize=resolve_ieee_figsize(len(network_sizes), scale=RL_FIGURE_SCALE)
     )
+    sfs = sorted({row.get("sf") for row in rows if row.get("sf") is not None})
+    max_entropy = log2(len(sfs)) if sfs else None
     all_entropy_values: list[float] = []
     for network_size in network_sizes:
         size_rows = [row for row in rows if row["network_size"] == network_size]
@@ -82,6 +85,13 @@ def _plot_entropy(
                 if row["round"] == round_id
             ]
             entropy_values.append(_entropy(_normalized_probs(probs)))
+        warn_metric_checks(
+            entropy_values,
+            f"Entropie SF (N={network_size})",
+            min_value=0.0,
+            max_value=max_entropy,
+            expected_monotonic="nondecreasing",
+        )
         all_entropy_values.extend(entropy_values)
         ax.plot(rounds, entropy_values, marker="o", label=f"N={network_size}")
     metric_state = is_constant_metric(all_entropy_values)

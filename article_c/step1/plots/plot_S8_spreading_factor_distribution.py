@@ -18,6 +18,7 @@ from article_c.common.plot_helpers import (
     SNIR_LINESTYLES,
     SNIR_MODES,
     MetricStatus,
+    algo_label,
     algo_labels,
     apply_plot_style,
     create_right_legend_layout,
@@ -31,6 +32,7 @@ from article_c.common.plot_helpers import (
     load_step1_aggregated,
     render_metric_status,
     save_figure,
+    warn_metric_checks,
     warn_if_insufficient_network_sizes,
 )
 from article_c.step1.plots.plot_utils import configure_figure
@@ -246,6 +248,27 @@ def _plot_distribution(
         for value in values.values()
         if isinstance(value, (int, float))
     ]
+    warn_metric_checks(
+        distribution_values,
+        "Distribution SF",
+        min_value=0.0,
+        max_value=1.0,
+    )
+    for (algo, fallback, snir_mode), values in distribution_by_group.items():
+        ordered = [values.get(sf, 0.0) for sf in sf_values]
+        cdf_values = []
+        cumulative = 0.0
+        for value in ordered:
+            cumulative += float(value)
+            cdf_values.append(cumulative)
+        label = f"CDF SF ({algo_label(str(algo), fallback)} - {snir_mode})"
+        warn_metric_checks(
+            cdf_values,
+            label,
+            min_value=0.0,
+            max_value=1.0,
+            expected_monotonic="nondecreasing",
+        )
     metric_state = is_constant_metric(distribution_values)
     if metric_state is not MetricStatus.OK:
         render_metric_status(

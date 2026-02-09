@@ -27,6 +27,7 @@ from article_c.common.plot_helpers import (
     plot_metric_by_algo,
     render_metric_status,
     save_figure,
+    warn_metric_checks_by_group,
 )
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
@@ -80,6 +81,14 @@ def _plot_metric(
             f"Moins de deux tailles de réseau disponibles: {network_sizes}.",
             stacklevel=2,
         )
+    warn_metric_checks_by_group(
+        rows,
+        metric_key,
+        x_key="network_size",
+        label="Reward",
+        expected_monotonic="nonincreasing",
+        group_keys=("cluster", "algo", "snir_mode"),
+    )
     metric_state = is_constant_metric(metric_values(rows, metric_key))
     if metric_state is not MetricStatus.OK:
         render_metric_status(
