@@ -1150,12 +1150,20 @@ def _legend_style(
 ) -> tuple[dict[str, object], int]:
     normalized = _normalize_legend_loc(legend_loc)
     if normalized == "right":
-        return {
+        legend_style = {
             "loc": "center left",
             "bbox_to_anchor": (1.02, 0.5),
-            "ncol": 1,
             "frameon": False,
-        }, 1
+        }
+        legend_rows = 1
+        if label_count is not None:
+            target_ncol = max(1, int(math.ceil(label_count / 6)))
+            target_ncol = min(label_count, target_ncol)
+            ncol, legend_rows = _legend_layout_from_fig(fig, label_count, target_ncol)
+            legend_style["ncol"] = ncol
+        else:
+            legend_style["ncol"] = 1
+        return legend_style, legend_rows
     legend_style = dict(LEGEND_STYLE)
     legend_rows = 1
     if label_count is not None:
@@ -1365,7 +1373,7 @@ def fallback_legend_handles() -> tuple[list[Line2D], list[str]]:
 
 def add_global_legend(
     fig: plt.Figure,
-    ax: plt.Axes,
+    axes: object,
     *,
     legend_loc: str | None = None,
     handles: list[Line2D] | None = None,
@@ -1373,11 +1381,18 @@ def add_global_legend(
     use_fallback: bool = True,
 ) -> None:
     """Ajoute une légende globale à la figure."""
+    axes_list = _flatten_axes(axes)
+    if not axes_list:
+        return
+    primary_ax = axes_list[0]
     legend_loc = legend_loc or DEFAULT_LEGEND_LOC
     if _normalize_legend_loc(legend_loc) == "right":
-        clear_axis_legends(fig.axes)
+        clear_axis_legends(axes_list)
     if handles is None or labels is None:
-        handles, labels = ax.get_legend_handles_labels()
+        if len(axes_list) > 1:
+            handles, labels = collect_legend_entries(axes_list)
+        else:
+            handles, labels = primary_ax.get_legend_handles_labels()
     if not handles and use_fallback:
         handles, labels = fallback_legend_handles()
     if handles:
@@ -1399,7 +1414,7 @@ def add_global_legend(
         labels=labels,
         fig=fig,
         legend_ncols_default=int(legend_style.get("ncol", 1)),
-        axes=[ax],
+        axes=axes_list,
     )
     apply_figure_layout(
         fig,
