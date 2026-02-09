@@ -121,12 +121,17 @@ def _plot_metric_page(
                 if not points:
                     continue
                 values = [points.get(size, float("nan")) for size in network_sizes]
+                label = (
+                    f"{algo_label(algo, fallback)} / "
+                    f"Cluster {cluster_labels.get(cluster, cluster)} "
+                    f"({SNIR_LABELS[snir_mode]})"
+                )
                 ax.plot(
                     network_sizes,
                     values,
                     marker="o",
                     linestyle=SNIR_LINESTYLES[snir_mode],
-                    label=SNIR_LABELS[snir_mode],
+                    label=label,
                 )
             ax.set_xlabel("Network size (nodes)")
             if cluster_idx == 0:
@@ -136,7 +141,13 @@ def _plot_metric_page(
             ax.set_xticks(network_sizes)
             ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
-    handles, labels = legend_handles_for_algos_snir()
+    handles: list[plt.Line2D] = []
+    labels: list[str] = []
+    for row_axes in axes:
+        for ax in row_axes:
+            series_handles, series_labels = ax.get_legend_handles_labels()
+            handles.extend(series_handles)
+            labels.extend(series_labels)
     place_adaptive_legend(
         fig,
         axes[0][0],
