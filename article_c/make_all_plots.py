@@ -1028,6 +1028,16 @@ def main(argv: list[str] | None = None) -> None:
                         status="SKIP",
                         message=step_errors[step],
                     )
+    if "step1" in steps and "step1" not in step_errors:
+        (ARTICLE_DIR / "step1" / "plots" / "output").mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+    if "step2" in steps and "step2" not in step_errors:
+        (ARTICLE_DIR / "step2" / "plots" / "output").mkdir(
+            parents=True,
+            exist_ok=True,
+        )
     for step in steps:
         if step in step_errors:
             continue
