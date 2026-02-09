@@ -1146,11 +1146,18 @@ def main(argv: list[str] | None = None) -> None:
                             f"({reduced_label}) au lieu de {expected_label}."
                         )
             if step == "step1":
+                figure = module_path.split(".")[-1]
                 step1_network_sizes = (
-                    network_sizes
-                    if args.network_sizes
-                    else step_network_sizes.get("step1") or network_sizes
+                    args.network_sizes
+                    or step_network_sizes.get("step1")
                 )
+                sizes_label = (
+                    ", ".join(str(size) for size in step1_network_sizes)
+                    if step1_network_sizes
+                    else "none"
+                )
+                print(f"Detected sizes: {sizes_label}")
+                print(f"Plotting Step1: {figure}")
                 try:
                     previous_figures = set(plt.get_fignums())
                     module = _run_plot_module(
