@@ -101,6 +101,7 @@ def main(
     argv: list[str] | None = None,
     allow_sample: bool = True,
 ) -> None:
+    apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -113,7 +114,6 @@ def main(
         network_sizes = args.network_sizes
     if network_sizes is not None and _has_invalid_network_sizes(network_sizes):
         return
-    apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "aggregated_results.csv"
     rows = load_step2_aggregated(results_path, allow_sample=allow_sample)
