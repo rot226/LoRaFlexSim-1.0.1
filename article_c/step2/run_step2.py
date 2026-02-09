@@ -22,6 +22,7 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     parse_export_formats,
     save_figure,
+    set_default_figure_clamp_enabled,
     set_default_export_formats,
 )
 from article_c.common.utils import (
@@ -1292,6 +1293,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     except ValueError as exc:
         raise ValueError(str(exc)) from exc
     set_default_export_formats(export_formats)
+    set_default_figure_clamp_enabled(not args.no_figure_clamp)
     if args.debug_step2:
         logging.basicConfig(
             level=logging.INFO,

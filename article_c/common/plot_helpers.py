@@ -126,6 +126,19 @@ INSIDE_LEGEND_LOCATIONS = (
 )
 INSIDE_OVERLAP_STRONG_RATIO = 0.25
 _EXPORT_FORMATS = DEFAULT_EXPORT_FORMATS
+_DEFAULT_FIGURE_CLAMP_ENABLED = True
+
+
+def set_default_figure_clamp_enabled(enabled: bool) -> None:
+    """Active/désactive le clamp de taille figure par défaut."""
+    global _DEFAULT_FIGURE_CLAMP_ENABLED
+    _DEFAULT_FIGURE_CLAMP_ENABLED = bool(enabled)
+
+
+def _resolve_figure_clamp(value: bool | None) -> bool:
+    if value is None:
+        return _DEFAULT_FIGURE_CLAMP_ENABLED
+    return bool(value)
 
 
 class MetricStatus(str, Enum):
@@ -1426,12 +1439,15 @@ def save_figure(
     use_tight: bool = False,
     formats: Iterable[str] | None = None,
     bbox_inches: str | bool | None = None,
+    figure_clamp: bool | None = None,
 ) -> None:
     """Sauvegarde la figure dans les formats demandés."""
     ensure_dir(output_dir)
     apply_output_fonttype()
     if use_tight:
-        apply_figure_layout(fig, tight_layout=True)
+        apply_figure_layout(fig, tight_layout=True, figure_clamp=figure_clamp)
+    elif _resolve_figure_clamp(figure_clamp):
+        _apply_figure_size_clamp(fig)
     selected_formats = _EXPORT_FORMATS if formats is None else _normalize_export_formats(formats)
     selected_formats = _enforce_png_eps_order(selected_formats)
     effective_bbox = bbox_inches
@@ -1630,12 +1646,15 @@ def apply_figure_layout(
     margins: dict[str, float] | None = None,
     legend_rows: int = 1,
     legend_loc: str | None = None,
+    figure_clamp: bool | None = None,
 ) -> None:
     """Applique taille, marges, légendes et tight_layout sur une figure."""
     extra_legend_rows = max(0, legend_rows - 1)
     reserved_top = 0.0
     if figsize is not None:
         fig.set_size_inches(*figsize, forward=True)
+    if _resolve_figure_clamp(figure_clamp):
+        _apply_figure_size_clamp(fig)
     if margins is None:
         margins = dict(FIGURE_MARGINS)
     normalized_legend_loc = _normalize_legend_loc(legend_loc) if legend_loc else ""

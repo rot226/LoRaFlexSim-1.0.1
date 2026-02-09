@@ -359,6 +359,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="png",
         help="Formats d'export des figures (ex: png,eps).",
     )
+    parser.add_argument(
+        "--no-figure-clamp",
+        action="store_true",
+        help="Désactive le clamp de taille des figures.",
+    )
     return parser
 
 
