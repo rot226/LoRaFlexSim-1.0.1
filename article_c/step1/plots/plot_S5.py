@@ -11,16 +11,13 @@ from typing import Iterable
 import warnings
 
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Patch
 from article_c.common.plot_helpers import (
-    BASE_DPI,
     MetricStatus,
     SNIR_LABELS,
     SNIR_MODES,
     algo_label,
     apply_plot_style,
-    apply_output_fonttype,
     apply_figure_layout,
     assert_legend_present,
     clear_axis_legends,
@@ -34,10 +31,8 @@ from article_c.common.plot_helpers import (
     render_metric_status,
     select_received_metric_key,
     save_figure,
-    save_figure_path,
     warn_if_insufficient_network_sizes,
 )
-from article_c.common.plotting_style import SAVEFIG_STYLE
 from article_c.common.utils import ensure_dir
 from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import resolve_ieee_figsize
@@ -562,16 +557,9 @@ def _save_multipage_figures(
     stem: str,
 ) -> None:
     ensure_dir(output_dir)
-    apply_output_fonttype()
-    pdf_path = output_dir / f"{stem}.pdf"
-    with PdfPages(pdf_path) as pdf:
-        for fig in figures:
-            fig.savefig(pdf, format="pdf", dpi=BASE_DPI, **SAVEFIG_STYLE)
-    extra_formats = [fmt for fmt in get_export_formats() if fmt != "pdf"]
     for index, fig in enumerate(figures, start=1):
         page_stem = f"{stem}_page{index}"
-        for ext in extra_formats:
-            save_figure_path(fig, output_dir / f"{page_stem}.{ext}", fmt=ext)
+        save_figure(fig, output_dir, page_stem)
 
 
 def _legend_bbox(fig: plt.Figure, legend_rows: int, anchor_x: float = 0.5) -> tuple[float, float]:
