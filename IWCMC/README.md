@@ -67,6 +67,20 @@ python IWCMC/rl_static/plots/plot_rl_static.py IWCMC/rl_static/data/rl_rewards.c
 > Remarque : adaptez les noms de scripts et chemins de sortie aux fichiers
 > placés dans `scenarios/` et `plots/`.
 
+## Vérifications pytest
+
+### PowerShell (Windows 11)
+
+```powershell
+python -m pytest IWCMC/tests
+```
+
+### Bash (Linux/macOS/WSL)
+
+```bash
+python -m pytest IWCMC/tests
+```
+
 ## Modèle SNIR κ (snir_model)
 
 Le cœur LoRaFlexSim supporte un calcul SNIR enrichi qui pondère la somme des

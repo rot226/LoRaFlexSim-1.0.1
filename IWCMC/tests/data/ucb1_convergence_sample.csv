@@ -1,0 +1,5 @@
+algorithm,replication_index,DER,der_cumulative,sf
+UCB1,1,0.2,0.2,7
+UCB1,2,0.4,0.3,8
+UCB1,3,0.1,0.2333333333,12
+ADR,1,0.5,0.5,7
