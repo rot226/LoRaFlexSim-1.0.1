@@ -359,14 +359,16 @@ def _check_legends_for_module(
     module_path: str,
     module: object,
     previous_figures: set[int],
-) -> None:
+    fail_on_missing_legends: bool = False,
+) -> list[str]:
     from article_c.common.plot_helpers import assert_legend_present
 
+    missing_contexts: list[str] = []
     new_fig_numbers = [
         num for num in plt.get_fignums() if num not in previous_figures
     ]
     if not new_fig_numbers:
-        return
+        return []
     source_file = getattr(module, "__file__", None)
     source_path = (
         Path(source_file).resolve()
@@ -444,6 +446,9 @@ def _check_legends_for_module(
                     f"place_adaptive_legend non exposé par {module_path}; "
                     f"légende absente pour {context}."
                 )
+        if fail_on_missing_legends and not _figure_has_legend(fig):
+            missing_contexts.append(context)
+    return missing_contexts
 
 
 def _resolve_plot_requirements(step: str, module_path: str) -> PlotRequirements:
@@ -1255,18 +1260,33 @@ def main(argv: list[str] | None = None) -> None:
                         allow_sample=False,
                         enable_suptitle=enable_suptitle,
                     )
-                    _check_legends_for_module(
+                    missing_legends = _check_legends_for_module(
                         module_path=module_path,
                         module=module,
                         previous_figures=previous_figures,
+                        fail_on_missing_legends=True,
                     )
-                    _register_status(
-                        status_map,
-                        step=step,
-                        module_path=module_path,
-                        status="OK",
-                        message="plot généré",
-                    )
+                    if missing_legends:
+                        message = (
+                            "légende absente (Step1) pour "
+                            + ", ".join(missing_legends)
+                        )
+                        print(f"ERREUR: {message}.")
+                        _register_status(
+                            status_map,
+                            step=step,
+                            module_path=module_path,
+                            status="FAIL",
+                            message=message,
+                        )
+                    else:
+                        _register_status(
+                            status_map,
+                            step=step,
+                            module_path=module_path,
+                            status="OK",
+                            message="plot généré",
+                        )
                 except Exception as exc:
                     print(
                         f"ERREUR: échec du plot {module_path}: {exc}"
