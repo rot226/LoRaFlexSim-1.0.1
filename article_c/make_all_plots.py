@@ -561,6 +561,17 @@ def _inspect_plot_outputs(
             "AVERTISSEMENT: "
             f"dossier de sortie absent pour {label}: {output_dir}"
         )
+        output_dir.mkdir(parents=True, exist_ok=True)
+        if label == "Step1":
+            formats_label = ",".join(formats) if formats else "png"
+            print(
+                "INFO: relancez la commande suivante pour régénérer "
+                "les figures Step1:"
+            )
+            print(
+                "python -m article_c.make_all_plots "
+                f"--steps step1 --formats {formats_label}"
+            )
         return
     if not formats:
         print(f"INFO: aucun format d'export fourni pour {label}.")
