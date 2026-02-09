@@ -328,6 +328,7 @@ def main(
     allow_sample: bool = False,
     enable_suptitle: bool = True,
 ) -> None:
+    apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -342,7 +343,6 @@ def main(
     )
     args = parser.parse_args(argv)
     enable_suptitle = enable_suptitle and not args.no_suptitle
-    apply_plot_style()
     logger = logging.getLogger(__name__)
     if allow_sample:
         logger.warning(

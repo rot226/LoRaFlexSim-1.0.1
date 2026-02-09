@@ -298,6 +298,7 @@ def _plot_scatter(points: list[dict[str, float | int | str]]) -> plt.Figure:
 
 
 def main() -> None:
+    apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -309,7 +310,6 @@ def main() -> None:
     network_sizes = args.network_sizes
     if network_sizes is not None and _has_invalid_network_sizes(network_sizes):
         return
-    apply_plot_style()
     root_dir = Path(__file__).resolve().parent
     step_dir = root_dir / "article_c" / "step2"
     step1_results_path = root_dir / "article_c" / "step1" / "results" / "raw_results.csv"

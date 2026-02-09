@@ -236,6 +236,7 @@ def _plot_summary_metric(rows: list[dict[str, object]], metric_key: str) -> plt.
 
 
 def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
+    apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -244,7 +245,6 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
     )
     args = parser.parse_args(argv)
-    apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "aggregated_results.csv"
     rows = load_step1_aggregated(results_path, allow_sample=allow_sample)

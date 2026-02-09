@@ -143,6 +143,7 @@ def main(
     allow_sample: bool = True,
     lite: bool = False,
 ) -> None:
+    apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--network-sizes",
@@ -162,7 +163,6 @@ def main(
         lite = args.lite
     if network_sizes is not None and _has_invalid_network_sizes(network_sizes):
         return
-    apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "rl5_selection_prob.csv"
     if not allow_sample and not results_path.exists():

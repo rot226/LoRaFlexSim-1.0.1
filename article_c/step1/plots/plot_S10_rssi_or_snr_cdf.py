@@ -252,9 +252,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def main(enable_suptitle: bool = True) -> None:
+    apply_plot_style()
     args = parse_args()
     enable_suptitle = enable_suptitle and not args.no_suptitle
-    apply_plot_style()
     rows = _read_rows(args.input)
     ensure_network_size(rows)
     for row in rows:
