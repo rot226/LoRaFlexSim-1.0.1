@@ -1221,10 +1221,13 @@ def _legend_right_margin(fig: plt.Figure | None) -> float:
     fig_width, _ = _figure_size(fig)
     base_width = FIGURE_SIZE[0]
     if fig_width <= 0 or base_width <= 0:
-        return LEGEND_RIGHT_MARGIN
-    margin_inches = (1.0 - LEGEND_RIGHT_MARGIN) * base_width
-    right = 1.0 - margin_inches / fig_width
-    return max(0.0, min(1.0, right))
+        return min(LEGEND_RIGHT_MARGIN, FIGURE_SUBPLOT_RIGHT)
+    reserved_ratio = max(0.0, FIGURE_SUBPLOT_RIGHT - LEGEND_RIGHT_MARGIN)
+    if reserved_ratio <= 0:
+        return min(LEGEND_RIGHT_MARGIN, FIGURE_SUBPLOT_RIGHT)
+    reserved_inches = reserved_ratio * base_width
+    right = FIGURE_SUBPLOT_RIGHT - reserved_inches / fig_width
+    return max(0.0, min(FIGURE_SUBPLOT_RIGHT, right))
 
 
 def _legend_margins(
