@@ -17,8 +17,8 @@ from article_c.common.plot_helpers import (
     SNIR_LINESTYLES,
     SNIR_MODES,
     MetricStatus,
+    add_global_legend,
     apply_plot_style,
-    place_adaptive_legend,
     assert_legend_present,
     fallback_legend_handles,
     filter_mixra_opt_fallback,
@@ -144,30 +144,16 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
 
     if not cluster_handles:
         cluster_handles, legend_labels = fallback_legend_handles()
-    placement = place_adaptive_legend(
+    add_global_legend(
         fig,
-        axes[0],
-        preferred_loc="right",
+        axes,
+        legend_loc="right",
         handles=cluster_handles,
         labels=legend_labels,
+        use_fallback=False,
     )
-    if placement.legend is not None:
-        placement.legend.set_title("Clusters")
-    if placement.legend_loc == "above":
-        layout_margins = legend_margins(
-            "above",
-            legend_rows=max(1, placement.legend_rows),
-            fig=fig,
-        )
-        apply_figure_layout(
-            fig,
-            margins={
-                **layout_margins,
-                "top": max(0.7, layout_margins.get("top", 0.0)),
-            },
-            legend_rows=max(1, placement.legend_rows),
-            legend_loc="above",
-        )
+    if fig.legends:
+        fig.legends[0].set_title("Clusters")
     return fig
 
 

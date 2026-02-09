@@ -17,8 +17,8 @@ from article_c.common.plot_helpers import (
     SNIR_LINESTYLES,
     SNIR_MODES,
     MetricStatus,
+    add_global_legend,
     apply_plot_style,
-    place_adaptive_legend,
     assert_legend_present,
     fallback_legend_handles,
     filter_mixra_opt_fallback,
@@ -161,12 +161,13 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         labels.extend(series_labels)
     if not handles:
         handles, labels = fallback_legend_handles()
-    place_adaptive_legend(
+    add_global_legend(
         fig,
-        axes[0],
-        preferred_loc="right",
+        axes,
+        legend_loc="right",
         handles=handles,
         labels=labels,
+        use_fallback=False,
     )
     return fig
 

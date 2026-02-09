@@ -12,8 +12,8 @@ import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
+    add_global_legend,
     apply_plot_style,
-    place_adaptive_legend,
     assert_legend_present,
     MetricStatus,
     ensure_network_size,
@@ -121,12 +121,13 @@ def _plot_metric_page(
     handles, labels = legend_handles_for_algos_snir()
     if not handles:
         handles, labels = fallback_legend_handles()
-    place_adaptive_legend(
+    add_global_legend(
         fig,
-        axes[0],
-        preferred_loc="right",
+        axes,
+        legend_loc="right",
         handles=handles,
         labels=labels,
+        use_fallback=False,
     )
     return fig
 

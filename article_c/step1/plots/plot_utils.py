@@ -14,6 +14,7 @@ from article_c.common.plot_helpers import (
     fallback_legend_handles,
     legend_margins,
     legend_ncols,
+    add_global_legend,
     place_adaptive_legend,
     suptitle_y_from_top,
 )
@@ -76,19 +77,33 @@ def configure_figure(
         if handles:
             handles, labels = deduplicate_legend_entries(handles, labels)
         if handles:
-            if legend_loc == "above":
-                ncol = min(len(labels), int(LEGEND_STYLE.get("ncol", len(labels)) or 1))
-                legend_rows = max(1, math.ceil(len(labels) / max(1, ncol)))
-            placement = place_adaptive_legend(
-                fig,
-                axes_list[0],
-                preferred_loc=legend_loc,
-                handles=handles,
-                labels=labels,
-                enable_suptitle=enable_suptitle,
-            )
-            legend_rows = placement.legend_rows
-            final_legend_loc = placement.legend_loc
+            if len(axes_list) > 1:
+                add_global_legend(
+                    fig,
+                    axes_list,
+                    legend_loc=legend_loc,
+                    handles=handles,
+                    labels=labels,
+                    use_fallback=False,
+                )
+                final_legend_loc = legend_loc
+            else:
+                if legend_loc == "above":
+                    ncol = min(
+                        len(labels),
+                        int(LEGEND_STYLE.get("ncol", len(labels)) or 1),
+                    )
+                    legend_rows = max(1, math.ceil(len(labels) / max(1, ncol)))
+                placement = place_adaptive_legend(
+                    fig,
+                    axes_list[0],
+                    preferred_loc=legend_loc,
+                    handles=handles,
+                    labels=labels,
+                    enable_suptitle=enable_suptitle,
+                )
+                legend_rows = placement.legend_rows
+                final_legend_loc = placement.legend_loc
     legend_in_figure = bool(fig.legends)
     legend_entry_count = 0
     if legend_in_figure:
