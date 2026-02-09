@@ -390,6 +390,13 @@ def _plot_diagnostics(
         alpha=0.8,
         label=display_label,
     )
+    if not metric_values.empty:
+        min_value = metric_values.min()
+        max_value = metric_values.max()
+        median_value = metric_values.median()
+        axes[2].axvline(min_value, color="#2f6c2f", linestyle="--", label="Min")
+        axes[2].axvline(max_value, color="#2f6c2f", linestyle=":", label="Max")
+        axes[2].axvline(median_value, color="#2f6c2f", linestyle="-.", label="P50")
     axes[2].set_xlabel(display_label)
     axes[2].set_ylabel("Count")
 

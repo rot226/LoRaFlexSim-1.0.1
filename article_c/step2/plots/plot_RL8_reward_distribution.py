@@ -257,6 +257,13 @@ def _plot_diagnostics(
         alpha=0.8,
         label="Reward",
     )
+    if not rewards.empty:
+        min_value = rewards.min()
+        max_value = rewards.max()
+        median_value = rewards.median()
+        axes[2].axvline(min_value, color="#2f6c2f", linestyle="--", label="Min")
+        axes[2].axvline(max_value, color="#2f6c2f", linestyle=":", label="Max")
+        axes[2].axvline(median_value, color="#2f6c2f", linestyle="-.", label="P50")
     axes[2].set_xlabel("Reward (a.u.)")
     axes[2].set_ylabel("Count")
 
