@@ -20,8 +20,8 @@ from article_c.common.plot_helpers import (
     MetricStatus,
     algo_label,
     algo_labels,
+    add_global_legend,
     apply_plot_style,
-    create_right_legend_layout,
     assert_legend_present,
     clear_axis_legends,
     ensure_network_size,
@@ -289,11 +289,13 @@ def _plot_distribution(
             )
             for mode in SNIR_MODES
         ]
-        create_right_legend_layout(
+        add_global_legend(
             fig,
             axes,
+            legend_loc="right",
             handles=snir_handles,
             labels=[handle.get_label() for handle in snir_handles],
+            use_fallback=False,
         )
         configure_figure(
             fig,
@@ -330,11 +332,13 @@ def _plot_distribution(
     handles, labels = axes[0].get_legend_handles_labels()
     clear_axis_legends(axes)
     if handles:
-        create_right_legend_layout(
+        add_global_legend(
             fig,
             axes,
+            legend_loc="right",
             handles=handles,
             labels=labels,
+            use_fallback=False,
         )
     configure_figure(
         fig,

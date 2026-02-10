@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     SNIR_LABELS,
     SNIR_MODES,
     algo_label,
+    add_global_legend,
     apply_plot_style,
     apply_figure_layout,
     assert_legend_present,
@@ -419,6 +420,14 @@ def _plot_pdr_distributions(
             legend_labels=legend_labels,
             enable_suptitle=enable_suptitle,
         )
+        add_global_legend(
+            fig,
+            configure_axes,
+            legend_loc="right",
+            handles=legend_handles,
+            labels=legend_labels,
+            use_fallback=False,
+        )
         layout_margins = legend_margins(final_loc, legend_rows=final_rows)
         legend_bbox = None
         if fig.legends and final_loc == "above":
@@ -545,6 +554,14 @@ def _plot_pdr_distribution_page(
         legend_handles=legend_handles,
         legend_labels=legend_labels,
         enable_suptitle=enable_suptitle,
+    )
+    add_global_legend(
+        fig,
+        axes,
+        legend_loc="right",
+        handles=legend_handles,
+        labels=legend_labels,
+        use_fallback=False,
     )
     layout_margins = {
         **legend_margins(final_loc, legend_rows=final_rows),
