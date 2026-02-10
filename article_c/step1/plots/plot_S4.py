@@ -41,11 +41,10 @@ from article_c.common.plot_helpers import (
     save_figure,
     warn_metric_checks_by_group,
     warn_if_insufficient_network_sizes,
+    auto_figsize_for_traces,
 )
 from plot_defaults import (
-    WIDE_SERIES_THRESHOLD,
     WIDE_SERIES_WSPACE,
-    resolve_ieee_figsize_for_series,
 )
 
 
@@ -143,8 +142,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         if {"algo", "snir_mode"}.issubset(df.columns)
         else len(df.dropna().drop_duplicates())
     )
-    fig, ax = plt.subplots(figsize=resolve_ieee_figsize_for_series(series_count))
-    wide_series = series_count >= WIDE_SERIES_THRESHOLD
+    fig, ax = plt.subplots(figsize=auto_figsize_for_traces(series_count))
+    wide_series = series_count >= 3
     network_sizes = sorted(df["network_size"].unique())
     warn_if_insufficient_network_sizes(network_sizes)
     metric_key = select_received_metric_key(rows, metric_key)
@@ -232,8 +231,8 @@ def _plot_summary_metric(rows: list[dict[str, object]], metric_key: str) -> plt.
         if {"algo", "snir_mode"}.issubset(df.columns)
         else len(df.dropna().drop_duplicates())
     )
-    fig, ax = plt.subplots(figsize=resolve_ieee_figsize_for_series(series_count))
-    wide_series = series_count >= WIDE_SERIES_THRESHOLD
+    fig, ax = plt.subplots(figsize=auto_figsize_for_traces(series_count))
+    wide_series = series_count >= 3
     metric_key = select_received_metric_key(rows, metric_key)
     warn_metric_checks_by_group(
         rows,
