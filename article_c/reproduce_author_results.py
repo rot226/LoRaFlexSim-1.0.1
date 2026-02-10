@@ -15,17 +15,17 @@ import logging
 import math
 import sys
 from dataclasses import dataclass
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Iterable
 
 import matplotlib.pyplot as plt
 
-from article_c.plot_defaults import resolve_ieee_figsize
-
-if __name__ == "__main__":
+if find_spec("article_c") is None:
     repo_root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(repo_root))
 
+from plot_defaults import resolve_ieee_figsize
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (
     ALGO_COLORS,

@@ -4,8 +4,15 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+from importlib.util import find_spec
+from pathlib import Path
 from types import ModuleType
 from typing import Optional
+
+
+if find_spec("article_c") is None:
+    repo_root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(repo_root))
 
 
 def _resolve_module_path(module: ModuleType) -> Optional[str]:

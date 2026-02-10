@@ -5,10 +5,17 @@ from __future__ import annotations
 import argparse
 import math
 from pathlib import Path
+import sys
 import warnings
+from importlib.util import find_spec
 
 import matplotlib.pyplot as plt
 import pandas as pd
+
+
+if find_spec("article_c") is None:
+    repo_root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(repo_root))
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_helpers import (

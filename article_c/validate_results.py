@@ -5,7 +5,13 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import sys
+from importlib.util import find_spec
 from pathlib import Path
+
+if find_spec("article_c") is None:
+    repo_root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(repo_root))
 
 from article_c.common.csv_io import write_simulation_results, write_step1_results
 
