@@ -328,6 +328,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--zero-success-quality-bonus-factor",
+        type=float,
+        default=step2_defaults.zero_success_quality_bonus_factor,
+        help=(
+            "Facteur multiplicatif appliqué à weighted_quality comme bonus minimal "
+            "quand success_rate == 0."
+        ),
+    )
+    parser.add_argument(
         "--workers",
         type=int,
         default=1,
