@@ -897,6 +897,135 @@ def _check_pdr_consistency(output_dir: Path) -> None:
         )
 
 
+def _step1_post_report(output_dir: Path, *, write_txt: bool = True) -> None:
+    """Affiche un bilan post-agrégation (PDR par taille) et peut l'exporter en TXT."""
+    aggregated_path = output_dir / "aggregated_results.csv"
+    aggregated_rows = _load_csv_rows(aggregated_path)
+    if not aggregated_rows:
+        print("Post-report ignoré: aggregated_results.csv manquant ou vide.")
+        return
+
+    grouped_by_size: dict[int, list[dict[str, str]]] = {}
+    for row in aggregated_rows:
+        network_size = _parse_float(row.get("network_size"))
+        if network_size is None:
+            continue
+        grouped_by_size.setdefault(int(round(network_size)), []).append(row)
+
+    if not grouped_by_size:
+        print("Post-report ignoré: aucune taille réseau exploitable.")
+        return
+
+    report_lines: list[str] = []
+    report_lines.append("=== Step1 post-report (agrégation PDR) ===")
+    report_lines.append("size | pdr_mean | pdr_min | pdr_max | var(inter) | var(intra)_moy")
+
+    invalid_pdr_count = 0
+    invalid_ratio_count = 0
+    empty_size_count = 0
+    collapse_alerts: list[str] = []
+
+    size_sent_means: list[tuple[int, float]] = []
+    size_received_means: list[tuple[int, float]] = []
+
+    for network_size in sorted(grouped_by_size):
+        rows = grouped_by_size[network_size]
+        pdr_values: list[float] = []
+        intra_variances: list[float] = []
+        sent_means: list[float] = []
+        received_means: list[float] = []
+
+        for row in rows:
+            pdr_mean = _parse_float(row.get("pdr_mean"))
+            if pdr_mean is not None:
+                pdr_values.append(pdr_mean)
+                if not (0.0 <= pdr_mean <= 1.0):
+                    invalid_pdr_count += 1
+            pdr_std = _parse_float(row.get("pdr_std"))
+            if pdr_std is not None and pdr_std >= 0.0:
+                intra_variances.append(pdr_std * pdr_std)
+            sent_mean = _parse_float(row.get("sent_mean"))
+            if sent_mean is not None:
+                sent_means.append(sent_mean)
+            received_mean = _parse_float(row.get("received_mean"))
+            if received_mean is not None:
+                received_means.append(received_mean)
+            if (
+                sent_mean is not None
+                and received_mean is not None
+                and sent_mean > 0.0
+                and received_mean > sent_mean + 1e-9
+            ):
+                invalid_ratio_count += 1
+
+        if not pdr_values:
+            empty_size_count += 1
+            report_lines.append(
+                f"{network_size:>4} | (aucune valeur pdr_mean exploitable)"
+            )
+            continue
+
+        pdr_avg = mean(pdr_values)
+        pdr_min = min(pdr_values)
+        pdr_max = max(pdr_values)
+        variance_inter = 0.0
+        if len(pdr_values) > 1:
+            variance_inter = sum((value - pdr_avg) ** 2 for value in pdr_values) / (
+                len(pdr_values) - 1
+            )
+        variance_intra = mean(intra_variances) if intra_variances else 0.0
+        report_lines.append(
+            f"{network_size:>4} | {pdr_avg:>8.4f} | {pdr_min:>7.4f} |"
+            f" {pdr_max:>7.4f} | {variance_inter:>10.6f} | {variance_intra:>13.6f}"
+        )
+
+        if sent_means:
+            size_sent_means.append((network_size, mean(sent_means)))
+        if received_means:
+            size_received_means.append((network_size, mean(received_means)))
+
+    if len(size_sent_means) >= 2 and len(size_received_means) >= 2:
+        sent_values = [value for _, value in size_sent_means]
+        received_values = [value for _, value in size_received_means]
+        sent_mean_global = mean(sent_values)
+        sent_range_ratio = (
+            (max(sent_values) - min(sent_values)) / sent_mean_global
+            if sent_mean_global
+            else 0.0
+        )
+        received_collapse_ratio = (
+            min(received_values) / max(received_values)
+            if max(received_values)
+            else 1.0
+        )
+        if sent_range_ratio <= 0.10 and received_collapse_ratio < 0.50:
+            collapse_alerts.append(
+                "Sent quasi constant entre tailles mais chute nette du received moyen "
+                f"(ratio={received_collapse_ratio:.2f})."
+            )
+
+    report_lines.append("")
+    report_lines.append("Indicateurs de cohérence")
+    report_lines.append(f"- pdr_mean hors [0,1]: {invalid_pdr_count}")
+    report_lines.append(
+        "- lignes avec received_mean > sent_mean: "
+        f"{invalid_ratio_count}"
+    )
+    report_lines.append(f"- tailles sans pdr exploitable: {empty_size_count}")
+    if collapse_alerts:
+        report_lines.append("- alertes de collapse détectées:")
+        report_lines.extend(f"  * {alert}" for alert in collapse_alerts)
+    else:
+        report_lines.append("- alertes de collapse détectées: aucune")
+
+    report_text = "\n".join(report_lines)
+    print(report_text)
+    if write_txt:
+        report_path = output_dir / "post_report_step1.txt"
+        report_path.write_text(report_text + "\n", encoding="utf-8")
+        print(f"Post-report écrit: {report_path}")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
@@ -1041,6 +1170,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Tailles simulées: {sizes_label}")
     aggregated_path = output_dir / "aggregated_results.csv"
     if aggregated_path.exists():
+        _step1_post_report(output_dir)
         _check_pdr_consistency(output_dir)
         _check_pdr_formula_for_size(output_dir, reference_size=80)
         if args.plot_summary:
