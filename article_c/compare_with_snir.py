@@ -47,7 +47,6 @@ from article_c.common.plot_helpers import (
     MetricStatus,
     SNIR_LABELS,
     SNIR_MODES,
-    add_global_legend,
     algo_label,
     apply_suptitle,
     apply_figure_layout,
@@ -57,7 +56,6 @@ from article_c.common.plot_helpers import (
     ensure_network_size,
     filter_mixra_opt_fallback,
     is_constant_metric,
-    legend_margins,
     load_step1_aggregated,
     load_step2_aggregated,
     metric_values,
@@ -334,8 +332,8 @@ def _render_metric_plot(
     handles, labels = collect_legend_entries(ax)
     handles, labels = deduplicate_legend_entries(handles, labels)
     if handles:
-        add_global_legend(fig, ax, legend_loc="above", handles=handles, labels=labels)
-    apply_figure_layout(fig, margins=legend_margins("above"))
+        ax.legend(handles, labels, loc="best")
+    apply_figure_layout(fig)
     save_figure(fig, output_dir, output_stem)
     if close_figures:
         plt.close(fig)
