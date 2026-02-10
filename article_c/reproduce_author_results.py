@@ -43,7 +43,6 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     metric_values,
     parse_export_formats,
-    place_adaptive_legend,
     render_metric_status,
     save_figure,
     select_received_metric_key,
@@ -403,17 +402,9 @@ def _render_legend(fig: plt.Figure, axes: Iterable[plt.Axes]) -> None:
     axes_list = list(axes)
     handles, labels = collect_legend_entries(axes_list)
     handles, labels = deduplicate_legend_entries(handles, labels)
-    if len(axes_list) == 1:
-        place_adaptive_legend(
-            fig,
-            axes_list[0],
-            handles=handles,
-            labels=labels,
-        )
-        return
     add_global_legend(
         fig,
-        axes_list[0],
+        axes_list,
         legend_loc="above",
         handles=handles,
         labels=labels,
@@ -463,6 +454,7 @@ def plot_fig4(
         cluster_rows = _filter_cluster_rows(rows, cluster)
         for profile in profiles:
             profile_label = profile.label or profile.key
+            simulation_label = f"{profile_label} (LoRaFlexSim)"
             profile_rows = _filter_rows_by_profile(cluster_rows, profile)
             points = _collect_metric_points(profile_rows, "pdr_mean")
             if not points:
@@ -473,7 +465,7 @@ def plot_fig4(
                 sizes,
                 der_values,
                 marker="o",
-                label=profile_label,
+                label=simulation_label,
                 color=profile.color,
             )
             for size, value in zip(sizes, der_values, strict=False):
@@ -486,7 +478,7 @@ def plot_fig4(
                     source="loraflexsim",
                     x=float(size),
                     y=float(value),
-                    label=profile_label,
+                    label=simulation_label,
                 )
             overlay = _group_author_curves(
                 author_curves,
@@ -568,6 +560,7 @@ def plot_fig5(
 
     for profile in profiles:
         profile_label = profile.label or profile.key
+        simulation_label = f"{profile_label} (LoRaFlexSim)"
         profile_rows = _filter_rows_by_profile(rows, profile)
         aggregated: dict[str, list[float]] = {label: [] for label in load_labels}
         for row in profile_rows:
@@ -589,7 +582,7 @@ def plot_fig5(
             x_positions,
             y_values,
             marker="o",
-            label=profile_label,
+            label=simulation_label,
             color=profile.color,
         )
         for x_value, y_value, label in zip(
@@ -610,7 +603,7 @@ def plot_fig5(
                 x=float(x_value),
                 x_label=label,
                 y=float(y_value),
-                label=profile_label,
+                label=simulation_label,
             )
         overlay = _group_author_curves(
             author_curves,
@@ -685,6 +678,7 @@ def plot_fig7(
 
     for profile in profiles:
         profile_label = profile.label or profile.key
+        simulation_label = f"{profile_label} (LoRaFlexSim)"
         profile_rows = _filter_rows_by_profile(rows, profile)
         sacrifices: list[float] = []
         for size in sizes:
@@ -704,7 +698,7 @@ def plot_fig7(
             sizes,
             sacrifices,
             marker="o",
-            label=profile_label,
+            label=simulation_label,
             color=profile.color,
         )
         for size, value in zip(sizes, sacrifices, strict=False):
@@ -719,7 +713,7 @@ def plot_fig7(
                 source="loraflexsim",
                 x=float(size),
                 y=float(value),
-                label=profile_label,
+                label=simulation_label,
             )
         overlay = _group_author_curves(
             author_curves,
@@ -789,6 +783,7 @@ def plot_fig8(
         cluster_rows = _filter_cluster_rows(rows, cluster)
         for profile in profiles:
             profile_label = profile.label or profile.key
+            simulation_label = f"{profile_label} (LoRaFlexSim)"
             profile_rows = _filter_rows_by_profile(cluster_rows, profile)
             points = _collect_metric_points(profile_rows, received_key)
             if not points:
@@ -799,7 +794,7 @@ def plot_fig8(
                 sizes,
                 values,
                 marker="o",
-                label=profile_label,
+                label=simulation_label,
                 color=profile.color,
             )
             for size, value in zip(sizes, values, strict=False):
@@ -812,7 +807,7 @@ def plot_fig8(
                     source="loraflexsim",
                     x=float(size),
                     y=float(value),
-                    label=profile_label,
+                    label=simulation_label,
                 )
             overlay = _group_author_curves(
                 author_curves,
