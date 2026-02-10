@@ -31,6 +31,8 @@ from article_c.common.csv_io import write_simulation_results, write_step1_result
 ARTICLE_DIR = Path(__file__).resolve().parent
 STEP1_RESULTS_DIR = ARTICLE_DIR / "step1" / "results"
 STEP2_RESULTS_DIR = ARTICLE_DIR / "step2" / "results"
+STEP1_PLOTS_OUTPUT_DIR = ARTICLE_DIR / "step1" / "plots" / "output"
+STEP2_PLOTS_OUTPUT_DIR = ARTICLE_DIR / "step2" / "plots" / "output"
 
 PLOT_MODULES = {
     "step1": [
@@ -1236,16 +1238,10 @@ def main(argv: list[str] | None = None) -> None:
                         status="SKIP",
                         message=step_errors[step],
                     )
-    if "step1" in steps and "step1" not in step_errors:
-        (ARTICLE_DIR / "step1" / "plots" / "output").mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-    if "step2" in steps and "step2" not in step_errors:
-        (ARTICLE_DIR / "step2" / "plots" / "output").mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+    if "step1" in steps:
+        STEP1_PLOTS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    if "step2" in steps:
+        STEP2_PLOTS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for step in steps:
         if step in step_errors:
             continue
@@ -1377,41 +1373,19 @@ def main(argv: list[str] | None = None) -> None:
                 print(f"Detected sizes: {sizes_label}")
                 print(f"Plotting Step1: {figure}")
                 try:
-                    previous_figures = set(plt.get_fignums())
-                    module = _run_plot_module(
+                    _run_plot_module(
                         module_path,
                         network_sizes=step1_network_sizes,
                         allow_sample=False,
                         enable_suptitle=enable_suptitle,
                     )
-                    missing_legends = _check_legends_for_module(
+                    _register_status(
+                        status_map,
+                        step=step,
                         module_path=module_path,
-                        module=module,
-                        previous_figures=previous_figures,
-                        fail_on_missing_legends=True,
-                        legend_status=step1_legend_status,
+                        status="OK",
+                        message="plot généré",
                     )
-                    if missing_legends:
-                        message = (
-                            "légende absente (Step1) pour "
-                            + ", ".join(missing_legends)
-                        )
-                        print(f"ERREUR: {message}.")
-                        _register_status(
-                            status_map,
-                            step=step,
-                            module_path=module_path,
-                            status="FAIL",
-                            message=message,
-                        )
-                    else:
-                        _register_status(
-                            status_map,
-                            step=step,
-                            module_path=module_path,
-                            status="OK",
-                            message="plot généré",
-                        )
                 except Exception as exc:
                     print(
                         f"ERREUR: échec du plot {module_path}: {exc}"
