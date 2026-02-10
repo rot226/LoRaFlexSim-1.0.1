@@ -99,6 +99,7 @@ BASE_DPI = 300
 BASE_GRID_ENABLED = True
 MAX_TIGHT_BBOX_SCALE = 4.0
 MAX_TIGHT_BBOX_INCHES = 30.0
+MAX_TIGHT_BBOX_OVERFLOW_RATIO = 1.05
 MAX_IMAGE_DIM_PX = 12000
 MAX_IMAGE_TOTAL_PIXELS = 120_000_000
 MAX_IEEE_FIGURE_SIZE_IN = (60.0, 40.0)
@@ -1910,6 +1911,18 @@ def _safe_bbox_inches(
     fig_width_in, fig_height_in = fig.get_size_inches()
     bbox_width_in = tight_bbox.width / fig.dpi
     bbox_height_in = tight_bbox.height / fig.dpi
+    overflow_width_limit_in = fig_width_in * MAX_TIGHT_BBOX_OVERFLOW_RATIO
+    overflow_height_limit_in = fig_height_in * MAX_TIGHT_BBOX_OVERFLOW_RATIO
+    if bbox_width_in > overflow_width_limit_in or bbox_height_in > overflow_height_limit_in:
+        LOGGER.warning(
+            "Bounding box tight au-delà du seuil (%.2f x %.2f in, seuil %.2f x %.2f). "
+            "Désactivation de bbox_inches pour éviter le rognage des légendes.",
+            bbox_width_in,
+            bbox_height_in,
+            overflow_width_limit_in,
+            overflow_height_limit_in,
+        )
+        return False
     max_width_in = max(fig_width_in * MAX_TIGHT_BBOX_SCALE, MAX_TIGHT_BBOX_INCHES)
     max_height_in = max(fig_height_in * MAX_TIGHT_BBOX_SCALE, MAX_TIGHT_BBOX_INCHES)
     if bbox_width_in > max_width_in or bbox_height_in > max_height_in:
