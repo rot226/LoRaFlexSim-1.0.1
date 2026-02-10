@@ -396,9 +396,10 @@ def _check_legends_for_module(
         )
         if legend_count == 0:
             print(
-                "SUGGESTION: "
-                f"aucune légende détectée pour {context}; "
-                "ajoutez des labels manquants (label=...) aux courbes."
+                "FAIL: "
+                f"aucune légende détectée pour {context}. "
+                "Chaque figure doit exposer une légende explicite "
+                "(labels/legend)."
             )
         assert_legend_present(fig, context)
         if not _figure_has_legend(fig):
