@@ -2482,7 +2482,7 @@ def plot_metric_by_snir(
                     label=f"{label} (P90)" if label_percentiles else None,
                 )
     set_network_size_ticks(ax, network_sizes)
-    if trace_count == 1:
+    if trace_count == 1 or _is_low_variance_axis(ax):
         auto_zoom(ax)
 
 
@@ -2593,7 +2593,7 @@ def plot_metric_by_algo(
             color = line.get_color()
             ax.plot(network_sizes, lower_values, linestyle=":", color=color, alpha=0.6)
             ax.plot(network_sizes, upper_values, linestyle=":", color=color, alpha=0.6)
-    if trace_count == 1:
+    if trace_count == 1 or _is_low_variance_axis(ax):
         auto_zoom(ax)
 
 
@@ -2643,6 +2643,27 @@ def _percentile(values: list[float], percent: float) -> float:
         return ordered[lower]
     weight = position - lower
     return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
+
+
+def _is_low_variance_axis(
+    ax: plt.Axes,
+    *,
+    y_percentile: tuple[float, float] = (5, 95),
+    relative_span_threshold: float = 0.15,
+    absolute_span_threshold: float = 1e-3,
+) -> bool:
+    """Détecte les axes dont la dispersion verticale est faible."""
+    values = _collect_axis_y_values(ax)
+    if len(values) < 2:
+        return False
+    low = _percentile(values, y_percentile[0])
+    high = _percentile(values, y_percentile[1])
+    if not (math.isfinite(low) and math.isfinite(high)):
+        return False
+    span = max(0.0, high - low)
+    median = _percentile(values, 50)
+    reference = max(abs(median), 1.0)
+    return span <= max(absolute_span_threshold, reference * relative_span_threshold)
 
 
 def auto_zoom(ax: plt.Axes, y_percentile: tuple[float, float] = (5, 95)) -> None:
