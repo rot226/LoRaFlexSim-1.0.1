@@ -127,6 +127,8 @@ INSIDE_LEGEND_LOCATIONS = (
 INSIDE_OVERLAP_STRONG_RATIO = 0.25
 _EXPORT_FORMATS = DEFAULT_EXPORT_FORMATS
 _DEFAULT_FIGURE_CLAMP_ENABLED = True
+AUTO_WIDE_TRACE_THRESHOLD = 3
+AUTO_WIDE_TRACE_WIDTH_SCALE = 1.12
 
 
 def set_default_figure_clamp_enabled(enabled: bool) -> None:
@@ -176,6 +178,17 @@ def apply_plot_style() -> None:
             "savefig.dpi": BASE_DPI,
         }
     )
+
+
+def auto_figsize_for_traces(n: int | None) -> tuple[float, float]:
+    """Retourne une taille de figure adaptée au nombre de traces.
+
+    À partir de 3 traces, la largeur est augmentée pour améliorer la lisibilité.
+    """
+    width, height = FIGURE_SIZE
+    if n is not None and n >= AUTO_WIDE_TRACE_THRESHOLD:
+        width *= AUTO_WIDE_TRACE_WIDTH_SCALE
+    return (width, height)
 
 
 def _normalize_export_formats(formats: Iterable[str]) -> tuple[str, ...]:
