@@ -168,6 +168,10 @@ def _apply_safe_profile_with_log(args: object, reason: str) -> None:
     _set_value("collision_size_under_max", STEP2_SAFE_CONFIG.collision_size_under_max)
     _set_value("collision_size_over_max", STEP2_SAFE_CONFIG.collision_size_over_max)
     _set_value("reward_floor", STEP2_SAFE_CONFIG.reward_floor)
+    _set_value(
+        "zero_success_quality_bonus_factor",
+        STEP2_SAFE_CONFIG.zero_success_quality_bonus_factor,
+    )
     _set_value("max_penalty_ratio", STEP2_SAFE_CONFIG.max_penalty_ratio)
     _set_value("shadowing_sigma_db", STEP2_SAFE_CONFIG.shadowing_sigma_db)
 
@@ -203,6 +207,10 @@ def _build_safe_profile_config(
     _set_value("collision_size_under_max", STEP2_SAFE_CONFIG.collision_size_under_max)
     _set_value("collision_size_over_max", STEP2_SAFE_CONFIG.collision_size_over_max)
     _set_value("reward_floor", STEP2_SAFE_CONFIG.reward_floor)
+    _set_value(
+        "zero_success_quality_bonus_factor",
+        STEP2_SAFE_CONFIG.zero_success_quality_bonus_factor,
+    )
     _set_value("max_penalty_ratio", STEP2_SAFE_CONFIG.max_penalty_ratio)
     _set_value("shadowing_sigma_db", STEP2_SAFE_CONFIG.shadowing_sigma_db)
     return updated, changes
@@ -236,6 +244,10 @@ def _build_super_safe_profile_config(
     )
     _set_value("collision_size_over_max", STEP2_SUPER_SAFE_CONFIG.collision_size_over_max)
     _set_value("reward_floor", STEP2_SUPER_SAFE_CONFIG.reward_floor)
+    _set_value(
+        "zero_success_quality_bonus_factor",
+        STEP2_SUPER_SAFE_CONFIG.zero_success_quality_bonus_factor,
+    )
     _set_value("max_penalty_ratio", STEP2_SUPER_SAFE_CONFIG.max_penalty_ratio)
     _set_value("shadowing_sigma_db", STEP2_SUPER_SAFE_CONFIG.shadowing_sigma_db)
     return updated, changes
@@ -279,6 +291,9 @@ def _update_safe_profile_config(config: dict[str, object], args: object) -> None
             "collision_size_under_max": args.collision_size_under_max,
             "collision_size_over_max": args.collision_size_over_max,
             "reward_floor": args.reward_floor,
+            "zero_success_quality_bonus_factor": getattr(
+                args, "zero_success_quality_bonus_factor", None
+            ),
             "max_penalty_ratio": getattr(args, "max_penalty_ratio", None),
             "shadowing_sigma_db": getattr(args, "shadowing_sigma_db", None),
         }
@@ -1224,6 +1239,11 @@ def _simulate_density(
                     if config.get("reward_floor") is not None
                     else None
                 ),
+                zero_success_quality_bonus_factor=(
+                    float(config["zero_success_quality_bonus_factor"])
+                    if config.get("zero_success_quality_bonus_factor") is not None
+                    else None
+                ),
                 floor_on_zero_success=bool(config["floor_on_zero_success"]),
                 debug_step2=bool(config.get("debug_step2", False)),
                 reward_alert_level=str(config.get("reward_alert_level", "WARNING")),
@@ -1382,6 +1402,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         "window_delay_range_s": args.window_delay_range_s,
         "reference_network_size": max(1, reference_network_size),
         "reward_floor": args.reward_floor,
+        "zero_success_quality_bonus_factor": getattr(
+            args, "zero_success_quality_bonus_factor", None
+        ),
         "floor_on_zero_success": args.floor_on_zero_success,
         "shadowing_sigma_db": getattr(args, "shadowing_sigma_db", None),
         "debug_step2": args.debug_step2,

@@ -85,6 +85,7 @@ def _compute_reward(
     max_penalty_ratio: float,
     *,
     floor_on_zero_success: bool = False,
+    zero_success_quality_bonus_factor: float = 0.0,
     log_components: bool = False,
     log_context: str | None = None,
 ) -> float:
@@ -147,6 +148,9 @@ def _compute_reward(
     success_term = 0.4 * success_rate
     bonus_quality_term = 0.05 * weighted_quality
     reward = quality_term + success_term + bonus_quality_term - collision_penalty
+    if success_rate == 0.0 and zero_success_quality_bonus_factor > 0.0:
+        zero_success_bonus = zero_success_quality_bonus_factor * weighted_quality
+        reward = max(reward, zero_success_bonus)
     reward_floor = max(weights.exploration_floor, 0.0)
     if floor_on_zero_success:
         reward_floor = max(reward_floor, reward_floor_base)
@@ -1846,6 +1850,7 @@ def run_simulation(
     collision_size_over_max: float | None = None,
     collision_size_factor: float | None = None,
     max_penalty_ratio: float | None = None,
+    zero_success_quality_bonus_factor: float | None = None,
     traffic_coeff_clamp_min: float | None = None,
     traffic_coeff_clamp_max: float | None = None,
     traffic_coeff_clamp_enabled: bool | None = None,
@@ -1973,6 +1978,20 @@ def run_simulation(
             )
     else:
         floor_on_zero_success_value = floor_on_zero_success
+    if zero_success_quality_bonus_factor is None:
+        zero_success_quality_bonus_factor_value = (
+            STEP2_SAFE_CONFIG.zero_success_quality_bonus_factor
+            if safe_profile
+            else step2_defaults.zero_success_quality_bonus_factor
+        )
+    else:
+        zero_success_quality_bonus_factor_value = float(
+            zero_success_quality_bonus_factor
+        )
+    if zero_success_quality_bonus_factor_value < 0.0:
+        raise ValueError(
+            "zero_success_quality_bonus_factor doit être positif ou nul."
+        )
     window_delay_enabled_value = (
         step2_defaults.window_delay_enabled
         if window_delay_enabled is None
@@ -2818,6 +2837,7 @@ def run_simulation(
                     lambda_collision_effective,
                     max_penalty_ratio_value,
                     floor_on_zero_success=floor_on_zero_success_value,
+                    zero_success_quality_bonus_factor=zero_success_quality_bonus_factor_value,
                     log_components=log_components,
                     log_context=log_context,
                 )
@@ -3530,6 +3550,7 @@ def run_simulation(
                     lambda_collision_effective,
                     max_penalty_ratio_value,
                     floor_on_zero_success=floor_on_zero_success_value,
+                    zero_success_quality_bonus_factor=zero_success_quality_bonus_factor_value,
                     log_components=log_components,
                     log_context=log_context,
                 )
