@@ -90,6 +90,7 @@ def _compute_reward(
 ) -> float:
     throughput_weight = 0.1
     energy_per_success_weight = 0.1
+    reward_floor_base = 0.08
     latency_norm = _clip(latency_norm**1.35 * 1.08, 0.0, 1.0)
     energy_norm = _clip(energy_norm**1.35 * 1.08, 0.0, 1.0)
     collision_norm = _clip(collision_norm**1.15 * 1.04, 0.0, 1.0)
@@ -119,7 +120,7 @@ def _compute_reward(
     if traffic_sent > 0:
         traffic_factor = _clip(traffic_sent / (traffic_sent + 20.0), 0.0, 1.0)
     collision_penalty = (
-        lambda_collision
+        (0.75 * lambda_collision)
         * weights.collision_weight
         * collision_norm
         * (0.7 + 0.3 * (1.0 - success_rate))
@@ -143,10 +144,12 @@ def _compute_reward(
             weighted_quality,
         )
     quality_term = weighted_quality * (0.6 + 0.4 * success_rate)
-    success_term = 0.35 * success_rate
+    success_term = 0.4 * success_rate
     bonus_quality_term = 0.05 * weighted_quality
     reward = quality_term + success_term + bonus_quality_term - collision_penalty
     reward_floor = max(weights.exploration_floor, 0.0)
+    if floor_on_zero_success:
+        reward_floor = max(reward_floor, reward_floor_base)
     if floor_on_zero_success and success_rate == 0.0 and reward_floor > 0.0:
         reward = reward_floor
     elif reward_floor > 0.0 and success_rate > 0.0 and reward < reward_floor:
