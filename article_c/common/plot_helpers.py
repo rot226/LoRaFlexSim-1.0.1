@@ -1667,11 +1667,15 @@ def add_global_legend(
         return
     primary_ax = axes_list[0]
     legend_loc = legend_loc or DEFAULT_LEGEND_LOC
-    if _normalize_legend_loc(legend_loc) == "right":
-        clear_axis_legends(axes_list)
+    normalized_legend_loc = _normalize_legend_loc(legend_loc)
+    legend_source_axes = axes_list
+    if len(axes_list) == 1 and len(fig.axes) > 1:
+        legend_source_axes = list(fig.axes)
+    if normalized_legend_loc == "right":
+        clear_axis_legends(fig.axes)
     if handles is None or labels is None:
-        if len(axes_list) > 1:
-            handles, labels = collect_legend_entries(axes_list)
+        if len(legend_source_axes) > 1:
+            handles, labels = collect_legend_entries(legend_source_axes)
         else:
             handles, labels = primary_ax.get_legend_handles_labels()
     if not handles and use_fallback:
