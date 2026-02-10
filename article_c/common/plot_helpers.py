@@ -711,6 +711,84 @@ def warn_metric_checks(
     return MetricStatus.OK
 
 
+def warn_if_inconsistent(series: Mapping[str, object]) -> MetricStatus:
+    """Émet des avertissements sur une série potentiellement incohérente.
+
+    Clés attendues dans ``series``:
+      - ``x``: itérable de valeurs en abscisse.
+      - ``y``: itérable de valeurs en ordonnée.
+      - ``label``: libellé de contexte pour les warnings.
+      - ``expected_monotonic`` (optionnel): sens attendu pour ``y``.
+    """
+
+    label = str(series.get("label", "série"))
+    x_values_raw = series.get("x")
+    y_values_raw = series.get("y")
+    if not isinstance(x_values_raw, Iterable) or isinstance(x_values_raw, (str, bytes)):
+        warnings.warn(
+            f"{label}: abscisses absentes ou invalides pour les vérifications.",
+            stacklevel=2,
+        )
+        return MetricStatus.MISSING
+    if not isinstance(y_values_raw, Iterable) or isinstance(y_values_raw, (str, bytes)):
+        warnings.warn(
+            f"{label}: ordonnées absentes ou invalides pour les vérifications.",
+            stacklevel=2,
+        )
+        return MetricStatus.MISSING
+
+    pairs: list[tuple[float, float]] = []
+    for x_value, y_value in zip(x_values_raw, y_values_raw, strict=False):
+        if not isinstance(x_value, (int, float)) or math.isnan(float(x_value)):
+            continue
+        if not isinstance(y_value, (int, float)) or math.isnan(float(y_value)):
+            continue
+        pairs.append((float(x_value), float(y_value)))
+
+    if not pairs:
+        warnings.warn(
+            f"{label}: aucune paire (x, y) exploitable.",
+            stacklevel=2,
+        )
+        return MetricStatus.MISSING
+
+    x_values = [x for x, _ in pairs]
+    y_values = [y for _, y in pairs]
+    monotonic = series.get("expected_monotonic")
+    tolerance = float(series.get("monotonic_tolerance", 0.0) or 0.0)
+    variance_threshold = float(
+        series.get("variance_threshold", CONSTANT_METRIC_VARIANCE_THRESHOLD)
+        or CONSTANT_METRIC_VARIANCE_THRESHOLD
+    )
+
+    metric_status = warn_metric_checks(
+        y_values,
+        label,
+        min_value=series.get("min_value") if isinstance(series.get("min_value"), (int, float)) else None,
+        max_value=series.get("max_value") if isinstance(series.get("max_value"), (int, float)) else None,
+        expected_monotonic=str(monotonic) if monotonic else None,
+        monotonic_tolerance=tolerance,
+        variance_threshold=variance_threshold,
+    )
+
+    x_deltas = [current - previous for previous, current in zip(x_values, x_values[1:], strict=False)]
+    if x_deltas and any(delta < -tolerance for delta in x_deltas):
+        warnings.warn(
+            f"{label}: abscisses non triées (possible inversion d'axes).",
+            stacklevel=2,
+        )
+
+    if len(x_values) > 1:
+        x_status = is_constant_metric(x_values, threshold=variance_threshold)
+        if x_status is MetricStatus.CONSTANT and is_constant_metric(y_values, threshold=variance_threshold) is not MetricStatus.CONSTANT:
+            warnings.warn(
+                f"{label}: abscisses quasi constantes avec ordonnées variables (possible inversion d'axes).",
+                stacklevel=2,
+            )
+
+    return metric_status
+
+
 def warn_metric_checks_by_group(
     rows: list[dict[str, object]],
     metric_key: str,
@@ -760,14 +838,18 @@ def warn_metric_checks_by_group(
             series_label = f"{label} ({details})"
         else:
             series_label = label
-        warn_metric_checks(
-            series_values,
-            series_label,
-            min_value=min_value,
-            max_value=max_value,
-            expected_monotonic=expected_monotonic,
-            monotonic_tolerance=monotonic_tolerance,
-            variance_threshold=variance_threshold,
+        x_series = [x_value for x_value, _ in points]
+        warn_if_inconsistent(
+            {
+                "x": x_series,
+                "y": series_values,
+                "label": series_label,
+                "min_value": min_value,
+                "max_value": max_value,
+                "expected_monotonic": expected_monotonic,
+                "monotonic_tolerance": monotonic_tolerance,
+                "variance_threshold": variance_threshold,
+            }
         )
 
 
@@ -2442,6 +2524,13 @@ def plot_metric_by_snir(
                 linewidth=line_width,
                 markersize=marker_size,
             )[0]
+            warn_if_inconsistent(
+                {
+                    "x": densities,
+                    "y": values,
+                    "label": label,
+                }
+            )
             trace_count += 1
             if lower_key and upper_key:
                 lower_points = {
@@ -2569,6 +2658,13 @@ def plot_metric_by_algo(
             continue
         values = [_value_or_nan(points.get(size, float("nan"))) for size in network_sizes]
         line = ax.plot(network_sizes, values, marker="o", label=label_fn(algo))[0]
+        warn_if_inconsistent(
+            {
+                "x": network_sizes,
+                "y": values,
+                "label": str(label_fn(algo)),
+            }
+        )
         if any(math.isfinite(value) for value in values):
             trace_count += 1
         if lower_key and upper_key:
