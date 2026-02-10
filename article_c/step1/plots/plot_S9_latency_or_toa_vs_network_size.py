@@ -12,6 +12,7 @@ import pandas as pd
 
 from article_c.common.plot_helpers import (
     apply_plot_style,
+    place_adaptive_legend,
     assert_legend_present,
     MetricStatus,
     ensure_network_size,
@@ -71,6 +72,7 @@ def _plot_metric(
             legend_loc="right",
             enable_suptitle=enable_suptitle,
         )
+        place_adaptive_legend(fig, ax, preferred_loc="right")
         return fig
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xticks(network_sizes)
@@ -84,6 +86,7 @@ def _plot_metric(
         legend_loc="right",
         enable_suptitle=enable_suptitle,
     )
+    place_adaptive_legend(fig, ax, preferred_loc="right")
     return fig
 
 

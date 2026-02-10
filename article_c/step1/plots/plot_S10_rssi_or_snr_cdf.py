@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     MetricStatus,
     algo_label,
     apply_plot_style,
+    place_adaptive_legend,
     assert_legend_present,
     ensure_network_size,
     filter_rows_by_network_sizes,
@@ -179,6 +180,7 @@ def plot_cdf_by_algo(
             legend_loc="right",
             enable_suptitle=enable_suptitle,
         )
+        place_adaptive_legend(fig, ax, preferred_loc="right")
         save_figure(fig, output_dir, "plot_S10_rssi_or_snr_cdf")
         assert_legend_present(fig, "plot_S10_rssi_or_snr_cdf")
         plt.close(fig)
@@ -217,6 +219,7 @@ def plot_cdf_by_algo(
         legend_loc="right",
         enable_suptitle=enable_suptitle,
     )
+    place_adaptive_legend(fig, ax, preferred_loc="right")
 
     save_figure(fig, output_dir, "plot_S10_rssi_or_snr_cdf")
     assert_legend_present(fig, "plot_S10_rssi_or_snr_cdf")

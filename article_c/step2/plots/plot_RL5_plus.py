@@ -121,7 +121,7 @@ def _plot_selection(
                 p90 = [p90[i] for i in indices]
             label = f"SF {sf} (N={network_size})"
             ax.plot(rounds, p50, label=label)
-            ax.fill_between(rounds, p10, p90, alpha=0.15)
+            ax.fill_between(rounds, p10, p90, alpha=0.15, label=f"{label} (P10–P90)")
     ax.set_xlabel("Round (index)")
     ax.set_ylabel("Selection prob. (prob.)")
     place_adaptive_legend(fig, ax, preferred_loc="right")

@@ -12,6 +12,7 @@ import matplotlib.ticker as mticker
 import pandas as pd
 
 from article_c.common.plot_helpers import (
+    place_adaptive_legend,
     apply_plot_style,
     assert_legend_present,
     MetricStatus,
@@ -111,6 +112,7 @@ def _plot_metric(
             enable_suptitle=enable_suptitle,
             wspace=WIDE_SERIES_WSPACE if wide_series else None,
         )
+        place_adaptive_legend(fig, ax, preferred_loc="right")
         return fig
     _warn_if_low_algo_variance(rows, metric_key)
     plot_metric_by_snir(ax, rows, metric_key)
@@ -126,6 +128,7 @@ def _plot_metric(
         enable_suptitle=enable_suptitle,
         wspace=WIDE_SERIES_WSPACE if wide_series else None,
     )
+    place_adaptive_legend(fig, ax, preferred_loc="right")
     return fig
 
 
