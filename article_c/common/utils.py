@@ -362,6 +362,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Active les logs détaillés pour l'étape 2.",
     )
     parser.add_argument(
+        "--reward-debug",
+        action="store_true",
+        help=(
+            "Active les logs détaillés des composantes de reward "
+            "(weighted_quality, collision_penalty, success_term, reward_floor)."
+        ),
+    )
+    parser.add_argument(
         "--reward-alert-level",
         type=str.upper,
         default="WARNING",

@@ -88,6 +88,7 @@ def _compute_reward(
     zero_success_quality_bonus_factor: float = 0.0,
     log_components: bool = False,
     log_context: str | None = None,
+    components_out: dict[str, float] | None = None,
 ) -> float:
     throughput_weight = 0.1
     energy_per_success_weight = 0.1
@@ -159,6 +160,11 @@ def _compute_reward(
     elif reward_floor > 0.0 and success_rate > 0.0 and reward < reward_floor:
         reward = reward_floor
     clipped_reward = _clip(reward, 0.0, 1.0)
+    if components_out is not None:
+        components_out["weighted_quality"] = weighted_quality
+        components_out["collision_penalty"] = collision_penalty
+        components_out["success_term"] = success_term
+        components_out["reward_floor"] = reward_floor
     if reward_floor > 0.0 and clipped_reward < reward_floor:
         if success_rate > 0.0 or (floor_on_zero_success and success_rate <= 0.0):
             clipped_reward = reward_floor
@@ -1860,6 +1866,7 @@ def run_simulation(
     reference_network_size: int | None = None,
     output_dir: Path | None = None,
     debug_step2: bool = False,
+    reward_debug: bool = False,
     reward_alert_level: str = "INFO",
     safe_profile: bool = False,
     no_clamp: bool = False,
@@ -2067,6 +2074,10 @@ def run_simulation(
     all_link_qualities: list[float] = []
     all_snir_success_factors: list[float] = []
     all_link_quality_snir: list[float] = []
+    reward_debug_weighted_quality: list[float] = []
+    reward_debug_collision_penalty: list[float] = []
+    reward_debug_success_term: list[float] = []
+    reward_debug_floor: list[float] = []
     node_clusters = assign_clusters(n_nodes, rng=rng)
     reference_size = (
         _default_reference_size()
@@ -2823,6 +2834,7 @@ def run_simulation(
                     if log_components
                     else None
                 )
+                reward_components = {} if reward_debug else None
                 reward = _compute_reward(
                     metrics.success_rate,
                     traffic_sent,
@@ -2840,7 +2852,19 @@ def run_simulation(
                     zero_success_quality_bonus_factor=zero_success_quality_bonus_factor_value,
                     log_components=log_components,
                     log_context=log_context,
+                    components_out=reward_components,
                 )
+                if reward_debug and reward_components is not None:
+                    reward_debug_weighted_quality.append(
+                        reward_components.get("weighted_quality", 0.0)
+                    )
+                    reward_debug_collision_penalty.append(
+                        reward_components.get("collision_penalty", 0.0)
+                    )
+                    reward_debug_success_term.append(
+                        reward_components.get("success_term", 0.0)
+                    )
+                    reward_debug_floor.append(reward_components.get("reward_floor", 0.0))
                 window_rewards.append(reward)
                 round_success_rates.append(metrics.success_rate)
                 round_rewards.append(reward)
@@ -2882,6 +2906,8 @@ def run_simulation(
                     "reward": reward,
                     **snir_meta,
                 }
+                if reward_components is not None:
+                    common_raw_row.update(reward_components)
                 raw_rows.append(
                     {
                         **common_raw_row,
@@ -3536,6 +3562,7 @@ def run_simulation(
                     if log_components
                     else None
                 )
+                reward_components = {} if reward_debug else None
                 reward = _compute_reward(
                     metrics.success_rate,
                     traffic_sent,
@@ -3553,7 +3580,19 @@ def run_simulation(
                     zero_success_quality_bonus_factor=zero_success_quality_bonus_factor_value,
                     log_components=log_components,
                     log_context=log_context,
+                    components_out=reward_components,
                 )
+                if reward_debug and reward_components is not None:
+                    reward_debug_weighted_quality.append(
+                        reward_components.get("weighted_quality", 0.0)
+                    )
+                    reward_debug_collision_penalty.append(
+                        reward_components.get("collision_penalty", 0.0)
+                    )
+                    reward_debug_success_term.append(
+                        reward_components.get("success_term", 0.0)
+                    )
+                    reward_debug_floor.append(reward_components.get("reward_floor", 0.0))
                 window_rewards.append(reward)
                 round_success_rates.append(metrics.success_rate)
                 round_rewards.append(reward)
@@ -3595,6 +3634,8 @@ def run_simulation(
                     "reward": reward,
                     **snir_meta,
                 }
+                if reward_components is not None:
+                    common_raw_row.update(reward_components)
                 raw_rows.append(
                     {
                         **common_raw_row,
@@ -3744,6 +3785,29 @@ def run_simulation(
         algo_label=algo_label,
         values=all_link_quality_snir,
     )
+    if reward_debug and reward_debug_weighted_quality:
+        weighted_quality_mean = mean(reward_debug_weighted_quality)
+        collision_penalty_mean = mean(reward_debug_collision_penalty)
+        success_term_mean = mean(reward_debug_success_term)
+        reward_floor_mean = mean(reward_debug_floor)
+        component_mean = (
+            weighted_quality_mean
+            + collision_penalty_mean
+            + success_term_mean
+            + reward_floor_mean
+        ) / 4.0
+        logger.info(
+            "Reward debug (taille=%s algo=%s) moyennes: "
+            "weighted_quality=%.4f collision_penalty=%.4f success_term=%.4f "
+            "reward_floor=%.4f moyenne=%.4f",
+            network_size_value,
+            algo_label,
+            weighted_quality_mean,
+            collision_penalty_mean,
+            success_term_mean,
+            reward_floor_mean,
+            component_mean,
+        )
 
     if output_dir is not None:
         write_simulation_results(output_dir, raw_rows, network_size=network_size_value)

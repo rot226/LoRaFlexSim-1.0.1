@@ -519,6 +519,7 @@ def _summarize_post_simulation(
     losses_congestion_total = 0
     losses_link_quality_total = 0
     loss_keys_seen: set[tuple[object, object, object]] = set()
+    reward_debug_sums: dict[str, dict[str, float]] = {}
     for row in raw_rows:
         if str(row.get("cluster", "")) != "all":
             continue
@@ -560,6 +561,38 @@ def _summarize_post_simulation(
                 reward_zero_no_success += 1
             else:
                 reward_zero_clipped += 1
+        if "weighted_quality" in row:
+            algo_label = str(row.get("algo", ""))
+            bucket = reward_debug_sums.setdefault(
+                algo_label,
+                {
+                    "weighted_quality_sum": 0.0,
+                    "collision_penalty_sum": 0.0,
+                    "success_term_sum": 0.0,
+                    "reward_floor_sum": 0.0,
+                    "count": 0.0,
+                },
+            )
+            bucket["weighted_quality_sum"] += float(
+                row.get("weighted_quality", 0.0) or 0.0
+            )
+            bucket["collision_penalty_sum"] += float(
+                row.get("collision_penalty", 0.0) or 0.0
+            )
+            bucket["success_term_sum"] += float(row.get("success_term", 0.0) or 0.0)
+            bucket["reward_floor_sum"] += float(row.get("reward_floor", 0.0) or 0.0)
+            bucket["count"] += 1.0
+
+    reward_debug_summary: dict[str, dict[str, float]] = {}
+    for algo_label, values in reward_debug_sums.items():
+        count = max(values.get("count", 0.0), 1.0)
+        reward_debug_summary[algo_label] = {
+            "weighted_quality_mean": values["weighted_quality_sum"] / count,
+            "collision_penalty_mean": values["collision_penalty_sum"] / count,
+            "success_term_mean": values["success_term_sum"] / count,
+            "reward_floor_mean": values["reward_floor_sum"] / count,
+            "count": values["count"],
+        }
     return {
         "success_sum": success_sum,
         "success_count": success_count,
@@ -580,6 +613,7 @@ def _summarize_post_simulation(
         "losses_collisions_total": losses_collisions_total,
         "losses_congestion_total": losses_congestion_total,
         "losses_link_quality_total": losses_link_quality_total,
+        "reward_debug_summary": reward_debug_summary,
     }
 
 
@@ -947,6 +981,37 @@ def _compose_post_simulation_report(
     else:
         lines.append("- aucune perte détectée via les compteurs T07.")
 
+    reward_debug_entries: list[tuple[int, str, dict[str, float]]] = []
+    for size in sorted(per_size_stats):
+        summary = per_size_stats[size].get("reward_debug_summary", {})
+        if not isinstance(summary, dict):
+            continue
+        for algo_label, values in sorted(summary.items()):
+            if isinstance(values, dict):
+                reward_debug_entries.append((size, str(algo_label), values))
+
+    if reward_debug_entries:
+        lines.extend(["", "Résumé reward debug (par algo/taille):"])
+        for size, algo_label, values in reward_debug_entries:
+            weighted_quality_mean = float(values.get("weighted_quality_mean", 0.0))
+            collision_penalty_mean = float(values.get("collision_penalty_mean", 0.0))
+            success_term_mean = float(values.get("success_term_mean", 0.0))
+            reward_floor_mean = float(values.get("reward_floor_mean", 0.0))
+            component_mean = (
+                weighted_quality_mean
+                + collision_penalty_mean
+                + success_term_mean
+                + reward_floor_mean
+            ) / 4.0
+            lines.append(
+                f"- taille {size} | {algo_label}: "
+                f"weighted_quality={weighted_quality_mean:.4f}, "
+                f"collision_penalty={collision_penalty_mean:.4f}, "
+                f"success_term={success_term_mean:.4f}, "
+                f"reward_floor={reward_floor_mean:.4f}, "
+                f"moyenne={component_mean:.4f}"
+            )
+
     lines.extend(["", "Relances en profil sécurisé:"])
     if safe_profile_sizes:
         sizes_label = ", ".join(str(size) for size in sorted(set(safe_profile_sizes)))
@@ -1156,7 +1221,7 @@ def _simulate_density(
         timestamp_dir,
         flat_output,
     ) = task
-    if config.get("debug_step2"):
+    if config.get("debug_step2") or config.get("reward_debug"):
         logging.basicConfig(
             level=logging.INFO,
             format="%(levelname)s:%(name)s:%(message)s",
@@ -1246,6 +1311,7 @@ def _simulate_density(
                 ),
                 floor_on_zero_success=bool(config["floor_on_zero_success"]),
                 debug_step2=bool(config.get("debug_step2", False)),
+                reward_debug=bool(config.get("reward_debug", False)),
                 reward_alert_level=str(config.get("reward_alert_level", "WARNING")),
                 safe_profile=bool(config.get("safe_profile", False)),
                 no_clamp=bool(config.get("no_clamp", False)),
@@ -1320,7 +1386,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         raise ValueError(str(exc)) from exc
     set_default_export_formats(export_formats)
     set_default_figure_clamp_enabled(not args.no_figure_clamp)
-    if args.debug_step2:
+    if args.debug_step2 or getattr(args, "reward_debug", False):
         logging.basicConfig(
             level=logging.INFO,
             format="%(levelname)s:%(name)s:%(message)s",
@@ -1408,6 +1474,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "floor_on_zero_success": args.floor_on_zero_success,
         "shadowing_sigma_db": getattr(args, "shadowing_sigma_db", None),
         "debug_step2": args.debug_step2,
+        "reward_debug": getattr(args, "reward_debug", False),
         "reward_alert_level": args.reward_alert_level,
     }
 
