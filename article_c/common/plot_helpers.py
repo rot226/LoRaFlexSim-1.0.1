@@ -1108,8 +1108,7 @@ def place_adaptive_legend(
     if handles is None or labels is None:
         handles, labels = ax.get_legend_handles_labels()
     if not handles:
-        if use_fallback:
-            handles, labels = fallback_legend_handles()
+        handles, labels = fallback_legend_handles()
         if not handles and labels:
             handles = [
                 Line2D(
@@ -1122,6 +1121,17 @@ def place_adaptive_legend(
                 )
                 for _ in labels
             ]
+        if not handles:
+            handles = [
+                Line2D(
+                    [0],
+                    [0],
+                    color="#333333",
+                    linestyle="solid",
+                    linewidth=BASE_LINE_WIDTH,
+                )
+            ]
+            labels = ["Référence"]
     if handles:
         if len(labels) == 1:
             handles = handles[:1]
