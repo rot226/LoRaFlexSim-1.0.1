@@ -1240,82 +1240,123 @@ def _simulate_density(
         f"{algo}={offset}" for algo, offset in algo_offsets.items()
     )
     print(f"Offsets de seed par algorithme: {offsets_label}")
+    status_csv_path = base_results_dir / "run_status_step2.csv"
 
     for replication in replications:
         seed = int(config["base_seed"]) + density_idx * 1000 + replication
         for algorithm in algorithms:
             algorithm_seed = seed + algo_offsets[algorithm]
-            result = run_simulation(
-                algorithm=algorithm,
-                n_nodes=int(density),
-                density=density,
-                snir_mode="snir_on",
-                seed=algorithm_seed,
-                snir_threshold_db=float(config["snir_threshold_db"]),
-                snir_threshold_min_db=float(config["snir_threshold_min_db"]),
-                snir_threshold_max_db=float(config["snir_threshold_max_db"]),
-                traffic_mode=str(config["traffic_mode"]),
-                jitter_range_s=jitter_range_s,
-                window_duration_s=float(config["window_duration_s"]),
-                window_size=int(config["window_size"]),
-                lambda_collision=(
-                    float(config["lambda_collision"])
-                    if config.get("lambda_collision") is not None
-                    else None
-                ),
-                traffic_coeff_min=float(config["traffic_coeff_min"]),
-                traffic_coeff_max=float(config["traffic_coeff_max"]),
-                traffic_coeff_enabled=bool(config["traffic_coeff_enabled"]),
-                traffic_coeff_scale=float(config["traffic_coeff_scale"]),
-                auto_collision_control=bool(config.get("auto_collision_control", False)),
-                capture_probability=float(config["capture_probability"]),
-                congestion_coeff=float(config["congestion_coeff"]),
-                congestion_coeff_base=float(config["congestion_coeff_base"]),
-                congestion_coeff_growth=float(config["congestion_coeff_growth"]),
-                congestion_coeff_max=float(config["congestion_coeff_max"]),
-                network_load_min=float(config["network_load_min"]),
-                network_load_max=float(config["network_load_max"]),
-                collision_size_min=float(config["collision_size_min"]),
-                collision_size_under_max=float(config["collision_size_under_max"]),
-                collision_size_over_max=float(config["collision_size_over_max"]),
-                collision_size_factor=(
-                    float(config["collision_size_factor"])
-                    if config.get("collision_size_factor") is not None
-                    else None
-                ),
-                max_penalty_ratio=(
-                    float(config["max_penalty_ratio"])
-                    if config.get("max_penalty_ratio") is not None
-                    else None
-                ),
-                traffic_coeff_clamp_min=float(config["traffic_coeff_clamp_min"]),
-                traffic_coeff_clamp_max=float(config["traffic_coeff_clamp_max"]),
-                traffic_coeff_clamp_enabled=bool(config["traffic_coeff_clamp_enabled"]),
-                window_delay_enabled=bool(config["window_delay_enabled"]),
-                window_delay_range_s=float(config["window_delay_range_s"]),
-                shadowing_sigma_db=(
-                    float(config["shadowing_sigma_db"])
-                    if config.get("shadowing_sigma_db") is not None
-                    else None
-                ),
-                reference_network_size=int(config["reference_network_size"]),
-                reward_floor=(
-                    float(config["reward_floor"])
-                    if config.get("reward_floor") is not None
-                    else None
-                ),
-                zero_success_quality_bonus_factor=(
-                    float(config["zero_success_quality_bonus_factor"])
-                    if config.get("zero_success_quality_bonus_factor") is not None
-                    else None
-                ),
-                floor_on_zero_success=bool(config["floor_on_zero_success"]),
-                debug_step2=bool(config.get("debug_step2", False)),
-                reward_debug=bool(config.get("reward_debug", False)),
-                reward_alert_level=str(config.get("reward_alert_level", "WARNING")),
-                safe_profile=bool(config.get("safe_profile", False)),
-                no_clamp=bool(config.get("no_clamp", False)),
-            )
+            result = None
+            for attempt in (1, 2):
+                try:
+                    set_deterministic_seed(algorithm_seed)
+                    result = run_simulation(
+                        algorithm=algorithm,
+                        n_nodes=int(density),
+                        density=density,
+                        snir_mode="snir_on",
+                        seed=algorithm_seed,
+                        snir_threshold_db=float(config["snir_threshold_db"]),
+                        snir_threshold_min_db=float(config["snir_threshold_min_db"]),
+                        snir_threshold_max_db=float(config["snir_threshold_max_db"]),
+                        traffic_mode=str(config["traffic_mode"]),
+                        jitter_range_s=jitter_range_s,
+                        window_duration_s=float(config["window_duration_s"]),
+                        window_size=int(config["window_size"]),
+                        lambda_collision=(
+                            float(config["lambda_collision"])
+                            if config.get("lambda_collision") is not None
+                            else None
+                        ),
+                        traffic_coeff_min=float(config["traffic_coeff_min"]),
+                        traffic_coeff_max=float(config["traffic_coeff_max"]),
+                        traffic_coeff_enabled=bool(config["traffic_coeff_enabled"]),
+                        traffic_coeff_scale=float(config["traffic_coeff_scale"]),
+                        auto_collision_control=bool(config.get("auto_collision_control", False)),
+                        capture_probability=float(config["capture_probability"]),
+                        congestion_coeff=float(config["congestion_coeff"]),
+                        congestion_coeff_base=float(config["congestion_coeff_base"]),
+                        congestion_coeff_growth=float(config["congestion_coeff_growth"]),
+                        congestion_coeff_max=float(config["congestion_coeff_max"]),
+                        network_load_min=float(config["network_load_min"]),
+                        network_load_max=float(config["network_load_max"]),
+                        collision_size_min=float(config["collision_size_min"]),
+                        collision_size_under_max=float(config["collision_size_under_max"]),
+                        collision_size_over_max=float(config["collision_size_over_max"]),
+                        collision_size_factor=(
+                            float(config["collision_size_factor"])
+                            if config.get("collision_size_factor") is not None
+                            else None
+                        ),
+                        max_penalty_ratio=(
+                            float(config["max_penalty_ratio"])
+                            if config.get("max_penalty_ratio") is not None
+                            else None
+                        ),
+                        traffic_coeff_clamp_min=float(config["traffic_coeff_clamp_min"]),
+                        traffic_coeff_clamp_max=float(config["traffic_coeff_clamp_max"]),
+                        traffic_coeff_clamp_enabled=bool(config["traffic_coeff_clamp_enabled"]),
+                        window_delay_enabled=bool(config["window_delay_enabled"]),
+                        window_delay_range_s=float(config["window_delay_range_s"]),
+                        shadowing_sigma_db=(
+                            float(config["shadowing_sigma_db"])
+                            if config.get("shadowing_sigma_db") is not None
+                            else None
+                        ),
+                        reference_network_size=int(config["reference_network_size"]),
+                        reward_floor=(
+                            float(config["reward_floor"])
+                            if config.get("reward_floor") is not None
+                            else None
+                        ),
+                        zero_success_quality_bonus_factor=(
+                            float(config["zero_success_quality_bonus_factor"])
+                            if config.get("zero_success_quality_bonus_factor") is not None
+                            else None
+                        ),
+                        floor_on_zero_success=bool(config["floor_on_zero_success"]),
+                        debug_step2=bool(config.get("debug_step2", False)),
+                        reward_debug=bool(config.get("reward_debug", False)),
+                        reward_alert_level=str(config.get("reward_alert_level", "WARNING")),
+                        safe_profile=bool(config.get("safe_profile", False)),
+                        no_clamp=bool(config.get("no_clamp", False)),
+                    )
+                    break
+                except Exception as exc:
+                    print(
+                        "Échec simulation step2 "
+                        f"(size={density}, rep={replication}, seed={algorithm_seed}, "
+                        f"algo={algorithm}, step=step2, attempt={attempt}/2): {exc}"
+                    )
+                    if attempt == 1:
+                        print("Retry immédiat (1/1) pour cette simulation unitaire.")
+                    else:
+                        with status_csv_path.open("a", newline="", encoding="utf-8") as handle:
+                            writer = csv.DictWriter(
+                                handle,
+                                fieldnames=[
+                                    "status",
+                                    "step",
+                                    "network_size",
+                                    "replication",
+                                    "seed",
+                                    "algorithm",
+                                    "error",
+                                ],
+                            )
+                            writer.writerow(
+                                {
+                                    "status": "failed",
+                                    "step": "step2",
+                                    "network_size": density,
+                                    "replication": replication,
+                                    "seed": algorithm_seed,
+                                    "algorithm": algorithm,
+                                    "error": str(exc),
+                                }
+                            )
+            if result is None:
+                continue
             for row in result.raw_rows:
                 row["replication"] = replication
             raw_rows.extend(result.raw_rows)
@@ -1413,6 +1454,21 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     base_results_dir = Path(__file__).resolve().parent / "results"
     ensure_dir(base_results_dir)
+    status_csv_path = base_results_dir / "run_status_step2.csv"
+    with status_csv_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "status",
+                "step",
+                "network_size",
+                "replication",
+                "seed",
+                "algorithm",
+                "error",
+            ],
+        )
+        writer.writeheader()
     timestamp_dir: Path | None = None
     if args.timestamp:
         timestamp_dir = base_results_dir / timestamp_tag(with_timezone=True)

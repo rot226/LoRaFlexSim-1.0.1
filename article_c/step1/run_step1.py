@@ -468,6 +468,7 @@ def _simulate_density(
         ),
     }
     print(f"Jitter range utilisé (s): {jitter_range_s}")
+    status_csv_path = output_dir / "run_status_step1.csv"
     runs_per_size = len(ALGORITHMS) * len(snir_modes) * len(replications)
     mixra_opt_budget = (
         config["mixra_opt_budget"]
@@ -486,31 +487,72 @@ def _simulate_density(
                 base_seed = int(config["seeds_base"]) + size_idx * runs_per_size + run_index
                 seed = base_seed + algo_seed_offset
                 run_index += 1
-                set_deterministic_seed(seed)
                 sent = density_to_sent(network_size)
-                result = run_simulation(
-                    sent=sent,
-                    algorithm=algo,
-                    seed=seed,
-                    network_size=network_size,
-                    duration_s=float(config["duration_s"]),
-                    traffic_mode=str(config["traffic_mode"]),
-                    jitter_range_s=jitter_range_s,
-                    mixra_opt_max_iterations=int(config["mixra_opt_max_iterations"]),
-                    mixra_opt_candidate_subset_size=int(
-                        config["mixra_opt_candidate_subset_size"]
-                    ),
-                    mixra_opt_epsilon=float(config["mixra_opt_epsilon"]),
-                    mixra_opt_max_evaluations=int(config["mixra_opt_max_evals"]),
-                    mixra_opt_budget=mixra_opt_budget,
-                    mixra_opt_budget_base=int(config["mixra_opt_budget_base"]),
-                    mixra_opt_budget_scale=float(config["mixra_opt_budget_scale"]),
-                    mixra_opt_enabled=bool(config["mixra_opt_enabled"]),
-                    mixra_opt_mode=str(config["mixra_opt_mode"]),
-                    mixra_opt_timeout_s=config["mixra_opt_timeout"],
-                    mixra_opt_no_fallback=bool(config["mixra_opt_no_fallback"]),
-                    profile_timing=bool(config["profile_timing"]),
-                )
+                result = None
+                for attempt in (1, 2):
+                    try:
+                        set_deterministic_seed(seed)
+                        result = run_simulation(
+                            sent=sent,
+                            algorithm=algo,
+                            seed=seed,
+                            network_size=network_size,
+                            duration_s=float(config["duration_s"]),
+                            traffic_mode=str(config["traffic_mode"]),
+                            jitter_range_s=jitter_range_s,
+                            mixra_opt_max_iterations=int(config["mixra_opt_max_iterations"]),
+                            mixra_opt_candidate_subset_size=int(
+                                config["mixra_opt_candidate_subset_size"]
+                            ),
+                            mixra_opt_epsilon=float(config["mixra_opt_epsilon"]),
+                            mixra_opt_max_evaluations=int(config["mixra_opt_max_evals"]),
+                            mixra_opt_budget=mixra_opt_budget,
+                            mixra_opt_budget_base=int(config["mixra_opt_budget_base"]),
+                            mixra_opt_budget_scale=float(config["mixra_opt_budget_scale"]),
+                            mixra_opt_enabled=bool(config["mixra_opt_enabled"]),
+                            mixra_opt_mode=str(config["mixra_opt_mode"]),
+                            mixra_opt_timeout_s=config["mixra_opt_timeout"],
+                            mixra_opt_no_fallback=bool(config["mixra_opt_no_fallback"]),
+                            profile_timing=bool(config["profile_timing"]),
+                        )
+                        break
+                    except Exception as exc:
+                        print(
+                            "Échec simulation step1 "
+                            f"(size={network_size}, rep={replication}, seed={seed}, "
+                            f"algo={algo}, snir={snir_mode}, step=step1, attempt={attempt}/2): {exc}"
+                        )
+                        if attempt == 1:
+                            print("Retry immédiat (1/1) pour cette simulation unitaire.")
+                        else:
+                            with status_csv_path.open("a", newline="", encoding="utf-8") as handle:
+                                writer = csv.DictWriter(
+                                    handle,
+                                    fieldnames=[
+                                        "status",
+                                        "step",
+                                        "network_size",
+                                        "replication",
+                                        "seed",
+                                        "algorithm",
+                                        "snir_mode",
+                                        "error",
+                                    ],
+                                )
+                                writer.writerow(
+                                    {
+                                        "status": "failed",
+                                        "step": "step1",
+                                        "network_size": network_size,
+                                        "replication": replication,
+                                        "seed": seed,
+                                        "algorithm": algo,
+                                        "snir_mode": snir_mode,
+                                        "error": str(exc),
+                                    }
+                                )
+                if result is None:
+                    continue
                 metrics_start = perf_counter() if config["profile_timing"] else 0.0
                 cluster_stats = {
                     cluster: {"sent": 0, "received": 0} for cluster in cluster_ids
@@ -1047,6 +1089,23 @@ def main(argv: list[str] | None = None) -> None:
             "Étape 1: le répertoire de sortie doit être "
             f"{default_output_dir}."
         )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    status_csv_path = output_dir / "run_status_step1.csv"
+    with status_csv_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "status",
+                "step",
+                "network_size",
+                "replication",
+                "seed",
+                "algorithm",
+                "snir_mode",
+                "error",
+            ],
+        )
+        writer.writeheader()
     flat_output = bool(args.flat_output)
     simulated_sizes: list[int] = []
 
