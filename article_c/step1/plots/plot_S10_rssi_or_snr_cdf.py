@@ -133,7 +133,7 @@ def plot_cdf_by_algo(
     metric: str,
     output_dir: Path,
     *,
-    enable_suptitle: bool = True,
+    enable_suptitle: bool = False,
 ) -> None:
     if not rows:
         raise ValueError("Aucune ligne trouvée dans le CSV.")
@@ -262,7 +262,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main(enable_suptitle: bool = True) -> None:
+def main(enable_suptitle: bool = False) -> None:
     apply_plot_style()
     args = parse_args()
     enable_suptitle = enable_suptitle and not args.no_suptitle

@@ -77,7 +77,7 @@ def _plot_metric(
     rows: list[dict[str, object]],
     metric_key: str,
     *,
-    enable_suptitle: bool = True,
+    enable_suptitle: bool = False,
 ) -> plt.Figure:
     ensure_network_size(rows)
     df = pd.DataFrame(rows)
@@ -134,7 +134,7 @@ def _plot_metric(
 def main(
     argv: list[str] | None = None,
     allow_sample: bool = True,
-    enable_suptitle: bool = True,
+    enable_suptitle: bool = False,
 ) -> None:
     apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)

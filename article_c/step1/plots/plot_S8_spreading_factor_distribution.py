@@ -204,7 +204,7 @@ def _aggregate_distributions(
 def _plot_distribution(
     rows: list[dict[str, object]],
     *,
-    enable_suptitle: bool = True,
+    enable_suptitle: bool = False,
 ) -> plt.Figure:
     rows = [
         row
@@ -353,7 +353,7 @@ def _plot_distribution(
 def main(
     argv: list[str] | None = None,
     allow_sample: bool = False,
-    enable_suptitle: bool = True,
+    enable_suptitle: bool = False,
 ) -> None:
     apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
