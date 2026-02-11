@@ -75,7 +75,8 @@ def co_sf_interferers(target: Signal, interferers: Iterable[Signal]) -> list[Sig
         interferer
         for interferer in interferers
         if (
-            interferer.sf == target.sf
+            interferer is not target
+            and interferer.sf == target.sf
             and interferer.channel_hz == target.channel_hz
             and _signals_overlap(target, interferer)
         )
