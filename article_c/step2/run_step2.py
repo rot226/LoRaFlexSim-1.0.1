@@ -1079,6 +1079,158 @@ def _write_post_simulation_report(
     print(report)
 
 
+def _compute_quantiles(values: list[float], quantiles: Sequence[float]) -> dict[float, float]:
+    if not values:
+        return {float(q): 0.0 for q in quantiles}
+    sorted_values = sorted(values)
+    n_values = len(sorted_values)
+    if n_values == 1:
+        single_value = float(sorted_values[0])
+        return {float(q): single_value for q in quantiles}
+
+    result: dict[float, float] = {}
+    for quantile in quantiles:
+        q = max(0.0, min(1.0, float(quantile)))
+        position = q * (n_values - 1)
+        low_index = int(math.floor(position))
+        high_index = int(math.ceil(position))
+        if low_index == high_index:
+            result[q] = float(sorted_values[low_index])
+            continue
+        low_value = float(sorted_values[low_index])
+        high_value = float(sorted_values[high_index])
+        fraction = position - low_index
+        result[q] = low_value + (high_value - low_value) * fraction
+    return result
+
+
+def _load_raw_rows_for_snir_distribution(
+    base_results_dir: Path, flat_output: bool
+) -> list[dict[str, str]]:
+    raw_paths: list[Path] = []
+    if flat_output:
+        raw_path = base_results_dir / "raw_results.csv"
+        if raw_path.exists():
+            raw_paths.append(raw_path)
+    else:
+        raw_paths.extend(sorted(base_results_dir.glob("size_*/rep_*/raw_results.csv")))
+
+    rows: list[dict[str, str]] = []
+    for raw_path in raw_paths:
+        with raw_path.open("r", newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                rows.append(dict(row))
+    return rows
+
+
+def _write_step2_diagnostics_exports(
+    output_dir: Path,
+    per_size_diagnostics: dict[int, dict[str, float]],
+    per_size_stats: dict[int, dict[str, object]],
+    flat_output: bool,
+) -> None:
+    diagnostics_header = [
+        "network_size",
+        "success_rate_mean",
+        "collision_mean",
+        "link_quality_mean",
+        "reward_mean",
+    ]
+    diagnostics_values: list[list[object]] = []
+    for size in sorted(per_size_diagnostics):
+        diagnostics = per_size_diagnostics[size]
+        stats = per_size_stats.get(size, {})
+        link_quality_count = int(stats.get("link_quality_count", 0))
+        link_quality_sum = float(stats.get("link_quality_sum", 0.0))
+        link_quality_mean = (
+            link_quality_sum / link_quality_count if link_quality_count > 0 else 0.0
+        )
+        diagnostics_values.append(
+            [
+                size,
+                round(float(diagnostics.get("success_mean", 0.0)), 6),
+                round(float(diagnostics.get("collision_mean", 0.0)), 6),
+                round(link_quality_mean, 6),
+                round(float(diagnostics.get("reward_mean", 0.0)), 6),
+            ]
+        )
+    write_rows(
+        output_dir / "diagnostics_step2_by_size.csv",
+        diagnostics_header,
+        diagnostics_values,
+    )
+
+    losses_header = ["cause", "count"]
+    losses_values = [
+        [
+            "collisions",
+            sum(int(stats.get("losses_collisions_total", 0)) for stats in per_size_stats.values()),
+        ],
+        [
+            "congestion",
+            sum(int(stats.get("losses_congestion_total", 0)) for stats in per_size_stats.values()),
+        ],
+        [
+            "link_quality",
+            sum(int(stats.get("losses_link_quality_total", 0)) for stats in per_size_stats.values()),
+        ],
+    ]
+    write_rows(output_dir / "loss_causes_histogram.csv", losses_header, losses_values)
+
+    raw_rows = _load_raw_rows_for_snir_distribution(output_dir, flat_output)
+    snir_candidates = ["snir_db", "snir", "snir_value", "snr_db", "snir_threshold_db"]
+    snir_column = ""
+    if raw_rows:
+        first_row_keys = set(raw_rows[0])
+        for candidate in snir_candidates:
+            if candidate in first_row_keys:
+                snir_column = candidate
+                break
+    quantiles = (0.1, 0.25, 0.5, 0.75, 0.9)
+    snir_values_by_sf: dict[int, list[float]] = defaultdict(list)
+    if snir_column:
+        for row in raw_rows:
+            if str(row.get("cluster", "")) != "all":
+                continue
+            sf_value = row.get("sf")
+            snir_value = row.get(snir_column)
+            if sf_value in (None, "") or snir_value in (None, ""):
+                continue
+            try:
+                snir_values_by_sf[int(float(sf_value))].append(float(snir_value))
+            except (TypeError, ValueError):
+                continue
+
+    snir_header = [
+        "sf",
+        "snir_metric",
+        "count",
+        "q10",
+        "q25",
+        "q50",
+        "q75",
+        "q90",
+    ]
+    snir_rows: list[list[object]] = []
+    for sf in sorted(snir_values_by_sf):
+        values = snir_values_by_sf[sf]
+        quantiles_map = _compute_quantiles(values, quantiles)
+        snir_rows.append(
+            [
+                sf,
+                snir_column,
+                len(values),
+                round(quantiles_map[0.1], 6),
+                round(quantiles_map[0.25], 6),
+                round(quantiles_map[0.5], 6),
+                round(quantiles_map[0.75], 6),
+                round(quantiles_map[0.9], 6),
+            ]
+        )
+    write_rows(output_dir / "snir_distribution_by_sf.csv", snir_header, snir_rows)
+
+
 def _detect_low_success_first_size(
     density: int,
     diagnostics: dict[str, float],
@@ -1889,6 +2041,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         size_post_stats,
         size_diagnostics,
         sorted(safe_profile_sizes),
+    )
+    _write_step2_diagnostics_exports(
+        base_results_dir,
+        size_diagnostics,
+        size_post_stats,
+        flat_output,
     )
     strict_mode = bool(getattr(args, "strict", False)) or not bool(
         args.allow_low_success_rate
