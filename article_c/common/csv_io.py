@@ -172,6 +172,12 @@ def _normalize_cluster(value: object) -> str:
     return text
 
 
+def _is_failed_status(value: object) -> bool:
+    if value is None:
+        return False
+    return str(value).strip().lower() == "failed"
+
+
 def _normalize_group_keys(rows: list[dict[str, object]]) -> None:
     for row in rows:
         if row.get("algo") in (None, "") and row.get("algorithm") not in (None, ""):
@@ -331,6 +337,42 @@ def _log_metric_summary(
             )
 
 
+def _log_replication_status_summary(rows: list[dict[str, object]]) -> None:
+    if not rows:
+        return
+    rep_status: dict[tuple[str, str, str], dict[object, bool]] = defaultdict(dict)
+    for index, row in enumerate(rows):
+        algo = str(row.get("algo") or row.get("algorithm") or "unknown")
+        snir_mode = (
+            _normalize_snir_mode(row.get("snir_mode"))
+            or _normalize_snir_mode(row.get("snir_state"))
+            or _normalize_snir_mode(row.get("snir"))
+            or "snir_unknown"
+        )
+        size_value = row.get("network_size") or row.get("density")
+        size_label = "unknown"
+        if size_value not in (None, ""):
+            try:
+                size_label = str(int(round(float(size_value))))
+            except (TypeError, ValueError):
+                size_label = str(size_value)
+
+        rep_id_parts = tuple(
+            row.get(key) for key in ROUND_REPLICATION_KEYS if row.get(key) not in (None, "")
+        )
+        rep_id: object = rep_id_parts if rep_id_parts else ("row", index)
+        group_key = (size_label, algo, snir_mode)
+        has_failed = rep_status[group_key].get(rep_id, False)
+        rep_status[group_key][rep_id] = has_failed or _is_failed_status(row.get("status"))
+
+    print("Résumé réplications valides/échouées par size/algo/snir:")
+    print("network_size\talgo\tsnir_mode\tvalid_reps\tfailed_reps")
+    for (size_label, algo, snir_mode), status_map in sorted(rep_status.items()):
+        failed_count = sum(1 for is_failed in status_map.values() if is_failed)
+        valid_count = len(status_map) - failed_count
+        print(f"{size_label}\t{algo}\t{snir_mode}\t{valid_count}\t{failed_count}")
+
+
 def aggregate_results(
     raw_rows: list[dict[str, object]],
     *,
@@ -419,12 +461,25 @@ def _aggregate_rows(
     aggregated: list[dict[str, object]] = []
     for group_key, grouped_rows in groups.items():
         aggregated_row: dict[str, object] = dict(zip(group_keys, group_key))
+        valid_grouped_rows = [
+            row for row in grouped_rows if not _is_failed_status(row.get("status"))
+        ]
+        if not valid_grouped_rows:
+            logger.warning(
+                "[%s] Groupe sans réplication valide (toutes status=failed): %s",
+                step_label,
+                {
+                    key: value
+                    for key, value in zip(group_keys, group_key)
+                    if key in {"network_size", "algo", "snir_mode"}
+                },
+            )
         if aggregated_row.get("network_size") in (None, ""):
             raise AssertionError("network_size manquant dans les résultats agrégés.")
         if aggregated_row.get("density") in (None, ""):
             density_values = [
                 row.get("density")
-                for row in grouped_rows
+                for row in valid_grouped_rows
                 if isinstance(row.get("density"), (int, float))
             ]
             if density_values:
@@ -434,7 +489,7 @@ def _aggregate_rows(
         for key in sorted(numeric_keys):
             values = [
                 row[key]
-                for row in grouped_rows
+                for row in valid_grouped_rows
                 if isinstance(row.get(key), (int, float))
             ]
             count = len(values)
@@ -554,6 +609,7 @@ def write_simulation_results(
             "energy_per_success",
         ),
     )
+    _log_replication_status_summary(raw_rows)
 
     raw_header: list[str] = []
     seen: set[str] = set()
