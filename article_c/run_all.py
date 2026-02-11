@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from importlib.util import find_spec
 from pathlib import Path
@@ -28,6 +29,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour l'exécution complète."""
     parser = argparse.ArgumentParser(
         description="Exécute les étapes 1 et 2 avec des arguments communs."
+    )
+    parser.add_argument(
+        "--allow-non-article-c",
+        action="store_true",
+        help=(
+            "Bypass explicite du garde-fou de branche Git "
+            "(autorise une branche différente de 'article_c')."
+        ),
     )
     parser.add_argument(
         "--network-sizes",
@@ -423,6 +432,43 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _get_current_git_branch() -> str:
+    """Retourne le nom de la branche Git courante."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise RuntimeError(
+            "Impossible de déterminer la branche Git courante. "
+            "Utilisez --allow-non-article-c pour bypass explicite."
+        ) from exc
+    branch = result.stdout.strip()
+    if not branch:
+        raise RuntimeError(
+            "Impossible de déterminer la branche Git courante. "
+            "Utilisez --allow-non-article-c pour bypass explicite."
+        )
+    return branch
+
+
+def _enforce_article_c_branch(allow_non_article_c: bool) -> None:
+    """Vérifie que la branche courante est `article_c` sauf bypass explicite."""
+    if allow_non_article_c:
+        return
+    current_branch = _get_current_git_branch()
+    expected_branch = "article_c"
+    if current_branch != expected_branch:
+        raise SystemExit(
+            "Erreur: cette commande doit être exécutée sur la branche Git "
+            f"'{expected_branch}' (branche courante: '{current_branch}'). "
+            "Relancez avec --allow-non-article-c pour bypass explicite."
+        )
+
+
 def _build_step1_args(args: argparse.Namespace) -> list[str]:
     step1_args: list[str] = []
     if args.network_sizes:
@@ -623,6 +669,7 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    _enforce_article_c_branch(args.allow_non_article_c)
     if not args.auto_safe_profile:
         print(
             "Recommandation: activez --auto-safe-profile pour éviter un "
