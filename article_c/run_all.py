@@ -569,8 +569,12 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         step2_args.append("--timestamp")
     if args.safe_profile:
         step2_args.append("--safe-profile")
-    if args.auto_safe_profile:
-        step2_args.append("--auto-safe-profile")
+    if args.auto_safe_profile is not None:
+        step2_args.append(
+            "--auto-safe-profile"
+            if args.auto_safe_profile
+            else "--no-auto-safe-profile"
+        )
     if args.strict:
         step2_args.append("--strict")
     elif args.allow_low_success_rate is False:
@@ -670,7 +674,12 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
     _enforce_article_c_branch(args.allow_non_article_c)
-    if not args.auto_safe_profile:
+    if args.auto_safe_profile:
+        print(
+            "Auto-safe-profile activé par défaut: le profil sécurisé sera appliqué "
+            "avant la simulation de l'étape 2."
+        )
+    else:
         print(
             "Recommandation: activez --auto-safe-profile pour éviter un "
             "success_rate trop faible à l'étape 2."

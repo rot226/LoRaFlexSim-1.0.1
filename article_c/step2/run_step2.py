@@ -1646,7 +1646,12 @@ def main(argv: Sequence[str] | None = None) -> None:
             print("Option --no-clamp: désactivation du clamp traffic_coeff.")
         args.traffic_coeff_clamp_enabled = False
     _log_default_profile_if_needed(args)
-    if getattr(args, "safe_profile", False):
+    if getattr(args, "auto_safe_profile", False) and not getattr(args, "safe_profile", False):
+        _apply_safe_profile_with_log(
+            args,
+            "--auto-safe-profile activé par défaut (application avant simulation)",
+        )
+    elif getattr(args, "safe_profile", False):
         _apply_safe_profile_with_log(args, "demande explicite --safe-profile")
     try:
         export_formats = parse_export_formats(args.formats)

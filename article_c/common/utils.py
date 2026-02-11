@@ -79,10 +79,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--auto-safe-profile",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help=(
-            "Active un profil sécurisé automatique si la première taille simulée "
-            "présente un success_rate trop faible."
+            "Active/désactive l'application automatique du profil sécurisé "
+            "avant la simulation (activé par défaut)."
         ),
     )
     parser.add_argument(

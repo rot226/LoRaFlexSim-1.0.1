@@ -2990,6 +2990,7 @@ def run_simulation(
                     "losses_link_quality": losses_link_quality,
                     "reward": reward,
                     "rx_power_dbm": rx_power_dbm_effective,
+                    "safe_profile_applied": bool(safe_profile),
                     **snir_meta,
                 }
                 if reward_components is not None:
@@ -3719,6 +3720,7 @@ def run_simulation(
                     "losses_link_quality": losses_link_quality,
                     "reward": reward,
                     "rx_power_dbm": rx_power_dbm_effective,
+                    "safe_profile_applied": bool(safe_profile),
                     **snir_meta,
                 }
                 if reward_components is not None:
