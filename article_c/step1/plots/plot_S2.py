@@ -93,8 +93,6 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         handles=handles,
         labels=labels,
     )
-    if placement.legend is not None:
-        placement.legend.set_title("Mean ToA (s)")
     metric_series = pd.to_numeric(df[metric_key], errors="coerce").dropna()
     if not metric_series.empty:
         y_min = metric_series.min()

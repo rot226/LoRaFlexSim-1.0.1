@@ -383,7 +383,7 @@ def _plot_pdr_distributions(
     values_by_size: dict[int, dict[tuple[str, bool, str], list[float]]],
     network_sizes: list[int],
     *,
-    enable_suptitle: bool = True,
+    enable_suptitle: bool = False,
 ) -> list[plt.Figure]:
     legend_handles = [
         Patch(facecolor="#4c78a8", edgecolor="none", alpha=0.3, label=SNIR_LABELS["snir_on"]),
@@ -498,7 +498,7 @@ def _plot_pdr_distribution_page(
     legend_labels: list[str],
     legend_rows: int,
     title_suffix: str,
-    enable_suptitle: bool = True,
+    enable_suptitle: bool = False,
 ) -> plt.Figure:
     ncols = 2
     nrows = max(1, len(row_specs))
@@ -612,7 +612,7 @@ def _resolve_step1_intermediate_path(base_path: Path) -> Path | None:
 def main(
     argv: list[str] | None = None,
     allow_sample: bool = True,
-    enable_suptitle: bool = True,
+    enable_suptitle: bool = False,
 ) -> None:
     apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
