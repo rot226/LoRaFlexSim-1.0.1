@@ -762,7 +762,6 @@ def _plot_summary_pdr(output_dir: Path) -> None:
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Packet Delivery Ratio")
     ax.set_ylim(0.0, 1.0)
-    ax.set_title("Step 1 - Packet Delivery Ratio (avec barres d'erreur)")
     place_adaptive_legend(fig, ax)
     output_plot_dir = output_dir / "plots"
     save_figure(fig, output_plot_dir, "summary_pdr", use_tight=False)

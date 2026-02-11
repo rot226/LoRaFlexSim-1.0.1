@@ -1427,7 +1427,6 @@ def _plot_summary_reward(output_dir: Path) -> None:
         )
     ax.set_xlabel("Network size (number of nodes)")
     ax.set_ylabel("Mean Reward")
-    ax.set_title("Step 2 - Reward moyen (avec barres d'erreur)")
     ax.set_xticks(network_sizes)
     place_adaptive_legend(fig, ax)
     output_plot_dir = output_dir / "plots"

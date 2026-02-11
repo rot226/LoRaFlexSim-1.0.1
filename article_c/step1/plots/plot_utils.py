@@ -18,8 +18,8 @@ from article_c.common.plot_helpers import (
     place_adaptive_legend,
     suptitle_y_from_top,
 )
-from article_c.common.plotting_style import FIGURE_MARGINS, LEGEND_STYLE
-from article_c.common.plotting_style import legend_bbox_to_anchor
+from article_c.common.plot_style import FIGURE_MARGINS, LEGEND_STYLE
+from article_c.common.plot_style import legend_bbox_to_anchor
 
 
 def _flatten_axes(axes: object) -> list[plt.Axes]:
@@ -45,7 +45,7 @@ def configure_figure(
     legend_loc: str = "right",
     legend_handles: list[object] | None = None,
     legend_labels: list[str] | None = None,
-    enable_suptitle: bool = True,
+    enable_suptitle: bool = False,
     wspace: float | None = None,
 ) -> tuple[str, int]:
     """Configure le titre, la légende et les marges de la figure.
