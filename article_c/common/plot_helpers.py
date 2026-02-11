@@ -50,11 +50,11 @@ ALGO_LABELS = {
     "ucb1_sf": "UCB1-SF",
 }
 ALGO_COLORS = {
-    "adr": "#1f77b4",
-    "apra": "#8c564b",
-    "aimi": "#17becf",
+    "adr": "#333333",
+    "apra": "#6a3d9a",
+    "aimi": "#1f77b4",
     "loba": "#9467bd",
-    "mixra_h": "#ff7f0e",
+    "mixra_h": "#0f9d92",
     "mixra_opt": "#2ca02c",
     "ucb1_sf": "#d62728",
 }
@@ -68,12 +68,19 @@ ALGO_MARKERS = {
     "ucb1_sf": "D",
 }
 ALGO_ALIASES = {
+    "adr_pure": "adr",
+    "adr-pure": "adr",
+    "adr pur": "adr",
     "apra_like": "apra",
+    "apra-like": "apra",
     "aimi_like": "aimi",
+    "aimi-like": "aimi",
     "loba": "loba",
     "lo_ba": "loba",
     "lora_baseline": "loba",
     "lorawan_baseline": "loba",
+    "ucb1": "ucb1_sf",
+    "ucb1-sf": "ucb1_sf",
 }
 SNIR_MODES = ("snir_on", "snir_off")
 SNIR_LABELS = {
@@ -81,8 +88,8 @@ SNIR_LABELS = {
     "snir_off": "SNIR off",
 }
 SNIR_LINESTYLES = {
-    "snir_on": "solid",
-    "snir_off": "dashed",
+    "snir_on": "-",
+    "snir_off": "--",
 }
 MIXRA_FALLBACK_COLUMNS = ("mixra_opt_fallback", "mixra_fallback", "fallback")
 LOGGER = logging.getLogger(__name__)
@@ -193,6 +200,17 @@ def auto_figsize_for_traces(n: int | None) -> tuple[float, float]:
         width *= AUTO_WIDE_TRACE_WIDTH_SCALE
     return (width, height)
 
+
+def resolve_algo_color(algo: object, default: str = "#333333") -> str:
+    """Retourne la couleur normalisée d'un algorithme QoS."""
+    normalized = _normalize_algo(algo)
+    return ALGO_COLORS.get(normalized, default)
+
+
+def resolve_snir_linestyle(snir_mode: object, default: str = "-") -> str:
+    """Retourne le style de ligne normalisé d'un mode SNIR."""
+    normalized = str(snir_mode or "").strip().lower()
+    return SNIR_LINESTYLES.get(normalized, default)
 
 def _normalize_export_formats(formats: Iterable[str]) -> tuple[str, ...]:
     normalized: list[str] = []
