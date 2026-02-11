@@ -9,7 +9,12 @@ from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 
-from article_c.common.plot_helpers import apply_figure_layout, apply_plot_style, save_figure
+from article_c.common.plot_helpers import (
+    apply_figure_layout,
+    apply_plot_style,
+    resolve_algo_color,
+    save_figure,
+)
 from metrics import RunMetrics, load_cluster_ids
 from plot_defaults import resolve_ieee_figsize
 
@@ -21,18 +26,6 @@ DEFAULT_ALGORITHMS = [
     "MixRA-Opt",
 ]
 
-PALETTE = [
-    "#1f77b4",
-    "#ff7f0e",
-    "#2ca02c",
-    "#d62728",
-    "#9467bd",
-    "#8c564b",
-    "#e377c2",
-    "#7f7f7f",
-    "#bcbd22",
-    "#17becf",
-]
 THRESHOLDS_DB = [(-6.0, "Seuil décodage"), (6.0, "Capture")]
 SMALL_VALUE_UPPER = 0.3
 
@@ -87,10 +80,7 @@ def _resolve_order(values: Iterable[str], preferred: Sequence[str] | None) -> Li
 
 
 def _style_mapping(labels: Sequence[str]) -> Dict[str, str]:
-    mapping: Dict[str, str] = {}
-    for index, label in enumerate(labels):
-        mapping[label] = PALETTE[index % len(PALETTE)]
-    return mapping
+    return {label: resolve_algo_color(label) for label in labels}
 
 
 def _scenario_metadata(results: Sequence[RunMetrics]) -> Dict[str, Tuple[int, float]]:

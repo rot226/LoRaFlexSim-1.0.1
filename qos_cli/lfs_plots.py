@@ -14,7 +14,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from article_c.common.plotting_style import apply_base_rcparams
-from article_c.common.plot_helpers import apply_figure_layout
+from article_c.common.plot_helpers import apply_figure_layout, resolve_algo_color
 try:  # pragma: no cover - dépend du mode d'exécution
     from .lfs_metrics import (
         MethodScenarioMetrics,
@@ -124,8 +124,9 @@ def _render_snir_variants(
 def _style_mapping(labels: Sequence[str]) -> Dict[str, Tuple[str, str]]:
     mapping: Dict[str, Tuple[str, str]] = {}
     for index, label in enumerate(labels):
-        color = COLORS[index % len(COLORS)]
         marker = MARKERS[index % len(MARKERS)]
+        fallback_color = COLORS[index % len(COLORS)]
+        color = resolve_algo_color(label, default=fallback_color)
         mapping[str(label)] = (color, marker)
     return mapping
 
