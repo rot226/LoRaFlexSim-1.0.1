@@ -69,6 +69,30 @@ def write_rows(path: Path, header: list[str], rows: list[list[object]]) -> None:
             writer.writerows(rows)
 
 
+def atomic_write_csv(path: Path, header: list[str], rows: list[list[object]]) -> None:
+    """Écrit atomiquement un CSV via `path.tmp` puis `os.replace`.
+
+    Un verrou de fichier dédié est conservé pour sérialiser les écritures
+    concurrentes vers le même fichier de destination.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(f"{path.name}.lock")
+    tmp_path = path.with_name(f"{path.name}.tmp")
+    with lock_path.open("a+", newline="", encoding="utf-8") as lock_handle:
+        with _locked_handle(lock_handle):
+            try:
+                with tmp_path.open("w", newline="", encoding="utf-8") as tmp_handle:
+                    writer = csv.writer(tmp_handle)
+                    writer.writerow(header)
+                    writer.writerows(rows)
+                    tmp_handle.flush()
+                    os.fsync(tmp_handle.fileno())
+                os.replace(tmp_path, path)
+            finally:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+
+
 def _coerce_positive_network_size(value: object) -> float:
     if value is None or value == "":
         raise AssertionError("network_size manquant dans les lignes raw.")
@@ -541,19 +565,19 @@ def write_simulation_results(
                     raw_header.append(key)
     else:
         raw_header = list(GROUP_KEYS)
-    write_rows(
+    atomic_write_csv(
         raw_path,
         raw_header,
         [[row.get(key, "") for key in raw_header] for row in raw_rows],
     )
     raw_all_rows = [row for row in raw_rows if row.get("cluster") == "all"]
     raw_cluster_rows = [row for row in raw_rows if row.get("cluster") != "all"]
-    write_rows(
+    atomic_write_csv(
         raw_all_path,
         raw_header,
         [[row.get(key, "") for key in raw_header] for row in raw_all_rows],
     )
-    write_rows(
+    atomic_write_csv(
         raw_cluster_path,
         raw_header,
         [[row.get(key, "") for key in raw_header] for row in raw_cluster_rows],
@@ -585,7 +609,7 @@ def write_simulation_results(
     if "density" not in aggregated_header and "network_size" in aggregated_header:
         size_index = aggregated_header.index("network_size")
         aggregated_header.insert(size_index + 1, "density")
-    write_rows(
+    atomic_write_csv(
         aggregated_path,
         aggregated_header,
         [[row.get(key, "") for key in aggregated_header] for row in aggregated_rows],
@@ -598,7 +622,7 @@ def write_simulation_results(
             intermediate_name = "aggregated_results_by_replication.csv"
         intermediate_path = output_dir / intermediate_name
         intermediate_header = list(intermediate_rows[0].keys())
-        write_rows(
+        atomic_write_csv(
             intermediate_path,
             intermediate_header,
             [
@@ -684,7 +708,7 @@ def write_step1_results(
                     packets_header.append(key)
     else:
         packets_header = list(GROUP_KEYS)
-    write_rows(
+    atomic_write_csv(
         packets_path,
         packets_header,
         [[row.get(key, "") for key in packets_header] for row in packet_rows],
@@ -700,7 +724,7 @@ def write_step1_results(
                     metrics_header.append(key)
     else:
         metrics_header = list(GROUP_KEYS)
-    write_rows(
+    atomic_write_csv(
         metrics_path,
         metrics_header,
         [[row.get(key, "") for key in metrics_header] for row in metric_rows],
@@ -717,7 +741,7 @@ def write_step1_results(
     aggregated_header = (
         list(aggregated_rows[0].keys()) if aggregated_rows else list(BASE_GROUP_KEYS)
     )
-    write_rows(
+    atomic_write_csv(
         aggregated_path,
         aggregated_header,
         [[row.get(key, "") for key in aggregated_header] for row in aggregated_rows],
@@ -730,7 +754,7 @@ def write_step1_results(
             intermediate_name = "aggregated_results_by_replication.csv"
         intermediate_path = output_dir / intermediate_name
         intermediate_header = list(intermediate_rows[0].keys())
-        write_rows(
+        atomic_write_csv(
             intermediate_path,
             intermediate_header,
             [
