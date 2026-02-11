@@ -89,7 +89,7 @@ python -m article_c.run_all --skip-step2
 Exécuter toutes les étapes en ajustant collisions/congestion :
 
 ```powershell
-python -m article_c.run_all --capture-probability 0.12 --congestion-coeff 1.0 --collision-size-factor 1.1
+python -m article_c.run_all --capture-probability 0.28 --congestion-coeff 1.0 --collision-size-factor 1.1
 ```
 
 > Si l'étape 1 bloque, tester `--skip-step1` pour lancer directement l'étape 2.
@@ -119,13 +119,50 @@ Depuis cette version, l'étape 2 utilise un **profil standard adouci** par défa
 pour réduire les risques de congestion extrême. Les valeurs par défaut suivantes
 servent de base lorsque `--safe-profile` n'est pas activé :
 
-- `capture_probability=0.15` (tolérance légèrement plus élevée aux collisions).
-- `network_load_min=0.75` et `network_load_max=1.7` (clamp de charge plus modéré).
-- `collision_size_min=0.75`, `collision_size_under_max=1.15`,
-  `collision_size_over_max=1.8` (facteur de taille des collisions adouci).
+- `capture_probability=0.28` (tolérance légèrement plus élevée aux collisions).
+- `network_load_min=0.60` et `network_load_max=1.65` (clamp de charge plus modéré).
+- `collision_size_min=0.60`, `collision_size_under_max=1.10`,
+  `collision_size_over_max=1.90` (facteur de taille des collisions adouci).
 
 Le profil sécurisé reste disponible pour des scénarios plus difficiles ou pour
 stabiliser rapidement des runs instables.
+
+
+### Calibration Step2 (profil standard + safe)
+
+Objectif de calibration : conserver un PDR non nul aux faibles tailles, tout en gardant une décroissance visible quand la densité augmente (jusqu'à ~1280 nœuds).
+
+Ajustements retenus :
+
+- **Profil standard (`DEFAULT_CONFIG.step2`)**
+  - `capture_probability=0.28`
+  - `network_load_min/max=0.60/1.65`
+  - `collision_size_min/under/over=0.60/1.10/1.90`
+- **Profil safe (`STEP2_SAFE_CONFIG`)**
+  - `capture_probability=0.32`
+  - `network_load_min/max=0.65/1.45`
+  - `collision_size_min/under/over=0.65/1.05/1.60`
+- **Profil super-safe (`STEP2_SUPER_SAFE_CONFIG`)**
+  - `capture_probability=0.36`
+  - `network_load_min/max=0.75/1.30`
+  - `collision_size_min/under/over=0.75/1.00/1.40`
+
+Validation qualitative (exemple) : exécuter une passe rapide sur `80, 160, 320, 640, 960, 1280` et vérifier que le `success_rate` moyen reste **> 0** pour les petites tailles puis diminue globalement vers 1280 nœuds.
+
+Exemple de tendance observée (moyenne agrégée rapide, 6 rounds, seed fixe) :
+
+- `n=80`: ~0.0152
+- `n=160`: ~0.0065
+- `n=320`: ~0.0022
+- `n=640`: ~0.0010
+- `n=960`: ~0.0005
+- `n=1280`: ~0.0005
+
+Commande type (Windows 11) :
+
+```powershell
+python article_c/step2/run_step2.py --network-sizes 80 160 320 640 960 1280 --replications 1 --seeds_base 123 --allow-low-success-rate --workers 1
+```
 
 ### Mode sécurisé (--safe-profile)
 
@@ -133,9 +170,9 @@ Le flag `--safe-profile` active un **preset modéré** pour l'étape 2, pensé p
 stabiliser la charge, les collisions et le plancher de récompense. Il applique
 automatiquement des valeurs plus douces :
 
-- **Charge** (clamp du facteur de charge réseau) : `network_load_min=0.8` et `network_load_max=1.6`.
-- **Collisions** (bornes du facteur de taille) : `collision_size_min=0.8`,
-  `collision_size_under_max=1.2`, `collision_size_over_max=1.6`.
+- **Charge** (clamp du facteur de charge réseau) : `network_load_min=0.65` et `network_load_max=1.45`.
+- **Collisions** (bornes du facteur de taille) : `collision_size_min=0.65`,
+  `collision_size_under_max=1.05`, `collision_size_over_max=1.60`.
 - **Reward floor** : `reward_floor=0.05` (plancher appliqué dès que `success_rate > 0`).
 
 Exemples :
@@ -187,11 +224,11 @@ python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 
 
 Ces options permettent d'ajuster finement les pertes dues aux collisions/congestion :
 
-- `--capture-probability` : probabilité qu'une collision laisse un émetteur survivre. Valeur conseillée **0.08–0.18** (défaut 0.15).
+- `--capture-probability` : probabilité qu'une collision laisse un émetteur survivre. Valeur conseillée **0.22–0.38** (défaut 0.28).
 - `--congestion-coeff` : coefficient multiplicatif appliqué à la probabilité de congestion. Valeur conseillée **0.8–1.2** (défaut 1.0).
-- `--congestion-coeff-base` : coefficient de base de la probabilité de congestion. Valeur conseillée **0.25–0.40** (défaut 0.32).
-- `--congestion-coeff-growth` : vitesse de croissance avec la surcharge. Valeur conseillée **0.25–0.50** (défaut 0.35).
-- `--congestion-coeff-max` : plafond de la probabilité de congestion. Valeur conseillée **0.25–0.40** (défaut 0.35).
+- `--congestion-coeff-base` : coefficient de base de la probabilité de congestion. Valeur conseillée **0.25–0.40** (défaut 0.28).
+- `--congestion-coeff-growth` : vitesse de croissance avec la surcharge. Valeur conseillée **0.25–0.50** (défaut 0.30).
+- `--congestion-coeff-max` : plafond de la probabilité de congestion. Valeur conseillée **0.25–0.40** (défaut 0.30).
 - `--network-load-min` / `--network-load-max` : bornes du facteur de charge réseau (clamp).
 - `--collision-size-min` / `--collision-size-under-max` / `--collision-size-over-max` : bornes du facteur de taille des collisions.
 - `--collision-size-factor` : facteur de taille appliqué aux collisions (si non défini, calcul automatique). Valeur conseillée **0.8–1.6** selon la densité.
@@ -201,7 +238,7 @@ Ces options sont disponibles via `article_c/step2/run_step2.py` et `article_c/ru
 Exemple CLI avec ajustement des coefficients :
 
 ```powershell
-python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 --seeds_base 1000 --capture-probability 0.12 --congestion-coeff 1.0 --congestion-coeff-base 0.32 --congestion-coeff-growth 0.35 --congestion-coeff-max 0.35 --collision-size-factor 1.1
+python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 --seeds_base 1000 --capture-probability 0.28 --congestion-coeff 1.0 --congestion-coeff-base 0.28 --congestion-coeff-growth 0.30 --congestion-coeff-max 0.30 --collision-size-factor 1.1
 ```
 
 ### Causes fréquentes d’un `success_rate` faible et valeurs de départ recommandées
@@ -229,16 +266,16 @@ d’abord ces paramètres :
 
 **Valeurs de départ recommandées (profil standard adouci)**
 
-- **Congestion** : `--congestion-coeff 1.0`, `--congestion-coeff-base 0.32`,
-  `--congestion-coeff-growth 0.35`, `--congestion-coeff-max 0.35`,
-  `--network-load-min 0.75`, `--network-load-max 1.7`.  
+- **Congestion** : `--congestion-coeff 1.0`, `--congestion-coeff-base 0.28`,
+  `--congestion-coeff-growth 0.30`, `--congestion-coeff-max 0.30`,
+  `--network-load-min 0.60`, `--network-load-max 1.65`.  
   *Justification* : garde une croissance modérée de la congestion sans écraser
   les cas moyens.
-- **Collisions** : `--capture-probability 0.15`,
+- **Collisions** : `--capture-probability 0.28`,
   `--collision-size-factor 1.1`,
-  `--collision-size-min 0.75`,
-  `--collision-size-under-max 1.15`,
-  `--collision-size-over-max 1.8`.  
+  `--collision-size-min 0.60`,
+  `--collision-size-under-max 1.10`,
+  `--collision-size-over-max 1.90`.  
   *Justification* : tolérance réaliste aux collisions et montée progressive
   avec la densité.
 - **SNIR** : `--snir-threshold-db 4.0` avec clamp
