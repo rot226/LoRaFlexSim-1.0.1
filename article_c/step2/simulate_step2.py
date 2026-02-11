@@ -1812,7 +1812,23 @@ def _snir_success_factor(
     if max_db <= min_db:
         return 1.0
 
-    threshold_db = _clamp_range(snir_threshold_db, min_db, max_db)
+    threshold_db_requested = snir_threshold_db
+    threshold_db = _clamp_range(threshold_db_requested, min_db, max_db)
+    logger.debug(
+        "SNIR seuil effectif utilisé: %.3f dB (demandé=%.3f dB, min=%.3f dB, max=%.3f dB).",
+        threshold_db,
+        threshold_db_requested,
+        min_db,
+        max_db,
+    )
+    if not math.isclose(threshold_db_requested, threshold_db, abs_tol=1e-12):
+        logger.info(
+            "Diagnostic clamp SNIR: seuil demandé %.3f dB clampé à %.3f dB (bornes %.3f..%.3f dB).",
+            threshold_db_requested,
+            threshold_db,
+            min_db,
+            max_db,
+        )
     assert min_db <= threshold_db <= max_db, "Seuil SNIR clampé hors bornes en dB."
 
     threshold_linear = db_to_linear(threshold_db)
@@ -1823,6 +1839,10 @@ def _snir_success_factor(
     threshold_ratio = (threshold_linear - min_linear) / max(
         max_linear - min_linear, 1e-12
     )
+    snir_db = linear_to_db(threshold_linear)
+    snir_ok = snir_db >= threshold_db
+    if not snir_ok:
+        return 0.0
     softened_ratio = threshold_ratio**1.2
     attenuation = 1.0 - softened_ratio
     min_factor = 0.15
