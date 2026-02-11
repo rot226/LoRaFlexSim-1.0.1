@@ -45,6 +45,19 @@ from plot_defaults import resolve_ieee_figsize
 logger = logging.getLogger(__name__)
 SAFE_PROFILE_SUCCESS_THRESHOLD = 0.2
 SUPER_SAFE_PROFILE_SUCCESS_THRESHOLD = 0.05
+RX_POWER_DBM_MIN = -130.0
+RX_POWER_DBM_MAX = -90.0
+
+
+def _clamp_rx_power_dbm(value_dbm: float) -> float:
+    clamped = max(RX_POWER_DBM_MIN, min(RX_POWER_DBM_MAX, value_dbm))
+    if not math.isclose(clamped, value_dbm, abs_tol=1e-12):
+        print(
+            "WARNING: rx_power_dbm hors plage admissible "
+            f"({value_dbm:.2f} dBm). Valeur clampée à {clamped:.2f} dBm "
+            f"(bornes {RX_POWER_DBM_MIN:.2f}..{RX_POWER_DBM_MAX:.2f} dBm)."
+        )
+    return clamped
 
 
 def _log_default_profile_if_needed(args: object) -> None:
@@ -515,6 +528,10 @@ def _summarize_post_simulation(
     reward_min: float | None = None
     reward_max: float | None = None
     reward_count = 0
+    rx_power_dbm_sum = 0.0
+    rx_power_dbm_count = 0
+    rx_power_dbm_min: float | None = None
+    rx_power_dbm_max: float | None = None
     losses_collisions_total = 0
     losses_congestion_total = 0
     losses_link_quality_total = 0
@@ -555,6 +572,15 @@ def _summarize_post_simulation(
         reward_min = reward if reward_min is None else min(reward_min, reward)
         reward_max = reward if reward_max is None else max(reward_max, reward)
         reward_count += 1
+        rx_power_dbm = float(row.get("rx_power_dbm", 0.0) or 0.0)
+        rx_power_dbm_sum += rx_power_dbm
+        rx_power_dbm_count += 1
+        rx_power_dbm_min = (
+            rx_power_dbm if rx_power_dbm_min is None else min(rx_power_dbm_min, rx_power_dbm)
+        )
+        rx_power_dbm_max = (
+            rx_power_dbm if rx_power_dbm_max is None else max(rx_power_dbm_max, rx_power_dbm)
+        )
         if reward <= 1e-9:
             reward_zero_total += 1
             if success_rate <= 1e-9:
@@ -610,6 +636,10 @@ def _summarize_post_simulation(
         "reward_min": 0.0 if reward_min is None else reward_min,
         "reward_max": 0.0 if reward_max is None else reward_max,
         "reward_count": reward_count,
+        "rx_power_dbm_sum": rx_power_dbm_sum,
+        "rx_power_dbm_count": rx_power_dbm_count,
+        "rx_power_dbm_min": 0.0 if rx_power_dbm_min is None else rx_power_dbm_min,
+        "rx_power_dbm_max": 0.0 if rx_power_dbm_max is None else rx_power_dbm_max,
         "losses_collisions_total": losses_collisions_total,
         "losses_congestion_total": losses_congestion_total,
         "losses_link_quality_total": losses_link_quality_total,
@@ -775,6 +805,10 @@ def _compose_post_simulation_report(
     overall_losses_collisions = 0
     overall_losses_congestion = 0
     overall_losses_link_quality = 0
+    overall_rx_power_dbm_sum = 0.0
+    overall_rx_power_dbm_count = 0
+    overall_rx_power_dbm_min: float | None = None
+    overall_rx_power_dbm_max: float | None = None
 
     per_size_link_quality_mean: dict[int, float] = {}
     for size, stats in per_size_stats.items():
@@ -822,6 +856,22 @@ def _compose_post_simulation_report(
             else max(reward_max, float(stats.get("reward_max", 0.0)))
         )
         reward_count += int(stats.get("reward_count", 0))
+        rx_power_dbm_sum = float(stats.get("rx_power_dbm_sum", 0.0))
+        rx_power_dbm_count = int(stats.get("rx_power_dbm_count", 0))
+        rx_power_dbm_min = float(stats.get("rx_power_dbm_min", 0.0))
+        rx_power_dbm_max = float(stats.get("rx_power_dbm_max", 0.0))
+        overall_rx_power_dbm_sum += rx_power_dbm_sum
+        overall_rx_power_dbm_count += rx_power_dbm_count
+        overall_rx_power_dbm_min = (
+            rx_power_dbm_min
+            if overall_rx_power_dbm_min is None
+            else min(overall_rx_power_dbm_min, rx_power_dbm_min)
+        )
+        overall_rx_power_dbm_max = (
+            rx_power_dbm_max
+            if overall_rx_power_dbm_max is None
+            else max(overall_rx_power_dbm_max, rx_power_dbm_max)
+        )
         overall_losses_collisions += int(stats.get("losses_collisions_total", 0))
         overall_losses_congestion += int(stats.get("losses_congestion_total", 0))
         overall_losses_link_quality += int(stats.get("losses_link_quality_total", 0))
@@ -845,6 +895,17 @@ def _compose_post_simulation_report(
     )
     link_quality_min = 0.0 if overall_link_quality_min is None else overall_link_quality_min
     link_quality_max = 0.0 if overall_link_quality_max is None else overall_link_quality_max
+    rx_power_dbm_mean = (
+        overall_rx_power_dbm_sum / overall_rx_power_dbm_count
+        if overall_rx_power_dbm_count > 0
+        else 0.0
+    )
+    rx_power_dbm_min = (
+        0.0 if overall_rx_power_dbm_min is None else overall_rx_power_dbm_min
+    )
+    rx_power_dbm_max = (
+        0.0 if overall_rx_power_dbm_max is None else overall_rx_power_dbm_max
+    )
 
     lines = [
         "Rapport post-simulation (étape 2)",
@@ -897,6 +958,19 @@ def _compose_post_simulation_report(
             (
                 f"- moyenne globale: {link_quality_mean:.4f} "
                 f"(min {link_quality_min:.4f}, max {link_quality_max:.4f})"
+            ),
+        ]
+    )
+    lines.extend(
+        [
+            "",
+            "Puissance Rx effective (dBm):",
+            (
+                f"- valeur finale moyenne: {rx_power_dbm_mean:.2f} "
+                f"(min {rx_power_dbm_min:.2f}, max {rx_power_dbm_max:.2f})"
+            ),
+            (
+                f"- plage admissible: {RX_POWER_DBM_MIN:.2f}..{RX_POWER_DBM_MAX:.2f} dBm"
             ),
         ]
     )
@@ -1455,6 +1529,7 @@ def _simulate_density(
                             if config.get("shadowing_sigma_db") is not None
                             else None
                         ),
+                        rx_power_dbm=float(config["rx_power_dbm"]),
                         reference_network_size=int(config["reference_network_size"]),
                         reward_floor=(
                             float(config["reward_floor"])
@@ -1685,6 +1760,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "reward_debug": getattr(args, "reward_debug", False),
         "reward_alert_level": args.reward_alert_level,
     }
+    config["rx_power_dbm"] = _clamp_rx_power_dbm(float(getattr(args, "noise_floor_dbm", -110.0)))
 
     if flat_output:
         aggregated_sizes = _read_aggregated_sizes(
