@@ -62,6 +62,15 @@ def _clip(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float
     return max(min_value, min(max_value, value))
 
 
+def db_to_linear(value_db: float) -> float:
+    return 10 ** (value_db / 10.0)
+
+
+def linear_to_db(value_linear: float) -> float:
+    assert value_linear > 0.0, "Une valeur linéaire doit être strictement positive."
+    return 10.0 * math.log10(value_linear)
+
+
 def _normalize_local(
     value: float, min_value: float, max_value: float, *, fallback: float = 0.5
 ) -> float:
@@ -1431,7 +1440,7 @@ def _sample_log_normal_shadowing(
     rng: random.Random, mean_db: float, sigma_db: float
 ) -> tuple[float, float]:
     shadowing_db = rng.gauss(mean_db, sigma_db)
-    return shadowing_db, 10 ** (-shadowing_db / 10.0)
+    return shadowing_db, db_to_linear(-shadowing_db)
 
 
 def _log_link_quality_summary(
@@ -1776,12 +1785,44 @@ def _snir_success_factor(
 ) -> float:
     if snir_mode != "snir_on":
         return 1.0
+
+    # Convention SNIR unifiée : toutes les valeurs de seuil sont stockées en dB.
+    assert math.isfinite(snir_threshold_db), "Le seuil SNIR doit être exprimé en dB fini."
+    assert math.isfinite(
+        snir_threshold_min_db
+    ), "Le seuil SNIR min doit être exprimé en dB fini."
+    assert math.isfinite(
+        snir_threshold_max_db
+    ), "Le seuil SNIR max doit être exprimé en dB fini."
+
     min_db = min(snir_threshold_min_db, snir_threshold_max_db)
     max_db = max(snir_threshold_min_db, snir_threshold_max_db)
+
+    # Assertions de cohérence d'unités avant test de seuil.
+    min_linear = db_to_linear(min_db)
+    max_linear = db_to_linear(max_db)
+    assert min_linear > 0.0 and max_linear > 0.0
+    assert math.isclose(
+        linear_to_db(min_linear), min_db, rel_tol=1e-9, abs_tol=1e-9
+    ), "Incohérence de conversion SNIR min dB↔linéaire."
+    assert math.isclose(
+        linear_to_db(max_linear), max_db, rel_tol=1e-9, abs_tol=1e-9
+    ), "Incohérence de conversion SNIR max dB↔linéaire."
+
     if max_db <= min_db:
         return 1.0
+
     threshold_db = _clamp_range(snir_threshold_db, min_db, max_db)
-    threshold_ratio = (threshold_db - min_db) / max(max_db - min_db, 1e-6)
+    assert min_db <= threshold_db <= max_db, "Seuil SNIR clampé hors bornes en dB."
+
+    threshold_linear = db_to_linear(threshold_db)
+    assert (
+        min_linear <= threshold_linear <= max_linear
+    ), "Comparaison mixte interdite: le seuil SNIR doit rester cohérent en dB et linéaire."
+
+    threshold_ratio = (threshold_linear - min_linear) / max(
+        max_linear - min_linear, 1e-12
+    )
     softened_ratio = threshold_ratio**1.2
     attenuation = 1.0 - softened_ratio
     min_factor = 0.15
