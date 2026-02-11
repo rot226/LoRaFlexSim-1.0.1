@@ -56,6 +56,8 @@ class RewardAlertState:
 
 logger = logging.getLogger(__name__)
 _NO_CLAMP = False
+RX_POWER_DBM_MIN = -130.0
+RX_POWER_DBM_MAX = -90.0
 
 
 def _clip(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float:
@@ -223,6 +225,19 @@ def _clamp_range(value: float, min_value: float, max_value: float) -> float:
     if _NO_CLAMP:
         return value
     return max(min_value, min(max_value, value))
+
+
+def _clamp_rx_power_dbm(value_dbm: float) -> float:
+    clamped = _clamp_range(value_dbm, RX_POWER_DBM_MIN, RX_POWER_DBM_MAX)
+    if not math.isclose(clamped, value_dbm, abs_tol=1e-12):
+        logger.warning(
+            "Puissance Rx demandée hors plage admissible: %.2f dBm -> %.2f dBm (bornes %.2f..%.2f dBm).",
+            value_dbm,
+            clamped,
+            RX_POWER_DBM_MIN,
+            RX_POWER_DBM_MAX,
+        )
+    return clamped
 
 
 def _apply_reward_floor_boost(
@@ -1924,6 +1939,7 @@ def run_simulation(
     window_delay_enabled: bool | None = None,
     window_delay_range_s: float | None = None,
     shadowing_sigma_db: float | None = None,
+    rx_power_dbm: float | None = None,
     reference_network_size: int | None = None,
     output_dir: Path | None = None,
     debug_step2: bool = False,
@@ -1940,6 +1956,12 @@ def run_simulation(
     rng = random.Random(seed)
     step2_defaults = DEFAULT_CONFIG.step2
     snir_defaults = DEFAULT_CONFIG.snir
+    rx_power_dbm_requested = (
+        (RX_POWER_DBM_MIN + RX_POWER_DBM_MAX) / 2.0
+        if rx_power_dbm is None
+        else float(rx_power_dbm)
+    )
+    rx_power_dbm_effective = _clamp_rx_power_dbm(rx_power_dbm_requested)
     reward_floor_value = reward_floor
     if safe_profile and reward_floor_value is None:
         reward_floor_value = STEP2_SAFE_CONFIG.reward_floor
@@ -1971,6 +1993,8 @@ def run_simulation(
         "snir_threshold_db": snir_threshold_value,
         "snir_threshold_min_db": snir_threshold_min_value,
         "snir_threshold_max_db": snir_threshold_max_value,
+        "rx_power_dbm_requested": rx_power_dbm_requested,
+        "rx_power_dbm_effective": rx_power_dbm_effective,
     }
     jitter_range_value = jitter_range_s
     window_duration_value = (
@@ -2965,6 +2989,7 @@ def run_simulation(
                     "losses_congestion": losses_congestion,
                     "losses_link_quality": losses_link_quality,
                     "reward": reward,
+                    "rx_power_dbm": rx_power_dbm_effective,
                     **snir_meta,
                 }
                 if reward_components is not None:
@@ -3693,6 +3718,7 @@ def run_simulation(
                     "losses_congestion": losses_congestion,
                     "losses_link_quality": losses_link_quality,
                     "reward": reward,
+                    "rx_power_dbm": rx_power_dbm_effective,
                     **snir_meta,
                 }
                 if reward_components is not None:
