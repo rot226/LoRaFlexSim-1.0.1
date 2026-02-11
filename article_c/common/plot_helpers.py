@@ -19,7 +19,8 @@ from matplotlib.lines import Line2D
 from matplotlib.legend import Legend
 from matplotlib.transforms import BboxBase
 
-from article_c.common.plotting_style import (
+from article_c.common.plot_style import (
+    ALLOW_SUPTITLE,
     FIGURE_MARGINS,
     FIGURE_SIZE,
     LEGEND_MAX_HEIGHT_RATIO,
@@ -28,6 +29,7 @@ from article_c.common.plotting_style import (
     LEGEND_STYLE,
     SAVEFIG_STYLE,
     SUPTITLE_Y,
+    MIN_EXPORT_DPI,
     adjust_legend_to_fit,
     apply_ieee_style,
     apply_output_fonttype,
@@ -95,7 +97,7 @@ BASE_LINE_WIDTH = 2.0
 BASE_GRID_COLOR = "#e0e0e0"
 BASE_GRID_ALPHA = 0.6
 BASE_GRID_LINEWIDTH = 0.8
-BASE_DPI = 300
+BASE_DPI = MIN_EXPORT_DPI
 BASE_GRID_ENABLED = True
 MAX_TIGHT_BBOX_SCALE = 4.0
 MAX_TIGHT_BBOX_INCHES = 30.0
@@ -1571,6 +1573,8 @@ def apply_suptitle(
     y: float | None = None,
 ) -> None:
     """Ajoute un suptitle à la figure si activé."""
+    if not ALLOW_SUPTITLE:
+        return
     if not enable_suptitle or not title:
         return
     if y is None:
@@ -1953,6 +1957,7 @@ def _safe_dpi(fig: plt.Figure, dpi: float) -> float:
         max_dpi = min(max_dpi, MAX_IMAGE_DIM_PX / max(fig_width_in, fig_height_in))
     if total_pixels > MAX_IMAGE_TOTAL_PIXELS:
         max_dpi = min(max_dpi, math.sqrt(MAX_IMAGE_TOTAL_PIXELS / (fig_width_in * fig_height_in)))
+    min_dpi = float(MIN_EXPORT_DPI)
     if max_dpi < dpi:
         LOGGER.warning(
             "DPI réduit de %.1f à %.1f pour éviter une image trop grande (%.0f x %.0f px).",
@@ -1961,7 +1966,7 @@ def _safe_dpi(fig: plt.Figure, dpi: float) -> float:
             width_px,
             height_px,
         )
-    return max_dpi
+    return max(min_dpi, max_dpi)
 
 
 def _apply_figure_size_clamp(
