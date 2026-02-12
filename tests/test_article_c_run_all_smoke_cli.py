@@ -27,6 +27,7 @@ def _patch_smoke_startup(monkeypatch, *, expect_step: str) -> dict[str, int]:
     monkeypatch.setattr(run_all, "_assert_no_global_writes_during_simulation", lambda *_: None)
     monkeypatch.setattr(run_all, "_assert_output_layout_compliant", lambda *_: None)
     monkeypatch.setattr(run_all, "_assert_cumulative_sizes", lambda *_: None)
+    monkeypatch.setattr(run_all, "_assert_aggregation_contract_consistent", lambda *_: None)
     monkeypatch.setattr(run_all, "_assert_cumulative_sizes_nested", lambda *_: None)
     monkeypatch.setattr(run_all, "aggregate_results_by_size", lambda *_args, **_kwargs: {"global_row_count": 0})
     monkeypatch.setattr(run_all, "validate_results", lambda *_: 0)
