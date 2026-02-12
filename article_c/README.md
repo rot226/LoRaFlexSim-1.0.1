@@ -165,6 +165,22 @@ Exécuter uniquement l'étape 2 :
 python article_c/step2/run_step2.py --network-sizes 50 100 150 --replications 5 --seeds_base 1000
 ```
 
+### Autonomie de l'étape 2
+
+L'étape 2 est **autonome** : elle ne lit pas les états/CSV produits par l'étape 1
+pour se paramétrer.
+
+Les paramètres utilisés par Step2 sont uniquement des entrées explicites :
+
+- `network_size` (via `--network-sizes`),
+- `seed` (via `--seeds_base`),
+- paramètres RL (fenêtre/récompense/penalités),
+- paramètres de trafic (`--traffic-mode`, coefficients de charge),
+- paramètres de canal radio (`--snir-threshold-*`, `--noise-floor-dbm`, etc.).
+
+Conséquence pratique : `python -m article_c.run_all --skip-step1` exécute Step2 avec
+la même logique de paramétrage explicite, sans dépendance implicite à des sorties Step1.
+
 ### Profil standard adouci (par défaut)
 
 Depuis cette version, l'étape 2 utilise un **profil standard adouci** par défaut

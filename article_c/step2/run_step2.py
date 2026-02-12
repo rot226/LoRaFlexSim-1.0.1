@@ -658,6 +658,24 @@ def _assert_flat_output_sizes(
         raise RuntimeError(message)
 
 
+def _log_step2_autonomous_inputs(args: object, reference_network_size: int) -> None:
+    """Journalise les entrées explicites utilisées par Step2 (sans Step1)."""
+    print(
+        "Step2 autonome: paramètres explicites uniquement "
+        "(network_size, seed, RL, trafic, canal)."
+    )
+    print(
+        "Step2 paramètres explicites: "
+        f"seed={getattr(args, 'seeds_base', None)}, "
+        f"reference_network_size={reference_network_size}, "
+        f"window_size={getattr(args, 'window_size', None)}, "
+        f"lambda_collision={getattr(args, 'lambda_collision', None)}, "
+        f"traffic_mode={getattr(args, 'traffic_mode', None)}, "
+        f"traffic_coeff_scale={getattr(args, 'traffic_coeff_scale', None)}, "
+        f"snir_threshold_db={getattr(args, 'snir_threshold_db', None)}, "
+        f"noise_floor_dbm={getattr(args, 'noise_floor_dbm', None)}."
+    )
+
 def _init_collision_histogram() -> dict[str, int]:
     return {"0-0.1": 0, "0.1-0.3": 0, "0.3-0.6": 0, "0.6-1.0": 0}
 
@@ -2144,6 +2162,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "Référence réseau utilisée pour l'étape 2: "
         f"{reference_network_size} ({reference_source})."
     )
+    _log_step2_autonomous_inputs(args, reference_network_size)
     replications = replication_ids(args.replications)
     simulated_sizes: list[int] = []
 
