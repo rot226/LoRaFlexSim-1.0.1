@@ -111,7 +111,8 @@ MAX_TIGHT_BBOX_INCHES = 30.0
 MAX_TIGHT_BBOX_OVERFLOW_RATIO = 1.05
 MAX_IMAGE_DIM_PX = 12000
 MAX_IMAGE_TOTAL_PIXELS = 120_000_000
-MAX_IEEE_FIGURE_SIZE_IN = (60.0, 40.0)
+MAX_FIGSIZE_INCH_SINGLE = (12.0, 8.0)
+MAX_FIGSIZE_INCH_MULTIPANEL = (14.0, 10.0)
 AXES_TITLE_Y = 1.02
 SUPTITLE_TOP_RATIO = 0.85
 FIGURE_SUBPLOT_TOP = FIGURE_MARGINS["top"]
@@ -1893,13 +1894,13 @@ def save_figure(
     has_external_legend = bool(getattr(fig, "_external_legend", False))
     effective_bbox = bbox_inches
     if effective_bbox is None:
-        effective_bbox = False if has_external_legend else "tight"
+        effective_bbox = "tight"
     default_pad = float(SAVEFIG_STYLE.get("pad_inches", 0.0))
     pad_inches = default_pad
     if effective_bbox == "tight":
         pad_inches = max(default_pad, 0.06)
     elif has_external_legend:
-        pad_inches = max(default_pad, 0.02)
+        pad_inches = max(default_pad, 0.08)
     for ext in selected_formats:
         save_figure_path(
             fig,
@@ -2086,12 +2087,17 @@ def _safe_dpi(fig: plt.Figure, dpi: float) -> float:
 def _apply_figure_size_clamp(
     fig: plt.Figure,
     *,
-    max_size: tuple[float, float] = MAX_IEEE_FIGURE_SIZE_IN,
+    max_size: tuple[float, float] | None = None,
 ) -> bool:
     fig_width_in, fig_height_in = fig.get_size_inches()
+    if max_size is None:
+        max_size = (
+            MAX_FIGSIZE_INCH_MULTIPANEL if len(fig.axes) > 1 else MAX_FIGSIZE_INCH_SINGLE
+        )
     max_width, max_height = max_size
-    clamped_width = min(fig_width_in, max_width)
-    clamped_height = min(fig_height_in, max_height)
+    scale = min(max_width / fig_width_in, max_height / fig_height_in, 1.0)
+    clamped_width = fig_width_in * scale
+    clamped_height = fig_height_in * scale
     if clamped_width == fig_width_in and clamped_height == fig_height_in:
         return False
     LOGGER.warning(
@@ -2170,7 +2176,21 @@ def apply_figure_layout(
         for legend in legends:
             legend.set_bbox_to_anchor(bbox_to_anchor)
     if tight_layout and not full_canvas:
-        if isinstance(tight_layout, Mapping):
+        can_use_constrained_layout = (
+            not isinstance(tight_layout, Mapping)
+            and normalized_legend_loc not in {"right", "above"}
+            and bbox_to_anchor is None
+        )
+        if can_use_constrained_layout:
+            fig.set_constrained_layout(True)
+            fig.set_constrained_layout_pads(
+                h_pad=0.03,
+                w_pad=0.03,
+                hspace=0.04,
+                wspace=0.04,
+            )
+        elif isinstance(tight_layout, Mapping):
+            fig.set_constrained_layout(False)
             adjusted_tight = dict(tight_layout)
             rect = adjusted_tight.get("rect")
             if normalized_legend_loc == "right" and rect is None:
@@ -2207,16 +2227,18 @@ def apply_figure_layout(
                     min(right, _legend_right_margin(fig)),
                     top,
                 )
+            adjusted_tight.setdefault("pad", 0.8)
             fig.tight_layout(**adjusted_tight)
         else:
+            fig.set_constrained_layout(False)
             rect = tight_layout_rect_from_margins(margins)
             if normalized_legend_loc == "right":
                 left, bottom, right, top = rect
                 rect = (left, bottom, min(right, _legend_right_margin(fig)), top)
-            fig.tight_layout(rect=rect)
+            fig.tight_layout(rect=rect, pad=0.8)
     has_external_legend = normalized_legend_loc in {"right", "above"}
     fig._external_legend = has_external_legend
-    fig._avoid_tight_bbox = normalized_legend_loc == "right" or full_canvas
+    fig._avoid_tight_bbox = full_canvas
 
 
 def _layout_rect_from_margins(
