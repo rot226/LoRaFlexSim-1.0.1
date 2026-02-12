@@ -501,7 +501,7 @@ def _check_legends_for_module(
                     f"légende absente pour {context}."
                 )
         if fail_on_missing_legends and not _figure_has_legend(fig):
-            missing_contexts.append(context)
+            missing_contexts.append(f"{context} [{source_path}]")
     if legend_status is not None:
         module_key = module_path.split(".")[-1]
         legend_status[module_key] = all_figs_have_legends
@@ -1760,12 +1760,29 @@ def main(argv: list[str] | None = None) -> None:
                 print(f"Detected sizes: {sizes_label}")
                 print(f"Plotting Step1: {figure}")
                 try:
-                    _run_plot_module(
+                    previous_figures = set(plt.get_fignums())
+                    module = _run_plot_module(
                         module_path,
                         network_sizes=step1_network_sizes,
                         allow_sample=False,
                         enable_suptitle=enable_suptitle,
                     )
+                    missing_legends = _check_legends_for_module(
+                        module_path=module_path,
+                        module=module,
+                        previous_figures=previous_figures,
+                        fail_on_missing_legends=True,
+                        legend_status=step1_legend_status,
+                    )
+                    if missing_legends:
+                        _register_status(
+                            status_map,
+                            step=step,
+                            module_path=module_path,
+                            status="FAIL",
+                            message="légende absente: " + "; ".join(missing_legends),
+                        )
+                        continue
                     _register_status(
                         status_map,
                         step=step,
@@ -1803,12 +1820,22 @@ def main(argv: list[str] | None = None) -> None:
                         allow_sample=False,
                         enable_suptitle=enable_suptitle,
                     )
-                    _check_legends_for_module(
+                    missing_legends = _check_legends_for_module(
                         module_path=module_path,
                         module=module,
                         previous_figures=previous_figures,
+                        fail_on_missing_legends=True,
                         legend_status=step1_legend_status,
                     )
+                    if missing_legends:
+                        _register_status(
+                            status_map,
+                            step=step,
+                            module_path=module_path,
+                            status="FAIL",
+                            message="légende absente: " + "; ".join(missing_legends),
+                        )
+                        continue
                     _register_status(
                         status_map,
                         step=step,
@@ -1885,12 +1912,22 @@ def main(argv: list[str] | None = None) -> None:
                     post_args.get(module_path, []),
                     close_figures=False,
                 )
-                _check_legends_for_module(
+                missing_legends = _check_legends_for_module(
                     module_path=module_path,
                     module=module,
                     previous_figures=previous_figures,
+                    fail_on_missing_legends=True,
                     legend_status=step1_legend_status,
                 )
+                if missing_legends:
+                    _register_status(
+                        status_map,
+                        step="post",
+                        module_path=module_path,
+                        status="FAIL",
+                        message="légende absente: " + "; ".join(missing_legends),
+                    )
+                    continue
                 _register_status(
                     status_map,
                     step="post",
