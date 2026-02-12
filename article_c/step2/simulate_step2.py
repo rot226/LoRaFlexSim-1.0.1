@@ -854,6 +854,45 @@ def _compute_successes_and_traffic(
     return successes_by_node, traffic_sent_by_node, transmission_count, approx_mode
 
 
+def _compute_mean_temporal_overlap(
+    node_windows: list[dict[str, object]],
+    airtime_by_sf: dict[int, float],
+) -> float:
+    intervals_by_bucket: dict[tuple[int, int], list[tuple[float, float]]] = {}
+    total_transmissions = 0
+    for node_window in node_windows:
+        sf_value = int(node_window["sf"])
+        airtime = float(airtime_by_sf[sf_value])
+        tx_starts = [float(value) for value in node_window.get("tx_starts", [])]
+        tx_channels = [int(value) for value in node_window.get("tx_channels", [])]
+        for start_time, channel_id in zip(tx_starts, tx_channels):
+            bucket = (channel_id, sf_value)
+            intervals_by_bucket.setdefault(bucket, []).append(
+                (start_time, start_time + airtime)
+            )
+            total_transmissions += 1
+    if total_transmissions <= 0:
+        return 0.0
+    overlapping_transmissions = 0
+    for intervals in intervals_by_bucket.values():
+        if len(intervals) <= 1:
+            continue
+        sorted_intervals = sorted(intervals, key=lambda item: item[0])
+        active_end = sorted_intervals[0][1]
+        active_has_overlap = False
+        for start_time, end_time in sorted_intervals[1:]:
+            if start_time < active_end:
+                if not active_has_overlap:
+                    overlapping_transmissions += 1
+                    active_has_overlap = True
+                overlapping_transmissions += 1
+                active_end = max(active_end, end_time)
+            else:
+                active_end = end_time
+                active_has_overlap = False
+    return overlapping_transmissions / total_transmissions
+
+
 def _summarize_values(values: list[float]) -> tuple[float, float, float]:
     if not values:
         return 0.0, 0.0, 0.0
@@ -2902,6 +2941,10 @@ def run_simulation(
             energy_success_max = (
                 max(energy_success_values) if energy_success_values else 0.0
             )
+            mean_temporal_overlap = _compute_mean_temporal_overlap(
+                node_windows,
+                airtime_by_sf,
+            )
             for entry in node_metrics:
                 node_window = entry["node_window"]
                 node_id = int(entry["node_id"])
@@ -2992,6 +3035,7 @@ def run_simulation(
                     "ratio_successes_after_collisions": ratio_after_collisions,
                     "ratio_successes_after_congestion": ratio_after_congestion,
                     "ratio_successes_after_link": ratio_after_link,
+                    "mean_temporal_overlap": mean_temporal_overlap,
                     "losses_collisions": losses_collisions,
                     "losses_congestion": losses_congestion,
                     "losses_link_quality": losses_link_quality,
@@ -3632,6 +3676,10 @@ def run_simulation(
             energy_success_max = (
                 max(energy_success_values) if energy_success_values else 0.0
             )
+            mean_temporal_overlap = _compute_mean_temporal_overlap(
+                node_windows,
+                airtime_by_sf,
+            )
             for entry in node_metrics:
                 node_window = entry["node_window"]
                 node_id = int(entry["node_id"])
@@ -3722,6 +3770,7 @@ def run_simulation(
                     "ratio_successes_after_collisions": ratio_after_collisions,
                     "ratio_successes_after_congestion": ratio_after_congestion,
                     "ratio_successes_after_link": ratio_after_link,
+                    "mean_temporal_overlap": mean_temporal_overlap,
                     "losses_collisions": losses_collisions,
                     "losses_congestion": losses_congestion,
                     "losses_link_quality": losses_link_quality,

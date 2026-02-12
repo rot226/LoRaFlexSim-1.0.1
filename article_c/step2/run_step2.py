@@ -1400,6 +1400,167 @@ def _write_step2_diagnostics_exports(
         )
     write_rows(output_dir / "snir_distribution_by_sf.csv", snir_header, snir_rows)
 
+    def _min_mean_max(values: list[float]) -> tuple[float, float, float]:
+        if not values:
+            return 0.0, 0.0, 0.0
+        return min(values), sum(values) / len(values), max(values)
+
+    rx_requested_by_size: dict[int, list[float]] = defaultdict(list)
+    rx_effective_by_size: dict[int, list[float]] = defaultdict(list)
+    overlap_by_size: dict[int, list[float]] = defaultdict(list)
+    snir_by_size_sf: dict[int, dict[int, list[float]]] = defaultdict(lambda: defaultdict(list))
+    losses_by_size: dict[int, dict[str, int]] = defaultdict(
+        lambda: {"collisions": 0, "congestion": 0, "link_quality": 0}
+    )
+    loss_keys_seen_by_size: dict[int, set[tuple[object, object, object]]] = defaultdict(set)
+
+    for row in raw_rows:
+        if str(row.get("cluster", "")) != "all":
+            continue
+        size_raw = row.get("network_size", row.get("density"))
+        try:
+            size = int(float(size_raw))
+        except (TypeError, ValueError):
+            continue
+
+        requested_raw = row.get("rx_power_dbm_requested")
+        if requested_raw not in (None, ""):
+            try:
+                rx_requested_by_size[size].append(float(requested_raw))
+            except (TypeError, ValueError):
+                pass
+
+        effective_raw = row.get("rx_power_dbm_effective", row.get("rx_power_dbm"))
+        if effective_raw not in (None, ""):
+            try:
+                rx_effective_by_size[size].append(float(effective_raw))
+            except (TypeError, ValueError):
+                pass
+
+        overlap_raw = row.get("mean_temporal_overlap")
+        if overlap_raw not in (None, ""):
+            try:
+                overlap_by_size[size].append(float(overlap_raw))
+            except (TypeError, ValueError):
+                pass
+
+        if snir_column:
+            sf_raw = row.get("sf")
+            snir_raw = row.get(snir_column)
+            if sf_raw not in (None, "") and snir_raw not in (None, ""):
+                try:
+                    sf_value = int(float(sf_raw))
+                    snir_by_size_sf[size][sf_value].append(float(snir_raw))
+                except (TypeError, ValueError):
+                    pass
+
+        loss_key = (row.get("replication"), row.get("algo"), row.get("round"))
+        if loss_key in loss_keys_seen_by_size[size]:
+            continue
+        loss_keys_seen_by_size[size].add(loss_key)
+        for cause, key in (
+            ("collisions", "losses_collisions"),
+            ("congestion", "losses_congestion"),
+            ("link_quality", "losses_link_quality"),
+        ):
+            try:
+                losses_by_size[size][cause] += int(float(row.get(key, 0) or 0))
+            except (TypeError, ValueError):
+                continue
+
+    diagnostics_dedicated_header = [
+        "network_size",
+        "sf",
+        "snir_metric",
+        "snir_min",
+        "snir_mean",
+        "snir_max",
+        "rx_power_dbm_requested_min",
+        "rx_power_dbm_requested_mean",
+        "rx_power_dbm_requested_max",
+        "rx_power_dbm_effective_min",
+        "rx_power_dbm_effective_mean",
+        "rx_power_dbm_effective_max",
+        "losses_collisions",
+        "losses_congestion",
+        "losses_link_quality",
+        "losses_collisions_ratio",
+        "losses_congestion_ratio",
+        "losses_link_quality_ratio",
+        "losses_dominant_cause",
+        "mean_temporal_overlap",
+    ]
+    diagnostics_dedicated_rows: list[list[object]] = []
+    all_sizes = sorted(
+        set(per_size_diagnostics)
+        | set(rx_requested_by_size)
+        | set(rx_effective_by_size)
+        | set(snir_by_size_sf)
+        | set(losses_by_size)
+        | set(overlap_by_size)
+    )
+    for size in all_sizes:
+        req_min, req_mean, req_max = _min_mean_max(rx_requested_by_size.get(size, []))
+        eff_min, eff_mean, eff_max = _min_mean_max(rx_effective_by_size.get(size, []))
+        overlap_values = overlap_by_size.get(size, [])
+        mean_temporal_overlap = (
+            sum(overlap_values) / len(overlap_values) if overlap_values else 0.0
+        )
+        losses = losses_by_size.get(
+            size,
+            {"collisions": 0, "congestion": 0, "link_quality": 0},
+        )
+        total_losses = sum(losses.values())
+        collisions_ratio = (
+            losses["collisions"] / total_losses if total_losses > 0 else 0.0
+        )
+        congestion_ratio = (
+            losses["congestion"] / total_losses if total_losses > 0 else 0.0
+        )
+        link_quality_ratio = (
+            losses["link_quality"] / total_losses if total_losses > 0 else 0.0
+        )
+        dominant_cause = _dominant_loss_cause(
+            losses["collisions"],
+            losses["congestion"],
+            losses["link_quality"],
+        )
+        sf_values = sorted(snir_by_size_sf.get(size, {}))
+        if not sf_values:
+            sf_values = [-1]
+        for sf_value in sf_values:
+            snir_values = snir_by_size_sf.get(size, {}).get(sf_value, []) if sf_value >= 0 else []
+            snir_min, snir_mean, snir_max = _min_mean_max(snir_values)
+            diagnostics_dedicated_rows.append(
+                [
+                    size,
+                    "all" if sf_value < 0 else sf_value,
+                    snir_column,
+                    round(snir_min, 6),
+                    round(snir_mean, 6),
+                    round(snir_max, 6),
+                    round(req_min, 6),
+                    round(req_mean, 6),
+                    round(req_max, 6),
+                    round(eff_min, 6),
+                    round(eff_mean, 6),
+                    round(eff_max, 6),
+                    int(losses["collisions"]),
+                    int(losses["congestion"]),
+                    int(losses["link_quality"]),
+                    round(collisions_ratio, 6),
+                    round(congestion_ratio, 6),
+                    round(link_quality_ratio, 6),
+                    dominant_cause,
+                    round(mean_temporal_overlap, 6),
+                ]
+            )
+    write_rows(
+        output_dir / "diagnostics_by_size.csv",
+        diagnostics_dedicated_header,
+        diagnostics_dedicated_rows,
+    )
+
 
 def _detect_low_success_first_size(
     density: int,
