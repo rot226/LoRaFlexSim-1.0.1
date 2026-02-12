@@ -161,14 +161,13 @@ def _plot(agg: pd.DataFrame, sizes: list[int]) -> plt.Figure:
             )
             ax.fill_between(rounds, mean - ci95, mean + ci95, color=color, alpha=0.18)
 
-        ax.set_title(f"N = {size} nœuds")
+        ax.set_ylabel(f"Reward moyen — N={size} nœuds")
         ax.grid(True, linestyle=":", alpha=0.35)
         ax.set_xlabel("Round")
 
     for ax in axes_list[len(sizes) :]:
         ax.axis("off")
 
-    axes_list[0].set_ylabel("Récompense moyenne")
     handles, labels = axes_list[0].get_legend_handles_labels()
     if handles:
         fig.legend(handles, labels, loc="upper center", ncol=min(4, len(labels)), frameon=True)

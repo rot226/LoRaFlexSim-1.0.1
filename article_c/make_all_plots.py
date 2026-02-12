@@ -591,6 +591,48 @@ def _validate_plot_modules_use_save_figure() -> dict[str, str]:
     return missing
 
 
+
+
+def _validate_plot_modules_no_titles() -> dict[str, str]:
+    violations: dict[str, str] = {}
+    scoped_modules = [*PLOT_MODULES["step1"], *PLOT_MODULES["step2"], "article_c.reproduce_author_results"]
+    for module_path in scoped_modules:
+        spec = find_spec(module_path)
+        if spec is None or spec.origin is None:
+            violations[module_path] = "module introuvable"
+            continue
+        source_path = Path(spec.origin)
+        try:
+            source = source_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            violations[module_path] = f"lecture impossible: {exc}"
+            continue
+        try:
+            module_ast = ast.parse(source)
+        except SyntaxError as exc:
+            violations[module_path] = f"analyse AST impossible: {exc}"
+            continue
+
+        forbidden_lines: list[int] = []
+        for node in ast.walk(module_ast):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr in {"set_title", "suptitle"}:
+                forbidden_lines.append(getattr(node, "lineno", -1))
+            elif isinstance(func, ast.Name) and func.id == "suptitle":
+                forbidden_lines.append(getattr(node, "lineno", -1))
+        if forbidden_lines:
+            lines = ", ".join(str(line) for line in sorted({line for line in forbidden_lines if line > 0}))
+            violations[module_path] = f"usage interdit de set_title/suptitle (lignes: {lines})"
+
+    if violations:
+        print(
+            "ERREUR: titres détectés dans des modules interdits (Step1/Step2/reproduction):\n"
+            + "\n".join(f"- {module}: {reason}" for module, reason in violations.items())
+        )
+    return violations
+
 def _ast_int(node: ast.AST, default: int) -> int:
     if isinstance(node, ast.Constant) and isinstance(node.value, int):
         return int(node.value)
@@ -1431,6 +1473,7 @@ def main(argv: list[str] | None = None) -> None:
     status_map: dict[str, PlotStatus] = {}
     step1_legend_status: dict[str, bool] = {}
     invalid_modules = _validate_plot_modules_use_save_figure()
+    invalid_modules.update(_validate_plot_modules_no_titles())
     _validate_step2_plot_module_registry()
     if invalid_modules:
         for step, module_paths in PLOT_MODULES.items():

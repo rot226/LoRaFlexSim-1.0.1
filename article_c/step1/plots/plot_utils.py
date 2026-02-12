@@ -8,7 +8,6 @@ from collections.abc import Iterable
 import matplotlib.pyplot as plt
 
 from article_c.common.plot_helpers import (
-    apply_suptitle,
     apply_figure_layout,
     deduplicate_legend_entries,
     fallback_legend_handles,
@@ -16,7 +15,6 @@ from article_c.common.plot_helpers import (
     legend_ncols,
     add_global_legend,
     place_adaptive_legend,
-    suptitle_y_from_top,
 )
 from article_c.common.plot_style import FIGURE_MARGINS, LEGEND_STYLE
 from article_c.common.plot_style import legend_bbox_to_anchor
@@ -48,7 +46,7 @@ def configure_figure(
     enable_suptitle: bool = False,
     wspace: float | None = None,
 ) -> tuple[str, int]:
-    """Configure le titre, la légende et les marges de la figure.
+    """Configure la légende et les marges de la figure (sans titre).
 
     legend_loc doit valoir "above" (légende au-dessus) ou "right" (à droite).
     """
@@ -154,10 +152,5 @@ def configure_figure(
             if wspace is not None:
                 margins = {**margins, "wspace": wspace}
             apply_figure_layout(fig, margins=margins)
-    apply_suptitle(
-        fig,
-        title,
-        enable_suptitle=enable_suptitle,
-        y=suptitle_y_from_top(fig),
-    )
+    _ = (title, enable_suptitle)
     return final_legend_loc, legend_rows

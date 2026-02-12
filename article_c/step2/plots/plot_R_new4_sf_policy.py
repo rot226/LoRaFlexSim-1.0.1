@@ -132,7 +132,6 @@ def _plot(df: pd.DataFrame) -> plt.Figure:
         ax_a.plot(subset["round"], subset["entropy"], linewidth=1.8, marker="o", markersize=3, label=f"N={size}")
 
     max_entropy = log2(len(SF_VALUES))
-    ax_a.set_title("A) Entropie de sélection SF")
     ax_a.set_xlabel("Round")
     ax_a.set_ylabel("Entropie (bits)")
     ax_a.set_ylim(0.0, max_entropy * 1.05)
@@ -158,7 +157,6 @@ def _plot(df: pd.DataFrame) -> plt.Figure:
         ax_b.set_xticks(x)
         ax_b.set_xticklabels([f"SF{sf}" for sf in sf_values])
 
-    ax_b.set_title("B) Distribution SF finale")
     ax_b.set_xlabel("Spreading Factor")
     ax_b.set_ylabel("Probabilité de sélection")
     ax_b.grid(True, axis="y", linestyle=":", alpha=0.35)
