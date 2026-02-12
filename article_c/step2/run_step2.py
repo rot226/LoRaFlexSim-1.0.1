@@ -1495,29 +1495,6 @@ def _load_raw_rows_for_snir_distribution(
 
 
 
-def _write_global_aggregates_from_nested(base_results_dir: Path) -> None:
-    by_size_dir = base_results_dir / BY_SIZE_DIRNAME
-    raw_paths = sorted(by_size_dir.glob("size_*/rep_*/raw_results.csv"))
-    if not raw_paths:
-        print(
-            "Post-traitement Step2 ignoré: aucun raw_results.csv détecté sous "
-            f"{by_size_dir / 'size_<N>/rep_<R>'}."
-        )
-        return
-
-    raw_rows: list[dict[str, object]] = []
-    for raw_path in raw_paths:
-        with raw_path.open("r", newline="", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            raw_rows.extend(dict(row) for row in reader)
-
-    write_simulation_results(base_results_dir, raw_rows)
-    print(
-        "Post-traitement Step2 terminé: aggregated_results.csv global régénéré "
-        "depuis by_size/."
-    )
-
-
 def _write_step2_diagnostics_exports(
     output_dir: Path,
     per_size_diagnostics: dict[int, dict[str, float]],
@@ -2700,7 +2677,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         print(f"Tailles simulées: {sizes_label}")
-    _write_global_aggregates_from_nested(base_results_dir)
     aggregated_path = base_results_dir / "aggregated_results.csv"
     if aggregated_path.exists():
         if args.plot_summary:

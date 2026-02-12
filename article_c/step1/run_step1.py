@@ -209,40 +209,6 @@ def _read_nested_sizes(output_dir: Path, replications: list[int]) -> set[int]:
     return sizes
 
 
-def _write_global_aggregates_from_nested(output_dir: Path) -> None:
-    by_size_dir = output_dir / BY_SIZE_DIRNAME
-    metric_paths = sorted(by_size_dir.glob("size_*/rep_*/raw_metrics.csv"))
-    packet_paths = sorted(by_size_dir.glob("size_*/rep_*/raw_packets.csv"))
-    if not metric_paths:
-        print(
-            "Post-traitement Step1 ignoré: aucun raw_metrics.csv détecté sous "
-            f"{by_size_dir / 'size_<N>/rep_<R>'}."
-        )
-        return
-
-    metric_rows: list[dict[str, object]] = []
-    packet_rows: list[dict[str, object]] = []
-    for metric_path in metric_paths:
-        with metric_path.open("r", newline="", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            metric_rows.extend(dict(row) for row in reader)
-    for packet_path in packet_paths:
-        with packet_path.open("r", newline="", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            packet_rows.extend(dict(row) for row in reader)
-
-    write_step1_results(
-        output_dir,
-        metric_rows,
-        packet_rows=packet_rows,
-        metric_rows=metric_rows,
-    )
-    print(
-        "Post-traitement Step1 terminé: aggregated_results.csv global régénéré "
-        "depuis by_size/."
-    )
-
-
 def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour l'étape 1."""
     parser = argparse.ArgumentParser(description="Exécute l'étape 1 de l'article C.")
@@ -1298,7 +1264,6 @@ def main(argv: list[str] | None = None) -> None:
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         print(f"Tailles simulées: {sizes_label}")
-    _write_global_aggregates_from_nested(output_dir)
     aggregated_path = output_dir / "aggregated_results.csv"
     if aggregated_path.exists():
         _step1_post_report(output_dir)
