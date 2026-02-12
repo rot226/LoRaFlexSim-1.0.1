@@ -480,8 +480,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _get_current_git_branch() -> str:
-    """Retourne le nom de la branche Git courante."""
+def _get_current_git_branch() -> str | None:
+    """Retourne le nom de la branche Git courante ou ``None`` si indisponible."""
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -489,31 +489,32 @@ def _get_current_git_branch() -> str:
             capture_output=True,
             text=True,
         )
-    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-        raise RuntimeError(
-            "Impossible de déterminer la branche Git courante. "
-            "Utilisez --allow-non-article-c pour bypass explicite."
-        ) from exc
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
     branch = result.stdout.strip()
     if not branch:
-        raise RuntimeError(
-            "Impossible de déterminer la branche Git courante. "
-            "Utilisez --allow-non-article-c pour bypass explicite."
-        )
+        return None
     return branch
 
 
 def _enforce_article_c_branch(allow_non_article_c: bool) -> None:
-    """Vérifie que la branche courante est `article_c` sauf bypass explicite."""
+    """Informe sur la branche courante sans bloquer l'exécution utilisateur."""
     if allow_non_article_c:
         return
     current_branch = _get_current_git_branch()
+    if current_branch is None:
+        print(
+            "AVERTISSEMENT: impossible de déterminer la branche Git courante "
+            "(archive ZIP, Git absent ou dépôt non initialisé). "
+            "Contrôle de branche ignoré."
+        )
+        return
     expected_branch = "article_c"
     if current_branch != expected_branch:
-        raise SystemExit(
-            "Erreur: cette commande doit être exécutée sur la branche Git "
-            f"'{expected_branch}' (branche courante: '{current_branch}'). "
-            "Relancez avec --allow-non-article-c pour bypass explicite."
+        print(
+            "AVERTISSEMENT: branche Git attendue 'article_c', "
+            f"branche détectée: '{current_branch}'. "
+            "Exécution poursuivie pour compatibilité locale/Windows."
         )
 
 

@@ -711,24 +711,31 @@ def _write_figures_manifest(export_formats: tuple[str, ...]) -> None:
                         "short_description": short_description,
                         "step": step,
                         "panel_count": panel_count,
+                        "exists": int(full_path.exists()),
                     }
                 )
                 if not full_path.exists():
                     missing_files.append(full_path)
-    if missing_files:
-        missing_preview = "\n".join(f"- {path}" for path in sorted(set(missing_files)))
-        raise FileNotFoundError(
-            "Fichiers de figures manquants pour le manifest:\n"
-            f"{missing_preview}"
-        )
     with MANIFEST_OUTPUT_PATH.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
             handle,
-            fieldnames=["filename", "metric", "short_description", "step", "panel_count"],
+            fieldnames=[
+                "filename",
+                "metric",
+                "short_description",
+                "step",
+                "panel_count",
+                "exists",
+            ],
         )
         writer.writeheader()
         writer.writerows(sorted(rows, key=lambda row: (str(row["step"]), str(row["filename"]))))
     print(f"Manifest des figures écrit: {MANIFEST_OUTPUT_PATH}")
+    if missing_files:
+        print(
+            "AVERTISSEMENT: certaines figures attendues sont absentes "
+            f"({len(sorted(set(missing_files)))}) ; voir la colonne 'exists' du manifest."
+        )
 
 
 def _validate_step2_plot_module_registry() -> list[str]:
