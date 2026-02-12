@@ -994,6 +994,8 @@ def _load_network_sizes_from_csvs(paths: list[Path]) -> list[int]:
     for path in paths:
         if not path.exists():
             raise FileNotFoundError(f"CSV introuvable: {path}")
+        resolved_path = path.resolve()
+        print(f"[network_sizes] Lecture du CSV: {resolved_path}")
         df = pd.read_csv(path)
         if "network_size" in df.columns:
             size_column = "network_size"
@@ -1004,11 +1006,45 @@ def _load_network_sizes_from_csvs(paths: list[Path]) -> list[int]:
                 f"Le CSV {path} doit contenir une colonne "
                 "'network_size' ou 'density'."
             )
-        sizes.update(
-            int(float(value))
-            for value in df[size_column].dropna().unique().tolist()
+        print(
+            "[network_sizes] Colonne utilisée: "
+            f"{size_column}"
+            + (" (fallback depuis density)" if size_column == "density" else "")
         )
-    return sorted(sizes)
+        raw_values = df[size_column].tolist()
+        non_null_series = df[size_column].dropna()
+        dropped_count = len(raw_values) - len(non_null_series)
+        print(
+            f"[network_sizes] dropna sur '{size_column}': "
+            f"{dropped_count} ligne(s) ignorée(s)."
+        )
+        unique_raw_values = sorted(
+            {str(value).strip() for value in non_null_series.tolist() if str(value).strip()}
+        )
+        raw_label = ", ".join(unique_raw_values) if unique_raw_values else "aucune"
+        print(f"[network_sizes] Tailles uniques brutes: {raw_label}")
+
+        cast_errors: list[str] = []
+        csv_sizes: set[int] = set()
+        for value in non_null_series.tolist():
+            try:
+                csv_sizes.add(int(float(value)))
+            except (TypeError, ValueError):
+                cast_errors.append(str(value))
+        if cast_errors:
+            errors_label = ", ".join(sorted(set(cast_errors)))
+            print(
+                "[network_sizes] Erreurs de cast vers int ignorées "
+                f"({len(cast_errors)} ligne(s)): {errors_label}"
+            )
+        final_csv_sizes = sorted(csv_sizes)
+        final_label = ", ".join(str(value) for value in final_csv_sizes) or "aucune"
+        print(f"[network_sizes] Tailles finales conservées pour ce CSV: {final_label}")
+        sizes.update(csv_sizes)
+    merged_sizes = sorted(sizes)
+    merged_label = ", ".join(str(value) for value in merged_sizes) or "aucune"
+    print(f"[network_sizes] Tailles finales agrégées: {merged_label}")
+    return merged_sizes
 
 
 def _suggest_regeneration_command(path: Path, expected_sizes: list[int]) -> str | None:
@@ -1074,6 +1110,15 @@ def _validate_plot_data(
     expected_sizes: list[int] | None,
     cached_data: dict[str, tuple[list[str], list[dict[str, str]]]],
 ) -> tuple[bool, str]:
+    def _log_filter(filter_name: str, before: int, after: int, detail: str = "") -> None:
+        suffix = f" ({detail})" if detail else ""
+        print(
+            f"[validate_plot_data] Filtre {filter_name}: "
+            f"{before} -> {after} ligne(s){suffix}."
+        )
+
+    print(f"[validate_plot_data] Module: {module_path}")
+    print(f"[validate_plot_data] CSV: {csv_path.resolve()}")
     for extra_name in requirements.extra_csv_names:
         extra_path = csv_path.parent / extra_name
         if not extra_path.exists():
@@ -1086,6 +1131,10 @@ def _validate_plot_data(
     if cache_key not in cached_data:
         cached_data[cache_key] = _load_csv_data(csv_path)
     fieldnames, rows = cached_data[cache_key]
+    print(
+        "[validate_plot_data] Colonnes disponibles: "
+        f"{', '.join(fieldnames) if fieldnames else 'aucune'}"
+    )
     if not fieldnames:
         print(
             "AVERTISSEMENT: "
@@ -1093,6 +1142,40 @@ def _validate_plot_data(
         )
         return False, "CSV vide"
     sizes = _extract_network_sizes(csv_path)
+    if "network_size" in fieldnames:
+        size_col = "network_size"
+    elif "density" in fieldnames:
+        size_col = "density"
+    else:
+        size_col = None
+    if size_col is None:
+        _log_filter("fallback taille", len(rows), len(rows), "aucune colonne network_size/density")
+    else:
+        fallback_note = "fallback density" if size_col == "density" else "network_size"
+        size_raw = [row.get(size_col) for row in rows]
+        raw_unique_sizes = sorted(
+            {str(value).strip() for value in size_raw if value not in (None, "") and str(value).strip()}
+        )
+        raw_sizes_label = ", ".join(raw_unique_sizes) if raw_unique_sizes else "aucune"
+        final_sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
+        print(f"[validate_plot_data] Colonne taille utilisée: {size_col} ({fallback_note})")
+        print(f"[validate_plot_data] Tailles uniques brutes: {raw_sizes_label}")
+        print(f"[validate_plot_data] Tailles finales: {final_sizes_label}")
+        dropped_empty = sum(1 for value in size_raw if value in (None, ""))
+        cast_errors = 0
+        for value in size_raw:
+            if value in (None, ""):
+                continue
+            try:
+                int(float(str(value)))
+            except (TypeError, ValueError):
+                cast_errors += 1
+        _log_filter(
+            "fallback taille",
+            len(rows),
+            len(rows) - dropped_empty - cast_errors,
+            f"colonne={size_col}, dropna={dropped_empty}, cast_errors={cast_errors}",
+        )
     if module_path in MIN_NETWORK_SIZES_PER_PLOT:
         min_network_sizes = MIN_NETWORK_SIZES_PER_PLOT[module_path]
     elif step == "step2":
@@ -1144,6 +1227,10 @@ def _validate_plot_data(
         snir_col = _pick_column(
             fieldnames, ("snir_mode", "snir_state", "snir", "with_snir")
         )
+        print(
+            "[validate_plot_data] Colonnes utilisées pour filtrage: "
+            f"algo={algo_col or 'absente'}, snir={snir_col or 'absente'}"
+        )
         if not algo_col or not snir_col:
             print(
                 "AVERTISSEMENT: "
@@ -1163,6 +1250,47 @@ def _validate_plot_data(
         }
         required_algos = requirements.required_algos or ()
         required_snir = requirements.required_snir or ()
+        if required_algos:
+            algo_filtered_rows = [
+                row for row in rows if _normalize_algo(row.get(algo_col)) in required_algos
+            ]
+        else:
+            algo_filtered_rows = list(rows)
+        if required_snir:
+            snir_filtered_rows = [
+                row
+                for row in algo_filtered_rows
+                if _normalize_snir(row.get(snir_col)) in required_snir
+            ]
+        else:
+            snir_filtered_rows = list(algo_filtered_rows)
+        cluster_col = _pick_column(fieldnames, ("cluster", "cluster_id", "cluster_index"))
+        if cluster_col:
+            cluster_filtered_rows = [
+                row
+                for row in snir_filtered_rows
+                if row.get(cluster_col) not in (None, "")
+            ]
+            _log_filter(
+                "cluster",
+                len(snir_filtered_rows),
+                len(cluster_filtered_rows),
+                f"colonne={cluster_col}",
+            )
+        else:
+            _log_filter("cluster", len(snir_filtered_rows), len(snir_filtered_rows), "non appliqué")
+        _log_filter(
+            "algo",
+            len(rows),
+            len(algo_filtered_rows),
+            f"requis={required_algos or 'aucun (pass-through)'}",
+        )
+        _log_filter(
+            "snir",
+            len(algo_filtered_rows),
+            len(snir_filtered_rows),
+            f"requis={required_snir or 'aucun (pass-through)'}",
+        )
         missing_algos = [
             algo for algo in required_algos if algo not in available_algos
         ]
