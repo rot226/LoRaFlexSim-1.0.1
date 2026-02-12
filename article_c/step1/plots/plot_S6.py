@@ -11,6 +11,7 @@ from matplotlib import ticker as mticker
 import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
+from article_c.common.plot_style import label_for
 from article_c.common.plot_helpers import (
     add_global_legend,
     apply_plot_style,
@@ -76,8 +77,8 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
         plot_metric_by_snir(ax, cluster_rows, metric_key)
-        ax.set_xlabel("Network size (nodes)")
-        ax.set_ylabel("PDR (prob.)")
+        ax.set_xlabel(label_for("x.network_size"))
+        ax.set_ylabel(label_for("y.pdr"))
         ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.set_xticks(network_sizes)

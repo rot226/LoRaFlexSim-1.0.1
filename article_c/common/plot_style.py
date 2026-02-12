@@ -108,6 +108,53 @@ BASE_RCPARAMS = {
     "savefig.dpi": MIN_EXPORT_DPI,
 }
 
+# Libellés EN centralisés (axes, métriques, légendes, clusters).
+LABELS_EN: dict[str, str] = {
+    # Axes
+    "x.network_size": "Network size (nodes)",
+    "x.density": "Density (nodes/km²)",
+    "y.pdr": "PDR (prob.)",
+    "y.outage": "Outage (prob.)",
+    "y.outage_raw": "Outage (raw, prob.)",
+    "y.received": "Rx frames (count, median, p10–p90)",
+    "y.energy_per_delivered_packet": "Energy per delivered packet",
+    # Métriques
+    "metric.pdr_mean": "PDR",
+    "metric.success_rate_mean": "Success rate",
+    "metric.success_rate": "Success rate",
+    "metric.outage_prob": "Outage",
+    "metric.received_mean": "Rx frames",
+    "metric.energy_per_delivered_packet": "Energy per delivered packet",
+    # Légendes
+    "legend.replication": "replication",
+    "legend.round": "round",
+    "legend.cluster": "Cluster",
+    # Clusters
+    "cluster.all": "All clusters",
+    "cluster.critical": "Critical",
+    "cluster.priority": "Priority",
+    "cluster.standard": "Standard",
+    "cluster.bulk": "Bulk",
+}
+
+
+def label_for(metric_or_key: object) -> str:
+    """Retourne un libellé EN centralisé pour une métrique/clé de tracé."""
+    key = str(metric_or_key or "").strip()
+    if not key:
+        return ""
+    if key in LABELS_EN:
+        return LABELS_EN[key]
+    if f"metric.{key}" in LABELS_EN:
+        return LABELS_EN[f"metric.{key}"]
+    if f"cluster.{key}" in LABELS_EN:
+        return LABELS_EN[f"cluster.{key}"]
+    if f"x.{key}" in LABELS_EN:
+        return LABELS_EN[f"x.{key}"]
+    if f"y.{key}" in LABELS_EN:
+        return LABELS_EN[f"y.{key}"]
+    return key.replace("_", " ").strip().title()
+
 
 def apply_base_rcparams() -> None:
     """Applique les rcParams homogènes pour les figures."""
