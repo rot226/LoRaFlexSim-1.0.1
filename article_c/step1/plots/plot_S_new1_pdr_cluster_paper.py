@@ -54,61 +54,54 @@ def _prepare_dataframe(rows: list[dict[str, object]]) -> pd.DataFrame:
 
 
 def _plot(df: pd.DataFrame) -> plt.Figure:
-    fig, axes = plt.subplots(
-        1,
-        len(SNIR_MODES),
-        figsize=resolve_ieee_figsize(len(SNIR_MODES)),
-        sharey=True,
-    )
-    if len(SNIR_MODES) == 1:
-        axes = [axes]
+    fig, ax = plt.subplots(1, 1, figsize=resolve_ieee_figsize(1))
 
-    for ax, snir_mode in zip(axes, SNIR_MODES, strict=False):
-        subset_snir = df[df["snir_mode"] == snir_mode]
+    for algo in ALGOS:
+        color = ALGO_COLORS.get(algo, "#4c4c4c")
+        marker = ALGO_MARKERS.get(algo, "o")
 
-        for algo in ALGOS:
-            subset_algo = subset_snir[subset_snir["algo_norm"] == algo]
+        for snir_mode in SNIR_MODES:
+            subset = df[(df["algo_norm"] == algo) & (df["snir_mode"] == snir_mode)]
             points = {
                 int(row.network_size): float(row.pdr_mean)
-                for row in subset_algo.itertuples(index=False)
+                for row in subset.itertuples(index=False)
             }
             if not points:
                 continue
 
             y_values = [points.get(size, float("nan")) for size in NETWORK_SIZES]
+            snir_label = SNIR_LABELS.get(snir_mode, snir_mode)
             ax.plot(
                 NETWORK_SIZES,
                 y_values,
-                label=algo_label(algo),
-                color=ALGO_COLORS.get(algo, "#4c4c4c"),
-                marker=ALGO_MARKERS.get(algo, "o"),
+                label=f"{algo_label(algo)} ({snir_label})",
+                color=color,
+                marker=marker,
                 linestyle=SNIR_LINESTYLES.get(snir_mode, "solid"),
                 linewidth=2.0,
                 markersize=6,
             )
 
-        for idx, target in enumerate(PDR_CLUSTER_TARGETS, start=1):
-            ax.axhline(
-                y=target,
-                color="red",
-                linestyle="--",
-                linewidth=1.3,
-                alpha=0.8,
-                label=f"Cible cluster C{idx} ({target:.2f})",
-            )
+    for idx, target in enumerate(PDR_CLUSTER_TARGETS, start=1):
+        ax.axhline(
+            y=target,
+            color="red",
+            linestyle=":",
+            linewidth=1.5,
+            alpha=0.9,
+            label=f"Cible PDR cluster C{idx} ({target:.2f})",
+        )
 
-        snir_label = SNIR_LABELS.get(snir_mode, snir_mode)
-        ax.set_xlabel("Network size (nodes)")
-        ax.set_xticks(NETWORK_SIZES)
-        ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-        ax.set_ylim(0.0, 1.0)
-        ax.set_ylabel(f"PDR (prob.) — {snir_label}")
-        ax.grid(True, linestyle=":", alpha=0.35)
+    ax.set_xlabel("Network size (nodes)")
+    ax.set_xticks(NETWORK_SIZES)
+    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
+    ax.set_ylim(0.0, 1.0)
+    ax.set_ylabel("PDR (prob.)")
+    ax.grid(True, linestyle=":", alpha=0.35)
 
-
-    handles, labels = axes[0].get_legend_handles_labels()
+    handles, labels = ax.get_legend_handles_labels()
     fig.legend(handles, labels, loc="center right", frameon=True)
-    fig.subplots_adjust(right=0.74, bottom=0.2)
+    fig.subplots_adjust(right=0.67, bottom=0.16)
     return fig
 
 
