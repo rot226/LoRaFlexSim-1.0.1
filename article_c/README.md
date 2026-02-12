@@ -33,13 +33,37 @@ Ce dossier contient une structure minimale pour les scripts de l'article C.
 
 > Les scripts sont **100 % offline** : ils ne téléchargent rien et n'appellent aucun service réseau.
 
-### Installation minimale
+### Installation minimale (PowerShell + cmd)
+
+#### PowerShell
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r article_c/requirements.txt
 ```
+
+#### Invite de commandes (cmd)
+
+```cmd
+python -m venv .venv
+.venv\Scripts\activate.bat
+pip install -r article_c\requirements.txt
+```
+
+### Activation de l'environnement Python
+
+- **PowerShell** (session courante) : `\.venv\Scripts\Activate.ps1`
+- **cmd** : `.venv\Scripts\activate.bat`
+- **Désactivation** (PowerShell/cmd) : `deactivate`
+
+Si PowerShell bloque l'activation à cause de la politique d'exécution, lancez :
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+puis relancez `\.venv\Scripts\Activate.ps1`.
 
 ### Commandes CLI exactes
 
@@ -354,6 +378,17 @@ python -m article_c.make_all_plots
 
 Les résultats sont écrits dans `article_c/step*/results/` et les figures dans `article_c/step*/plots/output/`.
 
+### Chemins de sortie (résumé pratique)
+
+- **Étape 1 (CSV)** : `article_c/step1/results/`
+- **Étape 2 (CSV)** : `article_c/step2/results/`
+- **Plots étape 1** : `article_c/step1/plots/output/`
+- **Plots étape 2** : `article_c/step2/plots/output/`
+- **Plots comparaison papier** : `article_c/plots/output/`
+- **Pipeline compare all** : `article_c/plots/output/compare_all/`
+
+> Sous Windows, vous pouvez utiliser indifféremment `\` et `/` dans la plupart des commandes Python ; dans ce README, les chemins sont majoritairement indiqués avec `/` pour rester cohérents entre OS.
+
 ## Résultats
 
 Les scripts écrivent les CSV dans deux formats :
@@ -373,6 +408,73 @@ attendent des CSV **flat** (présence de `aggregated_results.csv` dans
 Si vous avez uniquement un format imbriqué, `make_all_plots.py` peut servir de
 **fallback d'agrégation** : il reconstitue les `aggregated_results.csv` flat à
 partir des sous-dossiers avant de lancer les figures.
+
+## End-to-end paper campaign (Windows 11)
+
+Objectif : enchaîner une campagne complète « simulation + figures papier + contrôles ».
+
+### 1) Exécution complète (preset article-c)
+
+```powershell
+python -m article_c.run_all --preset article-c --flat-output
+```
+
+### 2) Génération des figures IEEE-ready
+
+```powershell
+python -m article_c.make_all_plots --preset ieee-ready-no-titles
+python -m article_c.all_plot_compare --export-csv --output-dir article_c/plots/output/compare_all
+```
+
+### 3) Checks attendus après exécution
+
+- Présence des agrégats :
+  - `article_c/step1/results/aggregated_results.csv`
+  - `article_c/step2/results/aggregated_results.csv`
+- Présence des figures clés :
+  - `article_c/plots/output/fig4_der_by_cluster.png`
+  - `article_c/plots/output/fig5_der_by_load.png`
+  - `article_c/plots/output/fig7_traffic_sacrifice.png`
+  - `article_c/plots/output/fig8_throughput_clusters.png`
+- Présence de la comparaison SNIR :
+  - `article_c/plots/output/compare_with_snir/compare_pdr_snir.png`
+  - `article_c/plots/output/compare_with_snir/compare_der_snir.png`
+  - `article_c/plots/output/compare_with_snir/compare_throughput_snir.png`
+- Export CSV comparaison : dossier `article_c/plots/output/compare_all/csv/` non vide.
+
+### 4) Vérifications rapides (PowerShell)
+
+```powershell
+Test-Path article_c/step1/results/aggregated_results.csv
+Test-Path article_c/step2/results/aggregated_results.csv
+Get-ChildItem article_c/plots/output -Filter "fig*.png"
+Get-ChildItem article_c/plots/output/compare_with_snir -Filter "*.png"
+Get-ChildItem article_c/plots/output/compare_all/csv -Filter "*.csv"
+```
+
+## Troubleshooting courant (Windows 11)
+
+- **`ModuleNotFoundError: No module named 'article_c'`**
+  - Exécuter depuis la racine du dépôt.
+  - Préférer `python -m article_c.<module>` au lieu d'un chemin de script direct.
+- **Activation venv impossible en PowerShell**
+  - Utiliser `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` puis réactiver.
+- **Aucun plot généré**
+  - Vérifier la présence des CSV agrégés (`aggregated_results.csv`) dans `step1/results` et `step2/results`.
+  - Relancer avec `--flat-output`.
+- **Erreur d'encodage / caractères accentués illisibles**
+  - Forcer UTF-8 dans le terminal avant exécution :
+    - PowerShell : `$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)`
+    - cmd : `chcp 65001`
+- **Chemins avec espaces (ex. dossier utilisateur)**
+  - Entourer les chemins de guillemets (`"C:\Users\...\LoRaFlexSim-1.0.1"`).
+
+## Compatibilité chemins et encodage UTF-8
+
+- Les scripts Python du projet acceptent les chemins Windows natifs, mais la documentation utilise aussi le séparateur `/` pour la portabilité.
+- En automatisation (CI, scripts `.ps1`/`.bat`), gardez un style de chemin unique dans un même script pour éviter les ambiguïtés.
+- En cas d'export CSV destiné à Excel, conserver l'encodage UTF-8 (idéalement UTF-8 avec BOM si votre workflow Excel l'exige explicitement).
+- Pour les noms de fichiers et dossiers, éviter les caractères exotiques si les artefacts doivent transiter entre plusieurs outils Windows/Linux.
 
 ## Reproduction article QoS / Comparaison SNIR
 
