@@ -544,6 +544,7 @@ def _aggregate_learning_curve(
 ) -> list[dict[str, object]]:
     grouped: dict[tuple[int, int, str], list[float]] = defaultdict(list)
     density_by_key: dict[tuple[int, int, str], list[float]] = defaultdict(list)
+    clamp_rate_by_key: dict[tuple[int, int, str], list[float]] = defaultdict(list)
     for row in learning_curve_rows:
         network_size = int(row["network_size"])
         round_id = int(row["round"])
@@ -553,6 +554,9 @@ def _aggregate_learning_curve(
         density_value = row.get("density")
         if isinstance(density_value, (int, float)):
             density_by_key[(network_size, round_id, algo)].append(float(density_value))
+        clamp_rate_raw = row.get("traffic_coeff_clamp_rate")
+        if isinstance(clamp_rate_raw, (int, float)):
+            clamp_rate_by_key[(network_size, round_id, algo)].append(float(clamp_rate_raw))
     aggregated: list[dict[str, object]] = []
     for (network_size, round_id, algo), values in sorted(grouped.items()):
         avg = sum(values) / len(values) if values else 0.0
@@ -562,6 +566,8 @@ def _aggregate_learning_curve(
             if density_values
             else _compute_density(network_size)
         )
+        clamp_values = clamp_rate_by_key.get((network_size, round_id, algo), [])
+        clamp_rate = sum(clamp_values) / len(clamp_values) if clamp_values else 0.0
         aggregated.append(
             {
                 "network_size": network_size,
@@ -569,6 +575,7 @@ def _aggregate_learning_curve(
                 "round": round_id,
                 "algo": algo,
                 "avg_reward": round(avg, 6),
+                "traffic_coeff_clamp_rate": round(clamp_rate, 6),
             }
         )
     return aggregated
@@ -596,6 +603,7 @@ def _log_step2_key_csv_paths(output_dir: Path) -> None:
         "aggregates/snir_distribution_by_sf.csv",
         "aggregates/diagnostics_by_size.csv",
         "aggregates/diagnostics_by_size_algo_sf.csv",
+        "traffic_coeff_clamp_rate.csv",
     )
     for csv_name in key_csv_names:
         csv_path = output_dir / csv_name
@@ -821,6 +829,9 @@ def _summarize_post_simulation(
     rx_power_dbm_effective_sum = 0.0
     rx_power_dbm_effective_count = 0
     rx_power_dbm_clamped_count = 0
+    traffic_coeff_clamp_rate_sum = 0.0
+    traffic_coeff_clamp_rate_count = 0
+    traffic_coeff_clamp_alert_count = 0
     losses_collisions_total = 0
     losses_congestion_total = 0
     losses_link_quality_total = 0
@@ -884,6 +895,20 @@ def _summarize_post_simulation(
         )
         if clamp_flag:
             rx_power_dbm_clamped_count += 1
+        traffic_clamp_rate_raw = row.get("traffic_coeff_clamp_rate")
+        if traffic_clamp_rate_raw not in (None, ""):
+            try:
+                traffic_coeff_clamp_rate_sum += float(traffic_clamp_rate_raw)
+                traffic_coeff_clamp_rate_count += 1
+            except (TypeError, ValueError):
+                pass
+        traffic_clamp_alert_raw = row.get("traffic_coeff_clamp_alert_triggered")
+        if traffic_clamp_alert_raw not in (None, ""):
+            try:
+                if int(float(traffic_clamp_alert_raw)) != 0:
+                    traffic_coeff_clamp_alert_count += 1
+            except (TypeError, ValueError):
+                pass
         if reward <= 1e-9:
             reward_zero_total += 1
             if success_rate <= 1e-9:
@@ -948,6 +973,9 @@ def _summarize_post_simulation(
         "rx_power_dbm_effective_sum": rx_power_dbm_effective_sum,
         "rx_power_dbm_effective_count": rx_power_dbm_effective_count,
         "rx_power_dbm_clamped_count": rx_power_dbm_clamped_count,
+        "traffic_coeff_clamp_rate_sum": traffic_coeff_clamp_rate_sum,
+        "traffic_coeff_clamp_rate_count": traffic_coeff_clamp_rate_count,
+        "traffic_coeff_clamp_alert_count": traffic_coeff_clamp_alert_count,
         "losses_collisions_total": losses_collisions_total,
         "losses_congestion_total": losses_congestion_total,
         "losses_link_quality_total": losses_link_quality_total,
@@ -1622,6 +1650,7 @@ def _write_step2_diagnostics_exports(
         "collision_mean",
         "link_quality_mean",
         "reward_mean",
+        "traffic_coeff_clamp_rate_mean",
     ]
     diagnostics_values: list[list[object]] = []
     for size in sorted(per_size_diagnostics):
@@ -1632,6 +1661,9 @@ def _write_step2_diagnostics_exports(
         link_quality_mean = (
             link_quality_sum / link_quality_count if link_quality_count > 0 else 0.0
         )
+        clamp_count = int(stats.get("traffic_coeff_clamp_rate_count", 0))
+        clamp_sum = float(stats.get("traffic_coeff_clamp_rate_sum", 0.0))
+        clamp_mean = clamp_sum / clamp_count if clamp_count > 0 else 0.0
         diagnostics_values.append(
             [
                 size,
@@ -1639,6 +1671,7 @@ def _write_step2_diagnostics_exports(
                 round(float(diagnostics.get("collision_mean", 0.0)), 6),
                 round(link_quality_mean, 6),
                 round(float(diagnostics.get("reward_mean", 0.0)), 6),
+                round(clamp_mean, 6),
             ]
         )
     diagnostics_path = _ensure_csv_within_scope(
@@ -2285,6 +2318,9 @@ def _simulate_density(
                         traffic_coeff_clamp_min=float(config["traffic_coeff_clamp_min"]),
                         traffic_coeff_clamp_max=float(config["traffic_coeff_clamp_max"]),
                         traffic_coeff_clamp_enabled=bool(config["traffic_coeff_clamp_enabled"]),
+                        traffic_coeff_clamp_alert_threshold=float(
+                            config.get("traffic_coeff_clamp_alert_threshold", 0.45)
+                        ),
                         window_delay_enabled=bool(config["window_delay_enabled"]),
                         window_delay_range_s=float(config["window_delay_range_s"]),
                         shadowing_sigma_db=(
@@ -2521,6 +2557,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         "traffic_coeff_clamp_min": args.traffic_coeff_clamp_min,
         "traffic_coeff_clamp_max": args.traffic_coeff_clamp_max,
         "traffic_coeff_clamp_enabled": args.traffic_coeff_clamp_enabled,
+        "traffic_coeff_clamp_alert_threshold": 0.45,
         "window_delay_enabled": args.window_delay_enabled,
         "window_delay_range_s": args.window_delay_range_s,
         "reference_network_size": max(1, reference_network_size),
@@ -3001,6 +3038,32 @@ def main(argv: Sequence[str] | None = None) -> None:
                 learning_curve_header,
                 learning_curve_values,
             )
+        clamp_rate_header = [
+            "network_size",
+            "density",
+            "round",
+            "algo",
+            "traffic_coeff_clamp_rate",
+        ]
+        clamp_rate_values = [
+            [
+                row["network_size"],
+                row["density"],
+                row["round"],
+                row["algo"],
+                row.get("traffic_coeff_clamp_rate", 0.0),
+            ]
+            for row in learning_curve
+        ]
+        clamp_rate_path = _ensure_csv_within_scope(
+            base_results_dir / "traffic_coeff_clamp_rate.csv", base_results_dir
+        )
+        write_rows(clamp_rate_path, clamp_rate_header, clamp_rate_values)
+        if timestamp_dir is not None:
+            clamp_rate_timestamp_path = _ensure_csv_within_scope(
+                timestamp_dir / "traffic_coeff_clamp_rate.csv", base_results_dir
+            )
+            write_rows(clamp_rate_timestamp_path, clamp_rate_header, clamp_rate_values)
 
     aggregated_sizes = _read_nested_sizes(base_results_dir, replications)
     merge_stats = aggregate_results_by_size(

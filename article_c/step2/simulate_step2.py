@@ -389,6 +389,75 @@ def _traffic_coeff_variance_factor(network_size: int, reference_size: int) -> fl
     return _clamp_range(1.0 + 0.45 * (ratio - 1.0), 1.0, 2.2)
 
 
+def _soften_traffic_clamp_bounds(
+    clamp_min: float,
+    clamp_max: float,
+    *,
+    network_size: int,
+    reference_size: int,
+) -> tuple[float, float]:
+    ratio = max(0.2, network_size / max(reference_size, 1))
+    overload = max(0.0, ratio - 1.0)
+    softening = _clamp_range(0.10 + 0.10 * math.log1p(overload), 0.08, 0.28)
+    softened_min = max(0.1, clamp_min * (1.0 - softening))
+    softened_max = max(softened_min + 0.05, clamp_max * (1.0 + softening))
+    return softened_min, softened_max
+
+
+def _apply_traffic_coeff_clamp_with_alert(
+    *,
+    traffic_coeffs_raw: list[float],
+    clamp_enabled: bool,
+    clamp_min: float,
+    clamp_max: float,
+    clamp_alert_threshold: float,
+    max_adjust_attempts: int,
+    network_size: int,
+) -> tuple[list[float], float, int, float, float, bool]:
+    if not clamp_enabled:
+        return list(traffic_coeffs_raw), 0.0, 0, clamp_min, clamp_max, False
+    effective_min = clamp_min
+    effective_max = clamp_max
+    alert_triggered = False
+    for attempt in range(max(1, max_adjust_attempts) + 1):
+        flags = [
+            traffic_value < effective_min or traffic_value > effective_max
+            for traffic_value in traffic_coeffs_raw
+        ]
+        clamped_count = sum(1 for flag in flags if flag)
+        clamp_rate = clamped_count / max(len(flags), 1)
+        if clamp_rate <= clamp_alert_threshold:
+            return (
+                [
+                    _clamp_range(traffic_value, effective_min, effective_max)
+                    for traffic_value in traffic_coeffs_raw
+                ],
+                clamp_rate,
+                clamped_count,
+                effective_min,
+                effective_max,
+                alert_triggered,
+            )
+        alert_triggered = True
+        logger.warning(
+            "Alerte clamp traffic_coeff (taille=%s): %.1f%% > seuil %.1f%% "
+            "(tentative %s/%s). Ajustement automatique des bornes.",
+            network_size,
+            clamp_rate * 100.0,
+            clamp_alert_threshold * 100.0,
+            attempt,
+            max(1, max_adjust_attempts),
+        )
+        effective_min = max(0.1, effective_min * 0.92)
+        effective_max = max(effective_min + 0.05, effective_max * 1.08)
+    logger.warning(
+        "Alerte clamp persistante (taille=%s): clamp désactivé pour éviter "
+        "un biais excessif des coefficients de trafic.",
+        network_size,
+    )
+    return list(traffic_coeffs_raw), 0.0, 0, effective_min, effective_max, True
+
+
 def _shadowing_sigma_size_factor(network_size: int, reference_size: int) -> float:
     if reference_size <= 0:
         return 1.0
@@ -2129,6 +2198,7 @@ def run_simulation(
     traffic_coeff_clamp_min: float | None = None,
     traffic_coeff_clamp_max: float | None = None,
     traffic_coeff_clamp_enabled: bool | None = None,
+    traffic_coeff_clamp_alert_threshold: float | None = None,
     window_delay_enabled: bool | None = None,
     window_delay_range_s: float | None = None,
     shadowing_sigma_db: float | None = None,
@@ -2248,6 +2318,13 @@ def run_simulation(
         step2_defaults.traffic_coeff_clamp_enabled
         if traffic_coeff_clamp_enabled is None
         else traffic_coeff_clamp_enabled
+    )
+    traffic_coeff_clamp_alert_threshold_value = _clip(
+        float(traffic_coeff_clamp_alert_threshold)
+        if traffic_coeff_clamp_alert_threshold is not None
+        else 1.0,
+        0.0,
+        1.0,
     )
     if traffic_coeff_clamp_enabled is True and not step2_defaults.traffic_coeff_clamp_enabled:
         logger.warning(
@@ -2440,6 +2517,21 @@ def run_simulation(
             traffic_coeff_max_scaled,
             traffic_coeff_min_scaled,
         )
+    if (
+        traffic_coeff_clamp_enabled_value
+        and traffic_coeff_clamp_alert_threshold is not None
+        and traffic_coeff_clamp_min is None
+        and traffic_coeff_clamp_max is None
+    ):
+        (
+            traffic_coeff_clamp_min_value,
+            traffic_coeff_clamp_max_value,
+        ) = _soften_traffic_clamp_bounds(
+            float(traffic_coeff_clamp_min_value),
+            float(traffic_coeff_clamp_max_value),
+            network_size=n_nodes,
+            reference_size=reference_size,
+        )
     if debug_step2:
         logger.info(
             "Clamp traffic coeffs: enabled=%s min=%.3f max=%.3f",
@@ -2449,7 +2541,6 @@ def run_simulation(
         )
     traffic_coeffs = []
     traffic_coeffs_raw: list[float] = []
-    traffic_coeff_clamp_flags: list[bool] = []
     for node_id in range(n_nodes):
         traffic_value = (
             rng.uniform(traffic_coeff_min_scaled, traffic_coeff_max_scaled)
@@ -2460,35 +2551,22 @@ def run_simulation(
             traffic_size_factor * _cluster_traffic_factor(node_clusters[node_id], qos_clusters)
         )
         traffic_coeffs_raw.append(traffic_value)
-        if traffic_coeff_clamp_enabled_value:
-            traffic_coeff_clamp_flags.append(
-                traffic_value < traffic_coeff_clamp_min_value
-                or traffic_value > traffic_coeff_clamp_max_value
-            )
-        else:
-            traffic_coeff_clamp_flags.append(False)
-    if traffic_coeff_clamp_enabled_value:
-        clamped_count = sum(1 for flag in traffic_coeff_clamp_flags if flag)
-        clamp_share = clamped_count / max(len(traffic_coeff_clamp_flags), 1)
-        if clamp_share >= 0.8:
-            logger.warning(
-                "Clamping traffic_coeff ignoré (noeuds_clampes=%s/%s %.1f%%).",
-                clamped_count,
-                len(traffic_coeff_clamp_flags),
-                clamp_share * 100.0,
-            )
-            traffic_coeffs = list(traffic_coeffs_raw)
-        else:
-            traffic_coeffs = [
-                _clamp_range(
-                    traffic_value,
-                    traffic_coeff_clamp_min_value,
-                    traffic_coeff_clamp_max_value,
-                )
-                for traffic_value in traffic_coeffs_raw
-            ]
-    else:
-        traffic_coeffs = list(traffic_coeffs_raw)
+    (
+        traffic_coeffs,
+        traffic_coeff_clamp_rate,
+        traffic_coeff_clamped_count,
+        traffic_coeff_clamp_min_effective,
+        traffic_coeff_clamp_max_effective,
+        traffic_coeff_clamp_alert_triggered,
+    ) = _apply_traffic_coeff_clamp_with_alert(
+        traffic_coeffs_raw=traffic_coeffs_raw,
+        clamp_enabled=bool(traffic_coeff_clamp_enabled_value),
+        clamp_min=float(traffic_coeff_clamp_min_value),
+        clamp_max=float(traffic_coeff_clamp_max_value),
+        clamp_alert_threshold=traffic_coeff_clamp_alert_threshold_value,
+        max_adjust_attempts=2,
+        network_size=n_nodes,
+    )
     base_rate_multipliers = [rng.uniform(0.7, 1.3) for _ in range(n_nodes)]
 
     sf_values = list(SF_VALUES)
@@ -3236,6 +3314,13 @@ def run_simulation(
                     "reward": reward,
                     "rx_power_dbm": rx_power_dbm_effective,
                     "safe_profile_applied": bool(safe_profile),
+                    "traffic_coeff_clamp_rate": traffic_coeff_clamp_rate,
+                    "traffic_coeff_clamped_count": traffic_coeff_clamped_count,
+                    "traffic_coeff_clamp_min_effective": traffic_coeff_clamp_min_effective,
+                    "traffic_coeff_clamp_max_effective": traffic_coeff_clamp_max_effective,
+                    "traffic_coeff_clamp_alert_triggered": int(
+                        traffic_coeff_clamp_alert_triggered
+                    ),
                     **snir_meta,
                 }
                 if reward_components is not None:
@@ -3367,6 +3452,7 @@ def run_simulation(
                     "round": round_id,
                     "algo": algo_label,
                     "avg_reward": avg_reward,
+                    "traffic_coeff_clamp_rate": traffic_coeff_clamp_rate,
                 }
             )
             bandit.update(arm_index, avg_reward)
@@ -4000,6 +4086,13 @@ def run_simulation(
                     "reward": reward,
                     "rx_power_dbm": rx_power_dbm_effective,
                     "safe_profile_applied": bool(safe_profile),
+                    "traffic_coeff_clamp_rate": traffic_coeff_clamp_rate,
+                    "traffic_coeff_clamped_count": traffic_coeff_clamped_count,
+                    "traffic_coeff_clamp_min_effective": traffic_coeff_clamp_min_effective,
+                    "traffic_coeff_clamp_max_effective": traffic_coeff_clamp_max_effective,
+                    "traffic_coeff_clamp_alert_triggered": int(
+                        traffic_coeff_clamp_alert_triggered
+                    ),
                     **snir_meta,
                 }
                 if reward_components is not None:
@@ -4131,6 +4224,7 @@ def run_simulation(
                     "round": round_id,
                     "algo": algo_label,
                     "avg_reward": avg_reward,
+                    "traffic_coeff_clamp_rate": traffic_coeff_clamp_rate,
                 }
             )
     else:
