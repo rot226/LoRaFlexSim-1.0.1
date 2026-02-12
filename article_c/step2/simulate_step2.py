@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 _NO_CLAMP = False
 RX_POWER_DBM_MIN = -120.0
 RX_POWER_DBM_MAX = -70.0
-CAPTURE_POWER_DELTA_THRESHOLD_DB = 2.0
+CAPTURE_POWER_DELTA_THRESHOLD_DB = 0.5
 
 
 def _clip(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float:
@@ -108,7 +108,7 @@ def _compute_reward(
     reward_floor_base = 0.08
     latency_norm = _clip(latency_norm**1.35 * 1.08, 0.0, 1.0)
     energy_norm = _clip(energy_norm**1.35 * 1.08, 0.0, 1.0)
-    collision_norm = _clip(collision_norm**1.05, 0.0, 1.0)
+    collision_norm = _clip(0.78 * (collision_norm**0.9), 0.0, 1.0)
     energy_weight = weights.energy_weight * (1.0 + lambda_energy)
     total_weight = (
         weights.sf_weight
@@ -135,7 +135,7 @@ def _compute_reward(
     if traffic_sent > 0:
         traffic_factor = _clip(traffic_sent / (traffic_sent + 20.0), 0.0, 1.0)
     collision_penalty = (
-        (0.75 * lambda_collision)
+        (0.52 * lambda_collision)
         * weights.collision_weight
         * collision_norm
         * (0.7 + 0.3 * (1.0 - success_rate))
@@ -152,7 +152,7 @@ def _compute_reward(
             )
             collision_penalty = penalty_cap
     success_term = 0.4 * success_rate
-    success_penalty_cap = 1.15 * success_term
+    success_penalty_cap = 0.75 * success_term + 0.06 * weighted_quality
     if collision_penalty > success_penalty_cap:
         logger.info(
             "collision_penalty capped by success term (collision_penalty=%.4f cap=%.4f).",
@@ -715,28 +715,43 @@ def _compute_collision_successes(
                     interferers_dbm=interferer_powers_dbm,
                 )
                 sir_by_index[idx] = sir_db
+                effective_sir_threshold_db = capture_sir_threshold_db - 4.0
                 if (
                     signal_power_dbm >= capture_power_threshold_dbm
                     and signal_power_dbm
                     - max(interferer_powers_dbm, default=capture_power_threshold_dbm)
                     >= CAPTURE_POWER_DELTA_THRESHOLD_DB
-                    and sir_db >= capture_sir_threshold_db
+                    and sir_db >= effective_sir_threshold_db
                 ):
                     candidate_indices.append(idx)
             capture_gate = _clip(capture_probability, 0.0, 1.0)
-            boosted_capture_gate = _clip(0.2 + 0.8 * capture_gate, 0.0, 1.0)
+            boosted_capture_gate = _clip(0.35 + 0.65 * capture_gate, 0.0, 1.0)
             base_survival_prob = _clip(
-                (0.58 + 0.42 * boosted_capture_gate) / (group_size**0.14),
-                0.08,
-                0.98,
+                (0.78 + 0.22 * boosted_capture_gate) / (group_size**0.06),
+                0.22,
+                0.995,
             )
             survivors = [
                 idx for idx in candidate_indices if rng.random() < base_survival_prob
             ]
+            ranked_candidates = sorted(
+                candidate_indices,
+                key=lambda idx: (
+                    sir_by_index.get(idx, float("-inf")),
+                    signal_power_by_index[idx],
+                ),
+                reverse=True,
+            )
+            max_survivors = min(
+                len(indices) - 1,
+                max(1, int(round(len(indices) * (0.18 + 0.28 * boosted_capture_gate)))),
+            )
+            if survivors and len(survivors) > max_survivors:
+                survivors = ranked_candidates[:max_survivors]
             if (
                 not survivors
                 and candidate_indices
-                and rng.random() < max(0.35, boosted_capture_gate)
+                and rng.random() < max(0.65, boosted_capture_gate)
             ):
                 survivors = [
                     max(
@@ -744,6 +759,26 @@ def _compute_collision_successes(
                         key=lambda idx: (sir_by_index.get(idx, float("-inf")), signal_power_by_index[idx]),
                     )
                 ]
+            if not survivors and indices:
+                ranked_all = sorted(
+                    indices,
+                    key=lambda idx: (
+                        sir_by_index.get(idx, float("-inf")),
+                        signal_power_by_index.get(idx, capture_power_threshold_dbm),
+                    ),
+                    reverse=True,
+                )
+                fallback_gate = _clip(0.45 + 0.45 * boosted_capture_gate, 0.0, 0.95)
+                fallback_survivors = max(
+                    1,
+                    min(len(indices) - 1, int(round(len(indices) * (0.15 + 0.30 * boosted_capture_gate)))),
+                )
+                if rng.random() < fallback_gate:
+                    survivors = ranked_all[:fallback_survivors]
+            elif ranked_candidates and len(survivors) < max_survivors:
+                topup_count = max_survivors - len(survivors)
+                missing_best = [idx for idx in ranked_candidates if idx not in survivors]
+                survivors.extend(missing_best[:topup_count])
             collision_stats["capture_events"] += len(survivors)
             for idx in indices:
                 collided[idx] = idx not in survivors
