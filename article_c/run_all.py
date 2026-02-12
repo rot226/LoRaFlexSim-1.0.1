@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import json
 import subprocess
 import sys
 from importlib.util import find_spec
 from pathlib import Path
 from statistics import median
+from time import perf_counter
 
 if find_spec("article_c") is None:
     repo_root = Path(__file__).resolve().parents[1]
@@ -23,6 +26,28 @@ from article_c.common.utils import parse_network_size_list
 from article_c.step1.run_step1 import main as run_step1
 from article_c.step2.run_step2 import main as run_step2
 from article_c.validate_results import main as validate_results
+
+DEFAULT_REPLICATIONS = 10
+
+
+def _count_failed_runs(status_csv_path: Path, network_size: int) -> int:
+    """Compte les exécutions marquées `failed` pour une taille donnée."""
+    if not status_csv_path.exists():
+        return 0
+    failed = 0
+    with status_csv_path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            if str(row.get("status", "")).strip().lower() != "failed":
+                continue
+            size_value = row.get("network_size")
+            try:
+                row_size = int(float(str(size_value)))
+            except (TypeError, ValueError):
+                continue
+            if row_size == int(network_size):
+                failed += 1
+    return failed
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -699,21 +724,96 @@ def main(argv: list[str] | None = None) -> None:
         if args.network_sizes
         else list(DEFAULT_CONFIG.scenario.network_sizes)
     )
+    replications_total = (
+        int(args.replications)
+        if args.replications is not None
+        else DEFAULT_REPLICATIONS
+    )
+    step1_results_dir = (Path(__file__).resolve().parent / "step1" / "results").resolve()
+    step2_results_dir = (Path(__file__).resolve().parent / "step2" / "results").resolve()
+    campaign_summary_path = (Path(__file__).resolve().parent / "campaign_summary.json").resolve()
+    campaign_summary: dict[str, object] = {
+        "network_sizes": requested_sizes,
+        "replications_total": replications_total,
+        "total_elapsed_seconds": 0.0,
+        "sizes": [],
+        "output_paths": {
+            "step1_results": str(step1_results_dir),
+            "step2_results": str(step2_results_dir),
+        },
+    }
+    campaign_start = perf_counter()
     reference_network_size = int(round(median(requested_sizes)))
     args.reference_network_size = reference_network_size
     for size in requested_sizes:
         size_args = argparse.Namespace(**vars(args))
         size_args.network_sizes = [size]
+        size_summary: dict[str, object] = {
+            "network_size": size,
+            "replications_total": replications_total,
+            "failed": 0,
+            "elapsed_seconds": 0.0,
+            "step1": {
+                "status": "skipped" if size_args.skip_step1 else "pending",
+                "failed": 0,
+                "elapsed_seconds": 0.0,
+                "output_path": str(step1_results_dir),
+                "status_file": str(step1_results_dir / "run_status_step1.csv"),
+            },
+            "step2": {
+                "status": "skipped" if size_args.skip_step2 else "pending",
+                "failed": 0,
+                "elapsed_seconds": 0.0,
+                "output_path": str(step2_results_dir),
+                "status_file": str(step2_results_dir / "run_status_step2.csv"),
+            },
+        }
+        size_start = perf_counter()
         if not size_args.skip_step1:
+            step_start = perf_counter()
             run_step1(_build_step1_args(size_args))
+            step1_elapsed = perf_counter() - step_start
+            step1_failed = _count_failed_runs(step1_results_dir / "run_status_step1.csv", size)
+            size_summary["step1"] = {
+                **size_summary["step1"],
+                "status": "failed" if step1_failed > 0 else "ok",
+                "failed": step1_failed,
+                "elapsed_seconds": round(step1_elapsed, 3),
+            }
         if not size_args.skip_step2:
+            step_start = perf_counter()
             run_step2(_build_step2_args(size_args))
+            step2_elapsed = perf_counter() - step_start
+            step2_failed = _count_failed_runs(step2_results_dir / "run_status_step2.csv", size)
+            size_summary["step2"] = {
+                **size_summary["step2"],
+                "status": "failed" if step2_failed > 0 else "ok",
+                "failed": step2_failed,
+                "elapsed_seconds": round(step2_elapsed, 3),
+            }
+        size_summary["elapsed_seconds"] = round(perf_counter() - size_start, 3)
+        size_summary["failed"] = int(size_summary["step1"]["failed"]) + int(
+            size_summary["step2"]["failed"]
+        )
+        cast_sizes = campaign_summary["sizes"]
+        if isinstance(cast_sizes, list):
+            cast_sizes.append(size_summary)
         print(f"Résumé: taille de réseau {size} terminée.")
+    campaign_summary["total_elapsed_seconds"] = round(perf_counter() - campaign_start, 3)
     print("Validation des résultats (article C) en cours...")
     validation_args: list[str] = []
     if args.skip_step2:
         validation_args.append("--skip-step2")
     validation_code = validate_results(validation_args)
+    campaign_summary["validation"] = {
+        "status": "ok" if validation_code == 0 else "failed",
+        "exit_code": validation_code,
+    }
+    campaign_summary_path.write_text(
+        json.dumps(campaign_summary, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    print(f"Résumé de campagne écrit: {campaign_summary_path}")
     if validation_code != 0:
         raise SystemExit(validation_code)
 
