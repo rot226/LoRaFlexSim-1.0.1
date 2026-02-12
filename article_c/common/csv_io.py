@@ -29,6 +29,7 @@ SUM_KEYS = {"success", "failure"}
 DERIVED_SUFFIXES = ("_mean", "_std", "_count", "_ci95", "_p10", "_p50", "_p90")
 STEP1_EXPECTED_METRICS = ("sent", "received", "pdr")
 STEP2_EXPECTED_METRICS = ("reward", "success_rate")
+MERGE_KEYS = ("network_size", "algo", "snir_mode", "cluster", "replication")
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,81 @@ def atomic_write_csv(path: Path, header: list[str], rows: list[list[object]]) ->
                     writer = csv.writer(tmp_handle)
                     writer.writerow(header)
                     writer.writerows(rows)
+                    tmp_handle.flush()
+                    os.fsync(tmp_handle.fileno())
+                os.replace(tmp_path, path)
+            finally:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+
+
+def append_or_merge_csv(
+    path: Path,
+    header: list[str],
+    rows: list[list[object]],
+    dedupe_keys: tuple[str, ...],
+) -> None:
+    """Fusionne un CSV avec l'existant, puis réécrit atomiquement.
+
+    Étapes:
+    1. Lecture de l'existant si présent.
+    2. Normalisation du schéma (union des colonnes).
+    3. Concaténation + déduplication sur `dedupe_keys`.
+    4. Réécriture atomique du CSV fusionné.
+
+    Le verrouillage de fichier est conservé via un lock dédié `<path>.lock`.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(f"{path.name}.lock")
+    tmp_path = path.with_name(f"{path.name}.tmp")
+
+    incoming_rows = [
+        {column: row[index] if index < len(row) else "" for index, column in enumerate(header)}
+        for row in rows
+    ]
+
+    with lock_path.open("a+", newline="", encoding="utf-8") as lock_handle:
+        with _locked_handle(lock_handle):
+            existing_header: list[str] = []
+            existing_rows: list[dict[str, object]] = []
+            if path.exists():
+                with path.open("r", newline="", encoding="utf-8") as existing_handle:
+                    reader = csv.DictReader(existing_handle)
+                    if reader.fieldnames:
+                        existing_header = list(reader.fieldnames)
+                    for row in reader:
+                        existing_rows.append(dict(row))
+
+            merged_header: list[str] = []
+            for candidate_header in (existing_header, header):
+                for column in candidate_header:
+                    if column not in merged_header:
+                        merged_header.append(column)
+            if not merged_header:
+                merged_header = list(header)
+
+            for row in existing_rows:
+                for column in merged_header:
+                    row.setdefault(column, "")
+            for row in incoming_rows:
+                for column in merged_header:
+                    row.setdefault(column, "")
+
+            deduped_rows_by_key: dict[tuple[object, ...], dict[str, object]] = {}
+            for row in [*existing_rows, *incoming_rows]:
+                row_key = tuple(str(row.get(key, "")).strip() for key in dedupe_keys)
+                deduped_rows_by_key[row_key] = row
+
+            merged_rows = [
+                [row.get(column, "") for column in merged_header]
+                for row in deduped_rows_by_key.values()
+            ]
+
+            try:
+                with tmp_path.open("w", newline="", encoding="utf-8") as tmp_handle:
+                    writer = csv.writer(tmp_handle)
+                    writer.writerow(merged_header)
+                    writer.writerows(merged_rows)
                     tmp_handle.flush()
                     os.fsync(tmp_handle.fileno())
                 os.replace(tmp_path, path)
@@ -797,10 +873,11 @@ def write_step1_results(
     aggregated_header = (
         list(aggregated_rows[0].keys()) if aggregated_rows else list(BASE_GROUP_KEYS)
     )
-    atomic_write_csv(
+    append_or_merge_csv(
         aggregated_path,
         aggregated_header,
         [[row.get(key, "") for key in aggregated_header] for row in aggregated_rows],
+        dedupe_keys=MERGE_KEYS,
     )
     if intermediate_rows:
         has_round = any(row.get("round") not in (None, "") for row in intermediate_rows)
@@ -810,11 +887,13 @@ def write_step1_results(
             intermediate_name = "aggregated_results_by_replication.csv"
         intermediate_path = output_dir / intermediate_name
         intermediate_header = list(intermediate_rows[0].keys())
-        atomic_write_csv(
+        dedupe_keys = MERGE_KEYS + (("round",) if has_round else tuple())
+        append_or_merge_csv(
             intermediate_path,
             intermediate_header,
             [
                 [row.get(key, "") for key in intermediate_header]
                 for row in intermediate_rows
             ],
+            dedupe_keys=dedupe_keys,
         )
