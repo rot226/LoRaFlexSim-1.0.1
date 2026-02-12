@@ -82,7 +82,7 @@ def _plot_metric(
         rows,
         metric_key,
         x_key="network_size",
-        label="Énergie par succès",
+        label="Energy per success",
         min_value=0.0,
         expected_monotonic="nondecreasing",
         group_keys=("cluster", "algo", "snir_mode"),

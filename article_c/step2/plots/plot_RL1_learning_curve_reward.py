@@ -205,7 +205,7 @@ def _plot_learning_curve(
     ]
     warn_metric_checks(
         reward_values,
-        "Récompense moyenne",
+        "Mean reward",
     )
     metric_state = is_constant_metric(reward_values)
     if metric_state is not MetricStatus.OK:
@@ -239,7 +239,7 @@ def _plot_learning_curve(
                 values = [points[round_id] for round_id in rounds]
                 warn_metric_checks(
                     values,
-                    f"Récompense moyenne ({algo_label(algo)} - N={network_size})",
+                    f"Mean reward ({algo_label(algo)} - N={network_size})",
                     expected_monotonic="nondecreasing",
                 )
                 ax.plot(rounds, values, marker="o", label=algo)
@@ -254,7 +254,7 @@ def _plot_learning_curve(
                 label = f"{algo_label(algo)} - Taille {network_size}"
                 warn_metric_checks(
                     values,
-                    f"Récompense moyenne ({label})",
+                    f"Mean reward ({label})",
                     expected_monotonic="nondecreasing",
                 )
                 ax.plot(rounds, values, marker="o", label=label)

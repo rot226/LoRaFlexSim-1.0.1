@@ -43,6 +43,7 @@ from article_c.common.plot_helpers import (
     warn_if_insufficient_network_sizes,
     auto_figsize_for_traces,
 )
+from article_c.common.plotting_style import label_for
 from plot_defaults import (
     WIDE_SERIES_WSPACE,
 )
@@ -110,7 +111,7 @@ def _add_summary_plot(
             linestyle="None",
             color="#333333",
             markersize=5,
-            label="médiane",
+            label=label_for("y.median"),
         ),
         Line2D(
             [],
@@ -151,7 +152,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
         rows,
         metric_key,
         x_key="network_size",
-        label="Trames envoyées",
+        label="Tx frames",
         min_value=0.0,
         expected_monotonic="nondecreasing",
         group_keys=("algo", "snir_mode"),
@@ -238,7 +239,7 @@ def _plot_summary_metric(rows: list[dict[str, object]], metric_key: str) -> plt.
         rows,
         metric_key,
         x_key="network_size",
-        label="Trames envoyées",
+        label="Tx frames",
         min_value=0.0,
         expected_monotonic="nondecreasing",
         group_keys=("algo", "snir_mode"),
