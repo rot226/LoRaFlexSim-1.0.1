@@ -169,19 +169,35 @@ def append_or_merge_csv(
                     tmp_path.unlink()
 
 
-def _coerce_positive_network_size(value: object) -> float:
+def _coerce_positive_network_size(value: object) -> int:
     if value is None or value == "":
         raise AssertionError("network_size manquant dans les lignes raw.")
     try:
         size = float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError("network_size doit être numérique.") from exc
+    if not math.isfinite(size):
+        raise ValueError("network_size doit être une valeur finie.")
     if size == 0:
         logger.error("network_size == 0 avant écriture des résultats.")
         assert size != 0, "network_size ne doit pas être égal à 0."
     if size < 0:
         raise ValueError("network_size doit être strictement positif.")
-    return size
+    if not size.is_integer():
+        raise ValueError("network_size doit être un entier.")
+    return int(size)
+
+
+def _coerce_density(value: object) -> float:
+    try:
+        density = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("density doit être numérique.") from exc
+    if not math.isfinite(density):
+        raise ValueError("density doit être une valeur finie.")
+    if density < 0:
+        raise ValueError("density doit être positive.")
+    return float(density)
 
 
 def _parse_bool(value: object) -> bool | None:
@@ -531,6 +547,8 @@ def _aggregate_rows(
             row["network_size"] = row["density"]
         if row.get("network_size") not in (None, ""):
             row["network_size"] = _coerce_positive_network_size(row["network_size"])
+        if row.get("density") not in (None, ""):
+            row["density"] = _coerce_density(row["density"])
         group_key = tuple(row.get(key) for key in group_keys)
         groups[group_key].append(row)
 
@@ -552,6 +570,9 @@ def _aggregate_rows(
             )
         if aggregated_row.get("network_size") in (None, ""):
             raise AssertionError("network_size manquant dans les résultats agrégés.")
+        aggregated_row["network_size"] = _coerce_positive_network_size(
+            aggregated_row["network_size"]
+        )
         if aggregated_row.get("density") in (None, ""):
             density_values = [
                 row.get("density")
@@ -559,9 +580,15 @@ def _aggregate_rows(
                 if isinstance(row.get("density"), (int, float))
             ]
             if density_values:
-                aggregated_row["density"] = sum(density_values) / len(density_values)
+                aggregated_row["density"] = _coerce_density(
+                    sum(density_values) / len(density_values)
+                )
             elif not has_computed_density:
-                aggregated_row["density"] = aggregated_row.get("network_size")
+                aggregated_row["density"] = _coerce_density(
+                    aggregated_row.get("network_size")
+                )
+        elif aggregated_row.get("density") not in (None, ""):
+            aggregated_row["density"] = _coerce_density(aggregated_row["density"])
         for key in sorted(numeric_keys):
             values = [
                 row[key]
@@ -659,9 +686,11 @@ def write_simulation_results(
             elif expected_network_size is not None:
                 row["network_size"] = expected_network_size
         row_network_size = row.get("network_size")
-        _coerce_positive_network_size(row_network_size)
+        row["network_size"] = _coerce_positive_network_size(row_network_size)
         if row.get("density") in (None, "") and not has_computed_density:
-            row["density"] = row_network_size
+            row["density"] = _coerce_density(row["network_size"])
+        elif row.get("density") not in (None, ""):
+            row["density"] = _coerce_density(row["density"])
         row["cluster"] = _normalize_cluster(row.get("cluster"))
 
     if raw_rows:
@@ -726,12 +755,16 @@ def write_simulation_results(
     for row in aggregated_rows:
         if row.get("network_size") in (None, "") and row.get("density") not in (None, ""):
             row["network_size"] = row["density"]
+        if row.get("network_size") not in (None, ""):
+            row["network_size"] = _coerce_positive_network_size(row["network_size"])
         if (
             row.get("density") in (None, "")
             and row.get("network_size") not in (None, "")
             and not has_computed_density
         ):
-            row["density"] = row["network_size"]
+            row["density"] = _coerce_density(row["network_size"])
+        elif row.get("density") not in (None, ""):
+            row["density"] = _coerce_density(row["density"])
     aggregated_header = (
         list(aggregated_rows[0].keys()) if aggregated_rows else list(BASE_GROUP_KEYS)
     )
@@ -811,7 +844,9 @@ def write_step1_results(
             elif expected_network_size is not None:
                 row["network_size"] = expected_network_size
         row_network_size = row.get("network_size")
-        _coerce_positive_network_size(row_network_size)
+        row["network_size"] = _coerce_positive_network_size(row_network_size)
+        if row.get("density") not in (None, ""):
+            row["density"] = _coerce_density(row["density"])
 
     packet_keys = ("node_id", "packet_id", "sf_selected")
     metric_keys = ("sent", "received", "pdr")
