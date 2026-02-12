@@ -11,6 +11,7 @@ from matplotlib import ticker as mticker
 import pandas as pd
 
 from article_c.common.config import DEFAULT_CONFIG
+from article_c.common.plot_style import label_for
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
@@ -76,7 +77,7 @@ def _title_suffix(network_sizes: list[int]) -> str:
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
-    return {cluster: f"C{idx + 1}" for idx, cluster in enumerate(clusters)}
+    return {cluster: f"{label_for('legend.cluster')} {idx + 1}" for idx, cluster in enumerate(clusters)}
 
 
 def _normalize_algo_label(value: object) -> str:
@@ -201,6 +202,7 @@ def _plot_metric(
     algorithms = sorted({row["algo"] for row in rows})
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
+        ax.set_title(cluster_labels.get(cluster, label_for(cluster)))
         for algo in algorithms:
             points = {
                 int(row["network_size"]): row[metric_key]
@@ -221,8 +223,8 @@ def _plot_metric(
                 continue
             values = [points.get(size, float("nan")) for size in network_sizes]
             ax.plot(network_sizes, values, marker="o", label=_label_for_algo(str(algo)))
-        ax.set_xlabel("Network size (nodes)")
-        ax.set_ylabel("Outage (prob.)")
+        ax.set_xlabel(label_for("x.network_size"))
+        ax.set_ylabel(label_for("y.outage"))
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     clear_axis_legends(axes)
@@ -350,6 +352,7 @@ def _plot_raw_metric(
     algorithms = sorted({row["algo"] for row in rows})
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
+        ax.set_title(cluster_labels.get(cluster, label_for(cluster)))
         for algo in algorithms:
             algo_rows = [row for row in cluster_rows if row.get("algo") == algo]
             replications = sorted(
@@ -368,7 +371,7 @@ def _plot_raw_metric(
                 if not points:
                     continue
                 values = [points.get(size, float("nan")) for size in network_sizes]
-                label = f"{_label_for_algo(str(algo))} ({replication_key} {replication})"
+                label = f"{_label_for_algo(str(algo))} ({label_for(f'legend.{replication_key}')} {replication})"
                 ax.plot(
                     network_sizes,
                     values,
@@ -376,8 +379,8 @@ def _plot_raw_metric(
                     alpha=0.35,
                     label=label,
                 )
-        ax.set_xlabel("Network size (nodes)")
-        ax.set_ylabel("Outage (raw, prob.)")
+        ax.set_xlabel(label_for("x.network_size"))
+        ax.set_ylabel(label_for("y.outage_raw"))
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     clear_axis_legends(axes)

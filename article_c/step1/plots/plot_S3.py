@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
 
+from article_c.common.plot_style import label_for
 from article_c.common.plot_helpers import (
     place_adaptive_legend,
     apply_plot_style,
@@ -95,7 +96,7 @@ def _plot_metric(
         rows,
         metric_key,
         x_key="network_size",
-        label="Réceptions",
+        label=label_for("metric.received_mean"),
         min_value=0.0,
         expected_monotonic="nondecreasing",
         group_keys=("algo", "snir_mode"),
@@ -117,8 +118,8 @@ def _plot_metric(
     plot_metric_by_snir(ax, rows, metric_key)
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-    ax.set_xlabel("Network size (nodes)")
-    ax.set_ylabel("Rx frames (count, median, p10–p90)")
+    ax.set_xlabel(label_for("x.network_size"))
+    ax.set_ylabel(label_for("y.received"))
     configure_figure(
         fig,
         ax,
