@@ -28,6 +28,7 @@ from article_c.step2.run_step2 import main as run_step2
 from article_c.validate_results import main as validate_results
 
 DEFAULT_REPLICATIONS = 10
+STEP2_SUCCESS_RATE_MEAN_LOW_THRESHOLD = 0.20
 
 RUN_ALL_PRESETS: dict[str, dict[str, object]] = {
     "article-c": {
@@ -61,6 +62,64 @@ def _count_failed_runs(status_csv_path: Path, network_size: int) -> int:
             if row_size == int(network_size):
                 failed += 1
     return failed
+
+
+def _read_step2_success_rate_mean(results_dir: Path, network_size: int) -> float | None:
+    """Lit le success_rate moyen d'une taille depuis diagnostics_step2_by_size.csv."""
+    diagnostics_path = results_dir / "diagnostics_step2_by_size.csv"
+    if not diagnostics_path.exists():
+        return None
+    with diagnostics_path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            raw_size = row.get("network_size") or row.get("density")
+            if raw_size in (None, ""):
+                continue
+            try:
+                row_size = int(float(str(raw_size)))
+            except (TypeError, ValueError):
+                continue
+            if row_size != int(network_size):
+                continue
+            try:
+                return float(row.get("success_rate_mean", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def _build_step2_quality_summary(
+    results_dir: Path,
+    network_size: int,
+    failed_runs: int,
+) -> dict[str, object]:
+    """Évalue la qualité de simulation step2 (ok/low) et explique les raisons."""
+    reasons: list[str] = []
+    success_rate_mean = _read_step2_success_rate_mean(results_dir, network_size)
+    if failed_runs > 0:
+        reasons.append(
+            f"run_status_step2.csv contient {failed_runs} exécution(s) en échec pour la taille {network_size}."
+        )
+    if success_rate_mean is None:
+        reasons.append(
+            "Impossible de lire success_rate_mean dans diagnostics_step2_by_size.csv."
+        )
+    elif success_rate_mean < STEP2_SUCCESS_RATE_MEAN_LOW_THRESHOLD:
+        reasons.append(
+            "success_rate_mean "
+            f"{success_rate_mean:.4f} < seuil {STEP2_SUCCESS_RATE_MEAN_LOW_THRESHOLD:.2f}."
+        )
+
+    quality = "low" if reasons else "ok"
+    return {
+        "simulation_quality": quality,
+        "success_rate_mean": success_rate_mean,
+        "thresholds": {
+            "success_rate_mean_min": STEP2_SUCCESS_RATE_MEAN_LOW_THRESHOLD,
+            "failed_runs_max": 0,
+        },
+        "reasons": reasons,
+    }
 
 
 def _assert_cumulative_sizes(
@@ -848,6 +907,14 @@ def main(argv: list[str] | None = None) -> None:
     campaign_summary: dict[str, object] = {
         "network_sizes": requested_sizes,
         "replications_total": replications_total,
+        "simulation_quality": "ok",
+        "quality_thresholds": {
+            "step2": {
+                "success_rate_mean_min": STEP2_SUCCESS_RATE_MEAN_LOW_THRESHOLD,
+                "failed_runs_max": 0,
+            }
+        },
+        "quality_reasons": [],
         "total_elapsed_seconds": 0.0,
         "sizes": [],
         "output_paths": {
@@ -923,12 +990,24 @@ def main(argv: list[str] | None = None) -> None:
                 )
             step2_elapsed = perf_counter() - step_start
             step2_failed = _count_failed_runs(step2_results_dir / "run_status_step2.csv", size)
+            step2_quality = _build_step2_quality_summary(
+                step2_results_dir,
+                size,
+                step2_failed,
+            )
             size_summary["step2"] = {
                 **size_summary["step2"],
                 "status": "failed" if step2_failed > 0 else "ok",
                 "failed": step2_failed,
                 "elapsed_seconds": round(step2_elapsed, 3),
+                "quality": step2_quality,
             }
+            if str(step2_quality.get("simulation_quality")) == "low":
+                campaign_summary["simulation_quality"] = "low"
+                reasons = campaign_summary["quality_reasons"]
+                if isinstance(reasons, list):
+                    for reason in step2_quality.get("reasons", []):
+                        reasons.append(f"taille {size}: {reason}")
         size_summary["elapsed_seconds"] = round(perf_counter() - size_start, 3)
         size_summary["failed"] = int(size_summary["step1"]["failed"]) + int(
             size_summary["step2"]["failed"]
