@@ -954,55 +954,81 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
 
 def _build_step2_explicit_config(args: argparse.Namespace) -> dict[str, object]:
     """Construit une configuration Step2 autonome (sans lecture Step1)."""
-    opt = lambda name: getattr(args, name, None)
     return {
-        "reference_network_size": opt("reference_network_size"),
         "replications": args.replications,
         "seeds_base": args.seeds_base,
-        "timestamp": opt("timestamp"),
+        "timestamp": args.timestamp,
         "safe_profile": args.safe_profile,
         "auto_safe_profile": args.auto_safe_profile,
         "strict": args.strict,
         "allow_low_success_rate": args.allow_low_success_rate,
-        "snir_threshold_db": opt("snir_threshold_db"),
-        "snir_threshold_min_db": opt("snir_threshold_min_db"),
-        "snir_threshold_max_db": opt("snir_threshold_max_db"),
-        "noise_floor_dbm": opt("noise_floor_dbm"),
-        "traffic_mode": opt("traffic_mode"),
-        "jitter_range_s": opt("jitter_range_s"),
-        "window_duration_s": opt("window_duration_s"),
-        "traffic_coeff_min": opt("traffic_coeff_min"),
-        "traffic_coeff_max": opt("traffic_coeff_max"),
-        "traffic_coeff_enabled": opt("traffic_coeff_enabled"),
-        "traffic_coeff_scale": opt("traffic_coeff_scale"),
-        "capture_probability": opt("capture_probability"),
-        "congestion_coeff": opt("congestion_coeff"),
-        "congestion_coeff_base": opt("congestion_coeff_base"),
-        "congestion_coeff_growth": opt("congestion_coeff_growth"),
-        "congestion_coeff_max": opt("congestion_coeff_max"),
-        "network_load_min": opt("network_load_min"),
-        "network_load_max": opt("network_load_max"),
-        "collision_size_min": opt("collision_size_min"),
-        "collision_size_under_max": opt("collision_size_under_max"),
-        "collision_size_over_max": opt("collision_size_over_max"),
-        "collision_size_factor": opt("collision_size_factor"),
-        "max_penalty_ratio": opt("max_penalty_ratio"),
-        "traffic_coeff_clamp_min": opt("traffic_coeff_clamp_min"),
-        "traffic_coeff_clamp_max": opt("traffic_coeff_clamp_max"),
-        "traffic_coeff_clamp_enabled": opt("traffic_coeff_clamp_enabled"),
-        "window_delay_enabled": opt("window_delay_enabled"),
-        "window_delay_range_s": opt("window_delay_range_s"),
-        "reward_floor": opt("reward_floor"),
-        "zero_success_quality_bonus_factor": opt("zero_success_quality_bonus_factor"),
-        "floor_on_zero_success": opt("floor_on_zero_success"),
-        "rx_power_dbm": opt("rx_power_dbm"),
-        "shadowing_sigma_db": opt("shadowing_sigma_db"),
-        "debug_step2": opt("debug_step2"),
-        "reward_debug": opt("reward_debug"),
-        "reward_alert_level": opt("reward_alert_level"),
-        "flat_output": opt("flat_output"),
+        "snir_threshold_db": args.snir_threshold_db,
+        "snir_threshold_min_db": args.snir_threshold_min_db,
+        "snir_threshold_max_db": args.snir_threshold_max_db,
+        "noise_floor_dbm": args.noise_floor_dbm,
+        "traffic_mode": args.traffic_mode,
+        "jitter_range_s": args.jitter_range_s,
+        "window_duration_s": args.window_duration_s,
+        "traffic_coeff_min": args.traffic_coeff_min,
+        "traffic_coeff_max": args.traffic_coeff_max,
+        "traffic_coeff_enabled": args.traffic_coeff_enabled,
+        "traffic_coeff_scale": args.traffic_coeff_scale,
+        "capture_probability": args.capture_probability,
+        "congestion_coeff": args.congestion_coeff,
+        "congestion_coeff_base": args.congestion_coeff_base,
+        "congestion_coeff_growth": args.congestion_coeff_growth,
+        "congestion_coeff_max": args.congestion_coeff_max,
+        "network_load_min": args.network_load_min,
+        "network_load_max": args.network_load_max,
+        "collision_size_min": args.collision_size_min,
+        "collision_size_under_max": args.collision_size_under_max,
+        "collision_size_over_max": args.collision_size_over_max,
+        "collision_size_factor": args.collision_size_factor,
+        "traffic_coeff_clamp_min": args.traffic_coeff_clamp_min,
+        "traffic_coeff_clamp_max": args.traffic_coeff_clamp_max,
+        "traffic_coeff_clamp_enabled": args.traffic_coeff_clamp_enabled,
+        "window_delay_enabled": args.window_delay_enabled,
+        "window_delay_range_s": args.window_delay_range_s,
+        "reward_floor": args.reward_floor,
+        "floor_on_zero_success": args.floor_on_zero_success,
+        "flat_output": args.flat_output,
         "reset_status": getattr(args, "reset_status", False),
     }
+
+
+def _validate_step2_explicit_config_startup(
+    args: argparse.Namespace,
+    step2_explicit_config: dict[str, object],
+) -> None:
+    """Valide la config explicite Step2 et détecte les attributs manquants."""
+    explicit_keys = sorted(step2_explicit_config)
+    print("Step2: clés explicites construites = " + ", ".join(explicit_keys))
+
+    allowed_internal_keys = {"reset_status"}
+    missing_from_args = [
+        key
+        for key in explicit_keys
+        if key not in allowed_internal_keys and not hasattr(args, key)
+    ]
+    if missing_from_args:
+        raise RuntimeError(
+            "Step2: incohérence parser/config explicite, clés absentes du namespace CLI: "
+            f"{missing_from_args}"
+        )
+
+    probe_args = argparse.Namespace(**step2_explicit_config)
+    probe_args.network_sizes = []
+    try:
+        _build_step2_args(probe_args)
+    except AttributeError as exc:
+        raise RuntimeError(
+            "Step2: validation explicite échouée, un attribut attendu par "
+            f"_build_step2_args est manquant: {exc}"
+        ) from exc
+
+    print(
+        "Step2: validation explicite OK, aucune clé ne provoque d'AttributeError."
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -1073,6 +1099,7 @@ def main(argv: list[str] | None = None) -> None:
     reference_network_size = int(round(median(requested_sizes)))
     args.reference_network_size = reference_network_size
     step2_explicit_config = _build_step2_explicit_config(args)
+    _validate_step2_explicit_config_startup(args, step2_explicit_config)
     step2_explicit_config["flat_output"] = False
     step1_status_reset_pending = True
     step2_status_reset_pending = True
