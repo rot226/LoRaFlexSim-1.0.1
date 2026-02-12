@@ -740,6 +740,102 @@ def _extract_size_rep_from_path(path: Path) -> tuple[int, int] | None:
     return size_value, rep_value
 
 
+def aggregate_results_by_size(
+    results_dir: Path,
+    *,
+    write_global_aggregated: bool = False,
+    by_size_dirname: str = "by_size",
+) -> dict[str, int]:
+    """Consolide les `aggregated_results.csv` des réplications par taille.
+
+    Écrit, pour chaque dossier `size_<N>`:
+    - `results/by_size/size_<N>/aggregated_results.csv`
+
+    Et, si demandé, un fichier global:
+    - `results/aggregated_results.csv`
+    """
+
+    by_size_dir = results_dir / by_size_dirname
+    size_dirs = [path for path in sorted(by_size_dir.glob("size_*")) if path.is_dir()]
+    if not size_dirs:
+        return {
+            "size_count": 0,
+            "size_row_count": 0,
+            "global_row_count": 0,
+        }
+
+    all_rows_for_global: list[dict[str, str]] = []
+    total_size_rows = 0
+    size_count = 0
+
+    for size_dir in size_dirs:
+        rep_paths = sorted(size_dir.glob("rep_*/aggregated_results.csv"))
+        if not rep_paths:
+            continue
+
+        size_rows: list[dict[str, str]] = []
+        header_order: list[str] = []
+        seen_headers: set[str] = set()
+        for rep_path in rep_paths:
+            with rep_path.open("r", newline="", encoding="utf-8") as handle:
+                reader = csv.DictReader(handle)
+                fieldnames = [name for name in (reader.fieldnames or []) if name is not None]
+                for fieldname in fieldnames:
+                    if fieldname not in seen_headers:
+                        seen_headers.add(fieldname)
+                        header_order.append(fieldname)
+                for row in reader:
+                    if not row or all(value in (None, "") for value in row.values()):
+                        continue
+                    normalized_row = {
+                        key: "" if value is None else str(value)
+                        for key, value in row.items()
+                        if key is not None
+                    }
+                    normalized_row["source_size_dir"] = size_dir.name
+                    size_rows.append(normalized_row)
+
+        if not size_rows:
+            continue
+
+        if "source_size_dir" not in seen_headers:
+            header_order.append("source_size_dir")
+
+        atomic_write_csv(
+            size_dir / "aggregated_results.csv",
+            header_order,
+            [[row.get(column, "") for column in header_order] for row in size_rows],
+        )
+        size_count += 1
+        total_size_rows += len(size_rows)
+        all_rows_for_global.extend(size_rows)
+
+    global_count = 0
+    if write_global_aggregated and all_rows_for_global:
+        global_header: list[str] = []
+        seen_columns: set[str] = set()
+        for row in all_rows_for_global:
+            for column in row.keys():
+                if column not in seen_columns:
+                    seen_columns.add(column)
+                    global_header.append(column)
+        atomic_write_csv(
+            results_dir / "aggregated_results.csv",
+            global_header,
+            [
+                [row.get(column, "") for column in global_header]
+                for row in all_rows_for_global
+            ],
+        )
+        global_count = len(all_rows_for_global)
+
+    return {
+        "size_count": size_count,
+        "size_row_count": total_size_rows,
+        "global_row_count": global_count,
+    }
+
+
 def _find_run_status_path(output_dir: Path, step_label: str) -> Path:
     filename = f"run_status_{step_label.lower()}.csv"
     for candidate in [output_dir, *output_dir.parents]:

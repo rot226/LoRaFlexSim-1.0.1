@@ -111,6 +111,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Génère un plot de synthèse avec barres d'erreur.",
     )
     parser.add_argument(
+        "--global-aggregated",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Génère aussi results/aggregated_results.csv en concaténant "
+            "les size_<N>/aggregated_results.csv."
+        ),
+    )
+    parser.add_argument(
         "--snir-threshold-db",
         type=float,
         default=snir_defaults.snir_threshold_db,
