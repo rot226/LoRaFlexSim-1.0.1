@@ -256,16 +256,33 @@ def _assert_cumulative_sizes_nested(
     expected_sizes_so_far: set[int],
     step_label: str,
 ) -> None:
-    """Valide le mode non-flat via les dossiers size_*/rep_* et leurs CSV."""
+    """Valide le mode non-flat via `by_size/size_*/rep_*` et leurs CSV."""
+
+    by_size_dir = base_results_dir / "by_size"
+    size_pattern = str(by_size_dir / "size_*")
+    print(f"{step_label}: scan des tailles via le pattern {size_pattern}")
+
+    size_dirs = sorted(path for path in by_size_dir.glob("size_*") if path.is_dir())
+    print(
+        f"{step_label}: dossiers size scannés: "
+        f"{[str(path.resolve()) for path in size_dirs]}"
+    )
+
     found_sizes: set[int] = set()
-    for size_dir in sorted(base_results_dir.glob("size_*")):
-        if not size_dir.is_dir():
-            continue
+    for size_dir in size_dirs:
         try:
             size_value = int(size_dir.name.split("size_", 1)[1])
         except (IndexError, ValueError):
             continue
+
+        rep_pattern = str(size_dir / "rep_*")
+        print(f"{step_label}: scan des réplications via le pattern {rep_pattern}")
         rep_dirs = sorted(path for path in size_dir.glob("rep_*") if path.is_dir())
+        print(
+            f"{step_label}: dossiers rep scannés pour size_{size_value}: "
+            f"{[str(path.resolve()) for path in rep_dirs]}"
+        )
+
         if not rep_dirs:
             continue
         for rep_dir in rep_dirs:
