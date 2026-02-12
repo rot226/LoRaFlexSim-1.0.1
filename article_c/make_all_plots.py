@@ -669,6 +669,20 @@ def _validate_plot_modules_no_titles() -> dict[str, str]:
         )
     return violations
 
+
+def _preflight_validate_plot_modules() -> dict[str, str]:
+    invalid_modules = _validate_plot_modules_use_save_figure()
+    invalid_modules.update(_validate_plot_modules_no_titles())
+    if invalid_modules:
+        print(
+            "ERREUR: modules de plots fautifs détectés avant exécution:\n"
+            + "\n".join(
+                f"- {module}: {reason}"
+                for module, reason in sorted(invalid_modules.items())
+            )
+        )
+    return invalid_modules
+
 def _ast_int(node: ast.AST, default: int) -> int:
     if isinstance(node, ast.Constant) and isinstance(node.value, int):
         return int(node.value)
@@ -1637,8 +1651,7 @@ def main(argv: list[str] | None = None) -> None:
     set_default_figure_clamp_enabled(not args.no_figure_clamp)
     status_map: dict[str, PlotStatus] = {}
     step1_legend_status: dict[str, bool] = {}
-    invalid_modules = _validate_plot_modules_use_save_figure()
-    invalid_modules.update(_validate_plot_modules_no_titles())
+    invalid_modules = _preflight_validate_plot_modules()
     _validate_step2_plot_module_registry()
     if invalid_modules:
         for step, module_paths in PLOT_MODULES.items():
