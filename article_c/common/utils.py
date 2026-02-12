@@ -130,7 +130,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--noise-floor-dbm",
         type=float,
         default=snir_defaults.noise_floor_dbm,
-        help="Bruit thermique (densité en dBm/Hz).",
+        help="Bruit thermique (densité en dBm/Hz) utilisé pour le calcul SNIR.",
+    )
+    parser.add_argument(
+        "--rx-power-dbm",
+        type=float,
+        default=-100.0,
+        help=(
+            "Puissance reçue moyenne (dBm) utilisée dans le modèle radio "
+            "de l'étape 2."
+        ),
     )
     parser.add_argument(
         "--traffic-mode",
