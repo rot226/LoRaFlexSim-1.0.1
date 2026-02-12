@@ -56,6 +56,7 @@ RX_POWER_DBM_MAX = -70.0
 AUTO_TUNING_SUCCESS_THRESHOLD = 0.10
 AUTO_TUNING_MAX_ATTEMPTS = 3
 AUTO_TUNING_MINI_EVAL_NETWORK_SIZE = 80
+AUTO_TUNING_MIN_MEASURABLE_GAIN = 1e-4
 SUCCESS_ZERO_RATIO_THRESHOLD = 0.95
 BY_SIZE_DIRNAME = "by_size"
 
@@ -85,6 +86,7 @@ def _soften_collision_config(config: dict[str, object]) -> None:
 def _extract_auto_tuning_params(config: dict[str, object]) -> dict[str, float]:
     return {
         "traffic_load_scale_step2": float(config["traffic_coeff_scale"]),
+        "capture_probability": float(config["capture_probability"]),
         "collision_size_min": float(config["collision_size_min"]),
         "collision_size_under_max": float(config["collision_size_under_max"]),
         "collision_size_over_max": float(config["collision_size_over_max"]),
@@ -93,9 +95,39 @@ def _extract_auto_tuning_params(config: dict[str, object]) -> dict[str, float]:
 
 def _sync_args_from_auto_tuned_config(args: object, config: dict[str, object]) -> None:
     args.traffic_coeff_scale = float(config["traffic_coeff_scale"])
+    args.capture_probability = float(config["capture_probability"])
     args.collision_size_min = float(config["collision_size_min"])
     args.collision_size_under_max = float(config["collision_size_under_max"])
     args.collision_size_over_max = float(config["collision_size_over_max"])
+
+
+def _apply_structured_auto_tuning_adjustments(
+    tuned_config: dict[str, object], attempt: int
+) -> None:
+    traffic_step_by_attempt = {1: 0.78, 2: 0.70}
+    capture_step_by_attempt = {1: 0.04, 2: 0.06}
+
+    traffic_factor = traffic_step_by_attempt.get(attempt, 0.65)
+    capture_boost = capture_step_by_attempt.get(attempt, 0.08)
+
+    tuned_config["traffic_coeff_scale"] = max(
+        0.10, float(tuned_config["traffic_coeff_scale"]) * traffic_factor
+    )
+    tuned_config["capture_probability"] = min(
+        0.95, float(tuned_config["capture_probability"]) + capture_boost
+    )
+
+    _soften_collision_config(tuned_config)
+    tuned_config["collision_size_min"] = max(
+        0.50, float(tuned_config["collision_size_min"]) - 0.03 * attempt
+    )
+    tuned_config["collision_size_under_max"] = max(
+        0.70, float(tuned_config["collision_size_under_max"]) - 0.04 * attempt
+    )
+    tuned_config["collision_size_over_max"] = max(
+        0.90, float(tuned_config["collision_size_over_max"]) - 0.05 * attempt
+    )
+    _clamp_collision_bounds(tuned_config)
 
 
 def _run_auto_tuning_before_campaign(
@@ -108,12 +140,15 @@ def _run_auto_tuning_before_campaign(
     tuned_config = dict(config)
     selected_attempt = AUTO_TUNING_MAX_ATTEMPTS
     success_reached = False
+    measurable_gain_detected = False
+    previous_success_mean: float | None = None
     auto_tuning_tmp_dir = base_results_dir / "_auto_tuning_tmp"
     if auto_tuning_tmp_dir.exists():
         shutil.rmtree(auto_tuning_tmp_dir)
     ensure_dir(auto_tuning_tmp_dir)
     try:
         for attempt in range(1, AUTO_TUNING_MAX_ATTEMPTS + 1):
+            params_before = _extract_auto_tuning_params(tuned_config)
             task = (
                 AUTO_TUNING_MINI_EVAL_NETWORK_SIZE,
                 0,
@@ -131,42 +166,75 @@ def _run_auto_tuning_before_campaign(
                     diagnostics.get("success_mean", 0.0),
                 )
             )
-            params = _extract_auto_tuning_params(tuned_config)
+            delta_success = (
+                success_mean - previous_success_mean
+                if previous_success_mean is not None
+                else None
+            )
+            if delta_success is not None and delta_success > AUTO_TUNING_MIN_MEASURABLE_GAIN:
+                measurable_gain_detected = True
+
+            accepted = success_mean >= AUTO_TUNING_SUCCESS_THRESHOLD
+            params_after = dict(params_before)
+            adjustment_applied = False
+            if not accepted and attempt < AUTO_TUNING_MAX_ATTEMPTS:
+                _apply_structured_auto_tuning_adjustments(tuned_config, attempt)
+                params_after = _extract_auto_tuning_params(tuned_config)
+                adjustment_applied = True
+
             attempt_logs.append(
                 {
                     "attempt": attempt,
                     "network_size": AUTO_TUNING_MINI_EVAL_NETWORK_SIZE,
                     "replications": list(eval_replications),
                     "seed_base": int(config["base_seed"]),
+                    "before": {
+                        "success_rate_mean": previous_success_mean,
+                        "parameters": params_before,
+                    },
+                    "after": {
+                        "success_rate_mean": success_mean,
+                        "parameters": params_after,
+                    },
                     "success_rate_mean": success_mean,
-                    "accepted": success_mean >= AUTO_TUNING_SUCCESS_THRESHOLD,
-                    "parameters": params,
+                    "delta_success_rate_mean": delta_success,
+                    "measurable_gain": (
+                        delta_success is not None
+                        and delta_success > AUTO_TUNING_MIN_MEASURABLE_GAIN
+                    ),
+                    "accepted": accepted,
+                    "adjustment_applied": adjustment_applied,
                 }
             )
             print(
                 "Mini-évaluation auto-tuning "
                 f"(tentative {attempt}/{AUTO_TUNING_MAX_ATTEMPTS}, N={AUTO_TUNING_MINI_EVAL_NETWORK_SIZE}) "
-                f"success_rate_mean={success_mean:.4f}."
+                f"success_rate_mean={success_mean:.4f}, "
+                f"delta={delta_success if delta_success is not None else float('nan'):.4f}."
             )
-            if success_mean >= AUTO_TUNING_SUCCESS_THRESHOLD:
+            previous_success_mean = success_mean
+            if accepted:
                 selected_attempt = attempt
                 success_reached = True
                 break
-            tuned_config["traffic_coeff_scale"] = max(
-                0.10, float(tuned_config["traffic_coeff_scale"]) * 0.85
-            )
-            _soften_collision_config(tuned_config)
         config.update(tuned_config)
     finally:
         shutil.rmtree(auto_tuning_tmp_dir, ignore_errors=True)
 
     selected_parameters = _extract_auto_tuning_params(config)
+    status = "success" if success_reached else "completed_without_threshold"
+    if not success_reached and not measurable_gain_detected:
+        status = "failed_tuning"
+
     payload = {
+        "status": status,
         "network_size": AUTO_TUNING_MINI_EVAL_NETWORK_SIZE,
         "threshold": AUTO_TUNING_SUCCESS_THRESHOLD,
+        "min_measurable_gain": AUTO_TUNING_MIN_MEASURABLE_GAIN,
         "max_attempts": AUTO_TUNING_MAX_ATTEMPTS,
         "selected_attempt": selected_attempt,
         "success_reached": success_reached,
+        "measurable_gain_detected": measurable_gain_detected,
         "retained_parameters": selected_parameters,
         "attempts": attempt_logs,
     }
@@ -2470,7 +2538,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     config["rx_power_dbm"] = _clamp_rx_power_dbm(requested_rx_power_dbm)
     _log_rx_power_diagnostics(requested_rx_power_dbm, float(config["rx_power_dbm"]))
 
-    _run_auto_tuning_before_campaign(config, replications, base_results_dir)
+    auto_tuning_payload = _run_auto_tuning_before_campaign(
+        config, replications, base_results_dir
+    )
+    if str(auto_tuning_payload.get("status", "")) == "failed_tuning":
+        raise SystemExit("failed_tuning")
     _sync_args_from_auto_tuned_config(args, config)
     print(
         "Paramètres Step2 retenus après auto-tuning: "
