@@ -165,7 +165,7 @@ def _plot_for_cluster(df: pd.DataFrame, cluster: str) -> plt.Figure:
 def main() -> None:
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "aggregated_results.csv"
+    results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
 
     try:
         rows = load_step1_aggregated(results_path, allow_sample=True)

@@ -15,8 +15,8 @@ if find_spec("article_c") is None:
     sys.path.insert(0, str(repo_root))
 
 
-DEFAULT_STEP1_CSV = Path("article_c/step1/results/aggregated_results.csv")
-DEFAULT_STEP2_CSV = Path("article_c/step2/results/aggregated_results.csv")
+DEFAULT_STEP1_CSV = Path("article_c/step1/results/aggregates/aggregated_results.csv")
+DEFAULT_STEP2_CSV = Path("article_c/step2/results/aggregates/aggregated_results.csv")
 DEFAULT_REPORT_TXT = Path("article_c/scientific_qa_report.txt")
 DEFAULT_REPORT_CSV = Path("article_c/scientific_qa_report.csv")
 

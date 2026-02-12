@@ -522,12 +522,12 @@ def _ensure_csv_within_scope(csv_path: Path, scope_root: Path) -> Path:
 def _log_step2_key_csv_paths(output_dir: Path) -> None:
     key_csv_names = (
         "run_status_step2.csv",
-        "raw_results.csv",
-        "aggregated_results.csv",
-        "diagnostics_step2_by_size.csv",
-        "loss_causes_histogram.csv",
-        "snir_distribution_by_sf.csv",
-        "diagnostics_by_size.csv",
+        "aggregates/aggregated_results.csv",
+        "aggregates/diagnostics_step2_by_size.csv",
+        "aggregates/loss_causes_histogram.csv",
+        "aggregates/snir_distribution_by_sf.csv",
+        "aggregates/diagnostics_by_size.csv",
+        "aggregates/diagnostics_by_size_algo_sf.csv",
     )
     for csv_name in key_csv_names:
         csv_path = output_dir / csv_name
@@ -654,7 +654,7 @@ def _assert_flat_output_sizes(
     base_results_dir: Path, simulated_sizes: list[int]
 ) -> None:
     aggregated_sizes = _read_aggregated_sizes(
-        base_results_dir / "aggregated_results.csv"
+        base_results_dir / "aggregates" / "aggregated_results.csv"
     )
     missing_sizes = sorted(set(simulated_sizes) - aggregated_sizes)
     if missing_sizes:
@@ -943,7 +943,7 @@ def _verify_metric_variation(size_metrics: dict[int, dict[str, float]]) -> None:
 
 
 def _has_traceable_outputs(base_results_dir: Path) -> bool:
-    if (base_results_dir / "aggregated_results.csv").exists():
+    if (base_results_dir / "aggregates" / "aggregated_results.csv").exists():
         return True
     by_size_dir = base_results_dir / BY_SIZE_DIRNAME
     if not by_size_dir.exists():
@@ -1574,7 +1574,7 @@ def _write_step2_diagnostics_exports(
             ]
         )
     diagnostics_path = _ensure_csv_within_scope(
-        output_dir / "diagnostics_step2_by_size.csv", output_dir
+        output_dir / "aggregates" / "diagnostics_step2_by_size.csv", output_dir
     )
     write_rows(
         diagnostics_path,
@@ -1597,7 +1597,7 @@ def _write_step2_diagnostics_exports(
             sum(int(stats.get("losses_link_quality_total", 0)) for stats in per_size_stats.values()),
         ],
     ]
-    write_rows(_ensure_csv_within_scope(output_dir / "loss_causes_histogram.csv", output_dir), losses_header, losses_values)
+    write_rows(_ensure_csv_within_scope(output_dir / "aggregates" / "loss_causes_histogram.csv", output_dir), losses_header, losses_values)
 
     raw_rows = _load_raw_rows_for_snir_distribution(output_dir, flat_output)
     snir_candidates = ["snir_db", "snir", "snir_value", "snr_db", "snir_threshold_db"]
@@ -1649,7 +1649,7 @@ def _write_step2_diagnostics_exports(
                 round(quantiles_map[0.9], 6),
             ]
         )
-    write_rows(_ensure_csv_within_scope(output_dir / "snir_distribution_by_sf.csv", output_dir), snir_header, snir_rows)
+    write_rows(_ensure_csv_within_scope(output_dir / "aggregates" / "snir_distribution_by_sf.csv", output_dir), snir_header, snir_rows)
 
     def _min_mean_max(values: list[float]) -> tuple[float, float, float]:
         if not values:
@@ -1807,7 +1807,7 @@ def _write_step2_diagnostics_exports(
                 ]
             )
     write_rows(
-        _ensure_csv_within_scope(output_dir / "diagnostics_by_size.csv", output_dir),
+        _ensure_csv_within_scope(output_dir / "aggregates" / "diagnostics_by_size.csv", output_dir),
         diagnostics_dedicated_header,
         diagnostics_dedicated_rows,
     )
@@ -1974,7 +1974,7 @@ def _write_step2_diagnostics_exports(
         )
 
     write_rows(
-        _ensure_csv_within_scope(output_dir / "diagnostics_by_size_algo_sf.csv", output_dir),
+        _ensure_csv_within_scope(output_dir / "aggregates" / "diagnostics_by_size_algo_sf.csv", output_dir),
         algo_sf_header,
         algo_sf_rows,
     )
@@ -2085,7 +2085,7 @@ def _load_step2_aggregated_with_errors(
 
 
 def _plot_summary_reward(output_dir: Path) -> None:
-    aggregated_path = output_dir / "aggregated_results.csv"
+    aggregated_path = output_dir / "aggregates" / "aggregated_results.csv"
     rows = _load_step2_aggregated_with_errors(aggregated_path)
     if not rows:
         print("Aucune ligne agrégée disponible pour le plot de synthèse.")
@@ -2406,7 +2406,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.timestamp:
         timestamp_dir = base_results_dir / timestamp_tag(with_timezone=True)
         ensure_dir(timestamp_dir)
-    aggregated_path = base_results_dir / "aggregated_results.csv"
+    aggregated_path = base_results_dir / "aggregates" / "aggregated_results.csv"
     if _is_non_empty_file(aggregated_path):
         size_bytes = aggregated_path.stat().st_size
         print(
@@ -2494,7 +2494,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         print(
             "Agrégation Step2 globale: "
             f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
-            "dans results/aggregated_results.csv."
+            "dans results/aggregates/aggregated_results.csv."
         )
     requested_set = set(requested_sizes)
     existing_sizes = sorted(requested_set & aggregated_sizes)
@@ -2944,7 +2944,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         print(
             "Agrégation Step2 globale: "
             f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
-            "dans results/aggregated_results.csv."
+            "dans results/aggregates/aggregated_results.csv."
         )
     missing_sizes = sorted(set(requested_sizes) - aggregated_sizes)
     if missing_sizes:
@@ -2959,7 +2959,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         print(f"Tailles simulées: {sizes_label}")
-    aggregated_path = base_results_dir / "aggregated_results.csv"
+    aggregated_path = base_results_dir / "aggregates" / "aggregated_results.csv"
     if aggregated_path.exists():
         if args.plot_summary:
             _plot_summary_reward(base_results_dir)

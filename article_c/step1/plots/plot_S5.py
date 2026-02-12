@@ -651,7 +651,7 @@ def main(
         values_by_size = _extract_raw_pdr_groups(raw_rows)
 
     if not values_by_size:
-        aggregated_path = step_dir / "results" / "aggregated_results.csv"
+        aggregated_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
         intermediate_path = _resolve_step1_intermediate_path(aggregated_path)
         aggregated_source = intermediate_path or aggregated_path
         aggregated_rows = load_step1_aggregated(aggregated_source, allow_sample=allow_sample)

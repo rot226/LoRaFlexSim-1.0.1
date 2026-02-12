@@ -198,7 +198,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     )
     args = parser.parse_args(argv)
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "aggregated_results.csv"
+    results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
     rows = load_step1_aggregated(results_path, allow_sample=allow_sample)
     if not rows:
         warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)

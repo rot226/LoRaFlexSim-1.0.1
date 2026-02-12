@@ -58,8 +58,8 @@ def _normalize_algo(value: object) -> str:
 def _load_aggregated_rows(base_dir: Path) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     candidates = (
-        base_dir / "step1" / "results" / "aggregated_results.csv",
-        base_dir / "step2" / "results" / "aggregated_results.csv",
+        base_dir / "step1" / "results" / "aggregates" / "aggregated_results.csv",
+        base_dir / "step2" / "results" / "aggregates" / "aggregated_results.csv",
     )
     for path in candidates:
         if not path.exists():

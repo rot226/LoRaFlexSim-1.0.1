@@ -101,7 +101,7 @@ def _plot(df: pd.DataFrame, metric_key: str) -> plt.Figure:
 def main() -> None:
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "aggregated_results.csv"
+    results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
 
     rows = load_step2_aggregated(results_path, allow_sample=True)
     if not rows:

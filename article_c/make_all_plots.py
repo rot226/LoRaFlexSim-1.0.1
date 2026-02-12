@@ -255,7 +255,7 @@ def _resolve_step_label(step: str) -> str:
 
 
 def _load_dataset_from_aggregated(results_dir: Path) -> CsvDataBundle | None:
-    aggregated_path = results_dir / "aggregated_results.csv"
+    aggregated_path = results_dir / "aggregates" / "aggregated_results.csv"
     if not aggregated_path.exists():
         return None
     fieldnames, rows = _load_csv_data(aggregated_path)
@@ -304,7 +304,7 @@ def _report_missing_csv(
     source: str,
     csv_name: str,
 ) -> None:
-    aggregated_path = results_dir / "aggregated_results.csv"
+    aggregated_path = results_dir / "aggregates" / "aggregated_results.csv"
     nested_pattern = results_dir / "size_*" / "rep_*" / csv_name
     print(f"ERREUR: CSV {step_label} introuvable pour source={source}.")
     if source == "aggregated":
@@ -1890,7 +1890,7 @@ def main(argv: list[str] | None = None) -> None:
                     regen_sizes = step2_sizes or step1_sizes
                     command = (
                         _suggest_regeneration_command(
-                            STEP1_RESULTS_DIR / "aggregated_results.csv",
+                            STEP1_RESULTS_DIR / "aggregates" / "aggregated_results.csv",
                             regen_sizes,
                         )
                         if regen_sizes

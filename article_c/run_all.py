@@ -64,8 +64,8 @@ def _cleanup_size_directory(results_dir: Path, network_size: int, step_label: st
 
 def _remove_global_aggregation_artifacts(results_dir: Path, step_label: str) -> None:
     """Retire les artefacts globaux avant campagne pour garantir une agrégation finale unique."""
-    for filename in ("aggregated_results.csv", "raw_results.csv", "raw_metrics.csv"):
-        candidate = results_dir / filename
+    for relative in (Path("aggregates") / "aggregated_results.csv", Path("aggregates") / "diagnostics_step2_by_size.csv", Path("aggregates") / "diagnostics_by_size.csv", Path("aggregates") / "diagnostics_by_size_algo_sf.csv"):
+        candidate = results_dir / relative
         _assert_path_within_scope(candidate, results_dir, step_label)
         if candidate.exists():
             candidate.unlink()
@@ -75,7 +75,7 @@ def _remove_global_aggregation_artifacts(results_dir: Path, step_label: str) -> 
 def _assert_no_global_writes_during_simulation(results_dir: Path, step_label: str) -> None:
     """Échoue si des CSV globaux sont écrits dans `results/` pendant la simulation."""
     forbidden = [
-        results_dir / "aggregated_results.csv",
+        results_dir / "aggregates" / "aggregated_results.csv",
         results_dir / "raw_results.csv",
         results_dir / "raw_metrics.csv",
     ]
@@ -151,8 +151,8 @@ def _count_failed_runs(status_csv_path: Path, network_size: int) -> int:
 
 
 def _read_step2_success_rate_mean(results_dir: Path, network_size: int) -> float | None:
-    """Lit le success_rate moyen d'une taille depuis diagnostics_step2_by_size.csv."""
-    diagnostics_path = results_dir / "diagnostics_step2_by_size.csv"
+    """Lit le success_rate moyen d'une taille depuis aggregates/diagnostics_step2_by_size.csv."""
+    diagnostics_path = results_dir / "aggregates" / "diagnostics_step2_by_size.csv"
     if not diagnostics_path.exists():
         return None
     with diagnostics_path.open("r", newline="", encoding="utf-8") as handle:
@@ -188,7 +188,7 @@ def _build_step2_quality_summary(
         )
     if success_rate_mean is None:
         reasons.append(
-            "Impossible de lire success_rate_mean dans diagnostics_step2_by_size.csv."
+            "Impossible de lire success_rate_mean dans aggregates/diagnostics_step2_by_size.csv."
         )
     elif success_rate_mean < STEP2_SUCCESS_RATE_MEAN_LOW_THRESHOLD:
         reasons.append(
@@ -1191,7 +1191,7 @@ def main(argv: list[str] | None = None) -> None:
             "Step1",
         )
         _assert_cumulative_sizes(
-            step1_results_dir / "aggregated_results.csv",
+            step1_results_dir / "aggregates" / "aggregated_results.csv",
             set(requested_sizes),
             "Step1",
         )
@@ -1203,7 +1203,7 @@ def main(argv: list[str] | None = None) -> None:
             "Step2",
         )
         _assert_cumulative_sizes(
-            step2_results_dir / "aggregated_results.csv",
+            step2_results_dir / "aggregates" / "aggregated_results.csv",
             set(requested_sizes),
             "Step2",
         )

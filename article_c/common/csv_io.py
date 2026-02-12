@@ -752,7 +752,7 @@ def aggregate_results_by_size(
     - `results/by_size/size_<N>/aggregated_results.csv`
 
     Et, si demandé, un fichier global:
-    - `results/aggregated_results.csv`
+    - `results/aggregates/aggregated_results.csv`
     """
 
     by_size_dir = results_dir / by_size_dirname
@@ -820,7 +820,7 @@ def aggregate_results_by_size(
                     seen_columns.add(column)
                     global_header.append(column)
         atomic_write_csv(
-            results_dir / "aggregated_results.csv",
+            results_dir / "aggregates" / "aggregated_results.csv",
             global_header,
             [
                 [row.get(column, "") for column in global_header]

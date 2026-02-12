@@ -125,7 +125,7 @@ def main(
     if network_sizes is not None and _has_invalid_network_sizes(network_sizes):
         return
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "aggregated_results.csv"
+    results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
     rows = load_step2_aggregated(results_path, allow_sample=allow_sample)
     if not rows:
         warnings.warn("CSV Step2 manquant ou vide, figure ignorée.", stacklevel=2)

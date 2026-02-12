@@ -72,7 +72,7 @@ def _collect_nested_rows(results_dir: Path, filename: str) -> list[dict[str, obj
 
 def _ensure_step1_flat_files(step1_dir: Path) -> None:
     metrics_path = step1_dir / "raw_metrics.csv"
-    aggregated_path = step1_dir / "aggregated_results.csv"
+    aggregated_path = step1_dir / "aggregates" / "aggregated_results.csv"
     if metrics_path.exists() and aggregated_path.exists():
         return
     raw_rows = _collect_nested_rows(step1_dir, "raw_metrics.csv")
@@ -84,7 +84,7 @@ def _ensure_step1_flat_files(step1_dir: Path) -> None:
 
 def _ensure_step2_flat_files(step2_dir: Path) -> None:
     results_path = step2_dir / "raw_results.csv"
-    aggregated_path = step2_dir / "aggregated_results.csv"
+    aggregated_path = step2_dir / "aggregates" / "aggregated_results.csv"
     if results_path.exists() and aggregated_path.exists():
         return
     raw_rows = _collect_nested_rows(step2_dir, "raw_results.csv")
@@ -291,7 +291,7 @@ def validate_results(
         tracker=tracker,
     )
     _validate_pdr_file(
-        step1_dir / "aggregated_results.csv",
+        step1_dir / "aggregates" / "aggregated_results.csv",
         pdr_key="pdr_mean",
         sent_key="sent_mean",
         received_key="received_mean",
@@ -307,7 +307,7 @@ def validate_results(
             tracker=tracker,
         )
         _validate_reward_file(
-            step2_dir / "aggregated_results.csv",
+            step2_dir / "aggregates" / "aggregated_results.csv",
             reward_key="reward_mean",
             const_tolerance=const_tolerance,
             tracker=tracker,

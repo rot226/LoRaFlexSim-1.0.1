@@ -357,8 +357,8 @@ def main(
         return
     step_dir = Path(__file__).resolve().parents[1]
     learning_curve_path = step_dir / "results" / "learning_curve.csv"
-    step1_results_path = BASE_DIR / "step1" / "results" / "aggregated_results.csv"
-    step2_results_path = step_dir / "results" / "aggregated_results.csv"
+    step1_results_path = BASE_DIR / "step1" / "results" / "aggregates" / "aggregated_results.csv"
+    step2_results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
     if not step1_results_path.exists():
         step1_results_dir = BASE_DIR / "step1" / "results"
         print("INFO: CSV Step1 manquant, plot RL10 ignoré.")

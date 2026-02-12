@@ -436,7 +436,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=False,
         help=(
-            "Génère aussi step1/results/aggregated_results.csv en concaténant "
+            "Génère aussi step1/results/aggregates/aggregated_results.csv en concaténant "
             "les size_<N>/aggregated_results.csv."
         ),
     )
@@ -786,7 +786,7 @@ def _simulate_density(
 
 
 def _plot_summary_pdr(output_dir: Path) -> None:
-    results_path = output_dir / "aggregated_results.csv"
+    results_path = output_dir / "aggregates" / "aggregated_results.csv"
     if not results_path.exists():
         print(f"Aucun aggregated_results.csv pour tracer le résumé: {results_path}")
         return
@@ -840,7 +840,7 @@ def _load_csv_rows(path: Path) -> list[dict[str, str]]:
 
 def _check_pdr_formula_for_size(output_dir: Path, reference_size: int = 80) -> None:
     raw_path = output_dir / "raw_metrics.csv"
-    aggregated_path = output_dir / "aggregated_results.csv"
+    aggregated_path = output_dir / "aggregates" / "aggregated_results.csv"
     raw_rows = _load_csv_rows(raw_path)
     aggregated_rows = _load_csv_rows(aggregated_path)
     if not raw_rows or not aggregated_rows:
@@ -922,7 +922,7 @@ def _check_pdr_formula_for_size(output_dir: Path, reference_size: int = 80) -> N
 
 
 def _check_pdr_consistency(output_dir: Path) -> None:
-    aggregated_path = output_dir / "aggregated_results.csv"
+    aggregated_path = output_dir / "aggregates" / "aggregated_results.csv"
     aggregated_rows = _load_csv_rows(aggregated_path)
     if not aggregated_rows:
         print("Contrôle de cohérence PDR ignoré: aggregated_results.csv manquant.")
@@ -982,7 +982,7 @@ def _check_pdr_consistency(output_dir: Path) -> None:
 
 def _step1_post_report(output_dir: Path, *, write_txt: bool = True) -> None:
     """Affiche un bilan post-agrégation (PDR par taille) et peut l'exporter en TXT."""
-    aggregated_path = output_dir / "aggregated_results.csv"
+    aggregated_path = output_dir / "aggregates" / "aggregated_results.csv"
     aggregated_rows = _load_csv_rows(aggregated_path)
     if not aggregated_rows:
         print("Post-report ignoré: aggregated_results.csv manquant ou vide.")
@@ -1273,7 +1273,7 @@ def main(argv: list[str] | None = None) -> None:
         print(
             "Agrégation Step1 globale: "
             f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
-            "dans results/aggregated_results.csv."
+            "dans results/aggregates/aggregated_results.csv."
         )
     missing_sizes = sorted(set(network_sizes) - aggregated_sizes)
     if missing_sizes:
@@ -1288,7 +1288,7 @@ def main(argv: list[str] | None = None) -> None:
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         print(f"Tailles simulées: {sizes_label}")
-    aggregated_path = output_dir / "aggregated_results.csv"
+    aggregated_path = output_dir / "aggregates" / "aggregated_results.csv"
     if aggregated_path.exists():
         _step1_post_report(output_dir)
         _check_pdr_consistency(output_dir)
@@ -1297,7 +1297,7 @@ def main(argv: list[str] | None = None) -> None:
             _plot_summary_pdr(output_dir)
     elif args.plot_summary:
         print(
-            "Plot de synthèse ignoré: aggregated_results.csv absent "
+            "Plot de synthèse ignoré: results/aggregates/aggregated_results.csv absent "
             "(utilisez --flat-output ou make_all_plots.py)."
         )
 

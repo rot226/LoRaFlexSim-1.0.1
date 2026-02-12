@@ -121,7 +121,7 @@ def _check_step_sizes_completeness() -> list[str]:
     failures: list[str] = []
     expected = set(EXPECTED_SIZES)
     for step in ("step1", "step2"):
-        aggregated = BASE_DIR / step / "results" / "aggregated_results.csv"
+        aggregated = BASE_DIR / step / "results" / "aggregates" / "aggregated_results.csv"
         found_sizes = _read_sizes_from_aggregated(aggregated)
         missing = sorted(expected - found_sizes)
         if missing:
