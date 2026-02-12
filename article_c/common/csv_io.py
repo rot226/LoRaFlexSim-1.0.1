@@ -30,6 +30,14 @@ DERIVED_SUFFIXES = ("_mean", "_std", "_count", "_ci95", "_p10", "_p50", "_p90")
 STEP1_EXPECTED_METRICS = ("sent", "received", "pdr")
 STEP2_EXPECTED_METRICS = ("reward", "success_rate")
 MERGE_KEYS = ("network_size", "algo", "snir_mode", "cluster", "replication")
+CANONICAL_ID_COLUMNS = (
+    "network_size",
+    "density",
+    "algo",
+    "snir_mode",
+    "cluster",
+    "mixra_opt_fallback",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +107,7 @@ def append_or_merge_csv(
     header: list[str],
     rows: list[list[object]],
     dedupe_keys: tuple[str, ...],
+    canonical_base_columns: tuple[str, ...] | None = None,
 ) -> None:
     """Fusionne un CSV avec l'existant, puis réécrit atomiquement.
 
@@ -131,20 +140,20 @@ def append_or_merge_csv(
                     for row in reader:
                         existing_rows.append(dict(row))
 
-            merged_header: list[str] = []
-            for candidate_header in (existing_header, header):
-                for column in candidate_header:
-                    if column not in merged_header:
-                        merged_header.append(column)
+            merged_header = _merge_headers(
+                existing_header,
+                header,
+                canonical_base_columns=canonical_base_columns,
+            )
             if not merged_header:
                 merged_header = list(header)
 
             for row in existing_rows:
                 for column in merged_header:
-                    row.setdefault(column, "")
+                    row.setdefault(column, _missing_value_for_column(column))
             for row in incoming_rows:
                 for column in merged_header:
-                    row.setdefault(column, "")
+                    row.setdefault(column, _missing_value_for_column(column))
 
             deduped_rows_by_key: dict[tuple[object, ...], dict[str, object]] = {}
             for row in [*existing_rows, *incoming_rows]:
@@ -186,6 +195,62 @@ def _coerce_positive_network_size(value: object) -> int:
     if not size.is_integer():
         raise ValueError("network_size doit être un entier.")
     return int(size)
+
+
+def _missing_value_for_column(column: str) -> object:
+    if column in {"network_size", "density"}:
+        return math.nan
+    if any(column.endswith(suffix) for suffix in DERIVED_SUFFIXES):
+        return math.nan
+    return ""
+
+
+def _merge_headers(
+    existing_header: list[str],
+    incoming_header: list[str],
+    *,
+    canonical_base_columns: tuple[str, ...] | None,
+) -> list[str]:
+    merged_header: list[str] = []
+    for candidate_header in (existing_header, incoming_header):
+        for column in candidate_header:
+            if column not in merged_header:
+                merged_header.append(column)
+    if not canonical_base_columns:
+        return merged_header
+    ordered_header = [
+        column for column in canonical_base_columns if column in merged_header
+    ]
+    ordered_header.extend(column for column in merged_header if column not in ordered_header)
+    return ordered_header
+
+
+def _canonical_columns_for_step(
+    expected_metrics: tuple[str, ...],
+    *,
+    include_round: bool,
+    include_replication: bool,
+) -> tuple[str, ...]:
+    metric_columns: list[str] = []
+    for metric in expected_metrics:
+        metric_columns.extend(
+            [
+                metric,
+                f"{metric}_mean",
+                f"{metric}_std",
+                f"{metric}_count",
+                f"{metric}_ci95",
+                f"{metric}_p10",
+                f"{metric}_p50",
+                f"{metric}_p90",
+            ]
+        )
+    rep_columns: list[str] = []
+    if include_round:
+        rep_columns.append("round")
+    if include_replication:
+        rep_columns.append("replication")
+    return (*CANONICAL_ID_COLUMNS, *rep_columns, *metric_columns)
 
 
 def _coerce_density(value: object) -> float:
@@ -779,6 +844,11 @@ def write_simulation_results(
         aggregated_header,
         [[row.get(key, "") for key in aggregated_header] for row in aggregated_rows],
         dedupe_keys=_step2_dedupe_keys(aggregated_rows),
+        canonical_base_columns=_canonical_columns_for_step(
+            STEP2_EXPECTED_METRICS,
+            include_round=False,
+            include_replication=False,
+        ),
     )
     if intermediate_rows:
         has_round = any(row.get("round") not in (None, "") for row in intermediate_rows)
@@ -796,6 +866,11 @@ def write_simulation_results(
                 for row in intermediate_rows
             ],
             dedupe_keys=_step2_dedupe_keys(intermediate_rows),
+            canonical_base_columns=_canonical_columns_for_step(
+                STEP2_EXPECTED_METRICS,
+                include_round=has_round,
+                include_replication=not has_round,
+            ),
         )
 
 
@@ -927,6 +1002,11 @@ def write_step1_results(
         aggregated_header,
         [[row.get(key, "") for key in aggregated_header] for row in aggregated_rows],
         dedupe_keys=MERGE_KEYS,
+        canonical_base_columns=_canonical_columns_for_step(
+            STEP1_EXPECTED_METRICS,
+            include_round=False,
+            include_replication=False,
+        ),
     )
     if intermediate_rows:
         has_round = any(row.get("round") not in (None, "") for row in intermediate_rows)
@@ -945,4 +1025,9 @@ def write_step1_results(
                 for row in intermediate_rows
             ],
             dedupe_keys=dedupe_keys,
+            canonical_base_columns=_canonical_columns_for_step(
+                STEP1_EXPECTED_METRICS,
+                include_round=has_round,
+                include_replication=not has_round,
+            ),
         )
