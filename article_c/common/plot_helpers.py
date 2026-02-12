@@ -139,6 +139,11 @@ _EXPORT_FORMATS = DEFAULT_EXPORT_FORMATS
 _DEFAULT_FIGURE_CLAMP_ENABLED = True
 AUTO_WIDE_TRACE_THRESHOLD = 3
 AUTO_WIDE_TRACE_WIDTH_SCALE = 1.12
+BOUNDED_RATE_METRIC_TOKENS = ("pdr", "der", "success_rate")
+BOUNDED_RATE_MIN = 0.0
+BOUNDED_RATE_MAX = 1.0
+DEFAULT_BOUNDED_RATE_CLAMP = False
+DEFAULT_BOUNDED_RATE_STRICT = False
 
 
 def set_default_figure_clamp_enabled(enabled: bool) -> None:
@@ -151,6 +156,81 @@ def _resolve_figure_clamp(value: bool | None) -> bool:
     if value is None:
         return _DEFAULT_FIGURE_CLAMP_ENABLED
     return bool(value)
+
+
+def _is_bounded_rate_metric(metric_key: str) -> bool:
+    normalized = str(metric_key or "").strip().lower()
+    return any(token in normalized for token in BOUNDED_RATE_METRIC_TOKENS)
+
+
+def _resolve_bounded_rate_option(value: bool | None, default: bool) -> bool:
+    if value is None:
+        return default
+    return bool(value)
+
+
+def _bounded_metric_context(row: Mapping[str, object]) -> str:
+    algo = row.get("algo", "?")
+    size = row.get("network_size", row.get("density", "?"))
+    cluster = row.get("cluster", "?")
+    return f"algo={algo}, size={size}, cluster={cluster}"
+
+
+def validate_bounded_rate_metric_rows(
+    rows: list[dict[str, object]],
+    metric_key: str,
+    *,
+    clamp: bool | None = None,
+    strict: bool | None = None,
+    min_value: float = BOUNDED_RATE_MIN,
+    max_value: float = BOUNDED_RATE_MAX,
+) -> None:
+    """Valide les métriques de type PDR/DER/success_rate sur [0, 1].
+
+    - `strict=True`: lève `ValueError` à la première valeur hors borne.
+    - `clamp=True`: remplace les valeurs hors borne par leur version clampée.
+    - sinon: warning + journalisation des points hors bornes.
+    """
+    if not _is_bounded_rate_metric(metric_key) or not rows:
+        return
+
+    should_clamp = _resolve_bounded_rate_option(clamp, DEFAULT_BOUNDED_RATE_CLAMP)
+    is_strict = _resolve_bounded_rate_option(strict, DEFAULT_BOUNDED_RATE_STRICT)
+    out_of_bounds: list[str] = []
+
+    for row in rows:
+        raw_value = row.get(metric_key)
+        if not isinstance(raw_value, (int, float)):
+            continue
+        value = float(raw_value)
+        if math.isnan(value):
+            continue
+        if min_value <= value <= max_value:
+            continue
+
+        context = _bounded_metric_context(row)
+        message = (
+            f"{metric_key} hors bornes [{min_value:.3g}, {max_value:.3g}]={value:.6g} "
+            f"({context})"
+        )
+        out_of_bounds.append(message)
+        LOGGER.warning(message)
+
+        if is_strict:
+            raise ValueError(message)
+
+        if should_clamp:
+            clamped = min(max_value, max(min_value, value))
+            row[metric_key] = clamped
+
+    if not out_of_bounds:
+        return
+
+    action = "clamp appliqué" if should_clamp and not is_strict else "aucun clamp"
+    warnings.warn(
+        f"{metric_key}: {len(out_of_bounds)} point(s) hors bornes détecté(s), {action}.",
+        stacklevel=2,
+    )
 
 
 class MetricStatus(str, Enum):
@@ -822,6 +902,8 @@ def warn_metric_checks_by_group(
     group_keys: Iterable[str] | None = None,
     monotonic_tolerance: float = 0.0,
     variance_threshold: float = CONSTANT_METRIC_VARIANCE_THRESHOLD,
+    bounded_rate_clamp: bool | None = None,
+    bounded_rate_strict: bool | None = None,
 ) -> None:
     if not rows:
         warnings.warn(
@@ -830,6 +912,12 @@ def warn_metric_checks_by_group(
         )
         return
     median_key, _, _ = resolve_percentile_keys(rows, metric_key)
+    validate_bounded_rate_metric_rows(
+        rows,
+        median_key,
+        clamp=bounded_rate_clamp,
+        strict=bounded_rate_strict,
+    )
     group_keys_list = list(group_keys) if group_keys else []
     grouped: dict[tuple[object, ...], list[tuple[float, float]]] = {}
     for row in rows:
@@ -2525,6 +2613,11 @@ def plot_metric_by_snir(
 ) -> None:
     network_sizes = sorted({_network_size_value(row) for row in rows})
     median_key, lower_key, upper_key = resolve_percentile_keys(rows, metric_key)
+    validate_bounded_rate_metric_rows(rows, median_key)
+    if lower_key:
+        validate_bounded_rate_metric_rows(rows, lower_key)
+    if upper_key:
+        validate_bounded_rate_metric_rows(rows, upper_key)
     trace_count = 0
 
     def _algo_key(row: dict[str, object]) -> tuple[str, bool]:
@@ -2644,6 +2737,11 @@ def plot_metric_by_algo(
     label_fn: Callable[[object], str] | None = None,
 ) -> None:
     median_key, lower_key, upper_key = resolve_percentile_keys(rows, metric_key)
+    validate_bounded_rate_metric_rows(rows, median_key)
+    if lower_key:
+        validate_bounded_rate_metric_rows(rows, lower_key)
+    if upper_key:
+        validate_bounded_rate_metric_rows(rows, upper_key)
     algorithms = sorted({row.get("algo") for row in rows})
     single_size = len(network_sizes) == 1
     only_size = network_sizes[0] if single_size else None
