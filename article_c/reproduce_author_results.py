@@ -49,7 +49,7 @@ from article_c.common.plot_helpers import (
     set_default_export_formats,
     set_network_size_ticks,
 )
-from article_c.common.plotting_style import apply_output_fonttype
+from article_c.common.plotting_style import apply_output_fonttype, label_for
 
 LOGGER = logging.getLogger(__name__)
 
@@ -111,10 +111,10 @@ QOS_PROFILES: dict[str, QoSProfile] = {
 }
 
 TRAFFIC_LOAD_LEVELS = (
-    ("faible", 0.85),
-    ("moyenne", 1.15),
-    ("élevée", 1.45),
-    ("très élevée", math.inf),
+    ("low", 0.85),
+    ("medium", 1.15),
+    ("high", 1.45),
+    ("very high", math.inf),
 )
 
 
@@ -492,8 +492,8 @@ def plot_fig4(
                 cluster=cluster,
                 label_prefix=profile_label,
             )
-        ax.set_xlabel("Nombre de nœuds")
-        ax.set_ylabel(f"DER — Cluster {cluster}")
+        ax.set_xlabel(label_for("x.network_size"))
+        ax.set_ylabel(f"{label_for('y.der')} — Cluster {cluster}")
         ax.set_ylim(0.0, 1.0)
         set_network_size_ticks(ax, sorted({int(row["network_size"]) for row in cluster_rows}))
 
@@ -619,8 +619,8 @@ def plot_fig5(
 
     ax.set_xticks(x_positions)
     ax.set_xticklabels([label.capitalize() for label in load_labels])
-    ax.set_xlabel("Charge réseau")
-    ax.set_ylabel("DER")
+    ax.set_xlabel(label_for("x.network_load"))
+    ax.set_ylabel(label_for("y.der"))
     ax.set_ylim(0.0, 1.0)
     _render_legend(fig, [ax])
     _finalize_figure(fig, "Fig.5 - DER selon la charge", show_header=show_header)
@@ -727,8 +727,8 @@ def plot_fig7(
             label_prefix=profile_label,
         )
 
-    ax.set_xlabel("Nombre de nœuds")
-    ax.set_ylabel("Sacrifice de trafic (ratio)")
+    ax.set_xlabel(label_for("x.network_size"))
+    ax.set_ylabel(label_for("y.traffic_sacrifice"))
     ax.set_ylim(0.0, 1.0)
     set_network_size_ticks(ax, sizes)
     _render_legend(fig, [ax])
@@ -821,8 +821,8 @@ def plot_fig8(
                 label_prefix=profile_label,
             )
         cluster_label = "Global" if cluster == "all" else f"Cluster {cluster}"
-        ax.set_xlabel("Nombre de nœuds")
-        ax.set_ylabel(f"Throughput (paquets reçus) — {cluster_label}")
+        ax.set_xlabel(label_for("x.network_size"))
+        ax.set_ylabel(f"{label_for('y.throughput')} — {cluster_label}")
         sizes = sorted(
             {
                 int(row["network_size"])

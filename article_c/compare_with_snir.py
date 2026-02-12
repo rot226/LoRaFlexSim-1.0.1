@@ -66,6 +66,7 @@ from article_c.common.plot_helpers import (
     save_figure,
     set_default_export_formats,
 )
+from article_c.common.plotting_style import label_for
 from article_c.common.plotting_style import SUPTITLE_Y
 
 LOGGER = logging.getLogger(__name__)
@@ -320,7 +321,7 @@ def _render_metric_plot(
             label_percentiles=True,
         )
         _plot_author_overlays(ax, author_curves, metric_label.lower())
-    ax.set_xlabel("Nombre de nœuds")
+    ax.set_xlabel(label_for("x.network_size"))
     ax.set_ylabel(metric_label)
     if y_limits:
         ax.set_ylim(*y_limits)

@@ -292,7 +292,7 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
     ]
     warn_metric_checks(
         reward_values,
-        "Reward moyen",
+        "Mean reward",
     )
     warn_metric_checks(
         sorted(pdr_values),

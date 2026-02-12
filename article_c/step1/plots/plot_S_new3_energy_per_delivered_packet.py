@@ -148,7 +148,7 @@ def _plot_for_cluster(df: pd.DataFrame, cluster: str) -> plt.Figure:
         ax.set_xlabel("Network size (nodes)")
         ax.set_xticks(NETWORK_SIZES)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-        ax.set_ylabel(f"Énergie / paquet livré (J) — {snir_label}")
+        ax.set_ylabel(f"Energy per delivered packet (J/packet) — {snir_label}")
         ax.grid(True, linestyle=":", alpha=0.35)
 
 

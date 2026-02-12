@@ -37,6 +37,7 @@ from article_c.common.plot_helpers import (
     set_network_size_ticks,
 )
 from plot_defaults import resolve_ieee_figsize
+from article_c.common.plotting_style import label_for
 
 PREFERRED_ALGOS = (
     "apra",
@@ -189,8 +190,8 @@ def _plot_der_by_cluster(df: pd.DataFrame, clusters: list[str]) -> plt.Figure:
                 legend_handles.append(line)
                 legend_labels.append(label)
                 seen_algos.add(algo)
-        ax.set_xlabel("Nombre de nœuds")
-        ax.set_ylabel("DER")
+        ax.set_xlabel(label_for("x.network_size"))
+        ax.set_ylabel(label_for("y.der"))
         ax.set_ylim(0.0, 1.0)
         ax.grid(True, linestyle=":", alpha=0.4)
         set_network_size_ticks(ax, network_sizes)

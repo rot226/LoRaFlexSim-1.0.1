@@ -22,6 +22,7 @@ from article_c.common.plot_helpers import (
     assert_legend_present,
     save_figure,
 )
+from article_c.common.plotting_style import label_for
 from plot_defaults import resolve_ieee_figsize
 
 FOCUS_SIZES = (80, 1280)
@@ -161,7 +162,7 @@ def _plot(agg: pd.DataFrame, sizes: list[int]) -> plt.Figure:
             )
             ax.fill_between(rounds, mean - ci95, mean + ci95, color=color, alpha=0.18)
 
-        ax.set_ylabel(f"Reward moyen — N={size} nœuds")
+        ax.set_ylabel(f"{label_for('y.reward_mean')} — N={size}")
         ax.grid(True, linestyle=":", alpha=0.35)
         ax.set_xlabel("Round")
 

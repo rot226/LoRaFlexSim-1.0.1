@@ -29,6 +29,7 @@ from article_c.common.plot_helpers import (
     save_figure,
     warn_metric_checks_by_group,
 )
+from article_c.common.plotting_style import label_for
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
 
@@ -82,7 +83,7 @@ def _plot_metric(
         rows,
         metric_key,
         x_key="network_size",
-        label="Débit réussi",
+        label="Successful throughput",
         min_value=0.0,
         expected_monotonic="nonincreasing",
         group_keys=("cluster", "algo", "snir_mode"),
@@ -101,7 +102,7 @@ def _plot_metric(
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (nodes)")
-    ax.set_ylabel("Throughput (bytes/s, median, p10–p90)")
+    ax.set_ylabel(label_for("y.successful_throughput"))
     place_adaptive_legend(fig, ax, preferred_loc="right")
     return fig
 
