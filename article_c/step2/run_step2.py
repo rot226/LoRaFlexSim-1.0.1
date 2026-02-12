@@ -18,7 +18,11 @@ from article_c.common.config import (
     STEP2_SAFE_CONFIG,
     STEP2_SUPER_SAFE_CONFIG,
 )
-from article_c.common.csv_io import write_rows, write_simulation_results
+from article_c.common.csv_io import (
+    aggregate_results_by_size,
+    write_rows,
+    write_simulation_results,
+)
 from article_c.common.plot_helpers import (
     place_adaptive_legend,
     apply_plot_style,
@@ -2477,6 +2481,21 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     aggregated_sizes = _read_nested_sizes(base_results_dir, replications)
+    merge_stats = aggregate_results_by_size(
+        base_results_dir,
+        write_global_aggregated=bool(args.global_aggregated),
+    )
+    print(
+        "Agrégation Step2 par taille: "
+        f"{merge_stats['size_count']} dossier(s) size_<N>, "
+        f"{merge_stats['size_row_count']} ligne(s) consolidée(s)."
+    )
+    if bool(args.global_aggregated):
+        print(
+            "Agrégation Step2 globale: "
+            f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
+            "dans results/aggregated_results.csv."
+        )
     requested_set = set(requested_sizes)
     existing_sizes = sorted(requested_set & aggregated_sizes)
     remaining_sizes = sorted(requested_set - aggregated_sizes)
@@ -2912,6 +2931,21 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
 
     aggregated_sizes = _read_nested_sizes(base_results_dir, replications)
+    merge_stats = aggregate_results_by_size(
+        base_results_dir,
+        write_global_aggregated=bool(args.global_aggregated),
+    )
+    print(
+        "Agrégation Step2 par taille: "
+        f"{merge_stats['size_count']} dossier(s) size_<N>, "
+        f"{merge_stats['size_row_count']} ligne(s) consolidée(s)."
+    )
+    if bool(args.global_aggregated):
+        print(
+            "Agrégation Step2 globale: "
+            f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
+            "dans results/aggregated_results.csv."
+        )
     missing_sizes = sorted(set(requested_sizes) - aggregated_sizes)
     if missing_sizes:
         missing_label = ", ".join(map(str, missing_sizes))

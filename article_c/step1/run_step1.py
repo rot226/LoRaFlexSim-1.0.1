@@ -13,7 +13,7 @@ from statistics import mean
 from time import perf_counter
 
 from article_c.common.config import DEFAULT_CONFIG
-from article_c.common.csv_io import write_step1_results
+from article_c.common.csv_io import aggregate_results_by_size, write_step1_results
 from article_c.common.plot_helpers import (
     place_adaptive_legend,
     apply_plot_style,
@@ -430,6 +430,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Génère un plot de synthèse avec barres d'erreur.",
+    )
+    parser.add_argument(
+        "--global-aggregated",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Génère aussi step1/results/aggregated_results.csv en concaténant "
+            "les size_<N>/aggregated_results.csv."
+        ),
     )
     parser.add_argument(
         "--profile-timing",
@@ -1251,6 +1260,21 @@ def main(argv: list[str] | None = None) -> None:
         )
         print(f"Rows per size: {sizes_summary}")
     aggregated_sizes = _read_nested_sizes(output_dir, replications)
+    merge_stats = aggregate_results_by_size(
+        output_dir,
+        write_global_aggregated=bool(args.global_aggregated),
+    )
+    print(
+        "Agrégation Step1 par taille: "
+        f"{merge_stats['size_count']} dossier(s) size_<N>, "
+        f"{merge_stats['size_row_count']} ligne(s) consolidée(s)."
+    )
+    if bool(args.global_aggregated):
+        print(
+            "Agrégation Step1 globale: "
+            f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
+            "dans results/aggregated_results.csv."
+        )
     missing_sizes = sorted(set(network_sizes) - aggregated_sizes)
     if missing_sizes:
         missing_label = ", ".join(map(str, missing_sizes))
