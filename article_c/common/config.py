@@ -81,18 +81,33 @@ class Step2Config:
     traffic_coeff_clamp_enabled: bool = False
     window_delay_enabled: bool = True
     window_delay_range_s: float = 5.0
+    # Facteur de sécurité de capacité Tx par fenêtre.
+    # Plus élevé => moins de paquets admissibles, collisions réduites.
+    tx_window_safety_factor: float = 4.0
     capture_probability: float = 0.28
     congestion_coeff: float = 1.0
     congestion_coeff_base: float = 0.28
     congestion_coeff_growth: float = 0.3
     congestion_coeff_max: float = 0.3
-    link_success_min_ratio: float = 0.02
+    # Garde-fou post-congestion/lien: part minimale de succès conservée.
+    # Calibré pour conserver un success_rate non-trivial à N=80.
+    link_success_min_ratio: float = 0.65
     network_load_min: float = 0.6
     network_load_max: float = 1.65
-    collision_size_min: float = 0.6
-    collision_size_under_max: float = 1.1
-    collision_size_over_max: float = 1.9
+    # Calibrage facteur de taille collision (ratio N / N_ref).
+    # - collision_size_min: borne basse quand N <= N_ref.
+    # - collision_size_under_max: borne haute en sous-charge.
+    # - collision_size_over_max: borne haute en surcharge.
+    collision_size_min: float = 0.72
+    collision_size_under_max: float = 1.02
+    collision_size_over_max: float = 1.45
     collision_size_factor: float | None = None
+    # Coefficients explicites du calcul collision_norm pour tuning.
+    collision_norm_airtime_exp: float = 1.1
+    collision_norm_congestion_gain: float = 0.45
+    collision_norm_size_exp: float = 0.7
+    collision_norm_failure_exp: float = 0.55
+    collision_norm_offset: float = 0.08
     lambda_collision_base: float = 0.1
     lambda_collision_min: float = 0.06
     lambda_collision_max: float = 0.6
@@ -128,9 +143,9 @@ STEP2_SAFE_CONFIG = Step2Config(
     traffic_coeff_clamp_enabled=False,
     network_load_min=0.65,
     network_load_max=1.45,
-    collision_size_min=0.65,
-    collision_size_under_max=1.05,
-    collision_size_over_max=1.6,
+    collision_size_min=0.75,
+    collision_size_under_max=1.0,
+    collision_size_over_max=1.35,
     reward_floor=0.05,
     floor_on_zero_success=True,
     zero_success_quality_bonus_factor=0.05,
@@ -145,9 +160,9 @@ STEP2_SUPER_SAFE_CONFIG = Step2Config(
     traffic_coeff_clamp_enabled=False,
     network_load_min=0.75,
     network_load_max=1.3,
-    collision_size_min=0.75,
+    collision_size_min=0.8,
     collision_size_under_max=1.0,
-    collision_size_over_max=1.4,
+    collision_size_over_max=1.3,
     reward_floor=0.06,
     floor_on_zero_success=True,
     zero_success_quality_bonus_factor=0.05,
