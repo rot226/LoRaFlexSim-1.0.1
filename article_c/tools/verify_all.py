@@ -25,11 +25,11 @@ if find_spec("article_c") is None:
     sys.path.insert(0, str(repo_root))
 
 from article_c.common.config import BASE_DIR
+from article_c.common.expected_figures import EXPECTED_FIGURES_BY_STEP
 from article_c.make_all_plots import (
     MANIFEST_STEP_OUTPUT_DIRS,
-    PLOT_MODULES,
     POST_PLOT_MODULES,
-    _extract_plot_metadata,
+    PLOT_MODULES,
 )
 
 SUPPORTED_FORMATS = ("png", "pdf", "eps", "svg")
@@ -80,16 +80,11 @@ def _read_step1_sizes(path: Path) -> set[int]:
 
 def _iter_expected_figures() -> list[tuple[str, Path, str]]:
     expected: list[tuple[str, Path, str]] = []
-    modules_by_step = {
-        **{module_path: "step1" for module_path in PLOT_MODULES["step1"]},
-        **{module_path: "step2" for module_path in PLOT_MODULES["step2"]},
-        **{module_path: "post" for module_path in POST_PLOT_MODULES},
-    }
-    for module_path, step in modules_by_step.items():
-        _, _, _, stems = _extract_plot_metadata(module_path)
+    for step, module_entries in EXPECTED_FIGURES_BY_STEP.items():
         output_dir = MANIFEST_STEP_OUTPUT_DIRS[step]
-        for stem in stems:
-            expected.append((module_path, output_dir, stem))
+        for module_path, stems in module_entries:
+            for stem in stems:
+                expected.append((module_path, output_dir, stem))
     return expected
 
 
