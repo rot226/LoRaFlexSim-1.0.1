@@ -418,6 +418,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=1,
         help="Nombre de processus worker pour paralléliser les tailles.",
     )
+    parser.add_argument(
+        "--reset-status",
+        action="store_true",
+        help=(
+            "Réinitialise explicitement run_status_step1.csv avant exécution. "
+            "Sans cette option, le fichier est conservé s'il existe déjà."
+        ),
+    )
     return parser
 
 
@@ -1090,21 +1098,24 @@ def main(argv: list[str] | None = None) -> None:
         )
     output_dir.mkdir(parents=True, exist_ok=True)
     status_csv_path = output_dir / "run_status_step1.csv"
-    with status_csv_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[
-                "status",
-                "step",
-                "network_size",
-                "replication",
-                "seed",
-                "algorithm",
-                "snir_mode",
-                "error",
-            ],
-        )
-        writer.writeheader()
+    status_fieldnames = [
+        "status",
+        "step",
+        "network_size",
+        "replication",
+        "seed",
+        "algorithm",
+        "snir_mode",
+        "error",
+    ]
+    if args.reset_status or not status_csv_path.exists():
+        with status_csv_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=status_fieldnames)
+            writer.writeheader()
+        action = "réinitialisé" if args.reset_status else "initialisé"
+        print(f"Statut Step1 {action}: {status_csv_path}")
+    else:
+        print(f"Statut Step1 conservé (mode campagne): {status_csv_path}")
     flat_output = bool(args.flat_output)
     simulated_sizes: list[int] = []
 

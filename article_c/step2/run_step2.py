@@ -2111,20 +2111,23 @@ def main(argv: Sequence[str] | None = None) -> None:
     base_results_dir = Path(__file__).resolve().parent / "results"
     ensure_dir(base_results_dir)
     status_csv_path = base_results_dir / "run_status_step2.csv"
-    with status_csv_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[
-                "status",
-                "step",
-                "network_size",
-                "replication",
-                "seed",
-                "algorithm",
-                "error",
-            ],
-        )
-        writer.writeheader()
+    status_fieldnames = [
+        "status",
+        "step",
+        "network_size",
+        "replication",
+        "seed",
+        "algorithm",
+        "error",
+    ]
+    if args.reset_status or not status_csv_path.exists():
+        with status_csv_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=status_fieldnames)
+            writer.writeheader()
+        action = "réinitialisé" if args.reset_status else "initialisé"
+        print(f"Statut Step2 {action}: {status_csv_path}")
+    else:
+        print(f"Statut Step2 conservé (mode campagne): {status_csv_path}")
     timestamp_dir: Path | None = None
     if args.timestamp:
         timestamp_dir = base_results_dir / timestamp_tag(with_timezone=True)
