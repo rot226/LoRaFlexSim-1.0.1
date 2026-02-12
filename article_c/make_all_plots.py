@@ -86,6 +86,7 @@ POST_PLOT_MODULES = [
 ]
 
 MANIFEST_OUTPUT_PATH = ARTICLE_DIR / "figures_manifest.csv"
+PLOT_DATA_FILTER_REPORT_OUTPUT_PATH = ARTICLE_DIR / "plot_data_filter_report.csv"
 
 MAKE_ALL_PLOTS_PRESETS: dict[str, dict[str, object]] = {
     "ieee-ready-no-titles": {
@@ -1152,13 +1153,27 @@ def _validate_plot_data(
     requirements: PlotRequirements,
     expected_sizes: list[int] | None,
     cached_data: dict[str, tuple[list[str], list[dict[str, str]]]],
-) -> tuple[bool, str]:
+) -> tuple[bool, str, dict[str, object]]:
     def _log_filter(filter_name: str, before: int, after: int, detail: str = "") -> None:
         suffix = f" ({detail})" if detail else ""
         print(
             f"[validate_plot_data] Filtre {filter_name}: "
             f"{before} -> {after} ligne(s){suffix}."
         )
+
+    report: dict[str, object] = {
+        "step": step,
+        "module_path": module_path,
+        "csv_path": str(csv_path.resolve()),
+        "initial_rows": 0,
+        "after_cast_type_rows": 0,
+        "after_dropna_rows": 0,
+        "after_algo_filter_rows": 0,
+        "after_snir_filter_rows": 0,
+        "after_cluster_filter_rows": 0,
+        "status": "PENDING",
+        "reason": "",
+    }
 
     print(f"[validate_plot_data] Module: {module_path}")
     print(f"[validate_plot_data] CSV: {csv_path.resolve()}")
@@ -1169,7 +1184,9 @@ def _validate_plot_data(
                 "AVERTISSEMENT: "
                 f"{module_path} nécessite {extra_name}, figure ignorée."
             )
-            return False, f"CSV manquant ({extra_name})"
+            report["status"] = "SKIP"
+            report["reason"] = f"CSV manquant ({extra_name})"
+            return False, f"CSV manquant ({extra_name})", report
     cache_key = str(csv_path)
     if cache_key not in cached_data:
         cached_data[cache_key] = _load_csv_data(csv_path)
@@ -1178,12 +1195,20 @@ def _validate_plot_data(
         "[validate_plot_data] Colonnes disponibles: "
         f"{', '.join(fieldnames) if fieldnames else 'aucune'}"
     )
+    report["initial_rows"] = len(rows)
+    report["after_cast_type_rows"] = len(rows)
+    report["after_dropna_rows"] = len(rows)
+    report["after_algo_filter_rows"] = len(rows)
+    report["after_snir_filter_rows"] = len(rows)
+    report["after_cluster_filter_rows"] = len(rows)
     if not fieldnames:
         print(
             "AVERTISSEMENT: "
             f"CSV vide pour {module_path}, figure ignorée."
         )
-        return False, "CSV vide"
+        report["status"] = "SKIP"
+        report["reason"] = "CSV vide"
+        return False, "CSV vide", report
     sizes = _extract_network_sizes(csv_path)
     if "network_size" in fieldnames:
         size_col = "network_size"
@@ -1219,6 +1244,8 @@ def _validate_plot_data(
             len(rows) - dropped_empty - cast_errors,
             f"colonne={size_col}, dropna={dropped_empty}, cast_errors={cast_errors}",
         )
+        report["after_cast_type_rows"] = len(rows) - cast_errors
+        report["after_dropna_rows"] = len(rows) - cast_errors - dropped_empty
     if module_path in MIN_NETWORK_SIZES_PER_PLOT:
         min_network_sizes = MIN_NETWORK_SIZES_PER_PLOT[module_path]
     elif step == "step2":
@@ -1238,7 +1265,9 @@ def _validate_plot_data(
             "figure ignorée."
         )
         print(f"CSV path: {csv_path}")
-        return False, "tailles de réseau insuffisantes"
+        report["status"] = "SKIP"
+        report["reason"] = "tailles de réseau insuffisantes"
+        return False, "tailles de réseau insuffisantes", report
     if expected_sizes:
         expected_set = {int(size) for size in expected_sizes}
         if sizes and sizes < expected_set:
@@ -1264,7 +1293,9 @@ def _validate_plot_data(
                 f"{module_path} nécessite une colonne RSSI/SNR, "
                 "figure ignorée."
             )
-            return False, "colonne RSSI/SNR manquante"
+            report["status"] = "SKIP"
+            report["reason"] = "colonne RSSI/SNR manquante"
+            return False, "colonne RSSI/SNR manquante", report
     if requirements.require_algo_snir:
         algo_col = _pick_column(fieldnames, ("algo", "algorithm", "method"))
         snir_col = _pick_column(
@@ -1280,7 +1311,9 @@ def _validate_plot_data(
                 f"{module_path} nécessite les colonnes algo/snir_mode, "
                 "figure ignorée."
             )
-            return False, "colonnes algo/snir_mode manquantes"
+            report["status"] = "SKIP"
+            report["reason"] = "colonnes algo/snir_mode manquantes"
+            return False, "colonnes algo/snir_mode manquantes", report
         available_algos = {
             normalized
             for row in rows
@@ -1307,6 +1340,8 @@ def _validate_plot_data(
             ]
         else:
             snir_filtered_rows = list(algo_filtered_rows)
+        report["after_algo_filter_rows"] = len(algo_filtered_rows)
+        report["after_snir_filter_rows"] = len(snir_filtered_rows)
         cluster_col = _pick_column(fieldnames, ("cluster", "cluster_id", "cluster_index"))
         if cluster_col:
             cluster_filtered_rows = [
@@ -1314,6 +1349,7 @@ def _validate_plot_data(
                 for row in snir_filtered_rows
                 if row.get(cluster_col) not in (None, "")
             ]
+            report["after_cluster_filter_rows"] = len(cluster_filtered_rows)
             _log_filter(
                 "cluster",
                 len(snir_filtered_rows),
@@ -1321,6 +1357,7 @@ def _validate_plot_data(
                 f"colonne={cluster_col}",
             )
         else:
+            report["after_cluster_filter_rows"] = len(snir_filtered_rows)
             _log_filter("cluster", len(snir_filtered_rows), len(snir_filtered_rows), "non appliqué")
         _log_filter(
             "algo",
@@ -1356,8 +1393,55 @@ def _validate_plot_data(
                 f"{module_path} incomplet ({' ; '.join(details)}), "
                 "figure ignorée."
             )
-            return False, "données incomplètes"
-    return True, "OK"
+            report["status"] = "SKIP"
+            report["reason"] = "données incomplètes"
+            return False, "données incomplètes", report
+    report["status"] = "OK"
+    report["reason"] = "OK"
+    return True, "OK", report
+
+
+def _write_plot_data_filter_report(report_rows: list[dict[str, object]]) -> None:
+    fieldnames = [
+        "step",
+        "module_path",
+        "csv_path",
+        "initial_rows",
+        "after_cast_type_rows",
+        "after_dropna_rows",
+        "after_algo_filter_rows",
+        "after_snir_filter_rows",
+        "after_cluster_filter_rows",
+        "status",
+        "reason",
+    ]
+    with PLOT_DATA_FILTER_REPORT_OUTPUT_PATH.open(
+        "w",
+        encoding="utf-8",
+        newline="",
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(report_rows)
+
+
+def _print_plot_data_filter_report_for_module(report_row: dict[str, object]) -> None:
+    print("[plot_data_filter_report] Détail module SKIP:")
+    print(
+        "  - module="
+        f"{report_row['module_path']}, status={report_row['status']}, "
+        f"reason={report_row['reason']}"
+    )
+    print(f"  - csv={report_row['csv_path']}")
+    print(
+        "  - lignes: "
+        f"initial={report_row['initial_rows']}, "
+        f"après_cast_type={report_row['after_cast_type_rows']}, "
+        f"après_dropna={report_row['after_dropna_rows']}, "
+        f"après_algo={report_row['after_algo_filter_rows']}, "
+        f"après_snir={report_row['after_snir_filter_rows']}, "
+        f"après_cluster={report_row['after_cluster_filter_rows']}"
+    )
 
 
 @dataclass
@@ -1613,6 +1697,7 @@ def main(argv: list[str] | None = None) -> None:
                 print("Commande PowerShell pour terminer Step2 (mode reprise):")
                 print(_suggest_step2_resume_command(expected_sizes))
     csv_cache: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
+    plot_data_filter_report_rows: list[dict[str, object]] = []
     for step, module_paths in PLOT_MODULES.items():
         if step not in steps:
             continue
@@ -1702,7 +1787,7 @@ def main(argv: list[str] | None = None) -> None:
                 or step_network_sizes.get(step)
                 or network_sizes
             )
-            is_valid, reason = _validate_plot_data(
+            is_valid, reason, report_row = _validate_plot_data(
                 step=step,
                 module_path=module_path,
                 csv_path=csv_path,
@@ -1710,6 +1795,7 @@ def main(argv: list[str] | None = None) -> None:
                 expected_sizes=expected_sizes,
                 cached_data=csv_cache,
             )
+            plot_data_filter_report_rows.append(report_row)
             if not is_valid:
                 _register_status(
                     status_map,
@@ -1718,6 +1804,7 @@ def main(argv: list[str] | None = None) -> None:
                     status="SKIP",
                     message=reason,
                 )
+                _print_plot_data_filter_report_for_module(report_row)
                 continue
             if step == "step2":
                 figure = module_path.split(".")[-1]
@@ -1995,6 +2082,11 @@ def main(argv: list[str] | None = None) -> None:
             message=str(exc),
         )
         print(f"ERREUR: génération du manifest impossible: {exc}")
+    _write_plot_data_filter_report(plot_data_filter_report_rows)
+    print(
+        "INFO: rapport de filtrage écrit: "
+        f"{PLOT_DATA_FILTER_REPORT_OUTPUT_PATH.resolve()}"
+    )
     counts = _summarize_statuses(status_map, steps, [*POST_PLOT_MODULES, manifest_module])
     if args.fail_on_error and counts.get("FAIL", 0) > 0:
         sys.exit(1)
