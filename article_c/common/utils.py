@@ -12,6 +12,8 @@ import numpy as np
 
 from article_c.common.config import DEFAULT_CONFIG
 
+DEFAULT_STEP2_RX_POWER_DBM = -100.0
+
 
 def ensure_dir(path: Path) -> None:
     """Crée le dossier s'il n'existe pas."""
@@ -135,10 +137,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--rx-power-dbm",
         type=float,
-        default=-100.0,
+        default=DEFAULT_STEP2_RX_POWER_DBM,
         help=(
             "Puissance reçue moyenne (dBm) utilisée dans le modèle radio "
-            "de l'étape 2."
+            "de l'étape 2 (indépendante de --noise-floor-dbm)."
         ),
     )
     parser.add_argument(

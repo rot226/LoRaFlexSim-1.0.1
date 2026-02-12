@@ -673,7 +673,18 @@ def _log_step2_autonomous_inputs(args: object, reference_network_size: int) -> N
         f"traffic_mode={getattr(args, 'traffic_mode', None)}, "
         f"traffic_coeff_scale={getattr(args, 'traffic_coeff_scale', None)}, "
         f"snir_threshold_db={getattr(args, 'snir_threshold_db', None)}, "
-        f"noise_floor_dbm={getattr(args, 'noise_floor_dbm', None)}."
+        f"noise_floor_dbm={getattr(args, 'noise_floor_dbm', None)}, "
+        f"rx_power_dbm_requested={getattr(args, 'rx_power_dbm', None)}."
+    )
+
+
+def _log_rx_power_diagnostics(requested_dbm: float, effective_dbm: float) -> None:
+    clamped = _is_rx_power_clamped(requested_dbm, effective_dbm)
+    print(
+        "Diagnostic rx_power_dbm: "
+        f"requested={requested_dbm:.2f} dBm, "
+        f"effective={effective_dbm:.2f} dBm, "
+        f"clamped={'yes' if clamped else 'no'}."
     )
 
 def _init_collision_histogram() -> dict[str, int]:
@@ -2251,9 +2262,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         "reward_debug": getattr(args, "reward_debug", False),
         "reward_alert_level": args.reward_alert_level,
     }
-    config["rx_power_dbm"] = _clamp_rx_power_dbm(
-        float(getattr(args, "rx_power_dbm", -100.0))
-    )
+    requested_rx_power_dbm = float(args.rx_power_dbm)
+    config["rx_power_dbm"] = _clamp_rx_power_dbm(requested_rx_power_dbm)
+    _log_rx_power_diagnostics(requested_rx_power_dbm, float(config["rx_power_dbm"]))
 
     _run_auto_tuning_before_campaign(config, replications, base_results_dir)
     _sync_args_from_auto_tuned_config(args, config)
