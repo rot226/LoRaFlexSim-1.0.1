@@ -150,9 +150,7 @@ def _plot_for_cluster(df: pd.DataFrame, cluster: str) -> plt.Figure:
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.grid(True, linestyle=":", alpha=0.35)
 
-    cluster_label = "global (all clusters)" if cluster == "all" else f"cluster={cluster}"
     axes[0].set_ylabel(f"Energy per delivered packet ({unit})")
-    fig.suptitle(cluster_label)
 
     handles, labels = axes[0].get_legend_handles_labels()
     if len(axes) > 1:

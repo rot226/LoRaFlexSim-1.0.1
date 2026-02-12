@@ -173,8 +173,7 @@ def _plot(agg: pd.DataFrame, sizes: list[int]) -> plt.Figure:
     if handles:
         fig.legend(handles, labels, loc="upper center", ncol=min(4, len(labels)), frameon=True)
 
-    fig.suptitle("Courbes d'apprentissage (moyenne ± IC95)", y=0.995)
-    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.94))
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 1.0))
     return fig
 
 

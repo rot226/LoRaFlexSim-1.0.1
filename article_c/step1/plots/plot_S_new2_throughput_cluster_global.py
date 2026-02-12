@@ -112,7 +112,7 @@ def _plot(df: pd.DataFrame, metric_key: str) -> plt.Figure:
         for algo in ALGOS:
             subset_algo = subset_snir[subset_snir["algo_norm"] == algo]
             points = {
-                int(row.network_size): float(row[metric_key])
+                int(row.network_size): float(getattr(row, metric_key))
                 for row in subset_algo.itertuples(index=False)
             }
             if not points:
