@@ -50,6 +50,10 @@ PLOT_MODULES = {
         "article_c.step1.plots.plot_S9_latency_or_toa_vs_network_size",
         "article_c.step1.plots.plot_S10_rssi_cdf_by_algo",
         "article_c.step1.plots.plot_S10_rssi_or_snr_cdf",
+        "article_c.step1.plots.plot_S_new1_pdr_cluster_paper",
+        "article_c.step1.plots.plot_S_new2_throughput_cluster_global",
+        "article_c.step1.plots.plot_S_new3_energy_per_delivered_packet",
+        "article_c.step1.plots.plot_S_new4_interference_realism",
     ],
     "step2": [
         "article_c.step2.plots.plot_RL1",
@@ -64,6 +68,11 @@ PLOT_MODULES = {
         "article_c.step2.plots.plot_RL8_reward_distribution",
         "article_c.step2.plots.plot_RL9_sf_selection_entropy",
         "article_c.step2.plots.plot_RL10_reward_vs_pdr_scatter",
+        "article_c.step2.plots.plot_R_new1_pdr_global",
+        "article_c.step2.plots.plot_R_new2_energy_per_packet",
+        "article_c.step2.plots.plot_R_new3_learning_curve",
+        "article_c.step2.plots.plot_R_new4_sf_policy",
+        "article_c.step2.plots.plot_R_figure3_ucb1_vs_baselines",
     ],
 }
 
@@ -291,7 +300,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--formats",
         type=str,
         default="png",
-        help="Formats d'export des figures (ex: png,eps).",
+        help="Formats d'export des figures (défaut: png, ex: png,pdf,eps).",
     )
     parser.add_argument(
         "--fail-on-error",
@@ -1391,6 +1400,7 @@ def main(argv: list[str] | None = None) -> None:
                     print(
                         f"ERREUR: échec du plot {module_path}: {exc}"
                     )
+                    print("INFO: batch poursuivi (module suivant).")
                     traceback.print_exc()
                     _register_status(
                         status_map,
@@ -1433,6 +1443,7 @@ def main(argv: list[str] | None = None) -> None:
                     print(
                         f"ERREUR: échec du plot {module_path}: {exc}"
                     )
+                    print("INFO: batch poursuivi (module suivant).")
                     traceback.print_exc()
                     _register_status(
                         status_map,
@@ -1514,6 +1525,7 @@ def main(argv: list[str] | None = None) -> None:
                 print(
                     f"ERREUR: échec du plot {module_path}: {exc}"
                 )
+                print("INFO: batch poursuivi (module suivant).")
                 traceback.print_exc()
                 _register_status(
                     status_map,
