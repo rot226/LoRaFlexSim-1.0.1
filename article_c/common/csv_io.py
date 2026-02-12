@@ -741,10 +741,11 @@ def write_simulation_results(
     if "density" not in aggregated_header and "network_size" in aggregated_header:
         size_index = aggregated_header.index("network_size")
         aggregated_header.insert(size_index + 1, "density")
-    atomic_write_csv(
+    append_or_merge_csv(
         aggregated_path,
         aggregated_header,
         [[row.get(key, "") for key in aggregated_header] for row in aggregated_rows],
+        dedupe_keys=_step2_dedupe_keys(aggregated_rows),
     )
     if intermediate_rows:
         has_round = any(row.get("round") not in (None, "") for row in intermediate_rows)
@@ -754,18 +755,31 @@ def write_simulation_results(
             intermediate_name = "aggregated_results_by_replication.csv"
         intermediate_path = output_dir / intermediate_name
         intermediate_header = list(intermediate_rows[0].keys())
-        atomic_write_csv(
+        append_or_merge_csv(
             intermediate_path,
             intermediate_header,
             [
                 [row.get(key, "") for key in intermediate_header]
                 for row in intermediate_rows
             ],
+            dedupe_keys=_step2_dedupe_keys(intermediate_rows),
         )
 
 
 def _row_has_any_keys(row: dict[str, object], keys: tuple[str, ...]) -> bool:
     return any(key in row for key in keys)
+
+
+def _step2_dedupe_keys(rows: list[dict[str, object]]) -> tuple[str, ...]:
+    """Construit les clés de déduplication Step2 selon les colonnes présentes."""
+    dedupe_keys: list[str] = ["network_size", "algo", "snir_mode"]
+    if any("round" in row for row in rows):
+        dedupe_keys.append("round")
+    elif any("replication" in row for row in rows):
+        dedupe_keys.append("replication")
+    if any("cluster" in row for row in rows):
+        dedupe_keys.append("cluster")
+    return tuple(dedupe_keys)
 
 
 def write_step1_results(
