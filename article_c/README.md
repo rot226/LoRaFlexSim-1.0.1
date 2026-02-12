@@ -87,6 +87,10 @@ Preset de génération IEEE-ready **sans titres globaux** :
 python -m article_c.make_all_plots --preset ieee-ready-no-titles
 ```
 
+> `make_all_plots` exécute automatiquement `article_c.qa_scientific_checks`
+> avant le traçage. Les rapports sont écrits dans
+> `article_c/scientific_qa_report.txt` et `article_c/scientific_qa_report.csv`.
+
 Équivalence exacte avec les **3 commandes** explicites :
 
 ```powershell
