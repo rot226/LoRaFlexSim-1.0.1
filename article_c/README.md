@@ -49,6 +49,30 @@ Exécuter toutes les étapes :
 python -m article_c.run_all
 ```
 
+### Presets documentés (Windows 11)
+
+Preset d'exécution complet (tailles + réplications + seed + SNIR) :
+
+```powershell
+python -m article_c.run_all --preset article-c
+```
+
+Preset de génération IEEE-ready **sans titres globaux** :
+
+```powershell
+python -m article_c.make_all_plots --preset ieee-ready-no-titles
+```
+
+Équivalence exacte avec les **3 commandes** explicites :
+
+```powershell
+python -m article_c.step1.run_step1 --network-sizes 50 100 150 --replications 5 --seeds_base 1 --snir_modes snir_on,snir_off --snir-threshold-db 5.0 --snir-threshold-min-db 3.0 --snir-threshold-max-db 6.0 --noise-floor-dbm -174.0
+python -m article_c.step2.run_step2 --network-sizes 50 100 150 --replications 5 --seeds_base 1
+python -m article_c.make_all_plots --formats png,eps,pdf --no-suptitle
+```
+
+`python -m article_c.run_all --preset article-c` est strictement équivalent aux deux premières commandes ci-dessus (step1 + step2), et le preset `ieee-ready-no-titles` couvre la troisième commande de génération des figures.
+
 Exécuter toutes les étapes en sortie **flat** + générer les figures (exemple Windows 11) :
 
 ```powershell

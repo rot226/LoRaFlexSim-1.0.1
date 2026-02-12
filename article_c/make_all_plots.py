@@ -86,6 +86,13 @@ POST_PLOT_MODULES = [
 
 MANIFEST_OUTPUT_PATH = ARTICLE_DIR / "figures_manifest.csv"
 
+MAKE_ALL_PLOTS_PRESETS: dict[str, dict[str, object]] = {
+    "ieee-ready-no-titles": {
+        "formats": "png,eps,pdf",
+        "no_suptitle": True,
+    }
+}
+
 MANIFEST_STEP_OUTPUT_DIRS = {
     "step1": STEP1_PLOTS_OUTPUT_DIR,
     "step2": STEP2_PLOTS_OUTPUT_DIR,
@@ -291,6 +298,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour générer les figures."""
     parser = argparse.ArgumentParser(
         description="Génère toutes les figures à partir des CSV agrégés."
+    )
+    parser.add_argument(
+        "--preset",
+        choices=tuple(sorted(MAKE_ALL_PLOTS_PRESETS)),
+        default=None,
+        help=(
+            "Préremplit un profil documenté. "
+            "Preset 'ieee-ready-no-titles' => formats=png,eps,pdf "
+            "et suppression du suptitle."
+        ),
     )
     parser.add_argument(
         "--steps",
@@ -1255,6 +1272,10 @@ def main(argv: list[str] | None = None) -> None:
 
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    if args.preset is not None:
+        preset_values = MAKE_ALL_PLOTS_PRESETS[args.preset]
+        for key, value in preset_values.items():
+            setattr(args, key, value)
     enable_suptitle = not args.no_suptitle
     try:
         export_formats = parse_export_formats(args.formats)

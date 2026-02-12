@@ -29,6 +29,19 @@ from article_c.validate_results import main as validate_results
 
 DEFAULT_REPLICATIONS = 10
 
+RUN_ALL_PRESETS: dict[str, dict[str, object]] = {
+    "article-c": {
+        "network_sizes": list(DEFAULT_CONFIG.scenario.network_sizes),
+        "replications": 5,
+        "seeds_base": 1,
+        "snir_modes": "snir_on,snir_off",
+        "snir_threshold_db": float(DEFAULT_CONFIG.snir.snir_threshold_db),
+        "snir_threshold_min_db": float(DEFAULT_CONFIG.snir.snir_threshold_min_db),
+        "snir_threshold_max_db": float(DEFAULT_CONFIG.snir.snir_threshold_max_db),
+        "noise_floor_dbm": float(DEFAULT_CONFIG.snir.noise_floor_dbm),
+    }
+}
+
 
 def _count_failed_runs(status_csv_path: Path, network_size: int) -> int:
     """Compte les exécutions marquées `failed` pour une taille donnée."""
@@ -54,6 +67,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour l'exécution complète."""
     parser = argparse.ArgumentParser(
         description="Exécute les étapes 1 et 2 avec des arguments communs."
+    )
+    parser.add_argument(
+        "--preset",
+        choices=tuple(sorted(RUN_ALL_PRESETS)),
+        default=None,
+        help=(
+            "Préremplit un profil documenté. "
+            "Preset 'article-c' => network_sizes=50 100 150, replications=5, "
+            "seeds_base=1 et options SNIR (modes + seuils + noise floor)."
+        ),
     )
     parser.add_argument(
         "--allow-non-article-c",
@@ -698,6 +721,11 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    if args.preset is not None:
+        preset_values = RUN_ALL_PRESETS[args.preset]
+        for key, value in preset_values.items():
+            if getattr(args, key) is None:
+                setattr(args, key, value)
     _enforce_article_c_branch(args.allow_non_article_c)
     if args.auto_safe_profile:
         print(
