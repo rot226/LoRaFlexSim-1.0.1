@@ -74,6 +74,7 @@ PLOT_MODULES = {
         "article_c.step2.plots.plot_R_new2_energy_per_packet",
         "article_c.step2.plots.plot_R_new3_learning_curve",
         "article_c.step2.plots.plot_R_new4_sf_policy",
+        "article_c.step2.plots.plot_R_new5_pdr_energy_tradeoff",
         "article_c.step2.plots.plot_R_figure3_ucb1_vs_baselines",
     ],
 }
