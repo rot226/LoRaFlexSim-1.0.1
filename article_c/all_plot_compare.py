@@ -18,8 +18,8 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_STEP1 = Path("article_c/step1/results/aggregated_results.csv")
-DEFAULT_STEP2 = Path("article_c/step2/results/aggregated_results.csv")
+DEFAULT_STEP1 = Path("article_c/step1/results/aggregates/aggregated_results.csv")
+DEFAULT_STEP2 = Path("article_c/step2/results/aggregates/aggregated_results.csv")
 
 
 def _split_formats(value: str) -> list[str]:

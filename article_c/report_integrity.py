@@ -405,9 +405,9 @@ def main(argv: list[str] | None = None) -> int:
     expected_sizes = _parse_int_csv_list(args.network_sizes)
     files = [
         args.step1_dir / "raw_metrics.csv",
-        args.step1_dir / "aggregated_results.csv",
+        args.step1_dir / "aggregates" / "aggregated_results.csv",
         args.step2_dir / "raw_results.csv",
-        args.step2_dir / "aggregated_results.csv",
+        args.step2_dir / "aggregates" / "aggregated_results.csv",
     ]
     report_rows: list[list[str]] = []
     console_rows: list[list[str]] = []

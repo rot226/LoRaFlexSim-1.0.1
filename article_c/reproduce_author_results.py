@@ -859,13 +859,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--step1-results",
         type=Path,
-        default=Path("article_c/step1/results/aggregated_results.csv"),
+        default=Path("article_c/step1/results/aggregates/aggregated_results.csv"),
         help="Chemin vers aggregated_results.csv (step1).",
     )
     parser.add_argument(
         "--step2-results",
         type=Path,
-        default=Path("article_c/step2/results/aggregated_results.csv"),
+        default=Path("article_c/step2/results/aggregates/aggregated_results.csv"),
         help="Chemin vers aggregated_results.csv (step2).",
     )
     parser.add_argument(

@@ -360,13 +360,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--step1-csv",
         type=Path,
-        default=Path("article_c/step1/results/aggregated_results.csv"),
+        default=Path("article_c/step1/results/aggregates/aggregated_results.csv"),
         help="Chemin vers aggregated_results.csv de l'étape 1.",
     )
     parser.add_argument(
         "--step2-csv",
         type=Path,
-        default=Path("article_c/step2/results/aggregated_results.csv"),
+        default=Path("article_c/step2/results/aggregates/aggregated_results.csv"),
         help="Chemin vers aggregated_results.csv de l'étape 2.",
     )
     parser.add_argument(

@@ -195,7 +195,7 @@ def main(
         warnings.warn("CSV Step2 manquant ou vide, figure ignorée.", stacklevel=2)
         return
     rows = load_step2_selection_probs(results_path)
-    aggregated_results_path = step_dir / "results" / "aggregated_results.csv"
+    aggregated_results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
     size_rows = load_step2_aggregated(
         aggregated_results_path,
         allow_sample=allow_sample,

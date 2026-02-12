@@ -378,7 +378,7 @@ def main(
         allow_sample = False
     step_dir = Path(__file__).resolve().parents[1]
     raw_results_path = step_dir / "results" / "raw_packets.csv"
-    aggregated_results_path = step_dir / "results" / "aggregated_results.csv"
+    aggregated_results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
     sf_values = list(DEFAULT_CONFIG.radio.spreading_factors)
     raw_rows = _read_raw_rows(raw_results_path)
     sf_rows = [row for row in raw_rows if _parse_sf_selected(row.get("sf_selected")) is not None]

@@ -79,9 +79,9 @@ def main() -> int:
         step_label="Step1",
     )
 
-    _write_csv(results_dir / "aggregated_results.csv", aggregated_rows)
-    _write_csv(results_dir / "aggregated_results_by_size.csv", aggregated_rows)
-    _write_csv(results_dir / "aggregated_results_by_replication.csv", intermediate_rows)
+    _write_csv(results_dir / "aggregates" / "aggregated_results.csv", aggregated_rows)
+    _write_csv(results_dir / "aggregates" / "aggregated_results_by_size.csv", aggregated_rows)
+    _write_csv(results_dir / "aggregates" / "aggregated_results_by_replication.csv", intermediate_rows)
 
     print(
         "Agrégation Step1 terminée: aggregated_results.csv, "

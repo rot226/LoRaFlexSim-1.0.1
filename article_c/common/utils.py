@@ -115,7 +115,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=False,
         help=(
-            "Génère aussi results/aggregated_results.csv en concaténant "
+            "Génère aussi results/aggregates/aggregated_results.csv en concaténant "
             "les size_<N>/aggregated_results.csv."
         ),
     )
