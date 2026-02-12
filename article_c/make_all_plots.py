@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import csv
 import importlib
 import inspect
+import re
 import statistics
 import sys
 import traceback
@@ -81,6 +83,14 @@ POST_PLOT_MODULES = [
     "article_c.compare_with_snir",
     "article_c.plot_cluster_der",
 ]
+
+MANIFEST_OUTPUT_PATH = ARTICLE_DIR / "figures_manifest.csv"
+
+MANIFEST_STEP_OUTPUT_DIRS = {
+    "step1": STEP1_PLOTS_OUTPUT_DIR,
+    "step2": STEP2_PLOTS_OUTPUT_DIR,
+    "post": ARTICLE_DIR / "plots" / "output",
+}
 
 MIN_NETWORK_SIZES_PER_PLOT = {
     "article_c.step2.plots.plot_RL1": 1,
@@ -552,6 +562,146 @@ def _validate_plot_modules_use_save_figure() -> dict[str, str]:
             + "\n".join(f"- {item}" for item in missing_plot_style)
         )
     return missing
+
+
+def _ast_int(node: ast.AST, default: int) -> int:
+    if isinstance(node, ast.Constant) and isinstance(node.value, int):
+        return int(node.value)
+    return default
+
+
+def _extract_save_figure_stems(module_ast: ast.Module) -> tuple[str, ...]:
+    stems: list[str] = []
+    for node in ast.walk(module_ast):
+        if not isinstance(node, ast.Call):
+            continue
+        func_name = ""
+        if isinstance(node.func, ast.Attribute):
+            func_name = node.func.attr
+        elif isinstance(node.func, ast.Name):
+            func_name = node.func.id
+        if func_name != "save_figure":
+            continue
+        stem_value: str | None = None
+        if len(node.args) >= 3 and isinstance(node.args[2], ast.Constant):
+            if isinstance(node.args[2].value, str):
+                stem_value = node.args[2].value
+        for keyword in node.keywords:
+            if keyword.arg == "stem" and isinstance(keyword.value, ast.Constant):
+                if isinstance(keyword.value.value, str):
+                    stem_value = keyword.value.value
+        if stem_value:
+            stems.append(stem_value)
+    return tuple(dict.fromkeys(stems))
+
+
+def _infer_panel_count(module_ast: ast.Module) -> int:
+    panel_count = 1
+    for node in ast.walk(module_ast):
+        if not isinstance(node, ast.Call):
+            continue
+        func_name = ""
+        if isinstance(node.func, ast.Attribute):
+            func_name = node.func.attr
+        elif isinstance(node.func, ast.Name):
+            func_name = node.func.id
+        if func_name != "subplots":
+            continue
+        nrows, ncols = 1, 1
+        if node.args:
+            nrows = _ast_int(node.args[0], default=1)
+        if len(node.args) >= 2:
+            ncols = _ast_int(node.args[1], default=1)
+        for keyword in node.keywords:
+            if keyword.arg == "nrows":
+                nrows = _ast_int(keyword.value, default=nrows)
+            if keyword.arg == "ncols":
+                ncols = _ast_int(keyword.value, default=ncols)
+        panel_count = max(panel_count, max(1, nrows * ncols))
+    return panel_count
+
+
+def _infer_metric(short_description: str, module_path: str) -> str:
+    lowered = f"{short_description} {module_path}".lower()
+    keyword_to_metric = (
+        ("pdr", "pdr"),
+        ("outage", "outage"),
+        ("throughput", "throughput"),
+        ("energy", "energy"),
+        ("reward", "reward"),
+        ("latency", "latency"),
+        ("toa", "toa"),
+        ("rssi", "rssi"),
+        ("snr", "snr"),
+        ("entropy", "entropy"),
+        ("sf", "sf_policy"),
+        ("der", "der"),
+    )
+    for keyword, metric in keyword_to_metric:
+        if keyword in lowered:
+            return metric
+    match = re.search(r"figure\s+([A-Za-z0-9_+\-]+)", short_description)
+    if match:
+        return match.group(1).lower()
+    return module_path.split(".")[-1]
+
+
+def _extract_plot_metadata(module_path: str) -> tuple[str, str, int, tuple[str, ...]]:
+    spec = importlib.util.find_spec(module_path)
+    if spec is None or spec.origin is None:
+        raise ModuleNotFoundError(f"Module introuvable: {module_path}")
+    source = Path(spec.origin).read_text(encoding="utf-8")
+    module_ast = ast.parse(source)
+    doc = ast.get_docstring(module_ast) or ""
+    short_description = doc.strip().splitlines()[0].strip() if doc.strip() else module_path
+    metric = _infer_metric(short_description, module_path)
+    panel_count = _infer_panel_count(module_ast)
+    stems = _extract_save_figure_stems(module_ast)
+    if not stems:
+        stems = (module_path.split(".")[-1],)
+    return metric, short_description, panel_count, stems
+
+
+def _write_figures_manifest(export_formats: tuple[str, ...]) -> None:
+    rows: list[dict[str, str | int]] = []
+    missing_files: list[Path] = []
+    all_modules = {
+        **{module_path: "step1" for module_path in PLOT_MODULES["step1"]},
+        **{module_path: "step2" for module_path in PLOT_MODULES["step2"]},
+        **{module_path: "post" for module_path in POST_PLOT_MODULES},
+    }
+    for module_path, step in all_modules.items():
+        metric, short_description, panel_count, stems = _extract_plot_metadata(module_path)
+        output_dir = MANIFEST_STEP_OUTPUT_DIRS[step]
+        for stem in stems:
+            for fmt in export_formats:
+                filename = f"{stem}.{fmt}"
+                full_path = output_dir / filename
+                rows.append(
+                    {
+                        "filename": str(full_path.relative_to(ARTICLE_DIR)),
+                        "metric": metric,
+                        "short_description": short_description,
+                        "step": step,
+                        "panel_count": panel_count,
+                    }
+                )
+                if not full_path.exists():
+                    missing_files.append(full_path)
+    if missing_files:
+        missing_preview = "\n".join(f"- {path}" for path in sorted(set(missing_files)))
+        raise FileNotFoundError(
+            "Fichiers de figures manquants pour le manifest:\n"
+            f"{missing_preview}"
+        )
+    with MANIFEST_OUTPUT_PATH.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["filename", "metric", "short_description", "step", "panel_count"],
+        )
+        writer.writeheader()
+        writer.writerows(sorted(rows, key=lambda row: (str(row["step"]), str(row["filename"]))))
+    print(f"Manifest des figures écrit: {MANIFEST_OUTPUT_PATH}")
 
 
 def _validate_step2_plot_module_registry() -> list[str]:
@@ -1561,7 +1711,26 @@ def main(argv: list[str] | None = None) -> None:
             "Step2",
             list(export_formats),
         )
-    counts = _summarize_statuses(status_map, steps, POST_PLOT_MODULES)
+    manifest_module = "article_c.make_all_plots.figures_manifest"
+    try:
+        _write_figures_manifest(export_formats)
+        _register_status(
+            status_map,
+            step="post",
+            module_path=manifest_module,
+            status="OK",
+            message=f"manifest écrit ({MANIFEST_OUTPUT_PATH.name})",
+        )
+    except Exception as exc:
+        _register_status(
+            status_map,
+            step="post",
+            module_path=manifest_module,
+            status="FAIL",
+            message=str(exc),
+        )
+        print(f"ERREUR: génération du manifest impossible: {exc}")
+    counts = _summarize_statuses(status_map, steps, [*POST_PLOT_MODULES, manifest_module])
     if args.fail_on_error and counts.get("FAIL", 0) > 0:
         sys.exit(1)
 
