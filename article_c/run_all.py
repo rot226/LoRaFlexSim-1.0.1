@@ -886,6 +886,57 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
     return step2_args
 
 
+def _build_step2_explicit_config(args: argparse.Namespace) -> dict[str, object]:
+    """Construit une configuration Step2 autonome (sans lecture Step1)."""
+    return {
+        "reference_network_size": getattr(args, "reference_network_size", None),
+        "replications": args.replications,
+        "seeds_base": args.seeds_base,
+        "safe_profile": args.safe_profile,
+        "auto_safe_profile": args.auto_safe_profile,
+        "strict": args.strict,
+        "allow_low_success_rate": args.allow_low_success_rate,
+        "snir_threshold_db": args.snir_threshold_db,
+        "snir_threshold_min_db": args.snir_threshold_min_db,
+        "snir_threshold_max_db": args.snir_threshold_max_db,
+        "noise_floor_dbm": args.noise_floor_dbm,
+        "traffic_mode": args.traffic_mode,
+        "jitter_range_s": args.jitter_range_s,
+        "window_duration_s": args.window_duration_s,
+        "traffic_coeff_min": args.traffic_coeff_min,
+        "traffic_coeff_max": args.traffic_coeff_max,
+        "traffic_coeff_enabled": args.traffic_coeff_enabled,
+        "traffic_coeff_scale": args.traffic_coeff_scale,
+        "capture_probability": args.capture_probability,
+        "congestion_coeff": args.congestion_coeff,
+        "congestion_coeff_base": args.congestion_coeff_base,
+        "congestion_coeff_growth": args.congestion_coeff_growth,
+        "congestion_coeff_max": args.congestion_coeff_max,
+        "network_load_min": args.network_load_min,
+        "network_load_max": args.network_load_max,
+        "collision_size_min": args.collision_size_min,
+        "collision_size_under_max": args.collision_size_under_max,
+        "collision_size_over_max": args.collision_size_over_max,
+        "collision_size_factor": args.collision_size_factor,
+        "max_penalty_ratio": args.max_penalty_ratio,
+        "traffic_coeff_clamp_min": args.traffic_coeff_clamp_min,
+        "traffic_coeff_clamp_max": args.traffic_coeff_clamp_max,
+        "traffic_coeff_clamp_enabled": args.traffic_coeff_clamp_enabled,
+        "window_delay_enabled": args.window_delay_enabled,
+        "window_delay_range_s": args.window_delay_range_s,
+        "reward_floor": args.reward_floor,
+        "zero_success_quality_bonus_factor": args.zero_success_quality_bonus_factor,
+        "floor_on_zero_success": args.floor_on_zero_success,
+        "rx_power_dbm": args.rx_power_dbm,
+        "shadowing_sigma_db": args.shadowing_sigma_db,
+        "debug_step2": args.debug_step2,
+        "reward_debug": args.reward_debug,
+        "reward_alert_level": args.reward_alert_level,
+        "flat_output": args.flat_output,
+        "reset_status": getattr(args, "reset_status", False),
+    }
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
@@ -951,26 +1002,29 @@ def main(argv: list[str] | None = None) -> None:
     campaign_start = perf_counter()
     reference_network_size = int(round(median(requested_sizes)))
     args.reference_network_size = reference_network_size
+    step2_explicit_config = _build_step2_explicit_config(args)
     step1_status_reset_pending = True
     step2_status_reset_pending = True
     for size_index, size in enumerate(requested_sizes):
         expected_sizes_so_far = set(requested_sizes[: size_index + 1])
-        size_args = argparse.Namespace(**vars(args))
-        size_args.network_sizes = [size]
+        step1_size_args = argparse.Namespace(**vars(args))
+        step1_size_args.network_sizes = [size]
+        step2_size_args = argparse.Namespace(**step2_explicit_config)
+        step2_size_args.network_sizes = [size]
         size_summary: dict[str, object] = {
             "network_size": size,
             "replications_total": replications_total,
             "failed": 0,
             "elapsed_seconds": 0.0,
             "step1": {
-                "status": "skipped" if size_args.skip_step1 else "pending",
+                "status": "skipped" if step1_size_args.skip_step1 else "pending",
                 "failed": 0,
                 "elapsed_seconds": 0.0,
                 "output_path": str(step1_results_dir),
                 "status_file": str(step1_results_dir / "run_status_step1.csv"),
             },
             "step2": {
-                "status": "skipped" if size_args.skip_step2 else "pending",
+                "status": "skipped" if step1_size_args.skip_step2 else "pending",
                 "failed": 0,
                 "elapsed_seconds": 0.0,
                 "output_path": str(step2_results_dir),
@@ -978,12 +1032,12 @@ def main(argv: list[str] | None = None) -> None:
             },
         }
         size_start = perf_counter()
-        if not size_args.skip_step1:
-            size_args.reset_status = step1_status_reset_pending
+        if not step1_size_args.skip_step1:
+            step1_size_args.reset_status = step1_status_reset_pending
             step_start = perf_counter()
-            run_step1(_build_step1_args(size_args))
+            run_step1(_build_step1_args(step1_size_args))
             step1_status_reset_pending = False
-            if bool(size_args.flat_output):
+            if bool(step1_size_args.flat_output):
                 _assert_cumulative_sizes(
                     step1_results_dir / "aggregated_results.csv",
                     expected_sizes_so_far,
@@ -1004,12 +1058,12 @@ def main(argv: list[str] | None = None) -> None:
                 "failed": step1_failed,
                 "elapsed_seconds": round(step1_elapsed, 3),
             }
-        if not size_args.skip_step2:
-            size_args.reset_status = step2_status_reset_pending
+        if not step1_size_args.skip_step2:
+            step2_size_args.reset_status = step2_status_reset_pending
             step_start = perf_counter()
-            run_step2(_build_step2_args(size_args))
+            run_step2(_build_step2_args(step2_size_args))
             step2_status_reset_pending = False
-            if bool(size_args.flat_output):
+            if bool(step2_size_args.flat_output):
                 _assert_cumulative_sizes(
                     step2_results_dir / "aggregated_results.csv",
                     expected_sizes_so_far,
