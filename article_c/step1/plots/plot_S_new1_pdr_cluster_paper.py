@@ -97,14 +97,14 @@ def _plot(df: pd.DataFrame) -> plt.Figure:
                 label=f"Cible cluster C{idx} ({target:.2f})",
             )
 
-        ax.set_title(SNIR_LABELS.get(snir_mode, snir_mode))
+        snir_label = SNIR_LABELS.get(snir_mode, snir_mode)
         ax.set_xlabel("Network size (nodes)")
         ax.set_xticks(NETWORK_SIZES)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.set_ylim(0.0, 1.0)
+        ax.set_ylabel(f"PDR (prob.) — {snir_label}")
         ax.grid(True, linestyle=":", alpha=0.35)
 
-    axes[0].set_ylabel("PDR (prob.)")
 
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="center right", frameon=True)

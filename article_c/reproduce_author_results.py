@@ -31,7 +31,6 @@ from article_c.common.plot_helpers import (
     ALGO_COLORS,
     MetricStatus,
     add_global_legend,
-    apply_suptitle,
     apply_figure_layout,
     apply_plot_style,
     collect_legend_entries,
@@ -50,10 +49,7 @@ from article_c.common.plot_helpers import (
     set_default_export_formats,
     set_network_size_ticks,
 )
-from article_c.common.plotting_style import (
-    SUPTITLE_Y,
-    apply_output_fonttype,
-)
+from article_c.common.plotting_style import apply_output_fonttype
 
 LOGGER = logging.getLogger(__name__)
 
@@ -412,7 +408,7 @@ def _render_legend(fig: plt.Figure, axes: Iterable[plt.Axes]) -> None:
 
 
 def _finalize_figure(fig: plt.Figure, title: str, *, show_header: bool = True) -> None:
-    apply_suptitle(fig, title, enable_suptitle=show_header, y=SUPTITLE_Y)
+    _ = (title, show_header)  # Compatibilité API: titres désactivés par politique éditoriale.
     apply_figure_layout(
         fig,
         figsize=resolve_ieee_figsize(len(fig.axes)),
@@ -496,9 +492,8 @@ def plot_fig4(
                 cluster=cluster,
                 label_prefix=profile_label,
             )
-        ax.set_title(f"Cluster {cluster}")
         ax.set_xlabel("Nombre de nœuds")
-        ax.set_ylabel("DER")
+        ax.set_ylabel(f"DER — Cluster {cluster}")
         ax.set_ylim(0.0, 1.0)
         set_network_size_ticks(ax, sorted({int(row["network_size"]) for row in cluster_rows}))
 
@@ -825,9 +820,9 @@ def plot_fig8(
                 cluster=cluster,
                 label_prefix=profile_label,
             )
-        ax.set_title("Global" if cluster == "all" else f"Cluster {cluster}")
+        cluster_label = "Global" if cluster == "all" else f"Cluster {cluster}"
         ax.set_xlabel("Nombre de nœuds")
-        ax.set_ylabel("Throughput (paquets reçus)")
+        ax.set_ylabel(f"Throughput (paquets reçus) — {cluster_label}")
         sizes = sorted(
             {
                 int(row["network_size"])
@@ -940,7 +935,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-header",
         action="store_true",
-        help="Désactive le titre global (suptitle) des figures.",
+        help="Option conservée pour compatibilité (titres déjà désactivés).",
     )
     return parser
 

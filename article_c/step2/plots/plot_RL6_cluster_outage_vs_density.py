@@ -202,7 +202,7 @@ def _plot_metric(
     algorithms = sorted({row["algo"] for row in rows})
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
-        ax.set_title(cluster_labels.get(cluster, label_for(cluster)))
+        cluster_label = cluster_labels.get(cluster, label_for(cluster))
         for algo in algorithms:
             points = {
                 int(row["network_size"]): row[metric_key]
@@ -224,7 +224,7 @@ def _plot_metric(
             values = [points.get(size, float("nan")) for size in network_sizes]
             ax.plot(network_sizes, values, marker="o", label=_label_for_algo(str(algo)))
         ax.set_xlabel(label_for("x.network_size"))
-        ax.set_ylabel(label_for("y.outage"))
+        ax.set_ylabel(f"{label_for('y.outage')} — {cluster_label}")
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     clear_axis_legends(axes)
@@ -352,7 +352,7 @@ def _plot_raw_metric(
     algorithms = sorted({row["algo"] for row in rows})
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
-        ax.set_title(cluster_labels.get(cluster, label_for(cluster)))
+        cluster_label = cluster_labels.get(cluster, label_for(cluster))
         for algo in algorithms:
             algo_rows = [row for row in cluster_rows if row.get("algo") == algo]
             replications = sorted(
@@ -380,7 +380,7 @@ def _plot_raw_metric(
                     label=label,
                 )
         ax.set_xlabel(label_for("x.network_size"))
-        ax.set_ylabel(label_for("y.outage_raw"))
+        ax.set_ylabel(f"{label_for('y.outage_raw')} — {cluster_label}")
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     clear_axis_legends(axes)

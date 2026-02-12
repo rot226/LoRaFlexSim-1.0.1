@@ -212,12 +212,12 @@ def _plot_metrics(metrics: list[GroupMetrics]) -> plt.Figure:
             ax_top.plot(NETWORK_SIZES, y_frac, **style)
             ax_bottom.plot(NETWORK_SIZES, y_inter, **style)
 
-        ax_top.set_title(SNIR_LABELS.get(snir_mode, snir_mode))
-        ax_top.set_ylabel("Fraction voisins ±3 dB")
+        snir_label = SNIR_LABELS.get(snir_mode, snir_mode)
+        ax_top.set_ylabel(f"Fraction voisins ±3 dB — {snir_label}")
         ax_top.set_ylim(0.0, 1.0)
         ax_top.grid(True, linestyle=":", alpha=0.35)
 
-        ax_bottom.set_ylabel("Interférents co-SF moyens")
+        ax_bottom.set_ylabel(f"Interférents co-SF moyens — {snir_label}")
         ax_bottom.set_xlabel("Network size (nodes)")
         ax_bottom.set_xticks(NETWORK_SIZES)
         ax_bottom.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
