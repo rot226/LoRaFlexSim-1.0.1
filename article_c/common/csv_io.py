@@ -723,6 +723,101 @@ def _percentile(values: list[float], percentile: float) -> float:
     return float(values[lower]) + (float(values[upper]) - float(values[lower])) * weight
 
 
+def _extract_size_rep_from_path(path: Path) -> tuple[int, int] | None:
+    size_value: int | None = None
+    rep_value: int | None = None
+    for part in path.parts:
+        if part.startswith("size_"):
+            suffix = part[len("size_") :]
+            if suffix.isdigit():
+                size_value = int(suffix)
+        elif part.startswith("rep_"):
+            suffix = part[len("rep_") :]
+            if suffix.isdigit():
+                rep_value = int(suffix)
+    if size_value is None or rep_value is None:
+        return None
+    return size_value, rep_value
+
+
+def _find_run_status_path(output_dir: Path, step_label: str) -> Path:
+    filename = f"run_status_{step_label.lower()}.csv"
+    for candidate in [output_dir, *output_dir.parents]:
+        candidate_path = candidate / filename
+        if candidate_path.exists():
+            return candidate_path
+    for parent in output_dir.parents:
+        if parent.name == "by_size":
+            return parent.parent / filename
+    return output_dir / filename
+
+
+def _log_network_size_mismatch(
+    output_dir: Path,
+    step_label: str,
+    expected_size: int,
+    rep_value: int,
+    *,
+    detail: str,
+) -> None:
+    status_path = _find_run_status_path(output_dir, step_label)
+    write_rows(
+        status_path,
+        [
+            "status",
+            "step",
+            "network_size",
+            "replication",
+            "seed",
+            "algorithm",
+            "snir_mode",
+            "error",
+        ],
+        [
+            [
+                "failed",
+                step_label.lower(),
+                expected_size,
+                rep_value,
+                "",
+                "",
+                "",
+                detail,
+            ]
+        ],
+    )
+
+
+def _validate_replication_network_size(
+    output_dir: Path,
+    raw_rows: list[dict[str, object]],
+    *,
+    step_label: str,
+) -> None:
+    size_rep = _extract_size_rep_from_path(output_dir)
+    if size_rep is None:
+        return
+    expected_size, rep_value = size_rep
+    observed_sizes = {
+        _coerce_positive_network_size(row.get("network_size")) for row in raw_rows
+    }
+    invalid_sizes = sorted(size for size in observed_sizes if size != expected_size)
+    if not invalid_sizes:
+        return
+    detail = (
+        "Incohérence network_size pour écriture sous "
+        f"size_{expected_size}/rep_{rep_value}: valeurs trouvées {invalid_sizes}."
+    )
+    _log_network_size_mismatch(
+        output_dir,
+        step_label,
+        expected_size,
+        rep_value,
+        detail=detail,
+    )
+    raise ValueError(detail)
+
+
 def write_simulation_results(
     output_dir: Path,
     raw_rows: list[dict[str, object]],
@@ -730,6 +825,7 @@ def write_simulation_results(
 ) -> None:
     """Écrit raw_results.csv, raw_all.csv, raw_cluster.csv et aggregated_results.csv."""
     output_dir.mkdir(parents=True, exist_ok=True)
+    _validate_replication_network_size(output_dir, raw_rows, step_label="step2")
     raw_path = output_dir / "raw_results.csv"
     raw_all_path = output_dir / "raw_all.csv"
     raw_cluster_path = output_dir / "raw_cluster.csv"
@@ -900,6 +996,7 @@ def write_step1_results(
 ) -> None:
     """Écrit raw_packets.csv, raw_metrics.csv et aggregated_results.csv pour l'étape 1."""
     output_dir.mkdir(parents=True, exist_ok=True)
+    _validate_replication_network_size(output_dir, raw_rows, step_label="step1")
     packets_path = output_dir / "raw_packets.csv"
     metrics_path = output_dir / "raw_metrics.csv"
     aggregated_path = output_dir / "aggregated_results.csv"
