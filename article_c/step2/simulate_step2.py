@@ -59,6 +59,7 @@ logger = logging.getLogger(__name__)
 _NO_CLAMP = False
 RX_POWER_DBM_MIN = -120.0
 RX_POWER_DBM_MAX = -70.0
+CAPTURE_POWER_DELTA_THRESHOLD_DB = 2.0
 
 
 def _clip(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float:
@@ -107,7 +108,7 @@ def _compute_reward(
     reward_floor_base = 0.08
     latency_norm = _clip(latency_norm**1.35 * 1.08, 0.0, 1.0)
     energy_norm = _clip(energy_norm**1.35 * 1.08, 0.0, 1.0)
-    collision_norm = _clip(collision_norm**1.15 * 1.04, 0.0, 1.0)
+    collision_norm = _clip(collision_norm**1.05, 0.0, 1.0)
     energy_weight = weights.energy_weight * (1.0 + lambda_energy)
     total_weight = (
         weights.sf_weight
@@ -150,6 +151,15 @@ def _compute_reward(
                 penalty_cap,
             )
             collision_penalty = penalty_cap
+    success_term = 0.4 * success_rate
+    success_penalty_cap = 1.15 * success_term
+    if collision_penalty > success_penalty_cap:
+        logger.info(
+            "collision_penalty capped by success term (collision_penalty=%.4f cap=%.4f).",
+            collision_penalty,
+            success_penalty_cap,
+        )
+        collision_penalty = success_penalty_cap
     if collision_penalty > success_rate * weighted_quality:
         logger.info(
             "Pénalité de collision dominante (collision_penalty=%.4f success_rate=%.4f weighted_quality=%.4f).",
@@ -158,7 +168,6 @@ def _compute_reward(
             weighted_quality,
         )
     quality_term = weighted_quality * (0.6 + 0.4 * success_rate)
-    success_term = 0.4 * success_rate
     bonus_quality_term = 0.05 * weighted_quality
     reward = quality_term + success_term + bonus_quality_term - collision_penalty
     if success_rate == 0.0 and zero_success_quality_bonus_factor > 0.0:
@@ -708,19 +717,27 @@ def _compute_collision_successes(
                 sir_by_index[idx] = sir_db
                 if (
                     signal_power_dbm >= capture_power_threshold_dbm
+                    and signal_power_dbm
+                    - max(interferer_powers_dbm, default=capture_power_threshold_dbm)
+                    >= CAPTURE_POWER_DELTA_THRESHOLD_DB
                     and sir_db >= capture_sir_threshold_db
                 ):
                     candidate_indices.append(idx)
             capture_gate = _clip(capture_probability, 0.0, 1.0)
+            boosted_capture_gate = _clip(0.2 + 0.8 * capture_gate, 0.0, 1.0)
             base_survival_prob = _clip(
-                (0.45 + 0.55 * capture_gate) / (group_size**0.18),
-                0.05,
+                (0.58 + 0.42 * boosted_capture_gate) / (group_size**0.14),
+                0.08,
                 0.98,
             )
             survivors = [
                 idx for idx in candidate_indices if rng.random() < base_survival_prob
             ]
-            if not survivors and candidate_indices and rng.random() < max(0.2, capture_gate):
+            if (
+                not survivors
+                and candidate_indices
+                and rng.random() < max(0.35, boosted_capture_gate)
+            ):
                 survivors = [
                     max(
                         candidate_indices,
