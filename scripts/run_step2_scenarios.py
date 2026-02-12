@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_DIR = ROOT_DIR / "experiments" / "ucb1"
 DEFAULT_OUTPUT_DIR = ROOT_DIR / "results" / "step2"
+RUN_INDEX_PATH = ROOT_DIR / "results" / "run_index.csv"
 
 STATE_LABELS = {True: "snir_on", False: "snir_off", None: "snir_unknown"}
 
@@ -148,10 +149,59 @@ def _write_csv(path: Path, fieldnames: Sequence[str], rows: Iterable[Mapping[str
             writer.writerow(row)
 
 
+def _read_csv_rows(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf8") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _build_run_id(
+    *,
+    size: int | None,
+    rep: int,
+    seed: int,
+    algorithm: str,
+    snir_state: str,
+) -> str:
+    size_label = str(size if size is not None else "na")
+    algo_label = algorithm.strip().lower().replace(" ", "_")
+    snir_label = snir_state.strip().lower()
+    return f"{size_label}-{rep}-{seed}-{algo_label}-{snir_label}"
+
+
+def _extract_run_dimensions(rows: Sequence[Mapping[str, Any]], fallback_rep: int) -> Tuple[int | None, int, int]:
+    first = rows[0] if rows else {}
+    size = _parse_int(first.get("num_nodes"))
+    rep = _parse_int(first.get("replication"), fallback_rep) or fallback_rep
+    seed = _parse_int(first.get("seed"), None)
+    if seed is None:
+        seed = _parse_int(first.get("random_seed"), fallback_rep)
+    if seed is None:
+        seed = fallback_rep
+    return size, rep, seed
+
+
+def _write_run_index(entries: Sequence[Mapping[str, Any]], *, overwrite: bool) -> None:
+    fieldnames = ["stage", "run_id", "size", "rep", "seed", "algorithm", "snir_state", "source"]
+    existing = _read_csv_rows(RUN_INDEX_PATH)
+    merged: List[Dict[str, Any]] = []
+    seen_ids = {str(entry.get("run_id", "")) for entry in entries}
+    for row in existing:
+        if row.get("stage") != "step2":
+            merged.append(row)
+            continue
+        if overwrite and row.get("run_id") in seen_ids:
+            continue
+        merged.append(row)
+    merged.extend(dict(entry) for entry in entries)
+    _write_csv(RUN_INDEX_PATH, fieldnames, merged)
+
+
 def _normalize_decision_rows(
     raw_rows: Iterable[Mapping[str, Any]],
     *,
-    run_id: int,
+    run_id: str,
     snir_state: str,
     algorithm: str,
 ) -> List[DecisionRow]:
@@ -160,11 +210,13 @@ def _normalize_decision_rows(
         episode_idx = _parse_int(row.get("episode_idx"))
         decision_idx = _parse_int(row.get("decision_idx"))
         round_idx = episode_idx if episode_idx is not None else decision_idx
+        row_snir_state = _snir_state_from_row(row) or snir_state
+        row_algorithm = _normalize_algorithm(row.get("algorithm")) or algorithm
         rows.append(
             {
                 "run_id": run_id,
-                "snir_state": snir_state,
-                "algorithm": algorithm,
+                "snir_state": row_snir_state,
+                "algorithm": row_algorithm,
                 "episode_idx": episode_idx,
                 "decision_idx": decision_idx,
                 "round_idx": round_idx,
@@ -188,17 +240,19 @@ def _normalize_decision_rows(
 def _normalize_metric_rows(
     raw_rows: Iterable[Mapping[str, Any]],
     *,
-    run_id: int,
+    run_id: str,
     snir_state: str,
     algorithm: str,
 ) -> List[MetricsRow]:
     rows: List[MetricsRow] = []
     for row in raw_rows:
+        row_snir_state = _snir_state_from_row(row) or snir_state
+        row_algorithm = _normalize_algorithm(row.get("algorithm")) or algorithm
         rows.append(
             {
                 "run_id": run_id,
-                "snir_state": snir_state,
-                "algorithm": algorithm,
+                "snir_state": row_snir_state,
+                "algorithm": row_algorithm,
                 "cluster": _parse_int(row.get("cluster")),
                 "num_nodes": _parse_int(row.get("num_nodes")),
                 "sf": _parse_float(row.get("sf")),
@@ -309,16 +363,36 @@ def _aggregate_sf_tp(decisions: Sequence[DecisionRow]) -> List[Dict[str, Any]]:
     return rows
 
 
-def run_normalisation(input_dir: Path, output_dir: Path, *, quiet: bool = False) -> None:
+def run_normalisation(
+    input_dir: Path,
+    output_dir: Path,
+    *,
+    quiet: bool = False,
+    resume: bool = False,
+    overwrite_run: bool = False,
+) -> None:
     input_paths = _collect_inputs(input_dir)
     if not input_paths:
         if not quiet:
             print(f"Aucun CSV Step 2 trouvé dans {input_dir}")
         return
+    raw_dir = output_dir / "raw"
+    agg_dir = output_dir / "agg"
+    _ensure_dir(raw_dir)
+    _ensure_dir(agg_dir)
+
+    decision_path = raw_dir / "decisions.csv"
+    metrics_path = raw_dir / "metrics.csv"
+    existing_decisions = _read_csv_rows(decision_path)
+    existing_metrics = _read_csv_rows(metrics_path)
+    existing_run_ids = {row.get("run_id", "") for row in existing_decisions + existing_metrics}
+
     decisions: List[DecisionRow] = []
     metrics: List[MetricsRow] = []
-    run_id = 1
+    run_index_entries: List[Dict[str, Any]] = []
+    run_counter = 0
     csv_read_count = 0
+    skipped_existing = 0
     for path in input_paths:
         kind, rows = _load_csv(path)
         if not rows or kind is None:
@@ -334,6 +408,36 @@ def run_normalisation(input_dir: Path, output_dir: Path, *, quiet: bool = False)
         if snir_state is None:
             snir_state = STATE_LABELS.get(None)
 
+        run_counter += 1
+        size, rep, seed = _extract_run_dimensions(rows, fallback_rep=run_counter)
+        run_id = _build_run_id(
+            size=size,
+            rep=rep,
+            seed=seed,
+            algorithm=algorithm,
+            snir_state=snir_state,
+        )
+        if run_id in existing_run_ids and not overwrite_run:
+            if resume:
+                skipped_existing += 1
+                continue
+            raise ValueError(
+                f"run_id déjà présent: {run_id}. Utilisez --overwrite-run pour remplacer ce run."
+            )
+
+        run_index_entries.append(
+            {
+                "stage": "step2",
+                "run_id": run_id,
+                "size": size,
+                "rep": rep,
+                "seed": seed,
+                "algorithm": algorithm,
+                "snir_state": snir_state,
+                "source": path.as_posix(),
+            }
+        )
+
         if kind == "decision":
             decisions.extend(
                 _normalize_decision_rows(rows, run_id=run_id, snir_state=snir_state, algorithm=algorithm)
@@ -342,16 +446,19 @@ def run_normalisation(input_dir: Path, output_dir: Path, *, quiet: bool = False)
             metrics.extend(
                 _normalize_metric_rows(rows, run_id=run_id, snir_state=snir_state, algorithm=algorithm)
             )
-        run_id += 1
 
-    raw_dir = output_dir / "raw"
-    agg_dir = output_dir / "agg"
-    _ensure_dir(raw_dir)
-    _ensure_dir(agg_dir)
+    if overwrite_run:
+        overwrite_ids = {entry["run_id"] for entry in run_index_entries}
+        if overwrite_ids:
+            existing_decisions = [row for row in existing_decisions if row.get("run_id") not in overwrite_ids]
+            existing_metrics = [row for row in existing_metrics if row.get("run_id") not in overwrite_ids]
     written_paths: List[Path] = []
     aggregated_lines = 0
 
-    if decisions:
+    all_decisions = [*existing_decisions, *decisions]
+    all_metrics = [*existing_metrics, *metrics]
+
+    if all_decisions:
         decision_fields = [
             "run_id",
             "snir_state",
@@ -372,9 +479,9 @@ def run_normalisation(input_dir: Path, output_dir: Path, *, quiet: bool = False)
             "packet_interval_s",
             "energy_j",
         ]
-        _write_csv(raw_dir / "decisions.csv", decision_fields, decisions)
+        _write_csv(raw_dir / "decisions.csv", decision_fields, all_decisions)
         written_paths.append(raw_dir / "decisions.csv")
-        performance_rows, convergence_rows = _aggregate_decisions(decisions)
+        performance_rows, convergence_rows = _aggregate_decisions(all_decisions)
         if performance_rows:
             _write_csv(
                 agg_dir / "performance_rounds.csv",
@@ -413,7 +520,7 @@ def run_normalisation(input_dir: Path, output_dir: Path, *, quiet: bool = False)
             )
             written_paths.append(agg_dir / "convergence.csv")
             aggregated_lines += len(convergence_rows)
-        sf_rows = _aggregate_sf_tp(decisions)
+        sf_rows = _aggregate_sf_tp(all_decisions)
         if sf_rows:
             _write_csv(
                 agg_dir / "sf_tp_distribution.csv",
@@ -423,7 +530,7 @@ def run_normalisation(input_dir: Path, output_dir: Path, *, quiet: bool = False)
             written_paths.append(agg_dir / "sf_tp_distribution.csv")
             aggregated_lines += len(sf_rows)
 
-    if metrics:
+    if all_metrics:
         metrics_fields = [
             "run_id",
             "snir_state",
@@ -440,11 +547,16 @@ def run_normalisation(input_dir: Path, output_dir: Path, *, quiet: bool = False)
             "energy_j",
             "fairness",
         ]
-        _write_csv(raw_dir / "metrics.csv", metrics_fields, metrics)
+        _write_csv(raw_dir / "metrics.csv", metrics_fields, all_metrics)
         written_paths.append(raw_dir / "metrics.csv")
+
+    if run_index_entries:
+        _write_run_index(run_index_entries, overwrite=overwrite_run)
+        written_paths.append(RUN_INDEX_PATH)
 
     if not quiet:
         print(f"CSV lus: {csv_read_count}")
+        print(f"Runs ignorés (déjà complets): {skipped_existing}")
         print(f"Lignes agrégées: {aggregated_lines}")
         if written_paths:
             print("Fichiers écrits:")
@@ -467,6 +579,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Répertoire de sortie pour results/step2.",
     )
     parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Ignore les runs déjà complets présents dans les CSV normalisés.",
+    )
+    parser.add_argument(
+        "--overwrite-run",
+        action="store_true",
+        help="Autorise l'écrasement d'un run_id déjà présent.",
+    )
+    parser.add_argument(
         "--quiet",
         action="store_true",
         help="Désactive l'affichage des informations de normalisation.",
@@ -476,7 +598,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = _build_parser().parse_args()
-    run_normalisation(args.input_dir, args.output_dir, quiet=args.quiet)
+    run_normalisation(
+        args.input_dir,
+        args.output_dir,
+        quiet=args.quiet,
+        resume=args.resume,
+        overwrite_run=args.overwrite_run,
+    )
 
 
 if __name__ == "__main__":

@@ -43,6 +43,7 @@ from loraflexsim.scenarios.qos_cluster_bench import (
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
 DEFAULT_RAW_DIR = DEFAULT_RESULTS_DIR / "raw"
 DEFAULT_AGG_DIR = DEFAULT_RESULTS_DIR / "agg"
+RUN_INDEX_PATH = ROOT_DIR / "results" / "run_index.csv"
 DEFAULT_NODE_COUNTS: Sequence[int] = (1000, 5000, 10000)
 DEFAULT_CHARGES: Sequence[float] = (600.0, 300.0, 150.0)
 DEFAULT_CHANNELS: Sequence[int] = (1, 3, 8)
@@ -170,6 +171,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--skip-existing",
         action="store_true",
         help="N'exécute pas les simulations si le CSV brut existe déjà",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Ignore les runs déjà complets présents dans le CSV brut.",
+    )
+    parser.add_argument(
+        "--overwrite-run",
+        action="store_true",
+        help="Autorise l'écrasement d'un run_id déjà présent.",
     )
     parser.add_argument(
         "--quiet",
@@ -374,6 +385,9 @@ def _collect_rows(
     mixra_solver: str,
     snir_window: str | float | None,
     quiet: bool,
+    existing_run_ids: set[str],
+    resume: bool,
+    overwrite_run: bool,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     scenario_index = 0
@@ -387,6 +401,21 @@ def _collect_rows(
                         for rep in range(replications):
                             scenario_index += 1
                             run_seed = seed + scenario_index
+                            run_id = _build_run_id(
+                                size=node_count,
+                                rep=rep + 1,
+                                seed=run_seed,
+                                algo=algo,
+                                snir_label=snir_label,
+                            )
+                            if run_id in existing_run_ids and not overwrite_run:
+                                if resume:
+                                    if not quiet:
+                                        print(f"[RESUME] run ignoré (déjà complet): {run_id}")
+                                    continue
+                                raise ValueError(
+                                    f"run_id déjà présent: {run_id}. Utilisez --overwrite-run pour remplacer ce run."
+                                )
                             if not quiet:
                                 print(
                                     "[RUN] "
@@ -412,6 +441,7 @@ def _collect_rows(
                             cluster_payload = metrics.get("qos_cluster_pdr", {}) or {}
                             row: Dict[str, Any] = {
                                 "scenario_id": f"N{node_count}_L{charge_s:g}_C{channel_count}",
+                                "run_id": run_id,
                                 "replication": rep + 1,
                                 "seed": run_seed,
                                 "n_nodes": node_count,
@@ -440,6 +470,33 @@ def _write_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _read_csv_rows(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf8") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _build_run_id(*, size: int, rep: int, seed: int, algo: str, snir_label: str) -> str:
+    return f"{size}-{rep}-{seed}-{algo.strip().lower()}-{snir_label.strip().lower()}"
+
+
+def _write_run_index(entries: Sequence[Mapping[str, Any]], *, overwrite: bool) -> None:
+    fieldnames = ["stage", "run_id", "size", "rep", "seed", "algorithm", "snir_state", "source"]
+    existing = _read_csv_rows(RUN_INDEX_PATH)
+    merged: List[Dict[str, Any]] = []
+    seen_ids = {str(entry.get("run_id", "")) for entry in entries}
+    for row in existing:
+        if row.get("stage") != "step1":
+            merged.append(row)
+            continue
+        if overwrite and row.get("run_id") in seen_ids:
+            continue
+        merged.append(row)
+    merged.extend(dict(entry) for entry in entries)
+    _write_csv(RUN_INDEX_PATH, merged)
 
 
 def _coerce_row_types(row: Mapping[str, Any]) -> Dict[str, Any]:
@@ -551,16 +608,15 @@ def main(argv: List[str] | None = None) -> None:
     agg_dir: Path = args.agg_dir
     raw_path = raw_dir / "step1_raw.csv"
     agg_path = agg_dir / "step1_agg.csv"
+    existing_rows = [_coerce_row_types(row) for row in _read_csv_rows(raw_path)]
+    existing_run_ids = {str(row.get("run_id", "")) for row in existing_rows if row.get("run_id")}
 
     if args.skip_existing and raw_path.exists():
         if not args.quiet:
             print(f"[SKIP] CSV brut déjà présent : {raw_path}")
-        rows: List[Dict[str, Any]] = []
-        with raw_path.open("r", encoding="utf8") as handle:
-            reader = csv.DictReader(handle)
-            rows.extend(_coerce_row_types(row) for row in reader)
+        rows = existing_rows
     else:
-        rows = _collect_rows(
+        new_rows = _collect_rows(
             nodes=args.nodes,
             charges=args.charges,
             channels=args.channels,
@@ -572,10 +628,35 @@ def main(argv: List[str] | None = None) -> None:
             mixra_solver=args.mixra_solver,
             snir_window=args.snir_window,
             quiet=args.quiet,
+            existing_run_ids=existing_run_ids,
+            resume=args.resume,
+            overwrite_run=args.overwrite_run,
         )
+        if args.overwrite_run and new_rows:
+            overwrite_ids = {row.get("run_id") for row in new_rows}
+            existing_rows = [row for row in existing_rows if row.get("run_id") not in overwrite_ids]
+        rows = [*existing_rows, *new_rows]
         _write_csv(raw_path, rows)
         if not args.quiet:
             print(f"[OK] CSV brut écrit : {raw_path}")
+
+        run_index_entries = [
+            {
+                "stage": "step1",
+                "run_id": row.get("run_id"),
+                "size": row.get("n_nodes"),
+                "rep": row.get("replication"),
+                "seed": row.get("seed"),
+                "algorithm": row.get("algos"),
+                "snir_state": row.get("snir_mode"),
+                "source": raw_path.as_posix(),
+            }
+            for row in new_rows
+        ]
+        if run_index_entries:
+            _write_run_index(run_index_entries, overwrite=args.overwrite_run)
+            if not args.quiet:
+                print(f"[OK] Index runs écrit : {RUN_INDEX_PATH}")
 
     if rows:
         aggregated = _aggregate(rows)
