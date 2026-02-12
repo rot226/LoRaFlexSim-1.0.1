@@ -2157,6 +2157,12 @@ def _normalize(value: float, min_value: float, max_value: float) -> float:
     return (value - min_value) / (max_value - min_value)
 
 
+def _startup_progress(round_id: int, startup_rounds: int) -> float:
+    if startup_rounds <= 0:
+        return 1.0
+    return _clip((round_id + 1) / startup_rounds, 0.0, 1.0)
+
+
 def run_simulation(
     algorithm: Literal["adr", "mixra_h", "mixra_opt", "ucb1_sf"] = "ucb1_sf",
     n_rounds: int = 20,
@@ -2694,8 +2700,16 @@ def run_simulation(
             epsilon_min=0.02,
         )
         exploration_epsilon = max(epsilon_greedy, reward_weights.exploration_floor)
+        startup_rounds = max(3, min(n_rounds, 8))
         window_start_s = 0.0
         for round_id in range(n_rounds):
+            startup_progress = _startup_progress(round_id, startup_rounds)
+            startup_softness = 1.0 - startup_progress
+            startup_traffic_scale = 0.55 + 0.45 * startup_progress
+            startup_collision_scale = 0.35 + 0.65 * startup_progress
+            startup_congestion_scale = 0.45 + 0.55 * startup_progress
+            startup_reward_floor_boost = 0.12 * startup_softness
+            startup_floor_on_zero_success = startup_softness > 0.0
             (
                 collision_penalty_scale,
                 reward_floor_boost,
@@ -2703,16 +2717,26 @@ def run_simulation(
                 reward_alert_state, network_size_value, algo_label
             )
             effective_reward_weights = _apply_reward_floor_boost(
-                reward_weights, reward_floor_boost
+                reward_weights,
+                reward_floor_boost + startup_reward_floor_boost,
             )
             lambda_collision_effective = _clip(
-                lambda_collision * collision_penalty_scale, 0.0, 1.0
+                lambda_collision
+                * collision_penalty_scale
+                * startup_collision_scale,
+                0.0,
+                1.0,
+            )
+            congestion_probability_effective = _clip(
+                congestion_probability * startup_congestion_scale,
+                0.0,
+                1.0,
             )
             _log_congestion_probability(
                 network_size=network_size_value,
                 algo_label=algo_label,
                 round_id=round_id,
-                congestion_probability=congestion_probability,
+                congestion_probability=congestion_probability_effective,
                 congestion_coeff=congestion_coeff_value,
                 congestion_coeff_base=congestion_coeff_base_value,
                 congestion_coeff_growth=congestion_coeff_growth_value,
@@ -2747,6 +2771,7 @@ def run_simulation(
                             * rate_multiplier
                             * load_factor
                             * traffic_coeff_scale_value
+                            * startup_traffic_scale
                         )
                     ),
                 )
@@ -3015,7 +3040,7 @@ def run_simulation(
                     node_windows=node_windows,
                     successes_by_node=successes_by_node,
                     traffic_sent_by_node=traffic_sent_by_node,
-                    congestion_probability=congestion_probability,
+                    congestion_probability=congestion_probability_effective,
                     link_success_min_ratio=link_success_min_ratio_value,
                     rng=rng,
                     round_id=round_id,
@@ -3252,7 +3277,9 @@ def run_simulation(
                     lambda_energy,
                     lambda_collision_effective,
                     max_penalty_ratio_value,
-                    floor_on_zero_success=floor_on_zero_success_value,
+                    floor_on_zero_success=(
+                        floor_on_zero_success_value or startup_floor_on_zero_success
+                    ),
                     zero_success_quality_bonus_factor=zero_success_quality_bonus_factor_value,
                     log_components=log_components,
                     log_context=log_context,
@@ -3356,7 +3383,7 @@ def run_simulation(
                 link_qualities=link_qualities,
                 rewards=round_rewards,
                 lambda_collision=lambda_collision,
-                congestion_probability=congestion_probability,
+                congestion_probability=congestion_probability_effective,
                 collision_size_factor=collision_size_factor_value,
             )
             _log_collision_stability(
@@ -3399,7 +3426,7 @@ def run_simulation(
                     network_size_value,
                     algo_label,
                     round_id,
-                    congestion_probability,
+                    congestion_probability_effective,
                     avg_link_quality,
                 )
             if _should_debug_log(debug_step2, round_id) and round_success_rates:
@@ -3453,6 +3480,9 @@ def run_simulation(
                     "algo": algo_label,
                     "avg_reward": avg_reward,
                     "traffic_coeff_clamp_rate": traffic_coeff_clamp_rate,
+                    "ucb1_non_zero_reward_rounds": (
+                        bandit.non_zero_reward_rounds + int(avg_reward > 0.0)
+                    ),
                 }
             )
             bandit.update(arm_index, avg_reward)
@@ -4225,6 +4255,7 @@ def run_simulation(
                     "algo": algo_label,
                     "avg_reward": avg_reward,
                     "traffic_coeff_clamp_rate": traffic_coeff_clamp_rate,
+                    "ucb1_non_zero_reward_rounds": "",
                 }
             )
     else:
@@ -4274,7 +4305,13 @@ def run_simulation(
     if output_dir is not None:
         write_simulation_results(output_dir, raw_rows, network_size=network_size_value)
         learning_curve_path = output_dir / "learning_curve.csv"
-        learning_curve_header = ["network_size", "round", "algo", "avg_reward"]
+        learning_curve_header = [
+            "network_size",
+            "round",
+            "algo",
+            "avg_reward",
+            "ucb1_non_zero_reward_rounds",
+        ]
         write_rows(
             learning_curve_path,
             learning_curve_header,

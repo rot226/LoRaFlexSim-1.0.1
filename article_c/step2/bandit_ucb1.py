@@ -11,6 +11,7 @@ class BanditUCB1:
         self.counts = [0] * n_arms
         self.values = [0.0] * n_arms
         self.t = 0
+        self.non_zero_reward_rounds = 0
         self.warmup_rounds = warmup_rounds
         self.epsilon_min = max(0.0, min(1.0, epsilon_min))
 
@@ -39,6 +40,8 @@ class BanditUCB1:
         if not 0 <= arm_index < self.n_arms:
             raise IndexError("Indice de bras invalide.")
         self.t += 1
+        if reward > 0.0:
+            self.non_zero_reward_rounds += 1
         self.counts[arm_index] += 1
         count = self.counts[arm_index]
         value = self.values[arm_index]
