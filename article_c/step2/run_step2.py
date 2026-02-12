@@ -45,8 +45,8 @@ from plot_defaults import resolve_ieee_figsize
 logger = logging.getLogger(__name__)
 SAFE_PROFILE_SUCCESS_THRESHOLD = 0.2
 SUPER_SAFE_PROFILE_SUCCESS_THRESHOLD = 0.05
-RX_POWER_DBM_MIN = -130.0
-RX_POWER_DBM_MAX = -90.0
+RX_POWER_DBM_MIN = -120.0
+RX_POWER_DBM_MAX = -70.0
 
 
 def _clamp_rx_power_dbm(value_dbm: float) -> float:
@@ -58,6 +58,10 @@ def _clamp_rx_power_dbm(value_dbm: float) -> float:
             f"(bornes {RX_POWER_DBM_MIN:.2f}..{RX_POWER_DBM_MAX:.2f} dBm)."
         )
     return clamped
+
+
+def _is_rx_power_clamped(requested_dbm: float, effective_dbm: float) -> bool:
+    return not math.isclose(requested_dbm, effective_dbm, abs_tol=1e-12)
 
 
 def _log_default_profile_if_needed(args: object) -> None:
@@ -532,6 +536,11 @@ def _summarize_post_simulation(
     rx_power_dbm_count = 0
     rx_power_dbm_min: float | None = None
     rx_power_dbm_max: float | None = None
+    rx_power_dbm_requested_sum = 0.0
+    rx_power_dbm_requested_count = 0
+    rx_power_dbm_effective_sum = 0.0
+    rx_power_dbm_effective_count = 0
+    rx_power_dbm_clamped_count = 0
     losses_collisions_total = 0
     losses_congestion_total = 0
     losses_link_quality_total = 0
@@ -581,6 +590,20 @@ def _summarize_post_simulation(
         rx_power_dbm_max = (
             rx_power_dbm if rx_power_dbm_max is None else max(rx_power_dbm_max, rx_power_dbm)
         )
+        rx_power_dbm_requested = float(row.get("rx_power_dbm_requested", rx_power_dbm) or rx_power_dbm)
+        rx_power_dbm_effective = float(row.get("rx_power_dbm_effective", rx_power_dbm) or rx_power_dbm)
+        rx_power_dbm_requested_sum += rx_power_dbm_requested
+        rx_power_dbm_requested_count += 1
+        rx_power_dbm_effective_sum += rx_power_dbm_effective
+        rx_power_dbm_effective_count += 1
+        clamp_flag_raw = row.get("rx_power_dbm_clamped")
+        clamp_flag = (
+            bool(clamp_flag_raw)
+            if clamp_flag_raw is not None
+            else _is_rx_power_clamped(rx_power_dbm_requested, rx_power_dbm_effective)
+        )
+        if clamp_flag:
+            rx_power_dbm_clamped_count += 1
         if reward <= 1e-9:
             reward_zero_total += 1
             if success_rate <= 1e-9:
@@ -640,6 +663,11 @@ def _summarize_post_simulation(
         "rx_power_dbm_count": rx_power_dbm_count,
         "rx_power_dbm_min": 0.0 if rx_power_dbm_min is None else rx_power_dbm_min,
         "rx_power_dbm_max": 0.0 if rx_power_dbm_max is None else rx_power_dbm_max,
+        "rx_power_dbm_requested_sum": rx_power_dbm_requested_sum,
+        "rx_power_dbm_requested_count": rx_power_dbm_requested_count,
+        "rx_power_dbm_effective_sum": rx_power_dbm_effective_sum,
+        "rx_power_dbm_effective_count": rx_power_dbm_effective_count,
+        "rx_power_dbm_clamped_count": rx_power_dbm_clamped_count,
         "losses_collisions_total": losses_collisions_total,
         "losses_congestion_total": losses_congestion_total,
         "losses_link_quality_total": losses_link_quality_total,
@@ -809,6 +837,11 @@ def _compose_post_simulation_report(
     overall_rx_power_dbm_count = 0
     overall_rx_power_dbm_min: float | None = None
     overall_rx_power_dbm_max: float | None = None
+    overall_rx_power_dbm_requested_sum = 0.0
+    overall_rx_power_dbm_requested_count = 0
+    overall_rx_power_dbm_effective_sum = 0.0
+    overall_rx_power_dbm_effective_count = 0
+    overall_rx_power_dbm_clamped_count = 0
 
     per_size_link_quality_mean: dict[int, float] = {}
     for size, stats in per_size_stats.items():
@@ -860,6 +893,11 @@ def _compose_post_simulation_report(
         rx_power_dbm_count = int(stats.get("rx_power_dbm_count", 0))
         rx_power_dbm_min = float(stats.get("rx_power_dbm_min", 0.0))
         rx_power_dbm_max = float(stats.get("rx_power_dbm_max", 0.0))
+        rx_power_dbm_requested_sum = float(stats.get("rx_power_dbm_requested_sum", 0.0))
+        rx_power_dbm_requested_count = int(stats.get("rx_power_dbm_requested_count", 0))
+        rx_power_dbm_effective_sum = float(stats.get("rx_power_dbm_effective_sum", 0.0))
+        rx_power_dbm_effective_count = int(stats.get("rx_power_dbm_effective_count", 0))
+        rx_power_dbm_clamped_count = int(stats.get("rx_power_dbm_clamped_count", 0))
         overall_rx_power_dbm_sum += rx_power_dbm_sum
         overall_rx_power_dbm_count += rx_power_dbm_count
         overall_rx_power_dbm_min = (
@@ -872,6 +910,11 @@ def _compose_post_simulation_report(
             if overall_rx_power_dbm_max is None
             else max(overall_rx_power_dbm_max, rx_power_dbm_max)
         )
+        overall_rx_power_dbm_requested_sum += rx_power_dbm_requested_sum
+        overall_rx_power_dbm_requested_count += rx_power_dbm_requested_count
+        overall_rx_power_dbm_effective_sum += rx_power_dbm_effective_sum
+        overall_rx_power_dbm_effective_count += rx_power_dbm_effective_count
+        overall_rx_power_dbm_clamped_count += rx_power_dbm_clamped_count
         overall_losses_collisions += int(stats.get("losses_collisions_total", 0))
         overall_losses_congestion += int(stats.get("losses_congestion_total", 0))
         overall_losses_link_quality += int(stats.get("losses_link_quality_total", 0))
@@ -905,6 +948,21 @@ def _compose_post_simulation_report(
     )
     rx_power_dbm_max = (
         0.0 if overall_rx_power_dbm_max is None else overall_rx_power_dbm_max
+    )
+    rx_power_dbm_requested_mean = (
+        overall_rx_power_dbm_requested_sum / overall_rx_power_dbm_requested_count
+        if overall_rx_power_dbm_requested_count > 0
+        else 0.0
+    )
+    rx_power_dbm_effective_mean = (
+        overall_rx_power_dbm_effective_sum / overall_rx_power_dbm_effective_count
+        if overall_rx_power_dbm_effective_count > 0
+        else 0.0
+    )
+    rx_power_dbm_clamped_ratio = (
+        overall_rx_power_dbm_clamped_count / overall_rx_power_dbm_effective_count
+        if overall_rx_power_dbm_effective_count > 0
+        else 0.0
     )
 
     lines = [
@@ -966,14 +1024,52 @@ def _compose_post_simulation_report(
             "",
             "Puissance Rx effective (dBm):",
             (
+                f"- requested moyen: {rx_power_dbm_requested_mean:.2f}, "
+                f"effective moyen: {rx_power_dbm_effective_mean:.2f}"
+            ),
+            (
                 f"- valeur finale moyenne: {rx_power_dbm_mean:.2f} "
                 f"(min {rx_power_dbm_min:.2f}, max {rx_power_dbm_max:.2f})"
+            ),
+            (
+                f"- clamps globaux: {overall_rx_power_dbm_clamped_count}/"
+                f"{overall_rx_power_dbm_effective_count} ({rx_power_dbm_clamped_ratio:.1%})"
             ),
             (
                 f"- plage admissible: {RX_POWER_DBM_MIN:.2f}..{RX_POWER_DBM_MAX:.2f} dBm"
             ),
         ]
     )
+    lines.append("- clamps Rx par taille:")
+    for size in sorted(per_size_stats):
+        stats = per_size_stats[size]
+        size_clamped = int(stats.get("rx_power_dbm_clamped_count", 0))
+        size_total = int(stats.get("rx_power_dbm_effective_count", 0))
+        size_requested_mean = (
+            float(stats.get("rx_power_dbm_requested_sum", 0.0)) / size_total
+            if size_total > 0
+            else 0.0
+        )
+        size_effective_mean = (
+            float(stats.get("rx_power_dbm_effective_sum", 0.0)) / size_total
+            if size_total > 0
+            else 0.0
+        )
+        size_ratio = size_clamped / size_total if size_total > 0 else 0.0
+        lines.append(
+            f"  - taille {size}: requested={size_requested_mean:.2f}, "
+            f"effective={size_effective_mean:.2f}, clamps={size_clamped}/{size_total} "
+            f"({size_ratio:.1%})"
+        )
+        if size_total > 0 and size_ratio > 0.05:
+            lines.append(
+                f"    AVERTISSEMENT: plus de 5% des échantillons sont clampés "
+                f"pour la taille {size}."
+            )
+    if rx_power_dbm_clamped_ratio > 0.05:
+        lines.append(
+            "AVERTISSEMENT global: plus de 5% des échantillons Rx sont clampés."
+        )
     if per_size_link_quality_mean:
         lq_means = list(per_size_link_quality_mean.values())
         lq_delta = max(lq_means) - min(lq_means) if lq_means else 0.0

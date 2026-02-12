@@ -56,8 +56,8 @@ class RewardAlertState:
 
 logger = logging.getLogger(__name__)
 _NO_CLAMP = False
-RX_POWER_DBM_MIN = -130.0
-RX_POWER_DBM_MAX = -90.0
+RX_POWER_DBM_MIN = -120.0
+RX_POWER_DBM_MAX = -70.0
 
 
 def _clip(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float:
@@ -238,6 +238,10 @@ def _clamp_rx_power_dbm(value_dbm: float) -> float:
             RX_POWER_DBM_MAX,
         )
     return clamped
+
+
+def _is_rx_power_clamped(requested_dbm: float, effective_dbm: float) -> bool:
+    return not math.isclose(requested_dbm, effective_dbm, abs_tol=1e-12)
 
 
 def _apply_reward_floor_boost(
@@ -1995,6 +1999,9 @@ def run_simulation(
         "snir_threshold_max_db": snir_threshold_max_value,
         "rx_power_dbm_requested": rx_power_dbm_requested,
         "rx_power_dbm_effective": rx_power_dbm_effective,
+        "rx_power_dbm_clamped": int(
+            _is_rx_power_clamped(rx_power_dbm_requested, rx_power_dbm_effective)
+        ),
     }
     jitter_range_value = jitter_range_s
     window_duration_value = (
