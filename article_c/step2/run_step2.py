@@ -1764,7 +1764,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         "reward_debug": getattr(args, "reward_debug", False),
         "reward_alert_level": args.reward_alert_level,
     }
-    config["rx_power_dbm"] = _clamp_rx_power_dbm(float(getattr(args, "noise_floor_dbm", -110.0)))
+    config["rx_power_dbm"] = _clamp_rx_power_dbm(
+        float(getattr(args, "rx_power_dbm", -100.0))
+    )
 
     if flat_output:
         aggregated_sizes = _read_aggregated_sizes(
