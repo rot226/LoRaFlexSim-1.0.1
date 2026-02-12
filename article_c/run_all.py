@@ -11,7 +11,7 @@ import sys
 from importlib.util import find_spec
 from pathlib import Path
 from statistics import median
-from time import perf_counter
+from time import perf_counter, sleep
 
 if find_spec("article_c") is None:
     repo_root = Path(__file__).resolve().parents[1]
@@ -297,45 +297,84 @@ def _assert_cumulative_sizes_nested(
     """Valide le mode non-flat via `by_size/size_*/rep_*` et leurs CSV."""
 
     by_size_dir = base_results_dir / "by_size"
-    size_pattern = str(by_size_dir / "size_*")
-    print(f"{step_label}: scan des tailles via le pattern {size_pattern}")
-
-    size_dirs = sorted(path for path in by_size_dir.glob("size_*") if path.is_dir())
-    print(
-        f"{step_label}: dossiers size scannés: "
-        f"{[str(path.resolve()) for path in size_dirs]}"
-    )
-
+    max_attempts = 3
+    retry_delay_s = 0.25
     found_sizes: set[int] = set()
-    for size_dir in size_dirs:
-        try:
-            size_value = int(size_dir.name.split("size_", 1)[1])
-        except (IndexError, ValueError):
-            continue
+    scan_debug: list[dict[str, object]] = []
 
-        rep_pattern = str(size_dir / "rep_*")
-        print(f"{step_label}: scan des réplications via le pattern {rep_pattern}")
-        rep_dirs = sorted(path for path in size_dir.glob("rep_*") if path.is_dir())
+    for attempt in range(1, max_attempts + 1):
+        size_pattern = str(by_size_dir / "size_*")
         print(
-            f"{step_label}: dossiers rep scannés pour size_{size_value}: "
-            f"{[str(path.resolve()) for path in rep_dirs]}"
+            f"{step_label}: scan cumulatif tentative {attempt}/{max_attempts} "
+            f"via le pattern {size_pattern}"
         )
 
-        if not rep_dirs:
-            continue
-        for rep_dir in rep_dirs:
-            _assert_cumulative_sizes(
-                rep_dir / "aggregated_results.csv",
-                {size_value},
-                step_label,
-            )
-        found_sizes.add(size_value)
-    if not expected_sizes_so_far.issubset(found_sizes):
-        raise RuntimeError(
-            f"{step_label}: validation cumulative échouée pour {base_results_dir}. "
-            f"Tailles attendues={sorted(expected_sizes_so_far)}, "
-            f"tailles trouvées={sorted(found_sizes)}"
+        current_scan: dict[str, object] = {
+            "attempt": attempt,
+            "size_pattern": size_pattern,
+            "size_dirs": [],
+        }
+        size_dirs = sorted(path for path in by_size_dir.glob("size_*") if path.is_dir())
+        current_scan["size_dirs"] = [str(path.resolve()) for path in size_dirs]
+        print(
+            f"{step_label}: dossiers size scannés: "
+            f"{current_scan['size_dirs']}"
         )
+
+        found_sizes = set()
+        size_entries: list[dict[str, object]] = []
+        for size_dir in size_dirs:
+            try:
+                size_value = int(size_dir.name.split("size_", 1)[1])
+            except (IndexError, ValueError):
+                continue
+
+            rep_pattern = str(size_dir / "rep_*")
+            print(f"{step_label}: scan des réplications via le pattern {rep_pattern}")
+            rep_dirs = sorted(path for path in size_dir.glob("rep_*") if path.is_dir())
+            rep_resolved = [str(path.resolve()) for path in rep_dirs]
+            print(
+                f"{step_label}: dossiers rep scannés pour size_{size_value}: "
+                f"{rep_resolved}"
+            )
+
+            size_entries.append(
+                {
+                    "size": size_value,
+                    "size_dir": str(size_dir.resolve()),
+                    "rep_pattern": rep_pattern,
+                    "rep_dirs": rep_resolved,
+                }
+            )
+            if not rep_dirs:
+                continue
+            for rep_dir in rep_dirs:
+                _assert_cumulative_sizes(
+                    rep_dir / "aggregated_results.csv",
+                    {size_value},
+                    step_label,
+                )
+            found_sizes.add(size_value)
+
+        current_scan["size_entries"] = size_entries
+        current_scan["found_sizes"] = sorted(found_sizes)
+        scan_debug.append(current_scan)
+
+        if expected_sizes_so_far.issubset(found_sizes):
+            return
+        if attempt < max_attempts:
+            print(
+                f"{step_label}: validation cumulative incomplète "
+                f"(attendues={sorted(expected_sizes_so_far)}, trouvées={sorted(found_sizes)}). "
+                f"Nouvelle tentative dans {retry_delay_s:.2f}s."
+            )
+            sleep(retry_delay_s)
+
+    raise RuntimeError(
+        f"{step_label}: validation cumulative échouée après {max_attempts} tentatives pour "
+        f"{base_results_dir.resolve()}. Tailles attendues={sorted(expected_sizes_so_far)}, "
+        f"tailles trouvées={sorted(found_sizes)}. Diagnostic scan complet={json.dumps(scan_debug, ensure_ascii=False)}"
+    )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
