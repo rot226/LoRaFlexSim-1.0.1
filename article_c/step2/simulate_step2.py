@@ -12,6 +12,7 @@ from typing import Literal
 
 from article_c.common.config import DEFAULT_CONFIG, STEP2_SAFE_CONFIG, Step2Config
 from article_c.common.csv_io import write_rows, write_simulation_results
+from article_c.common.interference import compute_sir_db
 from article_c.common.lora_phy import bitrate_lora, coding_rate_to_cr, compute_airtime
 from article_c.common.utils import assign_clusters, generate_traffic_times
 from article_c.step2.bandit_ucb1 import BanditUCB1
@@ -664,30 +665,69 @@ def _compute_collision_successes(
     approx_threshold: int = 5000,
     approx_sample_size: int = 2500,
     capture_probability: float = DEFAULT_CONFIG.step2.capture_probability,
-) -> tuple[dict[int, int], dict[int, int], int, bool]:
+    node_rx_power_dbm: dict[int, float] | None = None,
+    capture_sir_threshold_db: float = DEFAULT_CONFIG.snir.snir_threshold_db,
+    capture_power_threshold_dbm: float = -130.0,
+) -> tuple[dict[int, int], dict[int, int], int, bool, dict[str, float]]:
     def _compute_collisions(
         events: list[tuple[float, float, int]],
         *,
         rng: random.Random,
         capture_probability: float,
+        node_rx_power_dbm: dict[int, float],
+        capture_sir_threshold_db: float,
+        capture_power_threshold_dbm: float,
     ) -> list[bool]:
         collided = [False] * len(events)
+        collision_stats = {"total_collisions": 0, "capture_events": 0}
         indexed_events = sorted(enumerate(events), key=lambda item: item[1][0])
         group_indices: list[int] = []
         group_end: float | None = None
+
         def _resolve_collision_group(indices: list[int]) -> None:
             group_size = len(indices)
             if group_size <= 1:
                 return
+            collision_stats["total_collisions"] += group_size
+            candidate_indices: list[int] = []
+            sir_by_index: dict[int, float] = {}
+            signal_power_by_index: dict[int, float] = {}
+            for idx in indices:
+                _start, _end, node_id = events[idx]
+                signal_power_dbm = node_rx_power_dbm.get(node_id, capture_power_threshold_dbm)
+                signal_power_by_index[idx] = signal_power_dbm
+                interferer_powers_dbm = [
+                    node_rx_power_dbm.get(events[other_idx][2], capture_power_threshold_dbm)
+                    for other_idx in indices
+                    if other_idx != idx
+                ]
+                sir_db = compute_sir_db(
+                    signal_dbm=signal_power_dbm,
+                    interferers_dbm=interferer_powers_dbm,
+                )
+                sir_by_index[idx] = sir_db
+                if (
+                    signal_power_dbm >= capture_power_threshold_dbm
+                    and sir_db >= capture_sir_threshold_db
+                ):
+                    candidate_indices.append(idx)
+            capture_gate = _clip(capture_probability, 0.0, 1.0)
             base_survival_prob = _clip(
-                (0.65 + 0.7 * _clip(capture_probability, 0.0, 1.0))
-                / (group_size**0.2),
-                0.15,
-                0.995,
+                (0.45 + 0.55 * capture_gate) / (group_size**0.18),
+                0.05,
+                0.98,
             )
-            survivors = [idx for idx in indices if rng.random() < base_survival_prob]
-            if not survivors and rng.random() < 0.75:
-                survivors = [rng.choice(indices)]
+            survivors = [
+                idx for idx in candidate_indices if rng.random() < base_survival_prob
+            ]
+            if not survivors and candidate_indices and rng.random() < max(0.2, capture_gate):
+                survivors = [
+                    max(
+                        candidate_indices,
+                        key=lambda idx: (sir_by_index.get(idx, float("-inf")), signal_power_by_index[idx]),
+                    )
+                ]
+            collision_stats["capture_events"] += len(survivors)
             for idx in indices:
                 collided[idx] = idx not in survivors
 
@@ -701,7 +741,7 @@ def _compute_collision_successes(
                 if end > group_end:
                     group_end = end
         _resolve_collision_group(group_indices)
-        return collided
+        return collided, collision_stats
 
     transmissions_per_bucket = {
         (channel_id, sf_value): len(events)
@@ -717,6 +757,8 @@ def _compute_collision_successes(
     approx_mode = max_transmissions_per_bucket > approx_threshold
     rng = rng or random.Random(0)
     successes_by_node: dict[int, int] = {}
+    aggregate_collision_stats = {"total_collisions": 0, "capture_events": 0}
+    rx_power_by_node = node_rx_power_dbm or {}
     for channel_id, sf_events in transmissions.items():
         for sf_value, events in sf_events.items():
             if not events:
@@ -737,10 +779,19 @@ def _compute_collision_successes(
                     ]
                     if not sampled_events:
                         sampled_events = [rng.choice(events)]
-            collided = _compute_collisions(
+            collided, bucket_collision_stats = _compute_collisions(
                 sampled_events,
                 rng=rng,
                 capture_probability=capture_probability,
+                node_rx_power_dbm=rx_power_by_node,
+                capture_sir_threshold_db=capture_sir_threshold_db,
+                capture_power_threshold_dbm=capture_power_threshold_dbm,
+            )
+            aggregate_collision_stats["total_collisions"] += int(
+                bucket_collision_stats["total_collisions"]
+            )
+            aggregate_collision_stats["capture_events"] += int(
+                bucket_collision_stats["capture_events"]
             )
             sample_successes: dict[int, int] = {}
             for event_index, (_start, _end, node_id) in enumerate(sampled_events):
@@ -769,7 +820,20 @@ def _compute_collision_successes(
                         successes_by_node.get(node_id, 0)
                         + min(successes, per_node_total[node_id], remaining_global)
                     )
-    return successes_by_node, per_node_total_global, max_transmissions_per_bucket, approx_mode
+    total_collisions = aggregate_collision_stats["total_collisions"]
+    capture_ratio = (
+        aggregate_collision_stats["capture_events"] / total_collisions
+        if total_collisions > 0
+        else 0.0
+    )
+    aggregate_collision_stats["capture_ratio"] = capture_ratio
+    return (
+        successes_by_node,
+        per_node_total_global,
+        max_transmissions_per_bucket,
+        approx_mode,
+        aggregate_collision_stats,
+    )
 
 
 def _collect_traffic_sent(node_windows: list[dict[str, object]]) -> dict[int, int]:
@@ -787,10 +851,12 @@ def _compute_successes_and_traffic(
     *,
     rng: random.Random,
     capture_probability: float,
+    rx_power_dbm: float,
+    capture_sir_threshold_db: float,
     approx_threshold: int = 5000,
     approx_sample_size: int = 2500,
     debug_step2: bool = False,
-) -> tuple[dict[int, int], dict[int, int], int, bool]:
+) -> tuple[dict[int, int], dict[int, int], int, bool, dict[str, float]]:
     transmissions_by_channel: dict[int, dict[int, list[tuple[float, float, int]]]] = {}
     for node_window in node_windows:
         sf_value = int(node_window["sf"])
@@ -802,13 +868,27 @@ def _compute_successes_and_traffic(
             transmissions_by_channel.setdefault(channel_id, {}).setdefault(sf_value, []).append(
                 (start_time, start_time + airtime, node_id)
             )
-    successes_by_node, per_node_total_global, transmission_count, approx_mode = (
+    node_rx_power_dbm = {
+        int(node_window["node_id"]): (
+            rx_power_dbm + 10.0 * math.log10(max(float(node_window["link_quality"]), 1e-4))
+        )
+        for node_window in node_windows
+    }
+    (
+        successes_by_node,
+        per_node_total_global,
+        transmission_count,
+        approx_mode,
+        collision_stats,
+    ) = (
         _compute_collision_successes(
             transmissions_by_channel,
             rng=rng,
             approx_threshold=approx_threshold,
             approx_sample_size=approx_sample_size,
             capture_probability=capture_probability,
+            node_rx_power_dbm=node_rx_power_dbm,
+            capture_sir_threshold_db=capture_sir_threshold_db,
         )
     )
     traffic_sent_by_node = _collect_traffic_sent(node_windows)
@@ -851,7 +931,13 @@ def _compute_successes_and_traffic(
                 traffic_sent_by_node.get(node_id, 0),
                 successes_by_node.get(node_id, 0),
             )
-    return successes_by_node, traffic_sent_by_node, transmission_count, approx_mode
+    return (
+        successes_by_node,
+        traffic_sent_by_node,
+        transmission_count,
+        approx_mode,
+        collision_stats,
+    )
 
 
 def _compute_mean_temporal_overlap(
@@ -937,19 +1023,23 @@ def _approx_collision_gap_ratio(
         return None
     approx_rng = random.Random(seed + 313 + round_id)
     exact_rng = random.Random(seed + 313 + round_id)
-    approx_successes, approx_traffic, _, _ = _compute_successes_and_traffic(
+    approx_successes, approx_traffic, _, _, _ = _compute_successes_and_traffic(
         subset_windows,
         airtime_by_sf,
         rng=approx_rng,
         capture_probability=capture_probability,
+        rx_power_dbm=-95.0,
+        capture_sir_threshold_db=DEFAULT_CONFIG.snir.snir_threshold_db,
         approx_threshold=approx_threshold,
         approx_sample_size=approx_sample_size,
     )
-    exact_successes, exact_traffic, _, _ = _compute_successes_and_traffic(
+    exact_successes, exact_traffic, _, _, _ = _compute_successes_and_traffic(
         subset_windows,
         airtime_by_sf,
         rng=exact_rng,
         capture_probability=capture_probability,
+        rx_power_dbm=-95.0,
+        capture_sir_threshold_db=DEFAULT_CONFIG.snir.snir_threshold_db,
         approx_threshold=10**9,
         approx_sample_size=approx_sample_size,
     )
@@ -2658,11 +2748,14 @@ def run_simulation(
                 traffic_sent_by_node,
                 transmission_count,
                 approx_collision_mode,
+                collision_stats,
             ) = _compute_successes_and_traffic(
                 node_windows,
                 airtime_by_sf,
                 rng=rng,
                 capture_probability=capture_probability_value,
+                rx_power_dbm=rx_power_dbm_effective,
+                capture_sir_threshold_db=snir_threshold_value,
                 approx_threshold=approx_threshold,
                 approx_sample_size=approx_sample_size,
                 debug_step2=debug_step2,
@@ -2744,6 +2837,9 @@ def run_simulation(
                 )
             collision_success_total = sum(successes_by_node.values())
             total_traffic_sent = sum(traffic_sent_by_node.values())
+            capture_events = int(collision_stats.get("capture_events", 0))
+            total_collisions = int(collision_stats.get("total_collisions", 0))
+            capture_ratio = float(collision_stats.get("capture_ratio", 0.0))
             if _should_debug_log(debug_step2, round_id):
                 _log_link_quality_summary(
                     network_size=network_size_value,
@@ -2874,6 +2970,15 @@ def run_simulation(
             losses_congestion = loss_stats["losses_congestion"]
             losses_link_quality = loss_stats["losses_link_quality"]
             losses_collisions = max(total_traffic_sent - collision_success_total, 0)
+            logger.info(
+                "Capture collisions - taille=%s algo=%s round=%s capture_events=%s total_collisions=%s ratio=%.3f",
+                network_size_value,
+                algo_label,
+                round_id,
+                capture_events,
+                total_collisions,
+                capture_ratio,
+            )
             ratio_after_collisions = (
                 collision_success_total / total_traffic_sent
                 if total_traffic_sent > 0
@@ -3070,6 +3175,9 @@ def run_simulation(
                     "ratio_successes_after_congestion": ratio_after_congestion,
                     "ratio_successes_after_link": ratio_after_link,
                     "mean_temporal_overlap": mean_temporal_overlap,
+                    "capture_events": capture_events,
+                    "total_collisions": total_collisions,
+                    "capture_ratio": capture_ratio,
                     "losses_collisions": losses_collisions,
                     "losses_congestion": losses_congestion,
                     "losses_link_quality": losses_link_quality,
@@ -3418,11 +3526,14 @@ def run_simulation(
                 traffic_sent_by_node,
                 transmission_count,
                 approx_collision_mode,
+                collision_stats,
             ) = _compute_successes_and_traffic(
                 node_windows,
                 airtime_by_sf,
                 rng=rng,
                 capture_probability=capture_probability_value,
+                rx_power_dbm=rx_power_dbm_effective,
+                capture_sir_threshold_db=snir_threshold_value,
                 approx_threshold=approx_threshold,
                 approx_sample_size=approx_sample_size,
                 debug_step2=debug_step2,
@@ -3504,6 +3615,9 @@ def run_simulation(
                 )
             collision_success_total = sum(successes_by_node.values())
             total_traffic_sent = sum(traffic_sent_by_node.values())
+            capture_events = int(collision_stats.get("capture_events", 0))
+            total_collisions = int(collision_stats.get("total_collisions", 0))
+            capture_ratio = float(collision_stats.get("capture_ratio", 0.0))
             if _should_debug_log(debug_step2, round_id):
                 _log_link_quality_summary(
                     network_size=network_size_value,
@@ -3620,6 +3734,15 @@ def run_simulation(
             losses_congestion = loss_stats["losses_congestion"]
             losses_link_quality = loss_stats["losses_link_quality"]
             losses_collisions = max(total_traffic_sent - collision_success_total, 0)
+            logger.info(
+                "Capture collisions - taille=%s algo=%s round=%s capture_events=%s total_collisions=%s ratio=%.3f",
+                network_size_value,
+                algo_label,
+                round_id,
+                capture_events,
+                total_collisions,
+                capture_ratio,
+            )
             ratio_after_collisions = (
                 collision_success_total / total_traffic_sent
                 if total_traffic_sent > 0
@@ -3816,6 +3939,9 @@ def run_simulation(
                     "ratio_successes_after_congestion": ratio_after_congestion,
                     "ratio_successes_after_link": ratio_after_link,
                     "mean_temporal_overlap": mean_temporal_overlap,
+                    "capture_events": capture_events,
+                    "total_collisions": total_collisions,
+                    "capture_ratio": capture_ratio,
                     "losses_collisions": losses_collisions,
                     "losses_congestion": losses_congestion,
                     "losses_link_quality": losses_link_quality,
