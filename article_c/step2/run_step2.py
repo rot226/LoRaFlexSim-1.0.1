@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections import defaultdict
 import csv
+import json
 import logging
 import math
 from multiprocessing import get_context
 from pathlib import Path
+import shutil
 from statistics import median
 from typing import Sequence
 
@@ -47,6 +49,122 @@ SAFE_PROFILE_SUCCESS_THRESHOLD = 0.2
 SUPER_SAFE_PROFILE_SUCCESS_THRESHOLD = 0.05
 RX_POWER_DBM_MIN = -120.0
 RX_POWER_DBM_MAX = -70.0
+AUTO_TUNING_SUCCESS_THRESHOLD = 0.10
+AUTO_TUNING_MAX_ATTEMPTS = 3
+AUTO_TUNING_MINI_EVAL_NETWORK_SIZE = 80
+
+
+def _clamp_collision_bounds(config: dict[str, object]) -> None:
+    collision_min = float(config["collision_size_min"])
+    collision_under = float(config["collision_size_under_max"])
+    collision_over = float(config["collision_size_over_max"])
+    collision_under = max(collision_under, collision_min)
+    collision_over = max(collision_over, collision_under)
+    config["collision_size_min"] = collision_min
+    config["collision_size_under_max"] = collision_under
+    config["collision_size_over_max"] = collision_over
+
+
+def _soften_collision_config(config: dict[str, object]) -> None:
+    config["collision_size_min"] = max(0.55, float(config["collision_size_min"]) * 0.94)
+    config["collision_size_under_max"] = max(
+        0.75, float(config["collision_size_under_max"]) * 0.92
+    )
+    config["collision_size_over_max"] = max(
+        0.95, float(config["collision_size_over_max"]) * 0.90
+    )
+    _clamp_collision_bounds(config)
+
+
+def _extract_auto_tuning_params(config: dict[str, object]) -> dict[str, float]:
+    return {
+        "traffic_load_scale_step2": float(config["traffic_coeff_scale"]),
+        "collision_size_min": float(config["collision_size_min"]),
+        "collision_size_under_max": float(config["collision_size_under_max"]),
+        "collision_size_over_max": float(config["collision_size_over_max"]),
+    }
+
+
+def _sync_args_from_auto_tuned_config(args: object, config: dict[str, object]) -> None:
+    args.traffic_coeff_scale = float(config["traffic_coeff_scale"])
+    args.collision_size_min = float(config["collision_size_min"])
+    args.collision_size_under_max = float(config["collision_size_under_max"])
+    args.collision_size_over_max = float(config["collision_size_over_max"])
+
+
+def _run_auto_tuning_before_campaign(
+    config: dict[str, object],
+    replications: list[int],
+    base_results_dir: Path,
+) -> dict[str, object]:
+    eval_replications = replications[:1] if replications else [1]
+    attempt_logs: list[dict[str, object]] = []
+    tuned_config = dict(config)
+    selected_attempt = AUTO_TUNING_MAX_ATTEMPTS
+    success_reached = False
+    auto_tuning_tmp_dir = base_results_dir / "_auto_tuning_tmp"
+    if auto_tuning_tmp_dir.exists():
+        shutil.rmtree(auto_tuning_tmp_dir)
+    ensure_dir(auto_tuning_tmp_dir)
+    try:
+        for attempt in range(1, AUTO_TUNING_MAX_ATTEMPTS + 1):
+            task = (
+                AUTO_TUNING_MINI_EVAL_NETWORK_SIZE,
+                0,
+                eval_replications,
+                tuned_config,
+                auto_tuning_tmp_dir,
+                None,
+                True,
+            )
+            result = _simulate_density(task)
+            diagnostics = dict(result["diagnostics"])
+            success_mean = float(diagnostics.get("success_mean", 0.0))
+            params = _extract_auto_tuning_params(tuned_config)
+            attempt_logs.append(
+                {
+                    "attempt": attempt,
+                    "network_size": AUTO_TUNING_MINI_EVAL_NETWORK_SIZE,
+                    "replications": list(eval_replications),
+                    "seed_base": int(config["base_seed"]),
+                    "success_rate_mean": success_mean,
+                    "accepted": success_mean >= AUTO_TUNING_SUCCESS_THRESHOLD,
+                    "parameters": params,
+                }
+            )
+            print(
+                "Mini-évaluation auto-tuning "
+                f"(tentative {attempt}/{AUTO_TUNING_MAX_ATTEMPTS}, N={AUTO_TUNING_MINI_EVAL_NETWORK_SIZE}) "
+                f"success_rate_mean={success_mean:.4f}."
+            )
+            if success_mean >= AUTO_TUNING_SUCCESS_THRESHOLD:
+                selected_attempt = attempt
+                success_reached = True
+                break
+            tuned_config["traffic_coeff_scale"] = max(
+                0.10, float(tuned_config["traffic_coeff_scale"]) * 0.85
+            )
+            _soften_collision_config(tuned_config)
+        config.update(tuned_config)
+    finally:
+        shutil.rmtree(auto_tuning_tmp_dir, ignore_errors=True)
+
+    selected_parameters = _extract_auto_tuning_params(config)
+    payload = {
+        "network_size": AUTO_TUNING_MINI_EVAL_NETWORK_SIZE,
+        "threshold": AUTO_TUNING_SUCCESS_THRESHOLD,
+        "max_attempts": AUTO_TUNING_MAX_ATTEMPTS,
+        "selected_attempt": selected_attempt,
+        "success_reached": success_reached,
+        "retained_parameters": selected_parameters,
+        "attempts": attempt_logs,
+    }
+    log_path = base_results_dir / "auto_tuning_log.json"
+    log_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"Auto-tuning Step2: journal écrit dans {log_path}.")
+    return payload
 
 
 def _clamp_rx_power_dbm(value_dbm: float) -> float:
@@ -2050,6 +2168,16 @@ def main(argv: Sequence[str] | None = None) -> None:
     }
     config["rx_power_dbm"] = _clamp_rx_power_dbm(
         float(getattr(args, "rx_power_dbm", -100.0))
+    )
+
+    _run_auto_tuning_before_campaign(config, replications, base_results_dir)
+    _sync_args_from_auto_tuned_config(args, config)
+    print(
+        "Paramètres Step2 retenus après auto-tuning: "
+        f"traffic_load_scale_step2={float(config['traffic_coeff_scale']):.4f}, "
+        f"collision_size_min={float(config['collision_size_min']):.4f}, "
+        f"collision_size_under_max={float(config['collision_size_under_max']):.4f}, "
+        f"collision_size_over_max={float(config['collision_size_over_max']):.4f}."
     )
 
     if flat_output:
