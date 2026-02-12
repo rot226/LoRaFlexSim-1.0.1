@@ -1,0 +1,46 @@
+filename,metric,short_description,step,panel_count,exists
+plots/output/compare_with_snir.png,compare_with_snir,Compare les métriques SNIR on/off et superpose les courbes auteurs.,post,1,0
+plots/output/fig4_der_by_cluster.png,reproduce_author_results,"Reproduit les figures 4, 5, 7 et 8 de l'article QoS.",post,1,0
+plots/output/fig5_der_by_load.png,reproduce_author_results,"Reproduit les figures 4, 5, 7 et 8 de l'article QoS.",post,1,0
+plots/output/fig7_traffic_sacrifice.png,reproduce_author_results,"Reproduit les figures 4, 5, 7 et 8 de l'article QoS.",post,1,0
+plots/output/fig8_throughput_clusters.png,reproduce_author_results,"Reproduit les figures 4, 5, 7 et 8 de l'article QoS.",post,1,0
+plots/output/plot_cluster_der.png,der,Trace le DER par cluster à partir des CSV agrégés.,post,1,0
+step1/plots/output/plot_S1.png,pdr,"Trace la figure S1 (PDR vs densité, SNIR on/off).",step1,1,0
+step1/plots/output/plot_S10.png,rssi,"Trace la figure S10 (CDF RSSI/SNR par algorithme, SNIR on/off).",step1,1,0
+step1/plots/output/plot_S10_rssi_or_snr_cdf.png,rssi,"Trace la figure S10 (CDF RSSI/SNR par algorithme, SNIR on/off).",step1,1,0
+step1/plots/output/plot_S1_summary.png,pdr,"Trace la figure S1 (PDR vs densité, SNIR on/off).",step1,1,0
+step1/plots/output/plot_S2.png,toa,"Trace la figure S2 (ToA moyen vs densité, SNIR on/off).",step1,1,0
+step1/plots/output/plot_S3.png,s3,"Trace la figure S3 (réceptions médianes vs densité, SNIR on/off).",step1,1,0
+step1/plots/output/plot_S4.png,s4,"Trace la figure S4 (trames envoyées saturées vs densité, SNIR on/off).",step1,1,0
+step1/plots/output/plot_S4_summary.png,s4,"Trace la figure S4 (trames envoyées saturées vs densité, SNIR on/off).",step1,1,0
+step1/plots/output/plot_S5.png,pdr,"Trace la figure S5 (PDR par algorithme, SNIR on/off).",step1,1,0
+step1/plots/output/plot_S6.png,pdr,Trace la figure S6 (PDR vs densité par cluster).,step1,1,0
+step1/plots/output/plot_S6_cluster_pdr_vs_density.png,pdr,"Trace la figure S6 (PDR vs densité par cluster, algorithmes séparés).",step1,1,0
+step1/plots/output/plot_S6_cluster_pdr_vs_network_size.png,pdr,Trace la figure S6 (PDR vs taille du réseau par cluster).,step1,1,0
+step1/plots/output/plot_S7_cluster_outage_vs_density.png,outage,Trace la figure S7 (probabilité d'outage vs densité par cluster).,step1,1,0
+step1/plots/output/plot_S7_cluster_outage_vs_network_size.png,outage,Trace la figure S7 (probabilité d'outage vs taille du réseau par cluster).,step1,1,0
+step1/plots/output/plot_S8.png,sf_policy,Trace la figure S8 (distribution des SF par algorithme).,step1,1,0
+step1/plots/output/plot_S9.png,latency,"Trace la figure S9 (latence/ToA vs taille du réseau, SNIR on/off).",step1,1,0
+step1/plots/output/plot_S_new1_pdr_cluster_paper.png,pdr,Trace un plot dédié PDR (paper) pour APRA/Aimi/MixRA-Opt/MixRA-H avec SNIR on/off.,step1,1,0
+step1/plots/output/plot_S_new2_throughput_cluster_global.png,throughput,Trace throughput vs network size for clusters A/B/C and global scope.,step1,1,0
+step1/plots/output/plot_S_new3_energy_per_delivered_packet.png,energy,Trace l'énergie par paquet délivré (global + clusters si lisible).,step1,1,0
+step1/plots/output/plot_S_new4_interference_realism.png,plot_S_new4_interference_realism,Trace des métriques de réalisme d'interférence à partir de raw_packets.csv.,step1,2,0
+step2/plots/output/plot_RL1.png,rl1,Trace la figure RL1 (récompense médiane par cluster vs densité).,step2,1,0
+step2/plots/output/plot_RL10_reward_vs_pdr_scatter.png,pdr,Trace un nuage de points récompense moyenne vs PDR agrégé.,step2,1,0
+step2/plots/output/plot_RL1_learning_curve_reward.png,reward,Trace la courbe d'apprentissage (récompense moyenne vs rounds).,step2,1,0
+step2/plots/output/plot_RL2.png,rl2,Trace la figure RL2 (taux de succès médian vs densité).,step2,1,0
+step2/plots/output/plot_RL3.png,rl3,Trace la figure RL3 (débit réussi médian vs densité).,step2,1,0
+step2/plots/output/plot_RL4.png,rl4,Trace la figure RL4 (énergie par succès médiane vs densité).,step2,1,0
+step2/plots/output/plot_RL5.png,sf_policy,Trace la figure RL5 (probabilité de sélection par SF).,step2,1,0
+step2/plots/output/plot_RL5_plus.png,rl5+,Trace la figure RL5+ (résumé par percentile).,step2,1,0
+step2/plots/output/plot_RL6_cluster_outage_raw_by_replication.png,outage,Trace la figure RL6 (outage par cluster vs densité).,step2,1,0
+step2/plots/output/plot_RL6_cluster_outage_vs_density.png,outage,Trace la figure RL6 (outage par cluster vs densité).,step2,1,0
+step2/plots/output/plot_RL7_reward_vs_density.png,reward,Trace la figure RL7 (récompense médiane globale vs densité).,step2,4,0
+step2/plots/output/plot_RL8_reward_distribution.png,reward,Trace la figure RL8 (distribution des récompenses par algorithme).,step2,4,0
+step2/plots/output/plot_RL9_sf_selection_entropy.png,entropy,Trace la figure RL9 (entropie de sélection des SF vs rounds).,step2,1,0
+step2/plots/output/plot_R_figure3_ucb1_vs_baselines.png,pdr,Trace la figure 3: UCB1 vs baselines avec double axe PDR/énergie.,step2,1,0
+step2/plots/output/plot_R_new1_pdr_global.png,pdr,Trace le PDR global Step2 par taille de réseau avec comparaison SNIR.,step2,1,0
+step2/plots/output/plot_R_new2_energy_per_packet.png,energy,"Trace l'énergie par paquet délivré (Step2) pour ADR, MixRA-H, MixRA-Opt et UCB1-SF.",step2,1,0
+step2/plots/output/plot_R_new3_learning_curve.png,plot_R_new3_learning_curve,Trace la courbe d'apprentissage Step2 avec variabilité par round et par taille.,step2,1,0
+step2/plots/output/plot_R_new4_sf_policy.png,sf_policy,Trace la figure R_new4: entropie SF et distribution finale des SF.,step2,2,0
+step2/plots/output/plot_R_new5_pdr_energy_tradeoff.png,pdr,Trace le compromis PDR/énergie selon la taille du réseau (Step2).,step2,1,0
