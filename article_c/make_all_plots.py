@@ -29,6 +29,7 @@ if find_spec("article_c") is None:
         )
 
 from article_c.common.csv_io import write_simulation_results, write_step1_results
+from article_c.common.expected_figures import EXPECTED_FIGURES_BY_STEP
 
 ARTICLE_DIR = Path(__file__).resolve().parent
 STEP1_RESULTS_DIR = ARTICLE_DIR / "step1" / "results"
@@ -736,30 +737,26 @@ def _extract_plot_metadata(module_path: str) -> tuple[str, str, int, tuple[str, 
 def _write_figures_manifest(export_formats: tuple[str, ...]) -> None:
     rows: list[dict[str, str | int]] = []
     missing_files: list[Path] = []
-    all_modules = {
-        **{module_path: "step1" for module_path in PLOT_MODULES["step1"]},
-        **{module_path: "step2" for module_path in PLOT_MODULES["step2"]},
-        **{module_path: "post" for module_path in POST_PLOT_MODULES},
-    }
-    for module_path, step in all_modules.items():
-        metric, short_description, panel_count, stems = _extract_plot_metadata(module_path)
+    for step, module_entries in EXPECTED_FIGURES_BY_STEP.items():
         output_dir = MANIFEST_STEP_OUTPUT_DIRS[step]
-        for stem in stems:
-            for fmt in export_formats:
-                filename = f"{stem}.{fmt}"
-                full_path = output_dir / filename
-                rows.append(
-                    {
-                        "filename": str(full_path.relative_to(ARTICLE_DIR)),
-                        "metric": metric,
-                        "short_description": short_description,
-                        "step": step,
-                        "panel_count": panel_count,
-                        "exists": int(full_path.exists()),
-                    }
-                )
-                if not full_path.exists():
-                    missing_files.append(full_path)
+        for module_path, stems in module_entries:
+            metric, short_description, panel_count, _ = _extract_plot_metadata(module_path)
+            for stem in stems:
+                for fmt in export_formats:
+                    filename = f"{stem}.{fmt}"
+                    full_path = output_dir / filename
+                    rows.append(
+                        {
+                            "filename": str(full_path.relative_to(ARTICLE_DIR)),
+                            "metric": metric,
+                            "short_description": short_description,
+                            "step": step,
+                            "panel_count": panel_count,
+                            "exists": int(full_path.exists()),
+                        }
+                    )
+                    if not full_path.exists():
+                        missing_files.append(full_path)
     with MANIFEST_OUTPUT_PATH.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
             handle,
