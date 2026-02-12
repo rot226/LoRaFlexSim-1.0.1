@@ -99,7 +99,7 @@ RECEIVED_ALGO_MEAN_KEY = "received_algo_mean"
 RECEIVED_ALGO_TOL = 1e-6
 BASE_FONT_FAMILY = "sans-serif"
 BASE_FONT_SANS = ["DejaVu Sans", "Arial", "Liberation Sans"]
-BASE_FONT_SIZE = 10
+BASE_FONT_SIZE = 11
 BASE_LINE_WIDTH = 2.0
 BASE_GRID_COLOR = "#e0e0e0"
 BASE_GRID_ALPHA = 0.6
@@ -265,6 +265,12 @@ def apply_plot_style() -> None:
             "figure.dpi": BASE_DPI,
             "axes.grid": BASE_GRID_ENABLED,
             "axes.titley": AXES_TITLE_Y,
+            "axes.labelsize": 11,
+            "xtick.labelsize": 10,
+            "ytick.labelsize": 10,
+            "legend.fontsize": 10,
+            "lines.linewidth": BASE_LINE_WIDTH,
+            "lines.markersize": 6.0,
             "savefig.dpi": BASE_DPI,
         }
     )
@@ -1751,7 +1757,7 @@ def legend_handles_for_algos_snir(
                     marker=marker,
                     linestyle=SNIR_LINESTYLES[snir_mode],
                     linewidth=BASE_LINE_WIDTH,
-                    markersize=5.5,
+                    markersize=6.0,
                 )
             )
             labels.append(f"{algo_label_value} ({SNIR_LABELS[snir_mode]})")
