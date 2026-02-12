@@ -63,6 +63,81 @@ def _count_failed_runs(status_csv_path: Path, network_size: int) -> int:
     return failed
 
 
+def _assert_cumulative_sizes(
+    csv_path: Path,
+    expected_sizes_so_far: set[int],
+    step_label: str,
+) -> None:
+    """Valide que le CSV contient bien toutes les tailles attendues jusque-là."""
+    if not csv_path.exists():
+        raise RuntimeError(
+            f"{step_label}: CSV introuvable pour validation cumulative: {csv_path}"
+        )
+    with csv_path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames:
+            raise RuntimeError(
+                f"{step_label}: en-têtes CSV absents dans {csv_path}."
+            )
+        fieldnames = {
+            name.lstrip("\ufeff").strip() for name in reader.fieldnames if name is not None
+        }
+        size_key = "network_size" if "network_size" in fieldnames else None
+        if size_key is None and "density" in fieldnames:
+            size_key = "density"
+        if size_key is None:
+            raise RuntimeError(
+                f"{step_label}: colonnes network_size/density absentes dans {csv_path}."
+            )
+        found_sizes: set[int] = set()
+        for row in reader:
+            value = row.get(size_key)
+            if value in (None, ""):
+                continue
+            try:
+                found_sizes.add(int(float(str(value))))
+            except ValueError:
+                continue
+    if not expected_sizes_so_far.issubset(found_sizes):
+        raise RuntimeError(
+            f"{step_label}: validation cumulative échouée pour {csv_path}. "
+            f"Tailles attendues={sorted(expected_sizes_so_far)}, "
+            f"tailles trouvées={sorted(found_sizes)}"
+        )
+
+
+def _assert_cumulative_sizes_nested(
+    base_results_dir: Path,
+    expected_sizes_so_far: set[int],
+    step_label: str,
+) -> None:
+    """Valide le mode non-flat via les dossiers size_*/rep_* et leurs CSV."""
+    found_sizes: set[int] = set()
+    for size_dir in sorted(base_results_dir.glob("size_*")):
+        if not size_dir.is_dir():
+            continue
+        try:
+            size_value = int(size_dir.name.split("size_", 1)[1])
+        except (IndexError, ValueError):
+            continue
+        rep_dirs = sorted(path for path in size_dir.glob("rep_*") if path.is_dir())
+        if not rep_dirs:
+            continue
+        for rep_dir in rep_dirs:
+            _assert_cumulative_sizes(
+                rep_dir / "aggregated_results.csv",
+                {size_value},
+                step_label,
+            )
+        found_sizes.add(size_value)
+    if not expected_sizes_so_far.issubset(found_sizes):
+        raise RuntimeError(
+            f"{step_label}: validation cumulative échouée pour {base_results_dir}. "
+            f"Tailles attendues={sorted(expected_sizes_so_far)}, "
+            f"tailles trouvées={sorted(found_sizes)}"
+        )
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour l'exécution complète."""
     parser = argparse.ArgumentParser(
@@ -774,7 +849,8 @@ def main(argv: list[str] | None = None) -> None:
     campaign_start = perf_counter()
     reference_network_size = int(round(median(requested_sizes)))
     args.reference_network_size = reference_network_size
-    for size in requested_sizes:
+    for size_index, size in enumerate(requested_sizes):
+        expected_sizes_so_far = set(requested_sizes[: size_index + 1])
         size_args = argparse.Namespace(**vars(args))
         size_args.network_sizes = [size]
         size_summary: dict[str, object] = {
@@ -801,6 +877,18 @@ def main(argv: list[str] | None = None) -> None:
         if not size_args.skip_step1:
             step_start = perf_counter()
             run_step1(_build_step1_args(size_args))
+            if bool(size_args.flat_output):
+                _assert_cumulative_sizes(
+                    step1_results_dir / "aggregated_results.csv",
+                    expected_sizes_so_far,
+                    "Step1",
+                )
+            else:
+                _assert_cumulative_sizes_nested(
+                    step1_results_dir,
+                    expected_sizes_so_far,
+                    "Step1",
+                )
             step1_elapsed = perf_counter() - step_start
             step1_failed = _count_failed_runs(step1_results_dir / "run_status_step1.csv", size)
             size_summary["step1"] = {
@@ -812,6 +900,18 @@ def main(argv: list[str] | None = None) -> None:
         if not size_args.skip_step2:
             step_start = perf_counter()
             run_step2(_build_step2_args(size_args))
+            if bool(size_args.flat_output):
+                _assert_cumulative_sizes(
+                    step2_results_dir / "aggregated_results.csv",
+                    expected_sizes_so_far,
+                    "Step2",
+                )
+            else:
+                _assert_cumulative_sizes_nested(
+                    step2_results_dir,
+                    expected_sizes_so_far,
+                    "Step2",
+                )
             step2_elapsed = perf_counter() - step_start
             step2_failed = _count_failed_runs(step2_results_dir / "run_status_step2.csv", size)
             size_summary["step2"] = {
