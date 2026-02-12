@@ -1,194 +1,136 @@
-"""Inspection rapide des résultats CSV pour Step1/Step2."""
+"""Inspecte l'arborescence de résultats nested (`size_*/rep_*`).
+
+Vérifie :
+- existence des tailles attendues (`size_80`, `size_160`, `size_320`, `size_640`, `size_1280`)
+- présence des fichiers requis par réplication (`raw_*.csv`, `aggregated_results.csv`)
+- nombre de lignes de données non nul par taille
+
+Le script renvoie un code non-zéro si au moins une taille attendue est absente.
+"""
 
 from __future__ import annotations
 
 import argparse
 import csv
-from collections import Counter
+import sys
+from importlib.util import find_spec
 from pathlib import Path
-from typing import Iterable
+
+if find_spec("article_c") is None:
+    repo_root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(repo_root))
 
 from article_c.common.config import BASE_DIR
 
-STEP_TARGETS: dict[str, tuple[str, ...]] = {
-    "step1": (
-        "aggregated_results.csv",
-        "aggregated_results_by_replication.csv",
-        "aggregated_results_by_round.csv",
-        "raw_metrics.csv",
-        "raw_packets.csv",
-    ),
-    "step2": (
-        "aggregated_results.csv",
-        "aggregated_results_by_replication.csv",
-        "aggregated_results_by_round.csv",
-        "raw_results.csv",
-        "raw_all.csv",
-        "raw_cluster.csv",
-    ),
-}
-
-REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
-    "step1": ("network_size", "algo", "snir_mode", "cluster"),
-    "step2": ("network_size", "algo", "snir_mode", "cluster"),
-}
-
-NUMERIC_COLUMNS: dict[str, tuple[str, ...]] = {
-    "step1": ("network_size", "sent", "received", "pdr"),
-    "step2": ("network_size", "reward", "success_rate"),
-}
+EXPECTED_SIZES: tuple[int, ...] = (80, 160, 320, 640, 1280)
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Inspecte les résultats CSV de Step1/Step2."
+        description="Inspecte les résultats nested size_*/rep_*."
     )
     parser.add_argument(
         "--step",
-        required=True,
         choices=("step1", "step2"),
-        help="Étape à inspecter.",
+        default="step1",
+        help="Étape à inspecter (par défaut: step1).",
+    )
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        default=None,
+        help="Chemin explicite vers le dossier results (sinon: article_c/<step>/results).",
     )
     return parser
 
 
-def _detect_target_csv(step: str) -> tuple[Path, list[Path]]:
-    results_dir = BASE_DIR / step / "results"
-    targets = [results_dir / name for name in STEP_TARGETS[step]]
-    existing = [path for path in targets if path.exists()]
-    return results_dir, existing
+def _count_data_rows(csv_path: Path) -> int:
+    with csv_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.reader(handle)
+        try:
+            next(reader)  # en-tête
+        except StopIteration:
+            return 0
+        return sum(1 for _ in reader)
 
 
-def _fmt_size(path: Path) -> str:
-    size = path.stat().st_size
-    if size < 1024:
-        return f"{size} B"
-    if size < 1024 * 1024:
-        return f"{size / 1024:.1f} KiB"
-    return f"{size / (1024 * 1024):.2f} MiB"
-
-
-def _read_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
-    with path.open("r", newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        fieldnames = list(reader.fieldnames or [])
-        return fieldnames, list(reader)
-
-
-def _safe_float(value: str) -> float | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if text == "":
-        return None
-    try:
-        return float(text)
-    except ValueError:
-        return None
-
-
-def _inspect_schema_and_types(
-    step: str,
-    path: Path,
-    header: list[str],
-    rows: Iterable[dict[str, str]],
-) -> list[str]:
-    warnings: list[str] = []
-    required = REQUIRED_COLUMNS[step]
-    missing = [column for column in required if column not in header]
-    if missing:
-        warnings.append(
-            f"{path.name}: colonnes manquantes -> {', '.join(missing)}"
-        )
-
-    numeric_columns = [c for c in NUMERIC_COLUMNS[step] if c in header]
-    for idx, row in enumerate(rows, start=2):
-        for column in numeric_columns:
-            raw_value = row.get(column, "")
-            if str(raw_value).strip() == "":
-                continue
-            number = _safe_float(raw_value)
-            if number is None:
-                warnings.append(
-                    f"{path.name}: type invalide en ligne {idx} pour {column}='{raw_value}'"
-                )
-                continue
-            if column == "network_size" and (number <= 0 or not number.is_integer()):
-                warnings.append(
-                    f"{path.name}: network_size invalide ligne {idx} ({raw_value})"
-                )
-            if column in {"pdr", "success_rate"} and not (0.0 <= number <= 1.0):
-                warnings.append(
-                    f"{path.name}: {column} hors [0,1] ligne {idx} ({raw_value})"
-                )
-    return warnings
-
-
-def _count_by_keys(rows: Iterable[dict[str, str]]) -> Counter[tuple[str, str, str, str]]:
-    counter: Counter[tuple[str, str, str, str]] = Counter()
-    for row in rows:
-        key = (
-            str(row.get("network_size", "<NA>") or "<NA>").strip(),
-            str(row.get("algo", "<NA>") or "<NA>").strip(),
-            str(row.get("snir_mode", "<NA>") or "<NA>").strip(),
-            str(row.get("cluster", "<NA>") or "<NA>").strip(),
-        )
-        counter[key] += 1
-    return counter
+def _iter_rep_dirs(size_dir: Path) -> list[Path]:
+    return sorted(path for path in size_dir.iterdir() if path.is_dir() and path.name.startswith("rep_"))
 
 
 def main() -> int:
     args = _build_parser().parse_args()
-    step = args.step
 
-    results_dir, csv_paths = _detect_target_csv(step)
-    print(f"Dossier résultats: {results_dir}")
-    if not csv_paths:
-        print("Aucun CSV cible détecté.")
+    results_dir = args.results_dir or (BASE_DIR / args.step / "results")
+    print(f"Dossier inspecté: {results_dir}")
+
+    if not results_dir.exists():
+        print("ERREUR: dossier results introuvable.")
         return 1
 
-    print("CSV cibles détectés:")
-    for path in csv_paths:
-        print(f"- {path.name}: {_fmt_size(path)}")
+    failures: list[str] = []
+    missing_sizes: list[str] = []
 
-    global_counter: Counter[tuple[str, str, str, str]] = Counter()
-    all_warnings: list[str] = []
-    detected_sizes: set[int] = set()
+    # 1) Existence des tailles attendues
+    size_dirs: dict[int, Path] = {}
+    for size in EXPECTED_SIZES:
+        size_dir = results_dir / f"size_{size}"
+        if not size_dir.exists() or not size_dir.is_dir():
+            missing_sizes.append(size_dir.name)
+            continue
+        size_dirs[size] = size_dir
 
-    for path in csv_paths:
-        header, rows = _read_rows(path)
-        file_counter = _count_by_keys(rows)
-        global_counter.update(file_counter)
+    if missing_sizes:
+        failures.append(f"Tailles manquantes: {', '.join(missing_sizes)}")
 
-        if "network_size" in header:
-            for row in rows:
-                maybe_size = _safe_float(row.get("network_size", ""))
-                if maybe_size is not None and maybe_size.is_integer() and maybe_size > 0:
-                    detected_sizes.add(int(maybe_size))
+    # 2) Fichiers requis par réplication + 3) lignes non nulles par taille
+    rows_by_size: dict[int, int] = {size: 0 for size in EXPECTED_SIZES}
 
-        all_warnings.extend(_inspect_schema_and_types(step, path, header, rows))
+    for size, size_dir in size_dirs.items():
+        rep_dirs = _iter_rep_dirs(size_dir)
+        if not rep_dirs:
+            failures.append(f"{size_dir.name}: aucun dossier rep_* trouvé")
+            continue
 
-    sizes_label = ", ".join(map(str, sorted(detected_sizes))) if detected_sizes else "<aucune>"
-    print(f"Tailles détectées: {sizes_label}")
+        for rep_dir in rep_dirs:
+            raw_csvs = sorted(rep_dir.glob("raw_*.csv"))
+            agg_csv = rep_dir / "aggregated_results.csv"
 
-    print("\nComptage lignes par (taille, algo, snir_mode, cluster):")
-    for key, count in sorted(global_counter.items()):
-        print(f"- {key}: {count}")
+            if not raw_csvs:
+                failures.append(f"{rep_dir.relative_to(results_dir)}: raw_*.csv absent")
+            if not agg_csv.exists():
+                failures.append(
+                    f"{rep_dir.relative_to(results_dir)}: aggregated_results.csv absent"
+                )
 
-    if step == "step1" and len(detected_sizes) < 2:
-        print("ATTENTION: moins de 2 tailles détectées pour Step1.")
+            for csv_path in [*raw_csvs, agg_csv]:
+                if not csv_path.exists():
+                    continue
+                try:
+                    rows_by_size[size] += _count_data_rows(csv_path)
+                except Exception as exc:
+                    failures.append(
+                        f"{csv_path.relative_to(results_dir)}: lecture impossible ({exc})"
+                    )
 
-    if all_warnings:
-        print("\nAvertissements schéma/type:")
-        seen = set()
-        for warning in all_warnings:
-            if warning in seen:
-                continue
-            seen.add(warning)
-            print(f"- {warning}")
+    print("\nRésumé lignes de données par taille:")
+    for size in EXPECTED_SIZES:
+        print(f"- size_{size}: {rows_by_size[size]} ligne(s)")
+        if size in size_dirs and rows_by_size[size] == 0:
+            failures.append(f"size_{size}: 0 ligne de données cumulée")
+
+    if failures:
+        print("\nFAIL")
+        for item in failures:
+            print(f"- {item}")
     else:
-        print("\nAucun avertissement schéma/type.")
-    return 0
+        print("\nPASS")
+
+    # Exigence explicite: code non-zéro si une taille manque.
+    if missing_sizes:
+        return 2
+
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
