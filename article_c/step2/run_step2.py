@@ -52,6 +52,7 @@ RX_POWER_DBM_MAX = -70.0
 AUTO_TUNING_SUCCESS_THRESHOLD = 0.10
 AUTO_TUNING_MAX_ATTEMPTS = 3
 AUTO_TUNING_MINI_EVAL_NETWORK_SIZE = 80
+SUCCESS_ZERO_RATIO_THRESHOLD = 0.95
 
 
 def _clamp_collision_bounds(config: dict[str, object]) -> None:
@@ -1337,9 +1338,9 @@ def _compose_post_simulation_report(
 
 def _assert_success_rate_threshold(
     per_size_stats: dict[int, dict[str, object]],
-    threshold: float = 0.95,
+    threshold: float = SUCCESS_ZERO_RATIO_THRESHOLD,
     strict: bool = False,
-) -> None:
+) -> dict[str, object]:
     overall_success_sum = sum(
         float(stats.get("success_sum", 0.0)) for stats in per_size_stats.values()
     )
@@ -1349,9 +1350,23 @@ def _assert_success_rate_threshold(
     overall_success_zero_count = sum(
         int(stats.get("success_zero_count", 0)) for stats in per_size_stats.values()
     )
+    assessment: dict[str, object] = {
+        "simulation_quality": "ok",
+        "thresholds": {"success_zero_ratio_max": float(threshold)},
+        "reasons": [],
+    }
     if overall_success_count <= 0:
-        return
+        reasons = assessment["reasons"]
+        if isinstance(reasons, list):
+            reasons.append("Aucune statistique success_rate disponible.")
+        assessment["simulation_quality"] = "low"
+        if strict:
+            raise RuntimeError("Aucune statistique success_rate disponible.")
+        return assessment
+
     zero_ratio = overall_success_zero_count / overall_success_count
+    assessment["success_zero_ratio"] = zero_ratio
+    assessment["success_rate_mean"] = overall_success_sum / overall_success_count
     if zero_ratio > threshold:
         success_mean = overall_success_sum / overall_success_count
         per_size_lines: list[str] = []
@@ -1373,9 +1388,17 @@ def _assert_success_rate_threshold(
             "- résumé par taille:\n"
             f"{summary}"
         )
+        reasons = assessment["reasons"]
+        if isinstance(reasons, list):
+            reasons.append(
+                "Part de success_rate nuls trop élevée: "
+                f"{zero_ratio:.1%} > seuil {threshold:.1%}."
+            )
+        assessment["simulation_quality"] = "low"
         logging.warning(message)
         if strict:
             raise RuntimeError(message)
+    return assessment
 
 
 def _write_post_simulation_report(
@@ -2545,9 +2568,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     strict_mode = bool(getattr(args, "strict", False)) or not bool(
         args.allow_low_success_rate
     )
-    _assert_success_rate_threshold(
+    quality_summary = _assert_success_rate_threshold(
         size_post_stats,
         strict=strict_mode,
+    )
+    quality_path = base_results_dir / "simulation_quality_step2.json"
+    quality_path.write_text(
+        json.dumps(quality_summary, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
     )
 
     if selection_rows:
