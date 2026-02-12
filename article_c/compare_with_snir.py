@@ -54,6 +54,7 @@ from article_c.common.plot_helpers import (
     collect_legend_entries,
     deduplicate_legend_entries,
     ensure_network_size,
+    fallback_legend_handles,
     filter_mixra_opt_fallback,
     is_constant_metric,
     load_step1_aggregated,
@@ -331,8 +332,9 @@ def _render_metric_plot(
     )
     handles, labels = collect_legend_entries(ax)
     handles, labels = deduplicate_legend_entries(handles, labels)
-    if handles:
-        ax.legend(handles, labels, loc="best")
+    if not handles:
+        handles, labels = fallback_legend_handles()
+    ax.legend(handles, labels, loc="best")
     apply_figure_layout(fig)
     save_figure(fig, output_dir, output_stem)
     if close_figures:
