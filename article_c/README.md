@@ -67,6 +67,55 @@ puis relancez `\.venv\Scripts\Activate.ps1`.
 
 ### Commandes CLI exactes
 
+### Procédure recommandée (Windows 11) : nettoyage → Step1 verify → Step2 verify → figures → manifeste/diagnostics
+
+Exemple **exact** demandé pour les tailles `[80,160,320,640,1280]` et `5` réplications.
+
+#### 1) Nettoyage des dossiers résultats/figures
+
+```powershell
+Remove-Item -Recurse -Force article_c/step1/results, article_c/step2/results, article_c/step1/plots/output, article_c/step2/plots/output, article_c/plots/output -ErrorAction SilentlyContinue
+```
+
+#### 2) Exécuter Step1 puis verify
+
+```powershell
+python -m article_c.step1.run_step1 --network-sizes 80 160 320 640 1280 --replications 5 --seeds_base 1 --snir_modes snir_on,snir_off --flat-output
+python -m article_c.validate_results --step1-dir article_c/step1/results --step2-dir article_c/step2/results --skip-step2
+```
+
+#### 3) Exécuter Step2 puis verify
+
+```powershell
+python -m article_c.step2.run_step2 --network-sizes 80 160 320 640 1280 --replications 5 --seeds_base 1 --flat-output
+python -m article_c.validate_results --step1-dir article_c/step1/results --step2-dir article_c/step2/results
+```
+
+#### 4) Génération des figures
+
+```powershell
+python -m article_c.make_all_plots --formats png,eps,pdf --no-suptitle
+python -m article_c.all_plot_compare --export-csv --output-dir article_c/plots/output/compare_all
+```
+
+#### 5) Lecture du manifeste et diagnostics
+
+```powershell
+Import-Csv article_c/figures_manifest.csv | Select-Object module,format,path,exists | Format-Table -AutoSize
+Import-Csv article_c/step2/results/diagnostics_step2_by_size.csv | Format-Table -AutoSize
+Import-Csv article_c/scientific_qa_report.csv | Format-Table -AutoSize
+```
+
+Contrôles de présence rapides :
+
+```powershell
+Test-Path article_c/step1/results/aggregated_results.csv
+Test-Path article_c/step2/results/aggregated_results.csv
+Test-Path article_c/figures_manifest.csv
+Test-Path article_c/step2/results/diagnostics_step2_by_size.csv
+Test-Path article_c/scientific_qa_report.csv
+```
+
 Exécuter toutes les étapes :
 
 ```powershell
