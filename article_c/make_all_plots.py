@@ -767,24 +767,64 @@ def _extract_plot_metadata(module_path: str) -> tuple[str, str, int, tuple[str, 
     return metric, short_description, panel_count, stems
 
 
-def _write_figures_manifest(export_formats: tuple[str, ...]) -> None:
+def _format_sizes(values: tuple[int, ...]) -> str:
+    return ",".join(str(value) for value in values)
+
+
+def _format_size_dirs(values: tuple[int, ...]) -> str:
+    return ";".join(f"size_{value}" for value in values)
+
+
+def _compute_size_status(
+    *,
+    requested_sizes: tuple[int, ...],
+    detected_sizes: tuple[int, ...],
+    min_network_sizes: int,
+) -> tuple[str, str]:
+    if not requested_sizes:
+        return "OK", "aucune taille demandée"
+    missing_sizes = sorted(set(requested_sizes) - set(detected_sizes))
+    if not missing_sizes:
+        return "OK", "tailles demandées présentes"
+    missing_label = ", ".join(str(size) for size in missing_sizes)
+    severity = "FAIL" if min_network_sizes > 1 else "WARN"
+    return severity, f"tailles demandées manquantes: {missing_label}"
+
+
+def _write_figures_manifest(
+    export_formats: tuple[str, ...],
+    manifest_context_by_module: dict[str, ManifestContext],
+) -> None:
     rows: list[dict[str, str | int]] = []
     missing_files: list[Path] = []
     for step, module_entries in EXPECTED_FIGURES_BY_STEP.items():
         output_dir = MANIFEST_STEP_OUTPUT_DIRS[step]
         for module_path, stems in module_entries:
             metric, short_description, panel_count, _ = _extract_plot_metadata(module_path)
+            context = manifest_context_by_module.get(module_path, ManifestContext())
             for stem in stems:
                 for fmt in export_formats:
                     filename = f"{stem}.{fmt}"
                     full_path = output_dir / filename
                     rows.append(
                         {
+                            "figure": stem,
+                            "module": module_path,
                             "filename": str(full_path.relative_to(ARTICLE_DIR)),
                             "metric": metric,
                             "short_description": short_description,
                             "step": step,
                             "panel_count": panel_count,
+                            "csv_source_paths": ";".join(
+                                str(path.relative_to(ARTICLE_DIR))
+                                for path in context.csv_source_paths
+                            ),
+                            "size_paths": _format_size_dirs(context.detected_sizes),
+                            "detected_sizes": _format_sizes(context.detected_sizes),
+                            "requested_sizes": _format_sizes(context.requested_sizes),
+                            "filtered_rows": context.filtered_row_count,
+                            "size_status": context.size_status,
+                            "size_status_detail": context.size_message,
                             "exists": int(full_path.exists()),
                         }
                     )
@@ -794,11 +834,20 @@ def _write_figures_manifest(export_formats: tuple[str, ...]) -> None:
         writer = csv.DictWriter(
             handle,
             fieldnames=[
+                "figure",
+                "module",
                 "filename",
                 "metric",
                 "short_description",
                 "step",
                 "panel_count",
+                "csv_source_paths",
+                "size_paths",
+                "detected_sizes",
+                "requested_sizes",
+                "filtered_rows",
+                "size_status",
+                "size_status_detail",
                 "exists",
             ],
         )
@@ -1184,6 +1233,8 @@ def _validate_plot_data(
         "after_algo_filter_rows": 0,
         "after_snir_filter_rows": 0,
         "after_cluster_filter_rows": 0,
+        "detected_sizes": (),
+        "requested_sizes": tuple(int(size) for size in expected_sizes or []),
         "status": "PENDING",
         "reason": "",
     }
@@ -1226,6 +1277,7 @@ def _validate_plot_data(
         report["reason"] = "CSV vide"
         return False, "CSV vide", report
     sizes = _extract_network_sizes_from_rows(fieldnames, rows)
+    report["detected_sizes"] = tuple(sorted(int(size) for size in sizes))
     if "network_size" in fieldnames:
         size_col = "network_size"
     elif "density" in fieldnames:
@@ -1428,6 +1480,8 @@ def _write_plot_data_filter_report(report_rows: list[dict[str, object]]) -> None
         "after_algo_filter_rows",
         "after_snir_filter_rows",
         "after_cluster_filter_rows",
+        "detected_sizes",
+        "requested_sizes",
         "status",
         "reason",
     ]
@@ -1466,6 +1520,16 @@ class PlotStatus:
     module_path: str
     status: str
     message: str
+
+
+@dataclass
+class ManifestContext:
+    csv_source_paths: tuple[Path, ...] = ()
+    requested_sizes: tuple[int, ...] = ()
+    detected_sizes: tuple[int, ...] = ()
+    filtered_row_count: int = 0
+    size_status: str = "OK"
+    size_message: str = "OK"
 
 
 def _register_status(
@@ -1716,11 +1780,38 @@ def main(argv: list[str] | None = None) -> None:
                 print(_suggest_step2_resume_command(expected_sizes))
 
     plot_data_filter_report_rows: list[dict[str, object]] = []
+    manifest_context_by_module: dict[str, ManifestContext] = {}
     for step, module_paths in PLOT_MODULES.items():
         if step not in steps:
             continue
         if step in step_errors:
             for module_path in module_paths:
+                expected_sizes = tuple(
+                    args.network_sizes
+                    or step_network_sizes.get(step)
+                    or network_sizes
+                )
+                requirements = _resolve_plot_requirements(step, module_path)
+                min_network_sizes = (
+                    MIN_NETWORK_SIZES_PER_PLOT.get(module_path)
+                    if module_path in MIN_NETWORK_SIZES_PER_PLOT
+                    else (1 if step == "step2" else requirements.min_network_sizes)
+                )
+                size_status, size_message = _compute_size_status(
+                    requested_sizes=tuple(int(size) for size in expected_sizes),
+                    detected_sizes=(),
+                    min_network_sizes=min_network_sizes,
+                )
+                manifest_context_by_module.setdefault(
+                    module_path,
+                    ManifestContext(
+                        requested_sizes=tuple(int(size) for size in expected_sizes),
+                        detected_sizes=(),
+                        filtered_row_count=0,
+                        size_status=size_status,
+                        size_message=size_message,
+                    ),
+                )
                 if module_path not in status_map:
                     _register_status(
                         status_map,
@@ -1747,6 +1838,28 @@ def main(argv: list[str] | None = None) -> None:
                 cache=step_data_cache,
             )
             if data_bundle is None:
+                expected_sizes = tuple(
+                    args.network_sizes
+                    or step_network_sizes.get(step)
+                    or network_sizes
+                )
+                min_network_sizes = (
+                    MIN_NETWORK_SIZES_PER_PLOT.get(module_path)
+                    if module_path in MIN_NETWORK_SIZES_PER_PLOT
+                    else (1 if step == "step2" else requirements.min_network_sizes)
+                )
+                size_status, size_message = _compute_size_status(
+                    requested_sizes=tuple(int(size) for size in expected_sizes),
+                    detected_sizes=(),
+                    min_network_sizes=min_network_sizes,
+                )
+                manifest_context_by_module[module_path] = ManifestContext(
+                    requested_sizes=tuple(int(size) for size in expected_sizes),
+                    detected_sizes=(),
+                    filtered_row_count=0,
+                    size_status=size_status,
+                    size_message=size_message,
+                )
                 _register_status(
                     status_map,
                     step=step,
@@ -1812,6 +1925,31 @@ def main(argv: list[str] | None = None) -> None:
                 source=args.source,
             )
             plot_data_filter_report_rows.append(report_row)
+            detected_sizes = tuple(int(size) for size in report_row.get("detected_sizes", ()))
+            requested_sizes = tuple(int(size) for size in report_row.get("requested_sizes", ()))
+            min_network_sizes = (
+                MIN_NETWORK_SIZES_PER_PLOT.get(module_path)
+                if module_path in MIN_NETWORK_SIZES_PER_PLOT
+                else (1 if step == "step2" else requirements.min_network_sizes)
+            )
+            size_status, size_message = _compute_size_status(
+                requested_sizes=requested_sizes,
+                detected_sizes=detected_sizes,
+                min_network_sizes=min_network_sizes,
+            )
+            filtered_rows = max(
+                0,
+                int(report_row.get("initial_rows", 0))
+                - int(report_row.get("after_cluster_filter_rows", 0)),
+            )
+            manifest_context_by_module[module_path] = ManifestContext(
+                csv_source_paths=data_bundle.source_paths,
+                requested_sizes=requested_sizes,
+                detected_sizes=detected_sizes,
+                filtered_row_count=filtered_rows,
+                size_status=size_status,
+                size_message=size_message,
+            )
             if not is_valid:
                 _register_status(
                     status_map,
@@ -2081,7 +2219,7 @@ def main(argv: list[str] | None = None) -> None:
         )
     manifest_module = "article_c.make_all_plots.figures_manifest"
     try:
-        _write_figures_manifest(export_formats)
+        _write_figures_manifest(export_formats, manifest_context_by_module)
         _register_status(
             status_map,
             step="post",
