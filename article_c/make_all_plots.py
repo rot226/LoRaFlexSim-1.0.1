@@ -28,7 +28,6 @@ if find_spec("article_c") is None:
             "Ajoutez la racine du dépôt au PYTHONPATH."
         )
 
-from article_c.common.csv_io import write_simulation_results, write_step1_results
 from article_c.common.expected_figures import EXPECTED_FIGURES_BY_STEP
 
 ARTICLE_DIR = Path(__file__).resolve().parent
@@ -172,6 +171,14 @@ class PlotRequirements:
     extra_csv_names: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class CsvDataBundle:
+    fieldnames: list[str]
+    rows: list[dict[str, str]]
+    label: str
+    source_paths: tuple[Path, ...]
+
+
 PLOT_REQUIREMENTS = {
     "article_c.step1.plots.plot_S10_rssi_cdf_by_algo": PlotRequirements(
         csv_name="raw_packets.csv",
@@ -235,70 +242,101 @@ def _load_csv_rows_coerced(path: Path) -> list[dict[str, object]]:
         ]
 
 
-def _ensure_expected_results_dir(csv_path: Path, expected_dir: Path, label: str) -> None:
-    try:
-        csv_path.resolve().relative_to(expected_dir.resolve())
-    except ValueError as exc:
-        raise ValueError(
-            "Chemin CSV inattendu pour "
-            f"{label}: {csv_path} (attendu sous {expected_dir})."
-        ) from exc
-
-
 def _collect_nested_csvs(results_dir: Path, filename: str) -> list[Path]:
     return sorted(results_dir.glob(f"size_*/rep_*/{filename}"))
 
 
-def _ensure_step1_aggregated(results_dir: Path) -> Path | None:
+def _resolve_step_results_dir(step: str) -> Path:
+    return STEP1_RESULTS_DIR if step == "step1" else STEP2_RESULTS_DIR
+
+
+def _resolve_step_label(step: str) -> str:
+    return "Step1" if step == "step1" else "Step2"
+
+
+def _load_dataset_from_aggregated(results_dir: Path) -> CsvDataBundle | None:
     aggregated_path = results_dir / "aggregated_results.csv"
-    if aggregated_path.exists():
-        return aggregated_path
-    raw_paths = _collect_nested_csvs(results_dir, "raw_metrics.csv")
-    if not raw_paths:
+    if not aggregated_path.exists():
         return None
-    raw_rows: list[dict[str, object]] = []
-    for path in raw_paths:
-        raw_rows.extend(_load_csv_rows_coerced(path))
-    if not raw_rows:
-        return None
-    print("Assemblage des résultats Step1 à partir des sous-dossiers...")
-    write_step1_results(results_dir, raw_rows)
-    return aggregated_path
-
-
-def _ensure_step2_aggregated(results_dir: Path) -> Path | None:
-    aggregated_path = results_dir / "aggregated_results.csv"
-    if aggregated_path.exists():
-        return aggregated_path
-    raw_paths = _collect_nested_csvs(results_dir, "raw_results.csv")
-    if not raw_paths:
-        return None
-    raw_rows: list[dict[str, object]] = []
-    for path in raw_paths:
-        raw_rows.extend(_load_csv_rows_coerced(path))
-    if not raw_rows:
-        return None
-    print("Assemblage des résultats Step2 à partir des sous-dossiers...")
-    write_simulation_results(results_dir, raw_rows)
-    return aggregated_path
-
-
-def _report_missing_csv(step_label: str, results_dir: Path) -> None:
-    aggregated_path = results_dir / "aggregated_results.csv"
-    raw_metrics_path = results_dir / "raw_metrics.csv"
-    raw_results_path = results_dir / "raw_results.csv"
-    print(
-        f"ERREUR: CSV {step_label} introuvable. "
-        f"Chemin attendu: {aggregated_path}."
+    fieldnames, rows = _load_csv_data(aggregated_path)
+    return CsvDataBundle(
+        fieldnames=fieldnames,
+        rows=rows,
+        label=str(aggregated_path.resolve()),
+        source_paths=(aggregated_path,),
     )
+
+
+def _load_dataset_from_by_size(
+    *,
+    results_dir: Path,
+    csv_name: str,
+) -> CsvDataBundle | None:
+    nested_paths = _collect_nested_csvs(results_dir, csv_name)
+    if not nested_paths:
+        return None
+    fieldnames: list[str] | None = None
+    rows: list[dict[str, str]] = []
+    for nested_path in nested_paths:
+        nested_fieldnames, nested_rows = _load_csv_data(nested_path)
+        if fieldnames is None:
+            fieldnames = nested_fieldnames
+        elif nested_fieldnames != fieldnames:
+            raise ValueError(
+                "Colonnes incohérentes entre CSV imbriqués "
+                f"({nested_path})."
+            )
+        rows.extend(nested_rows)
+    if fieldnames is None or not rows:
+        return None
+    return CsvDataBundle(
+        fieldnames=fieldnames,
+        rows=rows,
+        label=f"{results_dir}/size_*/rep_*/{csv_name}",
+        source_paths=tuple(nested_paths),
+    )
+
+
+def _report_missing_csv(
+    *,
+    step_label: str,
+    results_dir: Path,
+    source: str,
+    csv_name: str,
+) -> None:
+    aggregated_path = results_dir / "aggregated_results.csv"
+    nested_pattern = results_dir / "size_*" / "rep_*" / csv_name
+    print(f"ERREUR: CSV {step_label} introuvable pour source={source}.")
+    if source == "aggregated":
+        print(f"Chemin attendu: {aggregated_path}.")
+    else:
+        print(f"Pattern attendu: {nested_pattern}.")
     print(
         "INFO: vérifiez que les simulations ont bien écrit dans "
         f"{results_dir}."
     )
-    if step_label == "Step1":
-        print(f"INFO: exemples attendus: {raw_metrics_path}")
+
+
+def _resolve_data_bundle(
+    *,
+    step: str,
+    csv_name: str,
+    source: str,
+    cache: dict[tuple[str, str], CsvDataBundle],
+) -> CsvDataBundle | None:
+    cache_key = (step, csv_name)
+    if cache_key in cache:
+        return cache[cache_key]
+    results_dir = _resolve_step_results_dir(step)
+    if source == "aggregated":
+        if csv_name != "aggregated_results.csv":
+            return None
+        bundle = _load_dataset_from_aggregated(results_dir)
     else:
-        print(f"INFO: exemples attendus: {raw_results_path}")
+        bundle = _load_dataset_from_by_size(results_dir=results_dir, csv_name=csv_name)
+    if bundle is not None:
+        cache[cache_key] = bundle
+    return bundle
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -321,6 +359,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default="step1,step2",
         help="Étapes à tracer (ex: step1,step2).",
+    )
+    parser.add_argument(
+        "--source",
+        choices=("by_size", "aggregated"),
+        default="by_size",
+        help=(
+            "Source des données CSV: by_size fusionne size_*/rep_* en mémoire "
+            "(défaut), aggregated lit uniquement aggregated_results.csv."
+        ),
     )
     parser.add_argument(
         "--network-sizes",
@@ -537,24 +584,6 @@ def _resolve_plot_requirements(step: str, module_path: str) -> PlotRequirements:
             }
         )
     return requirements
-
-
-def _resolve_csv_path(
-    *,
-    step: str,
-    requirements: PlotRequirements,
-    step1_csv: Path | None,
-    step2_csv: Path | None,
-) -> Path | None:
-    if step == "step1":
-        base_dir = STEP1_RESULTS_DIR
-        aggregated = step1_csv
-    else:
-        base_dir = STEP2_RESULTS_DIR
-        aggregated = step2_csv
-    if requirements.csv_name == "aggregated_results.csv":
-        return aggregated
-    return base_dir / requirements.csv_name
 
 
 def _validate_plot_modules_use_save_figure() -> dict[str, str]:
@@ -998,27 +1027,25 @@ def _normalize_snir(value: str | None) -> str | None:
     return SNIR_ALIASES.get(cleaned)
 
 
-def _extract_network_sizes(path: Path) -> set[int]:
-    if not path.exists():
+def _extract_network_sizes_from_rows(
+    fieldnames: list[str],
+    rows: list[dict[str, str]],
+) -> set[int]:
+    if "network_size" in fieldnames:
+        size_key = "network_size"
+    elif "density" in fieldnames:
+        size_key = "density"
+    else:
         return set()
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        fieldnames = reader.fieldnames or []
-        if "network_size" in fieldnames:
-            size_key = "network_size"
-        elif "density" in fieldnames:
-            size_key = "density"
-        else:
-            return set()
-        sizes: set[int] = set()
-        for row in reader:
-            raw_value = row.get(size_key)
-            if raw_value in (None, ""):
-                continue
-            try:
-                sizes.add(int(float(raw_value)))
-            except ValueError:
-                continue
+    sizes: set[int] = set()
+    for row in rows:
+        raw_value = row.get(size_key)
+        if raw_value in (None, ""):
+            continue
+        try:
+            sizes.add(int(float(raw_value)))
+        except ValueError:
+            continue
     return sizes
 
 
@@ -1032,23 +1059,18 @@ def _load_csv_data(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     return (fieldnames, rows)
 
 
-def _load_network_sizes_from_csvs(paths: list[Path]) -> list[int]:
-    import pandas as pd
-
+def _load_network_sizes_from_bundles(bundles: list[CsvDataBundle]) -> list[int]:
     sizes: set[int] = set()
-    for path in paths:
-        if not path.exists():
-            raise FileNotFoundError(f"CSV introuvable: {path}")
-        resolved_path = path.resolve()
-        print(f"[network_sizes] Lecture du CSV: {resolved_path}")
-        df = pd.read_csv(path)
-        if "network_size" in df.columns:
+    for bundle in bundles:
+        print(f"[network_sizes] Lecture de la source: {bundle.label}")
+        fieldnames = bundle.fieldnames
+        if "network_size" in fieldnames:
             size_column = "network_size"
-        elif "density" in df.columns:
+        elif "density" in fieldnames:
             size_column = "density"
         else:
             raise ValueError(
-                f"Le CSV {path} doit contenir une colonne "
+                f"La source {bundle.label} doit contenir une colonne "
                 "'network_size' ou 'density'."
             )
         print(
@@ -1056,24 +1078,22 @@ def _load_network_sizes_from_csvs(paths: list[Path]) -> list[int]:
             f"{size_column}"
             + (" (fallback depuis density)" if size_column == "density" else "")
         )
-        raw_values = df[size_column].tolist()
-        non_null_series = df[size_column].dropna()
-        dropped_count = len(raw_values) - len(non_null_series)
+        raw_values = [row.get(size_column) for row in bundle.rows]
+        non_null_values = [value for value in raw_values if value not in (None, "")]
+        dropped_count = len(raw_values) - len(non_null_values)
         print(
             f"[network_sizes] dropna sur '{size_column}': "
             f"{dropped_count} ligne(s) ignorée(s)."
         )
-        unique_raw_values = sorted(
-            {str(value).strip() for value in non_null_series.tolist() if str(value).strip()}
-        )
+        unique_raw_values = sorted({str(value).strip() for value in non_null_values if str(value).strip()})
         raw_label = ", ".join(unique_raw_values) if unique_raw_values else "aucune"
         print(f"[network_sizes] Tailles uniques brutes: {raw_label}")
 
         cast_errors: list[str] = []
-        csv_sizes: set[int] = set()
-        for value in non_null_series.tolist():
+        bundle_sizes: set[int] = set()
+        for value in non_null_values:
             try:
-                csv_sizes.add(int(float(value)))
+                bundle_sizes.add(int(float(str(value))))
             except (TypeError, ValueError):
                 cast_errors.append(str(value))
         if cast_errors:
@@ -1082,10 +1102,10 @@ def _load_network_sizes_from_csvs(paths: list[Path]) -> list[int]:
                 "[network_sizes] Erreurs de cast vers int ignorées "
                 f"({len(cast_errors)} ligne(s)): {errors_label}"
             )
-        final_csv_sizes = sorted(csv_sizes)
-        final_label = ", ".join(str(value) for value in final_csv_sizes) or "aucune"
-        print(f"[network_sizes] Tailles finales conservées pour ce CSV: {final_label}")
-        sizes.update(csv_sizes)
+        final_bundle_sizes = sorted(bundle_sizes)
+        final_label = ", ".join(str(value) for value in final_bundle_sizes) or "aucune"
+        print(f"[network_sizes] Tailles finales conservées pour cette source: {final_label}")
+        sizes.update(bundle_sizes)
     merged_sizes = sorted(sizes)
     merged_label = ", ".join(str(value) for value in merged_sizes) or "aucune"
     print(f"[network_sizes] Tailles finales agrégées: {merged_label}")
@@ -1117,43 +1137,35 @@ def _suggest_step2_resume_command(expected_sizes: list[int]) -> str:
 
 
 def _validate_network_sizes(
-    paths: list[Path],
+    bundles: list[CsvDataBundle],
     expected_sizes: list[int],
-) -> dict[Path, list[int]]:
+) -> dict[str, list[int]]:
     expected_set = {int(size) for size in expected_sizes}
-    missing_by_path: dict[Path, list[int]] = {}
-    for path in paths:
-        found_sizes = _extract_network_sizes(path)
+    missing_by_source: dict[str, list[int]] = {}
+    for bundle in bundles:
+        found_sizes = _extract_network_sizes_from_rows(bundle.fieldnames, bundle.rows)
         missing = sorted(expected_set - found_sizes)
         if missing:
-            missing_by_path[path] = missing
+            missing_by_source[bundle.label] = missing
             missing_list = ", ".join(str(size) for size in missing)
             message_lines = [
                 "AVERTISSEMENT: tailles de réseau manquantes dans les résultats.",
-                f"CSV: {path}",
+                f"Source: {bundle.label}",
                 f"Tailles attendues manquantes: {missing_list}.",
+                "Les plots compatibles seront générés malgré tout.",
             ]
-            command = _suggest_regeneration_command(path, expected_sizes)
-            if command:
-                message_lines.append(
-                    "Commande PowerShell pour régénérer les résultats:"
-                )
-                message_lines.append(command)
-            message_lines.append(
-                "Les plots compatibles seront générés malgré tout."
-            )
             print("\n".join(message_lines))
-    return missing_by_path
+    return missing_by_source
 
 
 def _validate_plot_data(
     *,
     step: str,
     module_path: str,
-    csv_path: Path,
+    data_bundle: CsvDataBundle,
     requirements: PlotRequirements,
     expected_sizes: list[int] | None,
-    cached_data: dict[str, tuple[list[str], list[dict[str, str]]]],
+    source: str,
 ) -> tuple[bool, str, dict[str, object]]:
     def _log_filter(filter_name: str, before: int, after: int, detail: str = "") -> None:
         suffix = f" ({detail})" if detail else ""
@@ -1165,7 +1177,7 @@ def _validate_plot_data(
     report: dict[str, object] = {
         "step": step,
         "module_path": module_path,
-        "csv_path": str(csv_path.resolve()),
+        "csv_path": data_bundle.label,
         "initial_rows": 0,
         "after_cast_type_rows": 0,
         "after_dropna_rows": 0,
@@ -1177,10 +1189,16 @@ def _validate_plot_data(
     }
 
     print(f"[validate_plot_data] Module: {module_path}")
-    print(f"[validate_plot_data] CSV: {csv_path.resolve()}")
+    print(f"[validate_plot_data] CSV: {data_bundle.label}")
     for extra_name in requirements.extra_csv_names:
-        extra_path = csv_path.parent / extra_name
-        if not extra_path.exists():
+        if source == "aggregated":
+            missing_extra = all(
+                not (path.parent / extra_name).exists()
+                for path in data_bundle.source_paths
+            )
+        else:
+            missing_extra = not _collect_nested_csvs(_resolve_step_results_dir(step), extra_name)
+        if missing_extra:
             print(
                 "AVERTISSEMENT: "
                 f"{module_path} nécessite {extra_name}, figure ignorée."
@@ -1188,10 +1206,7 @@ def _validate_plot_data(
             report["status"] = "SKIP"
             report["reason"] = f"CSV manquant ({extra_name})"
             return False, f"CSV manquant ({extra_name})", report
-    cache_key = str(csv_path)
-    if cache_key not in cached_data:
-        cached_data[cache_key] = _load_csv_data(csv_path)
-    fieldnames, rows = cached_data[cache_key]
+    fieldnames, rows = data_bundle.fieldnames, data_bundle.rows
     print(
         "[validate_plot_data] Colonnes disponibles: "
         f"{', '.join(fieldnames) if fieldnames else 'aucune'}"
@@ -1210,7 +1225,7 @@ def _validate_plot_data(
         report["status"] = "SKIP"
         report["reason"] = "CSV vide"
         return False, "CSV vide", report
-    sizes = _extract_network_sizes(csv_path)
+    sizes = _extract_network_sizes_from_rows(fieldnames, rows)
     if "network_size" in fieldnames:
         size_col = "network_size"
     elif "density" in fieldnames:
@@ -1257,7 +1272,7 @@ def _validate_plot_data(
         sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
         print(
             "Tailles détectées dans "
-            f"{csv_path}: {sizes_label}."
+            f"{data_bundle.label}: {sizes_label}."
         )
         print(
             "WARNING: "
@@ -1265,7 +1280,7 @@ def _validate_plot_data(
             f"{min_network_sizes} taille(s) disponible(s), "
             "figure ignorée."
         )
-        print(f"CSV path: {csv_path}")
+        print(f"CSV path: {data_bundle.label}")
         report["status"] = "SKIP"
         report["reason"] = "tailles de réseau insuffisantes"
         return False, "tailles de réseau insuffisantes", report
@@ -1382,7 +1397,7 @@ def _validate_plot_data(
             sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
             print(
                 "Tailles détectées dans "
-                f"{csv_path}: {sizes_label}."
+                f"{data_bundle.label}: {sizes_label}."
             )
             details = []
             if missing_algos:
@@ -1585,29 +1600,36 @@ def main(argv: list[str] | None = None) -> None:
         steps = _parse_steps(args.steps)
     except ValueError as exc:
         parser.error(str(exc))
-    step1_results_dir = STEP1_RESULTS_DIR
-    step2_results_dir = STEP2_RESULTS_DIR
-    step1_csv = None
-    step2_csv = None
+    step_data_cache: dict[tuple[str, str], CsvDataBundle] = {}
     step_errors: dict[str, str] = {}
-    if "step1" in steps:
-        step1_csv = _ensure_step1_aggregated(step1_results_dir)
-        if step1_csv is None:
-            _report_missing_csv("Step1", step1_results_dir)
-            step_errors["step1"] = "CSV Step1 manquant"
-        else:
-            _ensure_expected_results_dir(step1_csv, step1_results_dir, "Step1")
-            if not (step1_results_dir / "done.flag").exists():
-                print("AVERTISSEMENT: done.flag absent pour Step1, continuation.")
-    if "step2" in steps:
-        step2_csv = _ensure_step2_aggregated(step2_results_dir)
-        if step2_csv is None:
-            _report_missing_csv("Step2", step2_results_dir)
-            step_errors["step2"] = "CSV Step2 manquant"
-        else:
-            _ensure_expected_results_dir(step2_csv, step2_results_dir, "Step2")
-            if not (step2_results_dir / "done.flag").exists():
-                print("AVERTISSEMENT: done.flag absent pour Step2, continuation.")
+    step_primary_bundle: dict[str, CsvDataBundle] = {}
+    step1_csv: Path | None = None
+    step2_csv: Path | None = None
+
+    for step in steps:
+        step_label = _resolve_step_label(step)
+        primary_bundle = _resolve_data_bundle(
+            step=step,
+            csv_name="aggregated_results.csv",
+            source=args.source,
+            cache=step_data_cache,
+        )
+        if primary_bundle is None:
+            _report_missing_csv(
+                step_label=step_label,
+                results_dir=_resolve_step_results_dir(step),
+                source=args.source,
+                csv_name="aggregated_results.csv",
+            )
+            step_errors[step] = f"CSV {step_label} manquant"
+            continue
+        step_primary_bundle[step] = primary_bundle
+        if args.source == "aggregated" and primary_bundle.source_paths:
+            if step == "step1":
+                step1_csv = primary_bundle.source_paths[0]
+            else:
+                step2_csv = primary_bundle.source_paths[0]
+
     if (
         step1_csv is not None
         and step2_csv is not None
@@ -1620,37 +1642,39 @@ def main(argv: list[str] | None = None) -> None:
         print(f"ERREUR: {message}")
         step_errors["step1"] = message
         step_errors["step2"] = message
-    if (
-        not args.skip_scientific_qa
-        and step1_csv is not None
-        and step2_csv is not None
-    ):
-        from article_c.qa_scientific_checks import run_scientific_checks
 
-        qa_code, _ = run_scientific_checks(
-            step1_csv=step1_csv,
-            step2_csv=step2_csv,
-            report_txt=ARTICLE_DIR / "scientific_qa_report.txt",
-            report_csv=ARTICLE_DIR / "scientific_qa_report.csv",
-        )
-        if qa_code != 0 and not args.allow_scientific_qa_fail:
-            raise SystemExit(
-                "Contrôles QA scientifiques en échec. "
-                "Utilisez --allow-scientific-qa-fail pour forcer la suite."
+    if not args.skip_scientific_qa and "step1" in steps and "step2" in steps:
+        if args.source != "aggregated":
+            print(
+                "AVERTISSEMENT: QA scientifique ignorée avec --source by_size "
+                "(nécessite des fichiers agrégés explicites)."
             )
-    csv_paths: list[Path] = []
-    if "step1" in steps and step1_csv is not None:
-        csv_paths.append(step1_csv)
-    if "step2" in steps and step2_csv is not None:
-        csv_paths.append(step2_csv)
+        elif step1_csv is not None and step2_csv is not None:
+            from article_c.qa_scientific_checks import run_scientific_checks
+
+            qa_code, _ = run_scientific_checks(
+                step1_csv=step1_csv,
+                step2_csv=step2_csv,
+                report_txt=ARTICLE_DIR / "scientific_qa_report.txt",
+                report_csv=ARTICLE_DIR / "scientific_qa_report.csv",
+            )
+            if qa_code != 0 and not args.allow_scientific_qa_fail:
+                raise SystemExit(
+                    "Contrôles QA scientifiques en échec. "
+                    "Utilisez --allow-scientific-qa-fail pour forcer la suite."
+                )
+
     step_network_sizes: dict[str, list[int]] = {}
-    if "step1" in steps and step1_csv is not None:
-        step_network_sizes["step1"] = _load_network_sizes_from_csvs([step1_csv])
-    if "step2" in steps and step2_csv is not None:
-        step_network_sizes["step2"] = _load_network_sizes_from_csvs([step2_csv])
+    for step in steps:
+        if step in step_errors:
+            continue
+        primary_bundle = step_primary_bundle.get(step)
+        if primary_bundle is not None:
+            step_network_sizes[step] = _load_network_sizes_from_bundles([primary_bundle])
+
     if args.network_sizes:
         network_sizes = args.network_sizes
-        _validate_network_sizes(csv_paths, network_sizes)
+        _validate_network_sizes(list(step_primary_bundle.values()), network_sizes)
     else:
         network_sizes = sorted(
             {
@@ -1664,14 +1688,9 @@ def main(argv: list[str] | None = None) -> None:
                 "Aucune taille de réseau détectée dans les CSV, "
                 "aucun plot n'a été généré."
             )
-            step_errors.setdefault(
-                "step1",
-                "aucune taille de réseau détectée",
-            )
-            step_errors.setdefault(
-                "step2",
-                "aucune taille de réseau détectée",
-            )
+            step_errors.setdefault("step1", "aucune taille de réseau détectée")
+            step_errors.setdefault("step2", "aucune taille de réseau détectée")
+
     if "step2" in steps:
         step2_sizes = step_network_sizes.get("step2", [])
         if len(step2_sizes) < 2:
@@ -1682,22 +1701,20 @@ def main(argv: list[str] | None = None) -> None:
             print(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
         if args.network_sizes:
             expected_sizes = args.network_sizes
-        elif step1_csv is not None and step1_csv.exists():
-            expected_sizes = _load_network_sizes_from_csvs([step1_csv])
+        elif "step1" in step_network_sizes:
+            expected_sizes = step_network_sizes["step1"]
         else:
             expected_sizes = []
         if expected_sizes:
             missing_sizes = sorted(set(expected_sizes) - set(step2_sizes))
             if missing_sizes:
                 missing_label = ", ".join(str(size) for size in missing_sizes)
-                print(
-                    "WARNING: Step2 ne contient pas toutes les tailles attendues."
-                )
+                print("WARNING: Step2 ne contient pas toutes les tailles attendues.")
                 print(f"Tailles attendues manquantes: {missing_label}")
                 print(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
                 print("Commande PowerShell pour terminer Step2 (mode reprise):")
                 print(_suggest_step2_resume_command(expected_sizes))
-    csv_cache: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
+
     plot_data_filter_report_rows: list[dict[str, object]] = []
     for step, module_paths in PLOT_MODULES.items():
         if step not in steps:
@@ -1723,21 +1740,19 @@ def main(argv: list[str] | None = None) -> None:
             if module_path in status_map and status_map[module_path].status == "FAIL":
                 continue
             requirements = _resolve_plot_requirements(step, module_path)
-            csv_path = _resolve_csv_path(
+            data_bundle = _resolve_data_bundle(
                 step=step,
-                requirements=requirements,
-                step1_csv=step1_csv,
-                step2_csv=step2_csv,
+                csv_name=requirements.csv_name,
+                source=args.source,
+                cache=step_data_cache,
             )
-            if csv_path is None:
-                continue
-            if not csv_path.exists():
+            if data_bundle is None:
                 _register_status(
                     status_map,
                     step=step,
                     module_path=module_path,
                     status="SKIP",
-                    message=f"CSV manquant ({csv_path.name})",
+                    message=f"CSV manquant ({requirements.csv_name})",
                 )
                 continue
             rl10_network_sizes: list[int] | None = None
@@ -1747,8 +1762,8 @@ def main(argv: list[str] | None = None) -> None:
             ):
                 if step1_csv is None or step2_csv is None:
                     continue
-                step1_sizes = _load_network_sizes_from_csvs([step1_csv])
-                step2_sizes = _load_network_sizes_from_csvs([step2_csv])
+                step1_sizes = step_network_sizes.get("step1", [])
+                step2_sizes = step_network_sizes.get("step2", [])
                 intersection = sorted(set(step1_sizes) & set(step2_sizes))
                 if len(intersection) < 2:
                     print(
@@ -1762,7 +1777,7 @@ def main(argv: list[str] | None = None) -> None:
                     regen_sizes = step2_sizes or step1_sizes
                     command = (
                         _suggest_regeneration_command(
-                            step1_csv,
+                            STEP1_RESULTS_DIR / "aggregated_results.csv",
                             regen_sizes,
                         )
                         if regen_sizes
@@ -1791,10 +1806,10 @@ def main(argv: list[str] | None = None) -> None:
             is_valid, reason, report_row = _validate_plot_data(
                 step=step,
                 module_path=module_path,
-                csv_path=csv_path,
+                data_bundle=data_bundle,
                 requirements=requirements,
                 expected_sizes=expected_sizes,
-                cached_data=csv_cache,
+                source=args.source,
             )
             plot_data_filter_report_rows.append(report_row)
             if not is_valid:
