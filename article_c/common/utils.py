@@ -209,6 +209,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--traffic-load-scale-step2",
+        dest="traffic_coeff_scale",
+        type=float,
+        default=argparse.SUPPRESS,
+        help="Alias de --traffic-coeff-scale, appliqué uniquement à l'étape 2.",
+    )
+    parser.add_argument(
         "--auto-collision-control",
         action=argparse.BooleanOptionalAction,
         default=False,

@@ -325,6 +325,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Active/désactive la variabilité de trafic par nœud.",
     )
     parser.add_argument(
+        "--traffic-load-scale-step2",
+        dest="traffic_coeff_scale",
+        type=float,
+        default=None,
+        help="Alias de --traffic-coeff-scale, appliqué uniquement à l'étape 2.",
+    )
+    parser.add_argument(
         "--capture-probability",
         type=float,
         default=None,
@@ -731,6 +738,8 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
             if args.traffic_coeff_enabled
             else "--no-traffic-coeff-enabled"
         )
+    if args.traffic_coeff_scale is not None:
+        step2_args.extend(["--traffic-coeff-scale", str(args.traffic_coeff_scale)])
     if args.capture_probability is not None:
         step2_args.extend(["--capture-probability", str(args.capture_probability)])
     if args.congestion_coeff is not None:

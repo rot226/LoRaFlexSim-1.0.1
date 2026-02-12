@@ -165,6 +165,31 @@ def _format_size_factor_table(
     return "\n".join(lines)
 
 
+def _log_effective_traffic_scale_for_density(density: int, config: dict[str, object]) -> None:
+    load_clamp_min, load_clamp_max = _resolve_load_clamps(
+        DEFAULT_CONFIG.step2,
+        config.get("network_load_min"),
+        config.get("network_load_max"),
+        safe_profile=bool(config.get("safe_profile", False)),
+        no_clamp=bool(config.get("no_clamp", False)),
+    )
+    load_factor = _network_load_factor(
+        int(density),
+        int(config["reference_network_size"]),
+        load_clamp_min,
+        load_clamp_max,
+    )
+    traffic_coeff_scale = float(config["traffic_coeff_scale"])
+    effective_traffic_scale = traffic_coeff_scale * load_factor
+    print(
+        "Traffic scale effectif par taille: "
+        f"taille={int(density)}, "
+        f"traffic_coeff_scale={traffic_coeff_scale:.4f}, "
+        f"load_factor={load_factor:.4f}, "
+        f"effective_scale={effective_traffic_scale:.4f}"
+    )
+
+
 def _apply_safe_profile_with_log(args: object, reason: str) -> None:
     changes: list[tuple[str, object, object]] = []
 
@@ -1723,6 +1748,8 @@ def _simulate_density(
     )
     print(f"Offsets de seed par algorithme: {offsets_label}")
     status_csv_path = base_results_dir / "run_status_step2.csv"
+
+    _log_effective_traffic_scale_for_density(int(density), config)
 
     for replication in replications:
         seed = int(config["base_seed"]) + density_idx * 1000 + replication
