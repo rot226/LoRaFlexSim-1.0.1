@@ -35,6 +35,7 @@ from article_c.common.utils import (
 from article_c.step1.simulate_step1 import mixra_opt_budget_for_size, run_simulation
 
 ALGORITHMS = ("adr", "mixra_h", "mixra_opt")
+BY_SIZE_DIRNAME = "by_size"
 ALGORITHM_LABELS = {
     "adr": "ADR",
     "mixra_h": "MixRA-H",
@@ -186,7 +187,8 @@ def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
 
 def _read_nested_sizes(output_dir: Path, replications: list[int]) -> set[int]:
     sizes: set[int] = set()
-    for size_dir in sorted(output_dir.glob("size_*")):
+    by_size_dir = output_dir / BY_SIZE_DIRNAME
+    for size_dir in sorted(by_size_dir.glob("size_*")):
         if not size_dir.is_dir():
             continue
         try:
@@ -202,9 +204,43 @@ def _read_nested_sizes(output_dir: Path, replications: list[int]) -> set[int]:
     if not sizes:
         print(
             "Aucune taille complète détectée dans les sous-dossiers "
-            f"{output_dir / 'size_<N>/rep_<R>'}."
+            f"{output_dir / BY_SIZE_DIRNAME / 'size_<N>/rep_<R>'}."
         )
     return sizes
+
+
+def _write_global_aggregates_from_nested(output_dir: Path) -> None:
+    by_size_dir = output_dir / BY_SIZE_DIRNAME
+    metric_paths = sorted(by_size_dir.glob("size_*/rep_*/raw_metrics.csv"))
+    packet_paths = sorted(by_size_dir.glob("size_*/rep_*/raw_packets.csv"))
+    if not metric_paths:
+        print(
+            "Post-traitement Step1 ignoré: aucun raw_metrics.csv détecté sous "
+            f"{by_size_dir / 'size_<N>/rep_<R>'}."
+        )
+        return
+
+    metric_rows: list[dict[str, object]] = []
+    packet_rows: list[dict[str, object]] = []
+    for metric_path in metric_paths:
+        with metric_path.open("r", newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            metric_rows.extend(dict(row) for row in reader)
+    for packet_path in packet_paths:
+        with packet_path.open("r", newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            packet_rows.extend(dict(row) for row in reader)
+
+    write_step1_results(
+        output_dir,
+        metric_rows,
+        packet_rows=packet_rows,
+        metric_rows=metric_rows,
+    )
+    print(
+        "Post-traitement Step1 terminé: aggregated_results.csv global régénéré "
+        "depuis by_size/."
+    )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -739,26 +775,21 @@ def _simulate_density(
                     )
                     timing_totals["metrics_s"] += perf_counter() - metrics_start
                     timing_runs += 1
-    if flat_output:
-        write_step1_results(
-            output_dir,
-            raw_rows,
-            network_size=network_size,
-            packet_rows=packet_rows,
-            metric_rows=metric_rows,
+    for replication, rows in per_rep_rows.items():
+        rep_dir = (
+            output_dir
+            / BY_SIZE_DIRNAME
+            / f"size_{network_size}"
+            / f"rep_{replication}"
         )
-        _log_step1_key_csv_paths(output_dir)
-    else:
-        for replication, rows in per_rep_rows.items():
-            rep_dir = output_dir / f"size_{network_size}" / f"rep_{replication}"
-            write_step1_results(
-                rep_dir,
-                rows,
-                network_size=network_size,
-                packet_rows=per_rep_packet_rows[replication],
-                metric_rows=per_rep_metric_rows[replication],
-            )
-            _log_step1_key_csv_paths(rep_dir)
+        write_step1_results(
+            rep_dir,
+            rows,
+            network_size=network_size,
+            packet_rows=per_rep_packet_rows[replication],
+            metric_rows=per_rep_metric_rows[replication],
+        )
+        _log_step1_key_csv_paths(rep_dir)
     timing_summary = None
     if config["profile_timing"] and timing_runs > 0:
         mean_assignment = timing_totals["sf_assignment_s"] / timing_runs
@@ -1145,7 +1176,11 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Statut Step1 {action}: {status_csv_path.resolve()}")
     else:
         print(f"Statut Step1 conservé (mode campagne): {status_csv_path.resolve()}")
-    flat_output = bool(args.flat_output)
+    flat_output = False
+    if bool(args.flat_output):
+        print(
+            "Option --flat-output ignorée: écriture primaire imposée sous by_size/."
+        )
     simulated_sizes: list[int] = []
 
     total_runs = (
@@ -1249,15 +1284,12 @@ def main(argv: list[str] | None = None) -> None:
             f"{size}={count}" for size, count in sorted(rows_per_size.items())
         )
         print(f"Rows per size: {sizes_summary}")
-    if flat_output:
-        aggregated_sizes = _read_aggregated_sizes(output_dir / "aggregated_results.csv")
-    else:
-        aggregated_sizes = _read_nested_sizes(output_dir, replications)
+    aggregated_sizes = _read_nested_sizes(output_dir, replications)
     missing_sizes = sorted(set(network_sizes) - aggregated_sizes)
     if missing_sizes:
         missing_label = ", ".join(map(str, missing_sizes))
         print(
-            "ATTENTION: tailles manquantes dans aggregated_results.csv, "
+            "ATTENTION: tailles manquantes dans by_size/, "
             f"done.flag non écrit. Manquantes: {missing_label}"
         )
     else:
@@ -1266,6 +1298,7 @@ def main(argv: list[str] | None = None) -> None:
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         print(f"Tailles simulées: {sizes_label}")
+    _write_global_aggregates_from_nested(output_dir)
     aggregated_path = output_dir / "aggregated_results.csv"
     if aggregated_path.exists():
         _step1_post_report(output_dir)
