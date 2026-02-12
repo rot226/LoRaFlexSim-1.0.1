@@ -22,3 +22,31 @@ def test_collect_nested_csvs_detects_file_in_by_size(tmp_path) -> None:
     paths = make_all_plots._collect_nested_csvs(results_dir, "aggregated_results.csv")
 
     assert paths == [csv_path]
+
+
+def test_preflight_validate_plot_modules_lists_all_issues(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        make_all_plots,
+        "_validate_plot_modules_use_save_figure",
+        lambda: {
+            "article_c.step1.plots.plot_S1": "ne passe pas par save_figure",
+        },
+    )
+    monkeypatch.setattr(
+        make_all_plots,
+        "_validate_plot_modules_no_titles",
+        lambda: {
+            "article_c.step1.plots.plot_S2": "usage interdit de set_title/suptitle",
+        },
+    )
+
+    invalid = make_all_plots._preflight_validate_plot_modules()
+
+    captured = capsys.readouterr()
+    assert invalid == {
+        "article_c.step1.plots.plot_S1": "ne passe pas par save_figure",
+        "article_c.step1.plots.plot_S2": "usage interdit de set_title/suptitle",
+    }
+    assert "modules de plots fautifs détectés avant exécution" in captured.out
+    assert "article_c.step1.plots.plot_S1" in captured.out
+    assert "article_c.step1.plots.plot_S2" in captured.out

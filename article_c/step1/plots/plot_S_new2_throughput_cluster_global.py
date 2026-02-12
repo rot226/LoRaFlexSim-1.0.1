@@ -130,13 +130,6 @@ def _plot(df: pd.DataFrame, metric_key: str) -> plt.Figure:
 
     scale, unit = _metric_scale(df, metric_key)
 
-    panel_name_map = {
-        cluster: f"Cluster {panel_label}"
-        for cluster, panel_label in zip(selected_clusters, PANEL_LABELS, strict=False)
-    }
-    panel_name_map["all"] = "Global"
-    panel_name_map[GLOBAL_PANEL_KEY] = "Global"
-
     for ax, cluster in zip(axes, panel_order, strict=False):
         subset_cluster = df[df["cluster"] == cluster]
 
@@ -169,7 +162,6 @@ def _plot(df: pd.DataFrame, metric_key: str) -> plt.Figure:
 
         ax.set_ylabel(f"Throughput ({unit})")
         ax.set_xlabel("Network size (nodes)")
-        ax.set_title(panel_name_map.get(cluster, cluster))
         ax.set_xticks(NETWORK_SIZES)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
         ax.grid(True, linestyle=":", alpha=0.35)
