@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import shutil
 import subprocess
 import sys
 from importlib.util import find_spec
@@ -22,6 +23,7 @@ if find_spec("article_c") is None:
         )
 
 from article_c.common.config import DEFAULT_CONFIG
+from article_c.common.csv_io import aggregate_results_by_size
 from article_c.common.utils import parse_network_size_list
 from article_c.step1.run_step1 import main as run_step1
 from article_c.step2.run_step2 import main as run_step2
@@ -49,6 +51,70 @@ def _log_existing_key_csv_paths(step_label: str, results_dir: Path) -> None:
         _assert_path_within_scope(csv_path, results_dir, step_label)
         if any(csv_path.name.startswith(prefix) for prefix in key_csv_names):
             print(f"{step_label}: CSV clé détecté {csv_path.resolve()}")
+
+
+def _cleanup_size_directory(results_dir: Path, network_size: int, step_label: str) -> None:
+    """Supprime l'ancien dossier `by_size/size_<N>` avant une relance isolée."""
+    size_dir = results_dir / "by_size" / f"size_{network_size}"
+    if size_dir.exists():
+        _assert_path_within_scope(size_dir, results_dir, step_label)
+        shutil.rmtree(size_dir)
+        print(f"{step_label}: dossier nettoyé avant simulation isolée: {size_dir.resolve()}")
+
+
+def _remove_global_aggregation_artifacts(results_dir: Path, step_label: str) -> None:
+    """Retire les artefacts globaux avant campagne pour garantir une agrégation finale unique."""
+    for filename in ("aggregated_results.csv", "raw_results.csv", "raw_metrics.csv"):
+        candidate = results_dir / filename
+        _assert_path_within_scope(candidate, results_dir, step_label)
+        if candidate.exists():
+            candidate.unlink()
+            print(f"{step_label}: artefact global supprimé avant campagne: {candidate.resolve()}")
+
+
+def _assert_no_global_writes_during_simulation(results_dir: Path, step_label: str) -> None:
+    """Échoue si des CSV globaux sont écrits dans `results/` pendant la simulation."""
+    forbidden = [
+        results_dir / "aggregated_results.csv",
+        results_dir / "raw_results.csv",
+        results_dir / "raw_metrics.csv",
+    ]
+    written = [
+        str(_assert_path_within_scope(path, results_dir, step_label))
+        for path in forbidden
+        if path.exists()
+    ]
+    if written:
+        raise RuntimeError(
+            f"{step_label}: écriture globale directe interdite pendant simulation: {written}"
+        )
+
+
+def _assert_output_layout_compliant(
+    results_dir: Path,
+    expected_sizes: list[int],
+    replications_total: int,
+    step_label: str,
+) -> None:
+    """Vérifie la conformité stricte du layout `by_size/size_<N>/rep_<R>`."""
+    by_size_dir = results_dir / "by_size"
+    if not by_size_dir.exists():
+        raise RuntimeError(f"{step_label}: dossier manquant {by_size_dir.resolve()}.")
+    expected_rep_dirs = {f"rep_{replication}" for replication in range(int(replications_total))}
+    for size in expected_sizes:
+        size_dir = by_size_dir / f"size_{size}"
+        if not size_dir.is_dir():
+            raise RuntimeError(
+                f"{step_label}: layout invalide, dossier manquant {size_dir.resolve()}."
+            )
+        rep_dirs = {path.name for path in size_dir.glob("rep_*") if path.is_dir()}
+        missing_rep_dirs = sorted(expected_rep_dirs - rep_dirs)
+        if missing_rep_dirs:
+            raise RuntimeError(
+                f"{step_label}: layout invalide pour size_{size}, réplications manquantes: "
+                f"{missing_rep_dirs}."
+            )
+        _assert_cumulative_sizes_nested(results_dir, {int(size)}, step_label)
 
 RUN_ALL_PRESETS: dict[str, dict[str, object]] = {
     "article-c": {
@@ -620,10 +686,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--flat-output",
         action=argparse.BooleanOptionalAction,
-        default=True,
+        default=False,
         help=(
-            "Écrit les résultats directement dans le répertoire de sortie "
-            "(compatibilité avec l'ancien format)."
+            "Mode historique (désactivé par défaut). "
+            "run_all force une exécution isolée par taille sous by_size/."
         ),
     )
     parser.add_argument(
@@ -981,6 +1047,8 @@ def main(argv: list[str] | None = None) -> None:
     _assert_path_within_scope(step1_results_dir / "run_status_step1.csv", step1_results_dir, "Step1")
     _assert_path_within_scope(step2_results_dir / "run_status_step2.csv", step2_results_dir, "Step2")
     campaign_summary_path = (Path(__file__).resolve().parent / "campaign_summary.json").resolve()
+    _remove_global_aggregation_artifacts(step1_results_dir, "Step1")
+    _remove_global_aggregation_artifacts(step2_results_dir, "Step2")
     campaign_summary: dict[str, object] = {
         "network_sizes": requested_sizes,
         "replications_total": replications_total,
@@ -1003,10 +1071,10 @@ def main(argv: list[str] | None = None) -> None:
     reference_network_size = int(round(median(requested_sizes)))
     args.reference_network_size = reference_network_size
     step2_explicit_config = _build_step2_explicit_config(args)
+    step2_explicit_config["flat_output"] = False
     step1_status_reset_pending = True
     step2_status_reset_pending = True
-    for size_index, size in enumerate(requested_sizes):
-        expected_sizes_so_far = set(requested_sizes[: size_index + 1])
+    for size in requested_sizes:
         step1_size_args = argparse.Namespace(**vars(args))
         step1_size_args.network_sizes = [size]
         step2_size_args = argparse.Namespace(**step2_explicit_config)
@@ -1033,22 +1101,18 @@ def main(argv: list[str] | None = None) -> None:
         }
         size_start = perf_counter()
         if not step1_size_args.skip_step1:
+            _cleanup_size_directory(step1_results_dir, int(size), "Step1")
+            step1_size_args.flat_output = False
             step1_size_args.reset_status = step1_status_reset_pending
             step_start = perf_counter()
             run_step1(_build_step1_args(step1_size_args))
             step1_status_reset_pending = False
-            if bool(step1_size_args.flat_output):
-                _assert_cumulative_sizes(
-                    step1_results_dir / "aggregated_results.csv",
-                    expected_sizes_so_far,
-                    "Step1",
-                )
-            else:
-                _assert_cumulative_sizes_nested(
-                    step1_results_dir,
-                    expected_sizes_so_far,
-                    "Step1",
-                )
+            _assert_no_global_writes_during_simulation(step1_results_dir, "Step1")
+            _assert_cumulative_sizes_nested(
+                step1_results_dir,
+                {int(size)},
+                "Step1",
+            )
             _log_existing_key_csv_paths("Step1", step1_results_dir)
             step1_elapsed = perf_counter() - step_start
             step1_failed = _count_failed_runs(step1_results_dir / "run_status_step1.csv", size)
@@ -1059,22 +1123,18 @@ def main(argv: list[str] | None = None) -> None:
                 "elapsed_seconds": round(step1_elapsed, 3),
             }
         if not step1_size_args.skip_step2:
+            _cleanup_size_directory(step2_results_dir, int(size), "Step2")
+            step2_size_args.flat_output = False
             step2_size_args.reset_status = step2_status_reset_pending
             step_start = perf_counter()
             run_step2(_build_step2_args(step2_size_args))
             step2_status_reset_pending = False
-            if bool(step2_size_args.flat_output):
-                _assert_cumulative_sizes(
-                    step2_results_dir / "aggregated_results.csv",
-                    expected_sizes_so_far,
-                    "Step2",
-                )
-            else:
-                _assert_cumulative_sizes_nested(
-                    step2_results_dir,
-                    expected_sizes_so_far,
-                    "Step2",
-                )
+            _assert_no_global_writes_during_simulation(step2_results_dir, "Step2")
+            _assert_cumulative_sizes_nested(
+                step2_results_dir,
+                {int(size)},
+                "Step2",
+            )
             _log_existing_key_csv_paths("Step2", step2_results_dir)
             step2_elapsed = perf_counter() - step_start
             step2_failed = _count_failed_runs(step2_results_dir / "run_status_step2.csv", size)
@@ -1105,6 +1165,48 @@ def main(argv: list[str] | None = None) -> None:
             cast_sizes.append(size_summary)
         print(f"Résumé: taille de réseau {size} terminée.")
     campaign_summary["total_elapsed_seconds"] = round(perf_counter() - campaign_start, 3)
+    if not args.skip_step1:
+        step1_merge_stats = aggregate_results_by_size(
+            step1_results_dir,
+            write_global_aggregated=True,
+        )
+        print(
+            "Step1: agrégation globale finale exécutée "
+            f"({step1_merge_stats['global_row_count']} lignes)."
+        )
+    if not args.skip_step2:
+        step2_merge_stats = aggregate_results_by_size(
+            step2_results_dir,
+            write_global_aggregated=True,
+        )
+        print(
+            "Step2: agrégation globale finale exécutée "
+            f"({step2_merge_stats['global_row_count']} lignes)."
+        )
+    if not args.skip_step1:
+        _assert_output_layout_compliant(
+            step1_results_dir,
+            requested_sizes,
+            replications_total,
+            "Step1",
+        )
+        _assert_cumulative_sizes(
+            step1_results_dir / "aggregated_results.csv",
+            set(requested_sizes),
+            "Step1",
+        )
+    if not args.skip_step2:
+        _assert_output_layout_compliant(
+            step2_results_dir,
+            requested_sizes,
+            replications_total,
+            "Step2",
+        )
+        _assert_cumulative_sizes(
+            step2_results_dir / "aggregated_results.csv",
+            set(requested_sizes),
+            "Step2",
+        )
     print("Validation des résultats (article C) en cours...")
     validation_args: list[str] = []
     if args.skip_step2:
