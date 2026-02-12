@@ -434,11 +434,9 @@ def _collision_size_factor(
         return 1.0
     ratio = max(0.1, network_size / reference_size)
     if ratio <= 1.0:
-        return _clamp_range(ratio**0.4, clamp_min, clamp_under_max)
+        return _clamp_range(0.88 + 0.12 * ratio**0.6, clamp_min, clamp_under_max)
     overload = ratio - 1.0
-    return _clamp_range(
-        1.0 + 0.6 * (1.0 + overload) ** 0.45, 1.0, clamp_over_max
-    )
+    return _clamp_range(1.0 + 0.28 * overload**0.7, 1.0, clamp_over_max)
 
 
 def _resolve_load_clamps(
@@ -677,30 +675,32 @@ def _compute_collision_successes(
         indexed_events = sorted(enumerate(events), key=lambda item: item[1][0])
         group_indices: list[int] = []
         group_end: float | None = None
+        def _resolve_collision_group(indices: list[int]) -> None:
+            group_size = len(indices)
+            if group_size <= 1:
+                return
+            base_survival_prob = _clip(
+                (0.65 + 0.7 * _clip(capture_probability, 0.0, 1.0))
+                / (group_size**0.2),
+                0.15,
+                0.995,
+            )
+            survivors = [idx for idx in indices if rng.random() < base_survival_prob]
+            if not survivors and rng.random() < 0.75:
+                survivors = [rng.choice(indices)]
+            for idx in indices:
+                collided[idx] = idx not in survivors
+
         for event_index, (start, end, _node_id) in indexed_events:
             if group_end is None or start >= group_end:
-                if len(group_indices) > 1:
-                    if rng.random() < capture_probability:
-                        survivor = rng.choice(group_indices)
-                        for index in group_indices:
-                            collided[index] = index != survivor
-                    else:
-                        for index in group_indices:
-                            collided[index] = True
+                _resolve_collision_group(group_indices)
                 group_indices = [event_index]
                 group_end = end
             else:
                 group_indices.append(event_index)
                 if end > group_end:
                     group_end = end
-        if len(group_indices) > 1:
-            if rng.random() < capture_probability:
-                survivor = rng.choice(group_indices)
-                for index in group_indices:
-                    collided[index] = index != survivor
-            else:
-                for index in group_indices:
-                    collided[index] = True
+        _resolve_collision_group(group_indices)
         return collided
 
     transmissions_per_bucket = {
@@ -1419,7 +1419,7 @@ def _log_clamp_ratio_and_adjust(
     )
     adjust_factor = max(0.6, min(0.95, median_ratio))
     new_traffic_coeff_scale = max(0.1, traffic_coeff_scale * adjust_factor)
-    new_tx_window_safety_factor = max(0.7, tx_window_safety_factor * adjust_factor)
+    new_tx_window_safety_factor = min(8.0, tx_window_safety_factor / max(adjust_factor, 0.1))
     window_boost = min(1.3, max(1.0, 1.0 / max(median_ratio, 0.5)))
     new_window_duration_s = window_duration_s * window_boost
     if (
@@ -1666,13 +1666,21 @@ def _compute_collision_norm(
     collision_size_factor: float,
     successes: int,
     traffic_sent: int,
+    airtime_exp: float,
+    congestion_gain: float,
+    size_exp: float,
+    failure_exp: float,
+    offset: float,
 ) -> float:
     successes = min(successes, traffic_sent)
     success_ratio = successes / traffic_sent if traffic_sent > 0 else 0.0
-    congestion_scale = 1.0 + 0.65 * congestion_probability
-    size_scale = collision_size_factor**0.85
-    base = airtime_norm * congestion_scale * size_scale
-    return _clip(base * (1.0 - success_ratio) ** 0.85, 0.0, 1.0)
+    airtime_scale = max(airtime_norm, 0.0) ** max(airtime_exp, 0.1)
+    congestion_scale = 1.0 + max(congestion_gain, 0.0) * max(congestion_probability, 0.0)
+    size_scale = max(collision_size_factor, 1e-6) ** max(size_exp, 0.1)
+    failure_ratio = max(0.0, 1.0 - success_ratio)
+    failure_scale = failure_ratio ** max(failure_exp, 0.1)
+    base = airtime_scale * congestion_scale * size_scale
+    return _clip(offset + base * failure_scale, 0.0, 1.0)
 
 
 def _apply_cluster_bias(
@@ -2053,7 +2061,7 @@ def run_simulation(
     if jitter_range_value is not None and jitter_range_value < 0:
         logger.warning("jitter_range_s négatif (%.3f), forcé à 0.", jitter_range_value)
         jitter_range_value = 0.0
-    tx_window_safety_factor = 1.2
+    tx_window_safety_factor = max(0.1, float(step2_defaults.tx_window_safety_factor))
     traffic_coeff_min_value = (
         step2_defaults.traffic_coeff_min if traffic_coeff_min is None else traffic_coeff_min
     )
@@ -2427,6 +2435,21 @@ def run_simulation(
     )
     if max_penalty_ratio_value < 0.0:
         raise ValueError("max_penalty_ratio doit être positif ou nul.")
+    collision_norm_airtime_exp_value = max(
+        0.1, float(step2_defaults.collision_norm_airtime_exp)
+    )
+    collision_norm_congestion_gain_value = max(
+        0.0, float(step2_defaults.collision_norm_congestion_gain)
+    )
+    collision_norm_size_exp_value = max(
+        0.1, float(step2_defaults.collision_norm_size_exp)
+    )
+    collision_norm_failure_exp_value = max(
+        0.1, float(step2_defaults.collision_norm_failure_exp)
+    )
+    collision_norm_offset_value = _clip(
+        float(step2_defaults.collision_norm_offset), 0.0, 0.4
+    )
     reward_weights = _reward_weights_for_algo(
         algorithm, reward_floor=reward_floor_value
     )
@@ -2517,7 +2540,13 @@ def run_simulation(
                 max_tx = expected_sent_raw
                 if airtime_s > 0.0:
                     per_node_cap = max(
-                        1, int(math.floor(window_duration_value / airtime_s))
+                        1,
+                        int(
+                            math.floor(
+                                window_duration_value
+                                / (airtime_s * max(tx_window_safety_factor, 0.1))
+                            )
+                        ),
                     )
                     window_cap = _max_window_tx(
                         window_duration_value,
@@ -2903,6 +2932,11 @@ def run_simulation(
                     collision_size_factor=collision_size_factor_value,
                     successes=successes,
                     traffic_sent=traffic_sent,
+                    airtime_exp=collision_norm_airtime_exp_value,
+                    congestion_gain=collision_norm_congestion_gain_value,
+                    size_exp=collision_norm_size_exp_value,
+                    failure_exp=collision_norm_failure_exp_value,
+                    offset=collision_norm_offset_value,
                 )
                 metrics = _compute_window_metrics(
                     successes,
@@ -3284,7 +3318,13 @@ def run_simulation(
                 max_tx = expected_sent_raw
                 if airtime_s > 0.0:
                     per_node_cap = max(
-                        1, int(math.floor(window_duration_value / airtime_s))
+                        1,
+                        int(
+                            math.floor(
+                                window_duration_value
+                                / (airtime_s * max(tx_window_safety_factor, 0.1))
+                            )
+                        ),
                     )
                     window_cap = _max_window_tx(
                         window_duration_value,
@@ -3638,6 +3678,11 @@ def run_simulation(
                     collision_size_factor=collision_size_factor_value,
                     successes=successes,
                     traffic_sent=traffic_sent,
+                    airtime_exp=collision_norm_airtime_exp_value,
+                    congestion_gain=collision_norm_congestion_gain_value,
+                    size_exp=collision_norm_size_exp_value,
+                    failure_exp=collision_norm_failure_exp_value,
+                    offset=collision_norm_offset_value,
                 )
                 metrics = _compute_window_metrics(
                     successes,
