@@ -1982,6 +1982,7 @@ def save_figure_path(
     ensure_dir(output_path.parent)
     format_name = fmt or output_path.suffix.lstrip(".").lower()
     savefig_style = dict(SAVEFIG_STYLE)
+    configured_dpi = savefig_style.pop("dpi", None)
     if pad_inches is not None:
         savefig_style["pad_inches"] = float(pad_inches)
     avoid_tight_bbox = bool(getattr(fig, "_avoid_tight_bbox", False))
@@ -1992,7 +1993,8 @@ def save_figure_path(
     if bbox_inches is not False:
         safe_bbox = _safe_bbox_inches(fig, bbox_inches)
         savefig_style["bbox_inches"] = safe_bbox
-    safe_dpi = _safe_dpi(fig, BASE_DPI)
+    default_dpi = BASE_DPI if configured_dpi is None else float(configured_dpi)
+    safe_dpi = _safe_dpi(fig, default_dpi)
     if format_name == "eps":
         with _rasterize_transparent_artists(fig):
             with _force_opaque_alpha(fig):
