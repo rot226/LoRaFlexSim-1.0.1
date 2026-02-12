@@ -12,6 +12,7 @@ def _patch_run_all_startup(monkeypatch):
     monkeypatch.setattr(run_all, "_assert_cumulative_sizes_nested", lambda *_: None)
     monkeypatch.setattr(run_all, "_assert_output_layout_compliant", lambda *_: None)
     monkeypatch.setattr(run_all, "_assert_cumulative_sizes", lambda *_: None)
+    monkeypatch.setattr(run_all, "_assert_aggregation_contract_consistent", lambda *_: None)
     monkeypatch.setattr(run_all, "validate_results", lambda *_: 0)
 
 

@@ -243,6 +243,8 @@ def _load_csv_rows_coerced(path: Path) -> list[dict[str, object]]:
 
 
 def _collect_nested_csvs(results_dir: Path, filename: str) -> list[Path]:
+    if filename == "aggregated_results.csv":
+        return sorted(results_dir.glob("by_size/size_*/aggregated_results.csv"))
     return sorted(results_dir.glob(f"by_size/size_*/rep_*/{filename}"))
 
 
@@ -292,7 +294,7 @@ def _load_dataset_from_by_size(
     return CsvDataBundle(
         fieldnames=fieldnames,
         rows=rows,
-        label=f"{results_dir}/by_size/size_*/rep_*/{csv_name}",
+        label=f"{results_dir}/by_size/size_*/{csv_name}",
         source_paths=tuple(nested_paths),
     )
 
@@ -305,7 +307,7 @@ def _report_missing_csv(
     csv_name: str,
 ) -> None:
     aggregated_path = results_dir / "aggregates" / "aggregated_results.csv"
-    nested_pattern = results_dir / "by_size" / "size_*" / "rep_*" / csv_name
+    nested_pattern = results_dir / "by_size" / "size_*" / csv_name
     print(f"ERREUR: CSV {step_label} introuvable pour source={source}.")
     if source == "aggregated":
         print(f"Chemin attendu: {aggregated_path}.")
@@ -365,7 +367,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=("by_size", "aggregated"),
         default="by_size",
         help=(
-            "Source des données CSV: by_size fusionne size_*/rep_* en mémoire "
+            "Source des données CSV: by_size fusionne size_*/aggregated_results.csv en mémoire "
             "(défaut), aggregated lit uniquement aggregated_results.csv."
         ),
     )

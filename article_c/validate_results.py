@@ -13,8 +13,6 @@ if find_spec("article_c") is None:
     repo_root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(repo_root))
 
-from article_c.common.csv_io import write_simulation_results, write_step1_results
-
 
 class AnomalyTracker:
     def __init__(self, max_samples: int = 20) -> None:
@@ -58,40 +56,14 @@ def _read_csv(path: Path) -> tuple[list[dict[str, object]], list[str]]:
     return rows, fieldnames
 
 
-def _collect_nested_csvs(results_dir: Path, filename: str) -> list[Path]:
-    return sorted(results_dir.glob(f"size_*/rep_*/{filename}"))
+def _collect_size_aggregated_csvs(results_dir: Path) -> list[Path]:
+    return sorted(results_dir.glob("by_size/size_*/aggregated_results.csv"))
 
 
-def _collect_nested_rows(results_dir: Path, filename: str) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for path in _collect_nested_csvs(results_dir, filename):
-        nested_rows, _ = _read_csv(path)
-        rows.extend(nested_rows)
-    return rows
-
-
-def _ensure_step1_flat_files(step1_dir: Path) -> None:
-    metrics_path = step1_dir / "raw_metrics.csv"
-    aggregated_path = step1_dir / "aggregates" / "aggregated_results.csv"
-    if metrics_path.exists() and aggregated_path.exists():
-        return
-    raw_rows = _collect_nested_rows(step1_dir, "raw_metrics.csv")
-    if not raw_rows:
-        return
-    print("Assemblage des résultats Step1 depuis les sous-dossiers...")
-    write_step1_results(step1_dir, raw_rows)
-
-
-def _ensure_step2_flat_files(step2_dir: Path) -> None:
-    results_path = step2_dir / "raw_results.csv"
-    aggregated_path = step2_dir / "aggregates" / "aggregated_results.csv"
-    if results_path.exists() and aggregated_path.exists():
-        return
-    raw_rows = _collect_nested_rows(step2_dir, "raw_results.csv")
-    if not raw_rows:
-        return
-    print("Assemblage des résultats Step2 depuis les sous-dossiers...")
-    write_simulation_results(step2_dir, raw_rows)
+def _check_by_size_coverage(results_dir: Path, tracker: AnomalyTracker, step_label: str) -> None:
+    by_size_paths = _collect_size_aggregated_csvs(results_dir)
+    if not by_size_paths:
+        tracker.add(f"{step_label}: aucun agrégat by_size trouvé sous {results_dir / 'by_size'}.")
 
 
 def _check_constant(
@@ -277,9 +249,9 @@ def validate_results(
     skip_step2: bool,
 ) -> AnomalyTracker:
     tracker = AnomalyTracker(max_samples=max_samples)
-    _ensure_step1_flat_files(step1_dir)
+    _check_by_size_coverage(step1_dir, tracker, "Step1")
     if not skip_step2:
-        _ensure_step2_flat_files(step2_dir)
+        _check_by_size_coverage(step2_dir, tracker, "Step2")
 
     _validate_pdr_file(
         step1_dir / "raw_metrics.csv",
@@ -317,7 +289,7 @@ def validate_results(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Valide PDR, cohérence received/sent et variation des rewards."
+        description="Valide les agrégats globaux et par taille de l'article C."
     )
     parser.add_argument(
         "--step1-dir",

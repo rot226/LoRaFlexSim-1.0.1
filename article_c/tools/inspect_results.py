@@ -1,11 +1,9 @@
-"""Inspecte l'arborescence de résultats nested (`size_*/rep_*`).
+"""Inspecte le contrat d'agrégation de résultats (`aggregates` et `by_size`).
 
 Vérifie :
-- existence des tailles attendues (`size_80`, `size_160`, `size_320`, `size_640`, `size_1280`)
-- présence des fichiers requis par réplication (`raw_*.csv`, `aggregated_results.csv`)
-- nombre de lignes de données non nul par taille
-
-Le script renvoie un code non-zéro si au moins une taille attendue est absente.
+- existence des tailles attendues (`by_size/size_<N>/aggregated_results.csv`)
+- présence de l'agrégat global (`aggregates/aggregated_results.csv`)
+- cohérence du nombre total de lignes entre agrégats par taille et global
 """
 
 from __future__ import annotations
@@ -27,7 +25,7 @@ EXPECTED_SIZES: tuple[int, ...] = (80, 160, 320, 640, 1280)
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Inspecte les résultats nested size_*/rep_*."
+        description="Inspecte les agrégats results/aggregates et results/by_size."
     )
     parser.add_argument(
         "--step",
@@ -48,14 +46,10 @@ def _count_data_rows(csv_path: Path) -> int:
     with csv_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.reader(handle)
         try:
-            next(reader)  # en-tête
+            next(reader)
         except StopIteration:
             return 0
         return sum(1 for _ in reader)
-
-
-def _iter_rep_dirs(size_dir: Path) -> list[Path]:
-    return sorted(path for path in size_dir.iterdir() if path.is_dir() and path.name.startswith("rep_"))
 
 
 def main() -> int:
@@ -70,54 +64,47 @@ def main() -> int:
 
     failures: list[str] = []
     missing_sizes: list[str] = []
-
-    # 1) Existence des tailles attendues
-    size_dirs: dict[int, Path] = {}
-    for size in EXPECTED_SIZES:
-        size_dir = results_dir / f"size_{size}"
-        if not size_dir.exists() or not size_dir.is_dir():
-            missing_sizes.append(size_dir.name)
-            continue
-        size_dirs[size] = size_dir
-
-    if missing_sizes:
-        failures.append(f"Tailles manquantes: {', '.join(missing_sizes)}")
-
-    # 2) Fichiers requis par réplication + 3) lignes non nulles par taille
     rows_by_size: dict[int, int] = {size: 0 for size in EXPECTED_SIZES}
+    by_size_total = 0
 
-    for size, size_dir in size_dirs.items():
-        rep_dirs = _iter_rep_dirs(size_dir)
-        if not rep_dirs:
-            failures.append(f"{size_dir.name}: aucun dossier rep_* trouvé")
+    for size in EXPECTED_SIZES:
+        size_csv = results_dir / "by_size" / f"size_{size}" / "aggregated_results.csv"
+        if not size_csv.exists():
+            missing_sizes.append(f"size_{size}")
             continue
+        try:
+            rows = _count_data_rows(size_csv)
+        except Exception as exc:
+            failures.append(f"{size_csv.relative_to(results_dir)}: lecture impossible ({exc})")
+            continue
+        rows_by_size[size] = rows
+        by_size_total += rows
+        if rows == 0:
+            failures.append(f"size_{size}: aggregated_results.csv sans ligne de données")
 
-        for rep_dir in rep_dirs:
-            raw_csvs = sorted(rep_dir.glob("raw_*.csv"))
-            agg_csv = rep_dir / "aggregated_results.csv"
-
-            if not raw_csvs:
-                failures.append(f"{rep_dir.relative_to(results_dir)}: raw_*.csv absent")
-            if not agg_csv.exists():
-                failures.append(
-                    f"{rep_dir.relative_to(results_dir)}: aggregated_results.csv absent"
-                )
-
-            for csv_path in [*raw_csvs, agg_csv]:
-                if not csv_path.exists():
-                    continue
-                try:
-                    rows_by_size[size] += _count_data_rows(csv_path)
-                except Exception as exc:
-                    failures.append(
-                        f"{csv_path.relative_to(results_dir)}: lecture impossible ({exc})"
-                    )
+    global_csv = results_dir / "aggregates" / "aggregated_results.csv"
+    global_rows = 0
+    if not global_csv.exists():
+        failures.append("aggregates/aggregated_results.csv absent")
+    else:
+        try:
+            global_rows = _count_data_rows(global_csv)
+        except Exception as exc:
+            failures.append(f"aggregates/aggregated_results.csv: lecture impossible ({exc})")
 
     print("\nRésumé lignes de données par taille:")
     for size in EXPECTED_SIZES:
         print(f"- size_{size}: {rows_by_size[size]} ligne(s)")
-        if size in size_dirs and rows_by_size[size] == 0:
-            failures.append(f"size_{size}: 0 ligne de données cumulée")
+    print(f"- global: {global_rows} ligne(s)")
+
+    if global_csv.exists() and by_size_total != global_rows:
+        failures.append(
+            "Incohérence contrat agrégé: "
+            f"somme(by_size)={by_size_total} != global={global_rows}"
+        )
+
+    if missing_sizes:
+        failures.append(f"Tailles manquantes: {', '.join(missing_sizes)}")
 
     if failures:
         print("\nFAIL")
@@ -126,7 +113,6 @@ def main() -> int:
     else:
         print("\nPASS")
 
-    # Exigence explicite: code non-zéro si une taille manque.
     if missing_sizes:
         return 2
 

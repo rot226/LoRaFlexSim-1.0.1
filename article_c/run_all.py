@@ -116,6 +116,44 @@ def _assert_output_layout_compliant(
             )
         _assert_cumulative_sizes_nested(results_dir, {int(size)}, step_label)
 
+
+
+def _assert_aggregation_contract_consistent(
+    results_dir: Path,
+    expected_sizes: list[int],
+    step_label: str,
+) -> None:
+    """Vérifie le contrat unique d'agrégation (global + by_size)."""
+    global_csv = results_dir / "aggregates" / "aggregated_results.csv"
+    _assert_cumulative_sizes(global_csv, set(expected_sizes), step_label)
+
+    global_rows, global_fieldnames = 0, []
+    with global_csv.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        global_fieldnames = list(reader.fieldnames or [])
+        global_rows = sum(1 for _ in reader)
+
+    total_by_size_rows = 0
+    for size in expected_sizes:
+        size_csv = results_dir / "by_size" / f"size_{size}" / "aggregated_results.csv"
+        if not size_csv.exists():
+            raise RuntimeError(
+                f"{step_label}: agrégat par taille manquant: {size_csv.resolve()}."
+            )
+        with size_csv.open("r", newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            size_fieldnames = list(reader.fieldnames or [])
+            if global_fieldnames and size_fieldnames and size_fieldnames != global_fieldnames:
+                raise RuntimeError(
+                    f"{step_label}: schéma incohérent entre global et {size_csv.resolve()}."
+                )
+            total_by_size_rows += sum(1 for _ in reader)
+
+    if total_by_size_rows != global_rows:
+        raise RuntimeError(
+            f"{step_label}: incohérence d'agrégation finale: "
+            f"lignes by_size={total_by_size_rows} != lignes globales={global_rows}."
+        )
 RUN_ALL_PRESETS: dict[str, dict[str, object]] = {
     "article-c": {
         "network_sizes": list(DEFAULT_CONFIG.scenario.network_sizes),
@@ -1236,9 +1274,9 @@ def main(argv: list[str] | None = None) -> None:
             replications_total,
             "Step1",
         )
-        _assert_cumulative_sizes(
-            step1_results_dir / "aggregates" / "aggregated_results.csv",
-            set(requested_sizes),
+        _assert_aggregation_contract_consistent(
+            step1_results_dir,
+            requested_sizes,
             "Step1",
         )
     if not args.skip_step2:
@@ -1248,9 +1286,9 @@ def main(argv: list[str] | None = None) -> None:
             replications_total,
             "Step2",
         )
-        _assert_cumulative_sizes(
-            step2_results_dir / "aggregates" / "aggregated_results.csv",
-            set(requested_sizes),
+        _assert_aggregation_contract_consistent(
+            step2_results_dir,
+            requested_sizes,
             "Step2",
         )
     print("Validation des résultats (article C) en cours...")
