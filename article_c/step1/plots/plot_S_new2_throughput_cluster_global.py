@@ -1,4 +1,4 @@
-"""Trace un plot dédié throughput global (cluster all) pour ADR/MixRA-H/MixRA-Opt."""
+"""Trace throughput vs network size for clusters A/B/C and global scope."""
 
 from __future__ import annotations
 
@@ -26,6 +26,8 @@ from plot_defaults import resolve_ieee_figsize
 
 NETWORK_SIZES = [80, 160, 320, 640, 1280]
 ALGOS = ["adr", "mixra_h", "mixra_opt"]
+PANEL_LABELS = ("A", "B", "C")
+GLOBAL_PANEL_KEY = "__global__"
 THROUGHPUT_CANDIDATES = (
     "throughput_success_mean",
     "throughput_mean",
@@ -62,8 +64,18 @@ def _prepare_dataframe(rows: list[dict[str, object]]) -> tuple[pd.DataFrame, str
     df["algo_norm"] = df["algo"].map(_normalize_algo)
     df = df[df["algo_norm"].isin(ALGOS)].copy()
 
-    if "cluster" in df.columns and (df["cluster"] == "all").any():
-        df = df[df["cluster"] == "all"].copy()
+    if "cluster" not in df.columns:
+        df["cluster"] = GLOBAL_PANEL_KEY
+    df["cluster"] = df["cluster"].fillna("").astype(str)
+
+    cluster_candidates = sorted(
+        {cluster for cluster in set(df["cluster"]) if cluster and cluster != "all"}
+    )
+    selected_clusters = cluster_candidates[: len(PANEL_LABELS)]
+    clusters_to_keep = set(selected_clusters)
+    if "all" in set(df["cluster"]):
+        clusters_to_keep.add("all")
+    df = df[df["cluster"].isin(clusters_to_keep)].copy()
 
     available_snir = [mode for mode in SNIR_MODES if mode in set(df["snir_mode"])]
     if available_snir:
@@ -73,10 +85,20 @@ def _prepare_dataframe(rows: list[dict[str, object]]) -> tuple[pd.DataFrame, str
 
     df[metric_key] = pd.to_numeric(df[metric_key], errors="coerce")
     grouped = (
-        df.groupby(["algo_norm", "snir_mode", "network_size"], as_index=False)[metric_key]
+        df.groupby(["cluster", "algo_norm", "snir_mode", "network_size"], as_index=False)[metric_key]
         .mean()
-        .sort_values(["snir_mode", "algo_norm", "network_size"])
+        .sort_values(["cluster", "snir_mode", "algo_norm", "network_size"])
     )
+
+    if "all" not in set(grouped["cluster"]):
+        global_df = (
+            grouped.groupby(["algo_norm", "snir_mode", "network_size"], as_index=False)[
+                metric_key
+            ]
+            .mean()
+            .assign(cluster=GLOBAL_PANEL_KEY)
+        )
+        grouped = pd.concat([grouped, global_df], ignore_index=True)
     return grouped, metric_key
 
 
@@ -95,55 +117,76 @@ def _plot(df: pd.DataFrame, metric_key: str) -> plt.Figure:
     if not snir_modes_present:
         snir_modes_present = ["snir_on"]
 
-    fig, axes = plt.subplots(
-        1,
-        len(snir_modes_present),
-        figsize=resolve_ieee_figsize(len(snir_modes_present)),
-        sharey=True,
+    cluster_candidates = sorted(
+        {cluster for cluster in set(df["cluster"]) if cluster not in {"all", GLOBAL_PANEL_KEY}}
     )
-    if len(snir_modes_present) == 1:
+    selected_clusters = cluster_candidates[: len(PANEL_LABELS)]
+    panel_order = selected_clusters + (["all"] if "all" in set(df["cluster"]) else [GLOBAL_PANEL_KEY])
+    n_panels = len(panel_order)
+
+    fig, axes = plt.subplots(1, n_panels, figsize=resolve_ieee_figsize(n_panels), sharey=True)
+    if n_panels == 1:
         axes = [axes]
 
     scale, unit = _metric_scale(df, metric_key)
 
-    for ax, snir_mode in zip(axes, snir_modes_present, strict=False):
-        subset_snir = df[df["snir_mode"] == snir_mode]
+    panel_name_map = {
+        cluster: f"Cluster {panel_label}"
+        for cluster, panel_label in zip(selected_clusters, PANEL_LABELS, strict=False)
+    }
+    panel_name_map["all"] = "Global"
+    panel_name_map[GLOBAL_PANEL_KEY] = "Global"
+
+    for ax, cluster in zip(axes, panel_order, strict=False):
+        subset_cluster = df[df["cluster"] == cluster]
 
         for algo in ALGOS:
-            subset_algo = subset_snir[subset_snir["algo_norm"] == algo]
-            points = {
-                int(row.network_size): float(getattr(row, metric_key))
-                for row in subset_algo.itertuples(index=False)
-            }
-            if not points:
-                continue
+            for snir_mode in snir_modes_present:
+                subset_algo = subset_cluster[
+                    (subset_cluster["algo_norm"] == algo)
+                    & (subset_cluster["snir_mode"] == snir_mode)
+                ]
+                points = {
+                    int(row.network_size): float(getattr(row, metric_key))
+                    for row in subset_algo.itertuples(index=False)
+                }
+                if not points:
+                    continue
 
-            y_values = [
-                points.get(size, float("nan")) / scale for size in NETWORK_SIZES
-            ]
-            ax.plot(
-                NETWORK_SIZES,
-                y_values,
-                label=algo_label(algo),
-                color=ALGO_COLORS.get(algo, "#4c4c4c"),
-                marker=ALGO_MARKERS.get(algo, "o"),
-                linestyle=SNIR_LINESTYLES.get(snir_mode, "solid"),
-                linewidth=2.0,
-                markersize=6,
-            )
+                y_values = [
+                    points.get(size, float("nan")) / scale for size in NETWORK_SIZES
+                ]
+                ax.plot(
+                    NETWORK_SIZES,
+                    y_values,
+                    label=f"{algo_label(algo)} ({SNIR_LABELS.get(snir_mode, snir_mode)})",
+                    color=ALGO_COLORS.get(algo, "#4c4c4c"),
+                    marker=ALGO_MARKERS.get(algo, "o"),
+                    linestyle=SNIR_LINESTYLES.get(snir_mode, "solid"),
+                    linewidth=2.0,
+                    markersize=6,
+                )
 
-        snir_label = SNIR_LABELS.get(snir_mode, snir_mode)
+        ax.set_ylabel(f"Throughput ({unit})")
         ax.set_xlabel("Network size (nodes)")
+        ax.set_title(panel_name_map.get(cluster, cluster))
         ax.set_xticks(NETWORK_SIZES)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-        ax.set_ylabel(f"Throughput ({unit}) — {snir_label}")
         ax.grid(True, linestyle=":", alpha=0.35)
 
 
-    handles, labels = axes[0].get_legend_handles_labels()
-    if len(axes) > 1:
+    handles: list[object] = []
+    labels: list[str] = []
+    for ax in axes:
+        current_handles, current_labels = ax.get_legend_handles_labels()
+        for handle, label in zip(current_handles, current_labels, strict=False):
+            if label not in labels:
+                handles.append(handle)
+                labels.append(label)
+
+    if n_panels > 1:
         fig.legend(handles, labels, loc="center right", frameon=True)
-        fig.subplots_adjust(right=0.78, bottom=0.2)
+        fig.subplots_adjust(right=0.80, bottom=0.2)
     else:
         axes[0].legend(loc="best", frameon=True)
         fig.subplots_adjust(bottom=0.2)
