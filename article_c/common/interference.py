@@ -241,6 +241,7 @@ def evaluate_reception(
     snir_threshold_db: float | None = None,
     snir_threshold_min_db: float | None = None,
     snir_threshold_max_db: float | None = None,
+    capture_sir_threshold_db: float | None = None,
     noise_floor_dbm: float = -174.0,
     bandwidth_hz: float | None = 125_000.0,
 ) -> InterferenceOutcome:
@@ -248,7 +249,7 @@ def evaluate_reception(
 
     - SNIR OFF: le succès dépend uniquement de ``target.rssi_dbm`` >= sensibilité.
     - SNIR ON: succès si RSSI >= sensibilité ET SNIR >= seuil (bruit thermique inclus).
-    - Capture effect: en co-SF, succès seulement si SIR >= seuil.
+    - Capture effect: en co-SF, succès seulement si SIR >= seuil de capture.
     """
 
     co_sf = co_sf_interferers(target, interferers)
@@ -281,6 +282,15 @@ def evaluate_reception(
         max(snir_threshold_value, snir_threshold_min_value),
         snir_threshold_max_value,
     )
+    capture_sir_threshold_value = (
+        effective_snir_threshold_db
+        if capture_sir_threshold_db is None
+        else float(capture_sir_threshold_db)
+    )
+    effective_capture_sir_threshold_db = min(
+        max(capture_sir_threshold_value, snir_threshold_min_value),
+        snir_threshold_max_value,
+    )
 
     snir_db = None
     snir_ok = True
@@ -298,7 +308,7 @@ def evaluate_reception(
             signal_dbm=target.rssi_dbm,
             interferers_dbm=interferer_powers_dbm,
         )
-        capture_ok = sir_db >= effective_snir_threshold_db
+        capture_ok = sir_db >= effective_capture_sir_threshold_db
 
     success = (
         rssi_ok
