@@ -53,6 +53,32 @@ ALGORITHM_VARIABILITY = {
 }
 
 
+def _ensure_csv_within_scope(csv_path: Path, scope_root: Path) -> Path:
+    resolved_csv = csv_path.resolve()
+    resolved_scope = scope_root.resolve()
+    if resolved_csv.parent != resolved_scope and resolved_scope not in resolved_csv.parents:
+        raise RuntimeError(
+            "Étape 1: sortie CSV hors périmètre autorisé. "
+            f"Fichier: {resolved_csv} ; périmètre attendu: {resolved_scope}."
+        )
+    return resolved_csv
+
+
+def _log_step1_key_csv_paths(output_dir: Path) -> None:
+    key_csv_names = (
+        "run_status_step1.csv",
+        "raw_results.csv",
+        "raw_packets.csv",
+        "raw_metrics.csv",
+        "aggregated_results.csv",
+    )
+    for csv_name in key_csv_names:
+        csv_path = output_dir / csv_name
+        resolved_csv = _ensure_csv_within_scope(csv_path, output_dir)
+        if csv_path.exists():
+            print(f"CSV Step1 écrit: {resolved_csv}")
+
+
 def _congestion_ratio(network_size: float) -> float:
     if network_size <= CONGESTION_CRITICAL_SIZE:
         return 0.0
@@ -721,6 +747,7 @@ def _simulate_density(
             packet_rows=packet_rows,
             metric_rows=metric_rows,
         )
+        _log_step1_key_csv_paths(output_dir)
     else:
         for replication, rows in per_rep_rows.items():
             rep_dir = output_dir / f"size_{network_size}" / f"rep_{replication}"
@@ -731,6 +758,7 @@ def _simulate_density(
                 packet_rows=per_rep_packet_rows[replication],
                 metric_rows=per_rep_metric_rows[replication],
             )
+            _log_step1_key_csv_paths(rep_dir)
     timing_summary = None
     if config["profile_timing"] and timing_runs > 0:
         mean_assignment = timing_totals["sf_assignment_s"] / timing_runs
@@ -1096,6 +1124,7 @@ def main(argv: list[str] | None = None) -> None:
             "Étape 1: le répertoire de sortie doit être "
             f"{default_output_dir}."
         )
+    _ensure_csv_within_scope(output_dir / "run_status_step1.csv", default_output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     status_csv_path = output_dir / "run_status_step1.csv"
     status_fieldnames = [
@@ -1113,9 +1142,9 @@ def main(argv: list[str] | None = None) -> None:
             writer = csv.DictWriter(handle, fieldnames=status_fieldnames)
             writer.writeheader()
         action = "réinitialisé" if args.reset_status else "initialisé"
-        print(f"Statut Step1 {action}: {status_csv_path}")
+        print(f"Statut Step1 {action}: {status_csv_path.resolve()}")
     else:
-        print(f"Statut Step1 conservé (mode campagne): {status_csv_path}")
+        print(f"Statut Step1 conservé (mode campagne): {status_csv_path.resolve()}")
     flat_output = bool(args.flat_output)
     simulated_sizes: list[int] = []
 
@@ -1249,6 +1278,8 @@ def main(argv: list[str] | None = None) -> None:
             "Plot de synthèse ignoré: aggregated_results.csv absent "
             "(utilisez --flat-output ou make_all_plots.py)."
         )
+
+    _log_step1_key_csv_paths(output_dir)
 
 
 if __name__ == "__main__":

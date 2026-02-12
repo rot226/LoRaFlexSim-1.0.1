@@ -496,6 +496,35 @@ def _aggregate_learning_curve(
     return aggregated
 
 
+
+
+def _ensure_csv_within_scope(csv_path: Path, scope_root: Path) -> Path:
+    resolved_csv = csv_path.resolve()
+    resolved_scope = scope_root.resolve()
+    if resolved_csv.parent != resolved_scope and resolved_scope not in resolved_csv.parents:
+        raise RuntimeError(
+            "Étape 2: sortie CSV hors périmètre autorisé. "
+            f"Fichier: {resolved_csv} ; périmètre attendu: {resolved_scope}."
+        )
+    return resolved_csv
+
+
+def _log_step2_key_csv_paths(output_dir: Path) -> None:
+    key_csv_names = (
+        "run_status_step2.csv",
+        "raw_results.csv",
+        "aggregated_results.csv",
+        "diagnostics_step2_by_size.csv",
+        "loss_causes_histogram.csv",
+        "snir_distribution_by_sf.csv",
+        "diagnostics_by_size.csv",
+    )
+    for csv_name in key_csv_names:
+        csv_path = output_dir / csv_name
+        resolved_csv = _ensure_csv_within_scope(csv_path, output_dir)
+        if csv_path.exists():
+            print(f"CSV Step2 écrit: {resolved_csv}")
+
 def _compute_density(network_size: int) -> float:
     radius_m = float(DEFAULT_CONFIG.scenario.radius_m)
     if radius_m <= 0.0:
@@ -504,8 +533,8 @@ def _compute_density(network_size: int) -> float:
 
 
 def _log_results_written(output_dir: Path, row_count: int) -> None:
-    raw_path = output_dir / "raw_results.csv"
-    aggregated_path = output_dir / "aggregated_results.csv"
+    raw_path = _ensure_csv_within_scope(output_dir / "raw_results.csv", output_dir)
+    aggregated_path = _ensure_csv_within_scope(output_dir / "aggregated_results.csv", output_dir)
     print(f"Append rows: {row_count} -> {raw_path}")
     print(f"Append rows: {row_count} -> {aggregated_path}")
 
@@ -1491,8 +1520,11 @@ def _write_step2_diagnostics_exports(
                 round(float(diagnostics.get("reward_mean", 0.0)), 6),
             ]
         )
+    diagnostics_path = _ensure_csv_within_scope(
+        output_dir / "diagnostics_step2_by_size.csv", output_dir
+    )
     write_rows(
-        output_dir / "diagnostics_step2_by_size.csv",
+        diagnostics_path,
         diagnostics_header,
         diagnostics_values,
     )
@@ -1512,7 +1544,7 @@ def _write_step2_diagnostics_exports(
             sum(int(stats.get("losses_link_quality_total", 0)) for stats in per_size_stats.values()),
         ],
     ]
-    write_rows(output_dir / "loss_causes_histogram.csv", losses_header, losses_values)
+    write_rows(_ensure_csv_within_scope(output_dir / "loss_causes_histogram.csv", output_dir), losses_header, losses_values)
 
     raw_rows = _load_raw_rows_for_snir_distribution(output_dir, flat_output)
     snir_candidates = ["snir_db", "snir", "snir_value", "snr_db", "snir_threshold_db"]
@@ -1564,7 +1596,7 @@ def _write_step2_diagnostics_exports(
                 round(quantiles_map[0.9], 6),
             ]
         )
-    write_rows(output_dir / "snir_distribution_by_sf.csv", snir_header, snir_rows)
+    write_rows(_ensure_csv_within_scope(output_dir / "snir_distribution_by_sf.csv", output_dir), snir_header, snir_rows)
 
     def _min_mean_max(values: list[float]) -> tuple[float, float, float]:
         if not values:
@@ -1722,7 +1754,7 @@ def _write_step2_diagnostics_exports(
                 ]
             )
     write_rows(
-        output_dir / "diagnostics_by_size.csv",
+        _ensure_csv_within_scope(output_dir / "diagnostics_by_size.csv", output_dir),
         diagnostics_dedicated_header,
         diagnostics_dedicated_rows,
     )
@@ -2109,6 +2141,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     simulated_sizes: list[int] = []
 
     base_results_dir = Path(__file__).resolve().parent / "results"
+    _ensure_csv_within_scope(base_results_dir / "run_status_step2.csv", base_results_dir)
     ensure_dir(base_results_dir)
     status_csv_path = base_results_dir / "run_status_step2.csv"
     status_fieldnames = [
@@ -2125,9 +2158,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             writer = csv.DictWriter(handle, fieldnames=status_fieldnames)
             writer.writeheader()
         action = "réinitialisé" if args.reset_status else "initialisé"
-        print(f"Statut Step2 {action}: {status_csv_path}")
+        print(f"Statut Step2 {action}: {status_csv_path.resolve()}")
     else:
-        print(f"Statut Step2 conservé (mode campagne): {status_csv_path}")
+        print(f"Statut Step2 conservé (mode campagne): {status_csv_path.resolve()}")
     timestamp_dir: Path | None = None
     if args.timestamp:
         timestamp_dir = base_results_dir / timestamp_tag(with_timezone=True)
@@ -2583,7 +2616,9 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     if selection_rows:
         rl5_rows = _aggregate_selection_probs(selection_rows)
-        rl5_path = base_results_dir / "rl5_selection_prob.csv"
+        rl5_path = _ensure_csv_within_scope(
+            base_results_dir / "rl5_selection_prob.csv", base_results_dir
+        )
         rl5_header = ["network_size", "density", "round", "sf", "selection_prob"]
         rl5_values = [
             [
@@ -2597,7 +2632,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         ]
         write_rows(rl5_path, rl5_header, rl5_values)
         if timestamp_dir is not None:
-            rl5_timestamp_path = timestamp_dir / "rl5_selection_prob.csv"
+            rl5_timestamp_path = _ensure_csv_within_scope(
+                timestamp_dir / "rl5_selection_prob.csv", base_results_dir
+            )
             write_rows(rl5_timestamp_path, rl5_header, rl5_values)
 
     if learning_curve_rows:
@@ -2613,10 +2650,14 @@ def main(argv: Sequence[str] | None = None) -> None:
             ]
             for row in learning_curve
         ]
-        learning_curve_path = base_results_dir / "learning_curve.csv"
+        learning_curve_path = _ensure_csv_within_scope(
+            base_results_dir / "learning_curve.csv", base_results_dir
+        )
         write_rows(learning_curve_path, learning_curve_header, learning_curve_values)
         if timestamp_dir is not None:
-            learning_curve_timestamp_path = timestamp_dir / "learning_curve.csv"
+            learning_curve_timestamp_path = _ensure_csv_within_scope(
+                timestamp_dir / "learning_curve.csv", base_results_dir
+            )
             write_rows(
                 learning_curve_timestamp_path,
                 learning_curve_header,
@@ -2657,6 +2698,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             "Plot de synthèse ignoré: aggregated_results.csv absent "
             "(utilisez --flat-output ou make_all_plots.py)."
         )
+
+    _log_step2_key_csv_paths(base_results_dir)
 
 
 if __name__ == "__main__":

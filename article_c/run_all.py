@@ -30,6 +30,26 @@ from article_c.validate_results import main as validate_results
 DEFAULT_REPLICATIONS = 10
 STEP2_SUCCESS_RATE_MEAN_LOW_THRESHOLD = 0.20
 
+
+
+def _assert_path_within_scope(path: Path, scope_root: Path, context: str) -> Path:
+    resolved_path = path.resolve()
+    resolved_scope = scope_root.resolve()
+    if resolved_path.parent != resolved_scope and resolved_scope not in resolved_path.parents:
+        raise RuntimeError(
+            f"{context}: sortie hors périmètre autorisé. "
+            f"Fichier: {resolved_path} ; périmètre attendu: {resolved_scope}."
+        )
+    return resolved_path
+
+
+def _log_existing_key_csv_paths(step_label: str, results_dir: Path) -> None:
+    key_csv_names = ("run_status", "raw_results", "aggregated_results", "raw_metrics")
+    for csv_path in sorted(results_dir.glob("**/*.csv")):
+        _assert_path_within_scope(csv_path, results_dir, step_label)
+        if any(csv_path.name.startswith(prefix) for prefix in key_csv_names):
+            print(f"{step_label}: CSV clé détecté {csv_path.resolve()}")
+
 RUN_ALL_PRESETS: dict[str, dict[str, object]] = {
     "article-c": {
         "network_sizes": list(DEFAULT_CONFIG.scenario.network_sizes),
@@ -907,6 +927,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     step1_results_dir = (Path(__file__).resolve().parent / "step1" / "results").resolve()
     step2_results_dir = (Path(__file__).resolve().parent / "step2" / "results").resolve()
+    _assert_path_within_scope(step1_results_dir / "run_status_step1.csv", step1_results_dir, "Step1")
+    _assert_path_within_scope(step2_results_dir / "run_status_step2.csv", step2_results_dir, "Step2")
     campaign_summary_path = (Path(__file__).resolve().parent / "campaign_summary.json").resolve()
     campaign_summary: dict[str, object] = {
         "network_sizes": requested_sizes,
@@ -973,6 +995,7 @@ def main(argv: list[str] | None = None) -> None:
                     expected_sizes_so_far,
                     "Step1",
                 )
+            _log_existing_key_csv_paths("Step1", step1_results_dir)
             step1_elapsed = perf_counter() - step_start
             step1_failed = _count_failed_runs(step1_results_dir / "run_status_step1.csv", size)
             size_summary["step1"] = {
@@ -998,6 +1021,7 @@ def main(argv: list[str] | None = None) -> None:
                     expected_sizes_so_far,
                     "Step2",
                 )
+            _log_existing_key_csv_paths("Step2", step2_results_dir)
             step2_elapsed = perf_counter() - step_start
             step2_failed = _count_failed_runs(step2_results_dir / "run_status_step2.csv", size)
             step2_quality = _build_step2_quality_summary(
