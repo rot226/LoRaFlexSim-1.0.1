@@ -365,6 +365,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Ignore les tailles déjà présentes dans aggregated_results.csv.",
     )
     parser.add_argument(
+        "--reset-status",
+        action="store_true",
+        help=(
+            "Réinitialise explicitement run_status_step2.csv avant exécution. "
+            "Sans cette option, le fichier est conservé s'il existe déjà."
+        ),
+    )
+    parser.add_argument(
         "--flat-output",
         action=argparse.BooleanOptionalAction,
         default=True,

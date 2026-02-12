@@ -739,6 +739,8 @@ def _build_step1_args(args: argparse.Namespace) -> list[str]:
         )
     if args.workers is not None:
         step1_args.extend(["--workers", str(args.workers)])
+    if getattr(args, "reset_status", False):
+        step1_args.append("--reset-status")
     return step1_args
 
 
@@ -859,6 +861,8 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         )
     if args.flat_output is not None:
         step2_args.append("--flat-output" if args.flat_output else "--no-flat-output")
+    if getattr(args, "reset_status", False):
+        step2_args.append("--reset-status")
     return step2_args
 
 
@@ -925,6 +929,8 @@ def main(argv: list[str] | None = None) -> None:
     campaign_start = perf_counter()
     reference_network_size = int(round(median(requested_sizes)))
     args.reference_network_size = reference_network_size
+    step1_status_reset_pending = True
+    step2_status_reset_pending = True
     for size_index, size in enumerate(requested_sizes):
         expected_sizes_so_far = set(requested_sizes[: size_index + 1])
         size_args = argparse.Namespace(**vars(args))
@@ -951,8 +957,10 @@ def main(argv: list[str] | None = None) -> None:
         }
         size_start = perf_counter()
         if not size_args.skip_step1:
+            size_args.reset_status = step1_status_reset_pending
             step_start = perf_counter()
             run_step1(_build_step1_args(size_args))
+            step1_status_reset_pending = False
             if bool(size_args.flat_output):
                 _assert_cumulative_sizes(
                     step1_results_dir / "aggregated_results.csv",
@@ -974,8 +982,10 @@ def main(argv: list[str] | None = None) -> None:
                 "elapsed_seconds": round(step1_elapsed, 3),
             }
         if not size_args.skip_step2:
+            size_args.reset_status = step2_status_reset_pending
             step_start = perf_counter()
             run_step2(_build_step2_args(size_args))
+            step2_status_reset_pending = False
             if bool(size_args.flat_output):
                 _assert_cumulative_sizes(
                     step2_results_dir / "aggregated_results.csv",
