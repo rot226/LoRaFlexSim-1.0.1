@@ -347,6 +347,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Désactive le clamp de taille des figures.",
     )
+    parser.add_argument(
+        "--skip-scientific-qa",
+        action="store_true",
+        help="N'exécute pas les contrôles QA scientifiques avant les plots.",
+    )
+    parser.add_argument(
+        "--allow-scientific-qa-fail",
+        action="store_true",
+        help="Continue même si les contrôles QA scientifiques retournent FAIL.",
+    )
     return parser
 
 
@@ -1346,6 +1356,24 @@ def main(argv: list[str] | None = None) -> None:
         print(f"ERREUR: {message}")
         step_errors["step1"] = message
         step_errors["step2"] = message
+    if (
+        not args.skip_scientific_qa
+        and step1_csv is not None
+        and step2_csv is not None
+    ):
+        from article_c.qa_scientific_checks import run_scientific_checks
+
+        qa_code, _ = run_scientific_checks(
+            step1_csv=step1_csv,
+            step2_csv=step2_csv,
+            report_txt=ARTICLE_DIR / "scientific_qa_report.txt",
+            report_csv=ARTICLE_DIR / "scientific_qa_report.csv",
+        )
+        if qa_code != 0 and not args.allow_scientific_qa_fail:
+            raise SystemExit(
+                "Contrôles QA scientifiques en échec. "
+                "Utilisez --allow-scientific-qa-fail pour forcer la suite."
+            )
     csv_paths: list[Path] = []
     if "step1" in steps and step1_csv is not None:
         csv_paths.append(step1_csv)
