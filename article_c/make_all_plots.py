@@ -204,6 +204,10 @@ PLOT_REQUIREMENTS = {
         require_algo_snir=False,
         extra_csv_names=("rl5_selection_prob.csv",),
     ),
+    "article_c.step2.plots.plot_R_figure3_ucb1_vs_baselines": PlotRequirements(
+        min_network_sizes=1,
+        require_algo_snir=True,
+    ),
 }
 
 
