@@ -1794,6 +1794,192 @@ def _write_step2_diagnostics_exports(
         diagnostics_dedicated_rows,
     )
 
+    algo_sf_header = [
+        "network_size",
+        "algo",
+        "sf",
+        "snir_metric",
+        "success_rate_mean",
+        "success_rate_min",
+        "success_rate_max",
+        "collisions_ratio",
+        "link_quality_rejects_ratio",
+        "congestion_rejects_ratio",
+        "capture_success_ratio",
+        "snir_mean",
+        "snir_min",
+        "snir_max",
+        "rx_power_dbm_requested_mean",
+        "rx_power_dbm_requested_min",
+        "rx_power_dbm_requested_max",
+        "rx_power_dbm_effective_mean",
+        "rx_power_dbm_effective_min",
+        "rx_power_dbm_effective_max",
+    ]
+    algo_sf_grouped: dict[tuple[int, str, int], dict[str, object]] = {}
+    for row in raw_rows:
+        if str(row.get("cluster", "")) != "all":
+            continue
+        size_raw = row.get("network_size", row.get("density"))
+        algo_label = str(row.get("algo", ""))
+        sf_raw = row.get("sf")
+        try:
+            size = int(float(size_raw))
+            sf_value = int(float(sf_raw))
+        except (TypeError, ValueError):
+            continue
+
+        group_key = (size, algo_label, sf_value)
+        group = algo_sf_grouped.setdefault(
+            group_key,
+            {
+                "success_rates": [],
+                "snir_values": [],
+                "rx_requested": [],
+                "rx_effective": [],
+                "round_keys": set(),
+                "losses_collisions": 0,
+                "losses_congestion": 0,
+                "losses_link_quality": 0,
+                "capture_ratios": [],
+            },
+        )
+
+        try:
+            group["success_rates"].append(float(row.get("success_rate", 0.0) or 0.0))
+        except (TypeError, ValueError):
+            pass
+
+        if snir_column:
+            snir_raw = row.get(snir_column)
+            if snir_raw not in (None, ""):
+                try:
+                    group["snir_values"].append(float(snir_raw))
+                except (TypeError, ValueError):
+                    pass
+
+        requested_raw = row.get("rx_power_dbm_requested")
+        if requested_raw not in (None, ""):
+            try:
+                group["rx_requested"].append(float(requested_raw))
+            except (TypeError, ValueError):
+                pass
+
+        effective_raw = row.get("rx_power_dbm_effective", row.get("rx_power_dbm"))
+        if effective_raw not in (None, ""):
+            try:
+                group["rx_effective"].append(float(effective_raw))
+            except (TypeError, ValueError):
+                pass
+
+        round_key = (
+            row.get("replication"),
+            row.get("algo"),
+            row.get("round"),
+            row.get("sf"),
+        )
+        round_keys = group["round_keys"]
+        if isinstance(round_keys, set) and round_key not in round_keys:
+            round_keys.add(round_key)
+            for key, target in (
+                ("losses_collisions", "losses_collisions"),
+                ("losses_congestion", "losses_congestion"),
+                ("losses_link_quality", "losses_link_quality"),
+            ):
+                try:
+                    group[target] = int(group.get(target, 0)) + int(float(row.get(key, 0) or 0))
+                except (TypeError, ValueError):
+                    continue
+            try:
+                group["capture_ratios"].append(float(row.get("capture_ratio", 0.0) or 0.0))
+            except (TypeError, ValueError):
+                pass
+
+    algo_sf_rows: list[list[object]] = []
+    compact_by_size: dict[int, list[dict[str, float]]] = defaultdict(list)
+    for size, algo_label, sf_value in sorted(algo_sf_grouped):
+        group = algo_sf_grouped[(size, algo_label, sf_value)]
+        success_values = list(group.get("success_rates", []))
+        snir_values = list(group.get("snir_values", []))
+        rx_requested_values = list(group.get("rx_requested", []))
+        rx_effective_values = list(group.get("rx_effective", []))
+        capture_ratios = list(group.get("capture_ratios", []))
+        success_min, success_mean, success_max = _min_mean_max(success_values)
+        snir_min, snir_mean, snir_max = _min_mean_max(snir_values)
+        req_min, req_mean, req_max = _min_mean_max(rx_requested_values)
+        eff_min, eff_mean, eff_max = _min_mean_max(rx_effective_values)
+        losses_collisions = int(group.get("losses_collisions", 0))
+        losses_congestion = int(group.get("losses_congestion", 0))
+        losses_link_quality = int(group.get("losses_link_quality", 0))
+        losses_total = losses_collisions + losses_congestion + losses_link_quality
+        collisions_ratio = losses_collisions / losses_total if losses_total > 0 else 0.0
+        link_quality_rejects_ratio = (
+            losses_link_quality / losses_total if losses_total > 0 else 0.0
+        )
+        congestion_rejects_ratio = (
+            losses_congestion / losses_total if losses_total > 0 else 0.0
+        )
+        capture_success_ratio = (
+            sum(capture_ratios) / len(capture_ratios) if capture_ratios else 0.0
+        )
+        compact_by_size[size].append(
+            {
+                "success_rate_mean": success_mean,
+                "collisions_ratio": collisions_ratio,
+                "capture_success_ratio": capture_success_ratio,
+                "snir_mean": snir_mean,
+            }
+        )
+        algo_sf_rows.append(
+            [
+                size,
+                algo_label,
+                sf_value,
+                snir_column,
+                round(success_mean, 6),
+                round(success_min, 6),
+                round(success_max, 6),
+                round(collisions_ratio, 6),
+                round(link_quality_rejects_ratio, 6),
+                round(congestion_rejects_ratio, 6),
+                round(capture_success_ratio, 6),
+                round(snir_mean, 6),
+                round(snir_min, 6),
+                round(snir_max, 6),
+                round(req_mean, 6),
+                round(req_min, 6),
+                round(req_max, 6),
+                round(eff_mean, 6),
+                round(eff_min, 6),
+                round(eff_max, 6),
+            ]
+        )
+
+    write_rows(
+        _ensure_csv_within_scope(output_dir / "diagnostics_by_size_algo_sf.csv", output_dir),
+        algo_sf_header,
+        algo_sf_rows,
+    )
+
+    print("Résumé compact diagnostics_by_size_algo_sf (Step2):")
+    if not compact_by_size:
+        print("- aucun échantillon cluster=all exploitable.")
+    for size in sorted(compact_by_size):
+        rows = compact_by_size[size]
+        if not rows:
+            continue
+        success_mean = sum(row["success_rate_mean"] for row in rows) / len(rows)
+        collisions_ratio = sum(row["collisions_ratio"] for row in rows) / len(rows)
+        capture_ratio_mean = (
+            sum(row["capture_success_ratio"] for row in rows) / len(rows)
+        )
+        snir_mean = sum(row["snir_mean"] for row in rows) / len(rows)
+        print(
+            f"- taille {size}: success={success_mean:.4f}, "
+            f"collisions={collisions_ratio:.3f}, capture={capture_ratio_mean:.3f}, "
+            f"snir={snir_mean:.2f}"
+        )
+
 
 def _detect_low_success_first_size(
     density: int,
