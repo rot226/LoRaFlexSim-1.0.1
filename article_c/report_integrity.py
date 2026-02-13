@@ -16,6 +16,7 @@ if find_spec("article_c") is None:
     sys.path.insert(0, str(repo_root))
 
 from article_c.common.csv_io import _normalize_group_keys, _normalize_snir_mode
+from article_c.common.config import normalize_algorithm, normalize_cluster
 
 
 PDR_KEY_GROUPS = (
@@ -84,13 +85,16 @@ def _normalize_size(value: object) -> str | None:
 
 
 def _normalize_algo(value: object) -> str:
-    text = str(value).strip()
-    return text if text else "unknown"
+    normalized = normalize_algorithm(value, default=None)
+    if normalized is None:
+        text = str(value).strip()
+        return text if text else "unknown"
+    return normalized
 
 
-def _normalize_cluster(value: object) -> str:
-    text = str(value).strip()
-    return text if text else "unknown"
+def _normalize_cluster_name(value: object) -> str:
+    normalized = normalize_cluster(value, default="unknown")
+    return normalized if normalized else "unknown"
 
 
 def _infer_snir_mode(row: dict[str, object]) -> str:
@@ -310,7 +314,7 @@ def _collect_stats(
     for row in rows:
         algo = _normalize_algo(row.get("algo") or row.get("algorithm"))
         snir_mode = _infer_snir_mode(row)
-        cluster = _normalize_cluster(row.get("cluster"))
+        cluster = _normalize_cluster_name(row.get("cluster"))
         key = (algo, snir_mode, cluster)
         if key not in groups:
             groups[key] = GroupStats(algo=algo, snir_mode=snir_mode, cluster=cluster)

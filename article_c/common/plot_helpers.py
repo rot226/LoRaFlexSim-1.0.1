@@ -39,7 +39,11 @@ from article_c.common.plot_style import (
     tight_layout_rect_from_margins,
 )
 from article_c.common.utils import ensure_dir
-from article_c.common.config import CLUSTER_CANONICAL_TABLE, DEFAULT_CONFIG
+from article_c.common.config import (
+    ALGORITHM_CANONICAL_TABLE,
+    CLUSTER_CANONICAL_TABLE,
+    DEFAULT_CONFIG,
+)
 
 PREFIX_SCI_WARN = "[SCI_WARN]"
 PREFIX_IO_ERROR = "[IO_ERROR]"
@@ -47,13 +51,8 @@ PREFIX_IO_ERROR = "[IO_ERROR]"
 
 COMMON_PLOT_LABELS: dict[str, dict[str, str]] = {
     "algo": {
-        "adr": "ADR",
-        "apra": "APRA",
-        "aimi": "Aimi",
-        "loba": "LoBa",
-        "mixra_h": "MixRA-H",
-        "mixra_opt": "MixRA-Opt",
-        "ucb1_sf": "UCB1-SF",
+        algo_id: str(config["label"])
+        for algo_id, config in ALGORITHM_CANONICAL_TABLE.items()
     },
     "snir": {
         "snir_on": "SNIR on",
@@ -87,19 +86,9 @@ ALGO_MARKERS = {
     "ucb1_sf": "D",
 }
 ALGO_ALIASES = {
-    "adr_pure": "adr",
-    "adr-pure": "adr",
-    "adr pur": "adr",
-    "apra_like": "apra",
-    "apra-like": "apra",
-    "aimi_like": "aimi",
-    "aimi-like": "aimi",
-    "loba": "loba",
-    "lo_ba": "loba",
-    "lora_baseline": "loba",
-    "lorawan_baseline": "loba",
-    "ucb1": "ucb1_sf",
-    "ucb1-sf": "ucb1_sf",
+    alias.strip().lower(): algo_id
+    for algo_id, config in ALGORITHM_CANONICAL_TABLE.items()
+    for alias in config.get("aliases", ())
 }
 SNIR_MODES = ("snir_on", "snir_off")
 SNIR_LABELS = COMMON_PLOT_LABELS["snir"]

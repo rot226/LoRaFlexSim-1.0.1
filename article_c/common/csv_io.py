@@ -9,6 +9,8 @@ from contextlib import contextmanager
 from collections import defaultdict
 from pathlib import Path
 import math
+
+from article_c.common.config import normalize_algorithm, normalize_cluster, normalize_snir_mode
 from statistics import mean, median, stdev
 
 ROUND_REPLICATION_KEYS = ("round", "replication")
@@ -335,26 +337,18 @@ def _has_computed_density(rows: list[dict[str, object]]) -> bool:
 
 
 def _normalize_snir_mode(value: object) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip().lower()
-    if text in {"snir_on", "on", "true", "1", "yes"}:
-        return "snir_on"
-    if text in {"snir_off", "off", "false", "0", "no"}:
-        return "snir_off"
-    if text in {"snir_unknown", "unknown", "n/a", "na"}:
-        return "snir_unknown"
-    return None
+    return normalize_snir_mode(value, default=None)
 
 
 def _normalize_cluster(value: object) -> str:
-    if value is None:
-        return "all"
-    text = str(value).strip()
-    if not text:
-        return "all"
-    if text.lower() == "all":
-        return "all"
+    return normalize_cluster(value, default="all")
+
+
+def _normalize_algo(value: object) -> str:
+    normalized = normalize_algorithm(value, default=None)
+    if normalized is not None:
+        return normalized
+    text = str(value).strip() if value is not None else ""
     return text
 
 
@@ -368,6 +362,7 @@ def _normalize_group_keys(rows: list[dict[str, object]]) -> None:
     for row in rows:
         if row.get("algo") in (None, "") and row.get("algorithm") not in (None, ""):
             row["algo"] = row.get("algorithm")
+        row["algo"] = _normalize_algo(row.get("algo"))
         if row.get("snir_mode") in (None, ""):
             snir_mode = _normalize_snir_mode(row.get("snir_state") or row.get("snir"))
             if snir_mode is None:
@@ -380,6 +375,9 @@ def _normalize_group_keys(rows: list[dict[str, object]]) -> None:
                     snir_mode = "snir_off"
             if snir_mode is not None:
                 row["snir_mode"] = snir_mode
+        elif (normalized_snir := _normalize_snir_mode(row.get("snir_mode"))) is not None:
+            row["snir_mode"] = normalized_snir
+        row["cluster"] = _normalize_cluster(row.get("cluster"))
 
 
 def _log_control_table(rows: list[dict[str, object]], label: str) -> None:

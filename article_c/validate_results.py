@@ -13,6 +13,8 @@ if find_spec("article_c") is None:
     repo_root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(repo_root))
 
+from article_c.common.config import normalize_algorithm, normalize_cluster, normalize_snir_mode
+
 
 class AnomalyTracker:
     def __init__(self, max_samples: int = 20) -> None:
@@ -215,6 +217,28 @@ def _use_received_algo_mean(
     return derived_key
 
 
+
+
+def _check_canonical_mappings(rows: list[dict[str, object]], label: str, tracker: AnomalyTracker) -> None:
+    for idx, row in enumerate(rows, start=1):
+        algo_value = row.get("algo") or row.get("algorithm")
+        if algo_value not in (None, "") and normalize_algorithm(algo_value, default=None) is None:
+            tracker.add(f"{label}: algo non canonique ligne {idx}: {algo_value}.")
+            break
+    for idx, row in enumerate(rows, start=1):
+        snir_value = row.get("snir_mode") or row.get("snir_state") or row.get("snir")
+        if snir_value not in (None, "") and normalize_snir_mode(snir_value, default=None) is None:
+            tracker.add(f"{label}: snir_mode non canonique ligne {idx}: {snir_value}.")
+            break
+    for idx, row in enumerate(rows, start=1):
+        cluster_value = row.get("cluster")
+        if cluster_value in (None, ""):
+            continue
+        normalized = normalize_cluster(cluster_value, default="")
+        if not normalized:
+            tracker.add(f"{label}: cluster vide/non canonique ligne {idx}: {cluster_value}.")
+            break
+
 def _validate_pdr_file(
     path: Path,
     pdr_key: str,
@@ -232,6 +256,7 @@ def _validate_pdr_file(
     if _resolve_network_size_column(fieldnames) is None:
         tracker.add(f"{label}: colonne network_size absente (fallback density non disponible).")
         return
+    _check_canonical_mappings(rows, label, tracker)
     missing_columns = [key for key in (pdr_key, sent_key, received_key) if key not in fieldnames]
     if missing_columns:
         tracker.add(
@@ -287,6 +312,7 @@ def _validate_reward_file(
     if _resolve_network_size_column(fieldnames) is None:
         tracker.add(f"{label}: colonne network_size absente (fallback density non disponible).")
         return
+    _check_canonical_mappings(rows, label, tracker)
     if reward_key not in fieldnames:
         tracker.add(f"{label}: colonne {reward_key} absente.")
         return

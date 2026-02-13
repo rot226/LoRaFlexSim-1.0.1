@@ -30,6 +30,97 @@ CLUSTER_CANONICAL_TABLE: dict[str, dict[str, tuple[str, ...] | str]] = {
     },
 }
 
+ALGORITHM_CANONICAL_TABLE: dict[str, dict[str, tuple[str, ...] | str]] = {
+    "adr": {
+        "label": "ADR",
+        "aliases": ("adr", "adr_pure", "adr-pure", "adr pur"),
+    },
+    "apra": {
+        "label": "APRA",
+        "aliases": ("apra", "apra_like", "apra-like"),
+    },
+    "aimi": {
+        "label": "Aimi",
+        "aliases": ("aimi", "aimi_like", "aimi-like"),
+    },
+    "loba": {
+        "label": "LoBa",
+        "aliases": ("loba", "lo_ba", "lora_baseline", "lorawan_baseline"),
+    },
+    "mixra_h": {
+        "label": "MixRA-H",
+        "aliases": ("mixra_h", "mixra_hybrid", "mixra-h", "mixra h"),
+    },
+    "mixra_opt": {
+        "label": "MixRA-Opt",
+        "aliases": ("mixra_opt", "mixra_optimal", "mixraopt", "mixra-opt"),
+    },
+    "ucb1_sf": {
+        "label": "UCB1-SF",
+        "aliases": ("ucb1_sf", "ucb1", "ucb1-sf", "ucb1 sf"),
+    },
+}
+
+SNIR_CANONICAL_TABLE: dict[str, dict[str, tuple[str, ...] | str]] = {
+    "snir_on": {
+        "label": "SNIR on",
+        "aliases": ("snir_on", "on", "true", "1", "yes"),
+    },
+    "snir_off": {
+        "label": "SNIR off",
+        "aliases": ("snir_off", "off", "false", "0", "no"),
+    },
+    "snir_unknown": {
+        "label": "SNIR unknown",
+        "aliases": ("snir_unknown", "unknown", "n/a", "na"),
+    },
+}
+
+
+def _build_alias_lookup(
+    canonical_table: dict[str, dict[str, tuple[str, ...] | str]],
+) -> dict[str, str]:
+    alias_lookup: dict[str, str] = {}
+    for canonical_id, config in canonical_table.items():
+        alias_lookup[canonical_id.strip().lower()] = canonical_id
+        for alias in config.get("aliases", ()):  # type: ignore[arg-type]
+            alias_lookup[str(alias).strip().lower()] = canonical_id
+    return alias_lookup
+
+
+ALGORITHM_ALIAS_TO_CANONICAL = _build_alias_lookup(ALGORITHM_CANONICAL_TABLE)
+SNIR_ALIAS_TO_CANONICAL = _build_alias_lookup(SNIR_CANONICAL_TABLE)
+CLUSTER_ALIAS_TO_CANONICAL = _build_alias_lookup(CLUSTER_CANONICAL_TABLE)
+
+
+def normalize_algorithm(value: object, default: str | None = None) -> str | None:
+    text = str(value).strip().lower() if value is not None else ""
+    if not text:
+        return default
+    return ALGORITHM_ALIAS_TO_CANONICAL.get(text, default)
+
+
+def normalize_snir_mode(value: object, default: str | None = None) -> str | None:
+    text = str(value).strip().lower() if value is not None else ""
+    if not text:
+        return default
+    return SNIR_ALIAS_TO_CANONICAL.get(text, default)
+
+
+def normalize_cluster(value: object, default: str = "all") -> str:
+    text = str(value).strip().lower() if value is not None else ""
+    if not text:
+        return default
+    return CLUSTER_ALIAS_TO_CANONICAL.get(text, str(value).strip())
+
+
+def algorithm_label(value: object, default: str = "unknown") -> str:
+    canonical = normalize_algorithm(value)
+    if canonical is None:
+        text = str(value).strip()
+        return text if text else default
+    return str(ALGORITHM_CANONICAL_TABLE[canonical]["label"])
+
 
 @dataclass(frozen=True)
 class RadioConfig:
