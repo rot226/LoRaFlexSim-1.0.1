@@ -301,19 +301,6 @@ def _resolve_step_label(step: str) -> str:
     return "Step1" if step == "step1" else "Step2"
 
 
-def _load_dataset_from_aggregated(results_dir: Path) -> CsvDataBundle | None:
-    aggregated_path = results_dir / "aggregates" / "aggregated_results.csv"
-    if not aggregated_path.exists():
-        return None
-    fieldnames, rows = _load_csv_data(aggregated_path)
-    return CsvDataBundle(
-        fieldnames=fieldnames,
-        rows=rows,
-        label=str(aggregated_path.resolve()),
-        source_paths=(aggregated_path,),
-    )
-
-
 def _load_dataset_from_by_size(
     *,
     results_dir: Path,
@@ -344,56 +331,6 @@ def _load_dataset_from_by_size(
     )
 
 
-def _write_aggregated_results_from_by_size(
-    *,
-    step: str,
-    cache: dict[tuple[str, str], CsvDataBundle],
-) -> Path:
-    step_label = _resolve_step_label(step)
-    results_dir = _resolve_step_results_dir(step)
-    bundle = _resolve_data_bundle(
-        step=step,
-        csv_name="aggregated_results.csv",
-        source="by_size",
-        cache=cache,
-    )
-    if bundle is None:
-        nested_pattern = results_dir / "by_size" / "size_*" / "aggregated_results.csv"
-        raise FileNotFoundError(
-            f"Préflight impossible pour {step_label}: "
-            f"aucun CSV trouvé via {nested_pattern}."
-        )
-    aggregates_dir = results_dir / "aggregates"
-    aggregates_dir.mkdir(parents=True, exist_ok=True)
-    aggregated_path = aggregates_dir / "aggregated_results.csv"
-    with aggregated_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=bundle.fieldnames)
-        writer.writeheader()
-        writer.writerows(bundle.rows)
-    log_debug(
-        "INFO: Préflight agrégats "
-        f"{step_label}: {len(bundle.rows)} lignes écrites dans {aggregated_path}."
-    )
-    return aggregated_path
-
-
-def _preflight_materialize_aggregates(
-    *,
-    steps: list[str],
-    source: str,
-    cache: dict[tuple[str, str], CsvDataBundle],
-) -> dict[str, Path]:
-    if source != "by_size":
-        return {}
-    aggregated_paths: dict[str, Path] = {}
-    for step in steps:
-        aggregated_paths[step] = _write_aggregated_results_from_by_size(
-            step=step,
-            cache=cache,
-        )
-    return aggregated_paths
-
-
 def _report_missing_csv(
     *,
     step_label: str,
@@ -401,13 +338,9 @@ def _report_missing_csv(
     source: str,
     csv_name: str,
 ) -> None:
-    aggregated_path = results_dir / "aggregates" / "aggregated_results.csv"
     nested_pattern = results_dir / "by_size" / "size_*" / csv_name
     log_debug(f"ERREUR: CSV {step_label} introuvable pour source={source}.")
-    if source == "aggregated":
-        log_debug(f"Chemin attendu: {aggregated_path}.")
-    else:
-        log_debug(f"Pattern attendu: {nested_pattern}.")
+    log_debug(f"Pattern attendu: {nested_pattern}.")
     log_debug(
         "INFO: vérifiez que les simulations ont bien écrit dans "
         f"{results_dir}."
@@ -425,12 +358,9 @@ def _resolve_data_bundle(
     if cache_key in cache:
         return cache[cache_key]
     results_dir = _resolve_step_results_dir(step)
-    if source == "aggregated":
-        if csv_name != "aggregated_results.csv":
-            return None
-        bundle = _load_dataset_from_aggregated(results_dir)
-    else:
-        bundle = _load_dataset_from_by_size(results_dir=results_dir, csv_name=csv_name)
+    if source != "by_size":
+        raise ValueError("Source CSV non supportée. Utilisez uniquement --source by_size.")
+    bundle = _load_dataset_from_by_size(results_dir=results_dir, csv_name=csv_name)
     if bundle is not None:
         cache[cache_key] = bundle
     return bundle
@@ -470,11 +400,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--source",
-        choices=("by_size", "aggregated"),
+        choices=("by_size",),
         default="by_size",
         help=(
             "Source des données CSV: by_size fusionne size_*/aggregated_results.csv en mémoire "
-            "(défaut), aggregated lit uniquement aggregated_results.csv."
+            "(défaut). Les variantes flat/historiques sont interdites."
         ),
     )
     parser.add_argument(
@@ -1425,13 +1355,7 @@ def _validate_plot_data(
     log_debug(f"[validate_plot_data] Module: {module_path}")
     log_debug(f"[validate_plot_data] CSV: {data_bundle.label}")
     for extra_name in requirements.extra_csv_names:
-        if source == "aggregated":
-            missing_extra = all(
-                not (path.parent / extra_name).exists()
-                for path in data_bundle.source_paths
-            )
-        else:
-            missing_extra = not _collect_nested_csvs(_resolve_step_results_dir(step), extra_name)
+        missing_extra = not _collect_nested_csvs(_resolve_step_results_dir(step), extra_name)
         if missing_extra:
             log_debug(
                 "AVERTISSEMENT: "
@@ -1861,15 +1785,6 @@ def main(argv: list[str] | None = None) -> None:
     step1_csv: Path | None = None
     step2_csv: Path | None = None
 
-    try:
-        preflight_aggregated_paths = _preflight_materialize_aggregates(
-            steps=steps,
-            source=args.source,
-            cache=step_data_cache,
-        )
-    except FileNotFoundError as exc:
-        parser.error(str(exc))
-
     for step in steps:
         step_label = _resolve_step_label(step)
         primary_bundle = _resolve_data_bundle(
@@ -1888,12 +1803,7 @@ def main(argv: list[str] | None = None) -> None:
             step_errors[step] = f"CSV {step_label} manquant"
             continue
         step_primary_bundle[step] = primary_bundle
-        if args.source == "by_size" and step in preflight_aggregated_paths:
-            if step == "step1":
-                step1_csv = preflight_aggregated_paths[step]
-            else:
-                step2_csv = preflight_aggregated_paths[step]
-        elif args.source == "aggregated" and primary_bundle.source_paths:
+        if primary_bundle.source_paths:
             if step == "step1":
                 step1_csv = primary_bundle.source_paths[0]
             else:
@@ -2108,7 +2018,7 @@ def main(argv: list[str] | None = None) -> None:
                     regen_sizes = step2_sizes or step1_sizes
                     command = (
                         _suggest_regeneration_command(
-                            STEP1_RESULTS_DIR / "aggregates" / "aggregated_results.csv",
+                            STEP1_RESULTS_DIR / "by_size" / "size_0" / "aggregated_results.csv",
                             regen_sizes,
                         )
                         if regen_sizes
