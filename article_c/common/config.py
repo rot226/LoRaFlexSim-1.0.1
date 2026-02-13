@@ -76,9 +76,11 @@ class Step2Config:
     traffic_coeff_max: float = 1.3
     traffic_coeff_enabled: bool = True
     traffic_coeff_scale: float = 0.75
-    traffic_coeff_clamp_min: float = 0.4
-    traffic_coeff_clamp_max: float = 2.5
-    traffic_coeff_clamp_enabled: bool = False
+    traffic_coeff_clamp_min: float = 0.55
+    traffic_coeff_clamp_max: float = 1.9
+    traffic_coeff_clamp_enabled: bool = True
+    clamped_nodes_ratio_threshold: float = 0.7
+    clamped_load_adjust_min_scale: float = 0.55
     window_delay_enabled: bool = True
     window_delay_range_s: float = 5.0
     # Facteur de sécurité de capacité Tx par fenêtre.
@@ -138,9 +140,9 @@ DEFAULT_CONFIG = AppConfig()
 
 STEP2_SAFE_CONFIG = Step2Config(
     capture_probability=0.32,
-    traffic_coeff_clamp_min=0.6,
-    traffic_coeff_clamp_max=2.2,
-    traffic_coeff_clamp_enabled=False,
+    traffic_coeff_clamp_min=0.65,
+    traffic_coeff_clamp_max=1.8,
+    traffic_coeff_clamp_enabled=True,
     network_load_min=0.65,
     network_load_max=1.45,
     collision_size_min=0.75,
@@ -155,9 +157,9 @@ STEP2_SAFE_CONFIG = Step2Config(
 
 STEP2_SUPER_SAFE_CONFIG = Step2Config(
     capture_probability=0.36,
-    traffic_coeff_clamp_min=0.7,
-    traffic_coeff_clamp_max=2.0,
-    traffic_coeff_clamp_enabled=False,
+    traffic_coeff_clamp_min=0.75,
+    traffic_coeff_clamp_max=1.6,
+    traffic_coeff_clamp_enabled=True,
     network_load_min=0.75,
     network_load_max=1.3,
     collision_size_min=0.8,

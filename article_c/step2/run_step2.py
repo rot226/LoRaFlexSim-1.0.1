@@ -2440,6 +2440,12 @@ def _simulate_density(
                         traffic_coeff_clamp_alert_threshold=float(
                             config.get("traffic_coeff_clamp_alert_threshold", 0.45)
                         ),
+                        clamped_nodes_ratio_threshold=float(
+                            config.get("clamped_nodes_ratio_threshold", 0.70)
+                        ),
+                        clamped_load_adjust_min_scale=float(
+                            config.get("clamped_load_adjust_min_scale", 0.55)
+                        ),
                         window_delay_enabled=bool(config["window_delay_enabled"]),
                         window_delay_range_s=float(config["window_delay_range_s"]),
                         shadowing_sigma_db=(
@@ -2680,6 +2686,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         "traffic_coeff_clamp_max": args.traffic_coeff_clamp_max,
         "traffic_coeff_clamp_enabled": args.traffic_coeff_clamp_enabled,
         "traffic_coeff_clamp_alert_threshold": 0.45,
+        "clamped_nodes_ratio_threshold": args.clamped_nodes_ratio_threshold,
+        "clamped_load_adjust_min_scale": args.clamped_load_adjust_min_scale,
         "window_delay_enabled": args.window_delay_enabled,
         "window_delay_range_s": args.window_delay_range_s,
         "reference_network_size": max(1, reference_network_size),
