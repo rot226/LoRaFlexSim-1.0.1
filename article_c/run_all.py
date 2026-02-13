@@ -118,7 +118,7 @@ def _assert_no_global_writes_during_simulation(results_dir: Path, step_label: st
 def _self_check_replication_layout(
     size_dir: Path,
     expected_rep_dirs: list[str],
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str], list[str]]:
     """Self-check statique: compare les dossiers `rep_*` attendus vs présents."""
     expected_sorted = sorted(expected_rep_dirs)
     actual_sorted = sorted(
@@ -126,7 +126,7 @@ def _self_check_replication_layout(
     )
     missing = sorted(set(expected_sorted) - set(actual_sorted))
     unexpected = sorted(set(actual_sorted) - set(expected_sorted))
-    return expected_sorted, actual_sorted, missing + unexpected
+    return expected_sorted, actual_sorted, missing, unexpected
 
 def _assert_output_layout_compliant(
     results_dir: Path,
@@ -145,18 +145,23 @@ def _assert_output_layout_compliant(
             raise RuntimeError(
                 f"{step_label}: layout invalide, dossier manquant {size_dir.resolve()}."
             )
-        expected_dirs_sorted, actual_dirs_sorted, layout_diffs = _self_check_replication_layout(
+        expected_dirs_sorted, actual_dirs_sorted, missing_reps, unexpected_reps = _self_check_replication_layout(
             size_dir,
             expected_rep_dirs,
         )
-        if layout_diffs:
-            expected_rep_paths = [
-                str((size_dir / rep_dir).resolve()) for rep_dir in expected_dirs_sorted
+        if missing_reps or unexpected_reps:
+            missing_rep_paths = [
+                str((size_dir / rep_dir).resolve()) for rep_dir in missing_reps
             ]
+            expected_rep_paths = [str((size_dir / rep_dir).resolve()) for rep_dir in expected_dirs_sorted]
             raise RuntimeError(
-                f"{step_label}: layout invalide pour size_{size}, rep attendus={expected_dirs_sorted}, "
-                f"rep réels={actual_dirs_sorted}. Différences={layout_diffs}. "
-                f"Chemins absolus attendus: {expected_rep_paths}."
+                f"{step_label}: layout invalide. Taille concernée=size_{size}. "
+                f"Réplications manquantes={missing_reps or 'aucune'}. "
+                f"Réplications inattendues={unexpected_reps or 'aucune'}. "
+                f"Rep attendus={expected_dirs_sorted}, rep réels={actual_dirs_sorted}. "
+                f"Chemin(s) absolu(s) attendu(s) pour les réplications manquantes: "
+                f"{missing_rep_paths or 'aucun'}. "
+                f"Tous les chemins absolus attendus pour cette taille: {expected_rep_paths}."
             )
         _assert_cumulative_sizes_nested(results_dir, {int(size)}, step_label)
 
