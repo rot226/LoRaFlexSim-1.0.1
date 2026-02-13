@@ -490,7 +490,7 @@ def parse_network_size_list(value: str | Sequence[int]) -> list[int]:
 
 def replication_ids(count: int) -> list[int]:
     """Retourne les identifiants de réplications."""
-    return list(range(1, count + 1))
+    return list(range(count))
 
 
 def timestamp_tag(with_timezone: bool = True) -> str:
