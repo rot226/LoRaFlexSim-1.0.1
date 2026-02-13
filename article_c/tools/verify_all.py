@@ -36,6 +36,16 @@ from article_c.make_all_plots import (
 
 SUPPORTED_FORMATS = ("png", "pdf", "eps", "svg")
 EXPECTED_SIZES: tuple[int, ...] = (80, 160, 320, 640, 1280)
+LEGEND_CHECK_REPORT_PATH = BASE_DIR / "legend_check_report.csv"
+ALGO_LEGEND_KEYWORDS = ("adr", "mixra", "ucb1")
+STEP2_REQUIRED_LEGEND_MODULES = (
+    "article_c.step2.plots.plot_RL1",
+    "article_c.step2.plots.plot_RL2",
+    "article_c.step2.plots.plot_RL3",
+    "article_c.step2.plots.plot_RL4",
+    "article_c.step2.plots.plot_RL5",
+    "article_c.step2.plots.plot_RL6_cluster_outage_vs_density",
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -166,9 +176,44 @@ def _invoke_module_main(module: ModuleType) -> None:
     module.main(**kwargs) if kwargs else module.main()
 
 
+def _is_algorithm_legend_label(label: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", "", label.strip().lower())
+    return bool(normalized) and any(
+        keyword in normalized for keyword in ALGO_LEGEND_KEYWORDS
+    )
+
+
+def _count_algorithm_legend_entries(fig: plt.Figure) -> int:
+    count = 0
+    for ax in fig.axes:
+        _, labels = ax.get_legend_handles_labels()
+        count += sum(
+            1 for label in labels if label and _is_algorithm_legend_label(label)
+        )
+    for legend in fig.legends:
+        count += sum(
+            1
+            for text in legend.get_texts()
+            if text.get_text() and _is_algorithm_legend_label(text.get_text())
+        )
+    return count
+
+
+def _write_legend_check_report(rows: list[dict[str, object]]) -> None:
+    with LEGEND_CHECK_REPORT_PATH.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["module", "status", "legend_entries"],
+        )
+        writer.writeheader()
+        writer.writerows(sorted(rows, key=lambda row: str(row["module"])))
+
+
 def _check_legends_and_sizes() -> list[str]:
     failures: list[str] = []
     modules = [*PLOT_MODULES["step1"], *PLOT_MODULES["step2"], *POST_PLOT_MODULES]
+    legend_report_rows: list[dict[str, object]] = []
+    legend_validity_by_module: dict[str, bool] = {}
 
     original_close = plt.close
 
@@ -180,15 +225,33 @@ def _check_legends_and_sizes() -> list[str]:
         for module_path in modules:
             before = set(plt.get_fignums())
             module = importlib.import_module(module_path)
+            module_legend_entries = 0
+            module_has_valid_legend = True
             try:
                 _invoke_module_main(module)
             except Exception as exc:
                 failures.append(f"{module_path}: exécution impossible ({exc})")
+                legend_validity_by_module[module_path] = False
+                legend_report_rows.append(
+                    {
+                        "module": module_path,
+                        "status": "FAIL",
+                        "legend_entries": 0,
+                    }
+                )
                 continue
 
             new_numbers = [num for num in plt.get_fignums() if num not in before]
             if not new_numbers:
                 failures.append(f"{module_path}: aucune figure détectée pendant l'exécution.")
+                legend_validity_by_module[module_path] = False
+                legend_report_rows.append(
+                    {
+                        "module": module_path,
+                        "status": "FAIL",
+                        "legend_entries": 0,
+                    }
+                )
                 continue
 
             for idx, fig_no in enumerate(new_numbers, start=1):
@@ -197,8 +260,14 @@ def _check_legends_and_sizes() -> list[str]:
                 has_legend = bool(fig.legends) or any(
                     ax.get_legend() is not None for ax in fig.axes
                 )
-                if not has_legend:
-                    failures.append(f"{context}: légende absente.")
+                legend_entries = _count_algorithm_legend_entries(fig)
+                module_legend_entries += legend_entries
+                if not has_legend or legend_entries == 0:
+                    reason = (
+                        "légende absente" if not has_legend else "aucune entrée d'algorithme"
+                    )
+                    failures.append(f"{context}: {reason}.")
+                    module_has_valid_legend = False
 
                 width_in, height_in = fig.get_size_inches()
                 # Règle demandée: dimensions anormales (single-plot >12 in)
@@ -212,9 +281,30 @@ def _check_legends_and_sizes() -> list[str]:
                         f"{context}: dimension anormale pour mono-panel "
                         f"({width_in:.2f}x{height_in:.2f} in)."
                     )
+            legend_validity_by_module[module_path] = module_has_valid_legend
+            legend_report_rows.append(
+                {
+                    "module": module_path,
+                    "status": "PASS" if module_has_valid_legend else "FAIL",
+                    "legend_entries": module_legend_entries,
+                }
+            )
     finally:
         plt.close = original_close
         plt.close("all")
+
+    _write_legend_check_report(legend_report_rows)
+
+    missing_required_step2_legends = [
+        module
+        for module in STEP2_REQUIRED_LEGEND_MODULES
+        if module in legend_validity_by_module and not legend_validity_by_module[module]
+    ]
+    if missing_required_step2_legends:
+        failures.append(
+            "Step2: sortie finale bloquée, légende invalide pour: "
+            + ", ".join(missing_required_step2_legends)
+        )
 
     return failures
 

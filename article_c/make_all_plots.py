@@ -111,6 +111,17 @@ POST_PLOT_MODULES = [
 
 MANIFEST_OUTPUT_PATH = ARTICLE_DIR / "figures_manifest.csv"
 PLOT_DATA_FILTER_REPORT_OUTPUT_PATH = ARTICLE_DIR / "plot_data_filter_report.csv"
+LEGEND_CHECK_REPORT_OUTPUT_PATH = ARTICLE_DIR / "legend_check_report.csv"
+
+ALGO_LEGEND_KEYWORDS = ("adr", "mixra", "ucb1")
+STEP2_REQUIRED_LEGEND_MODULES = (
+    "article_c.step2.plots.plot_RL1",
+    "article_c.step2.plots.plot_RL2",
+    "article_c.step2.plots.plot_RL3",
+    "article_c.step2.plots.plot_RL4",
+    "article_c.step2.plots.plot_RL5",
+    "article_c.step2.plots.plot_RL6_cluster_outage_vs_density",
+)
 
 MAKE_ALL_PLOTS_PRESETS: dict[str, dict[str, object]] = {
     "ieee-ready-no-titles": {
@@ -545,6 +556,29 @@ def _figure_has_legend(fig: plt.Figure) -> bool:
     return any(ax.get_legend() is not None for ax in fig.axes)
 
 
+def _is_algorithm_legend_label(label: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", "", label.strip().lower())
+    return bool(normalized) and any(
+        keyword in normalized for keyword in ALGO_LEGEND_KEYWORDS
+    )
+
+
+def _count_algorithm_legend_entries(fig: plt.Figure) -> int:
+    count = 0
+    for ax in fig.axes:
+        _, labels = ax.get_legend_handles_labels()
+        count += sum(
+            1 for label in labels if label and _is_algorithm_legend_label(label)
+        )
+    for legend in fig.legends:
+        count += sum(
+            1
+            for text in legend.get_texts()
+            if text.get_text() and _is_algorithm_legend_label(text.get_text())
+        )
+    return count
+
+
 def _check_legends_for_module(
     *,
     module_path: str,
@@ -552,6 +586,8 @@ def _check_legends_for_module(
     previous_figures: set[int],
     fail_on_missing_legends: bool = False,
     legend_status: dict[str, bool] | None = None,
+    legend_report_rows: list[dict[str, object]] | None = None,
+    legend_validity_by_module: dict[str, bool] | None = None,
 ) -> list[str]:
     from article_c.common.plot_helpers import assert_legend_present
 
@@ -568,6 +604,7 @@ def _check_legends_for_module(
         else "source inconnue"
     )
     all_figs_have_legends = True
+    module_algorithm_entries = 0
     place_adaptive_legend = getattr(module, "place_adaptive_legend", None)
     for index, fig_number in enumerate(new_fig_numbers, start=1):
         fig = plt.figure(fig_number)
@@ -576,6 +613,8 @@ def _check_legends_for_module(
         for ax in fig.axes:
             _, labels = ax.get_legend_handles_labels()
             legend_count += len([label for label in labels if label])
+        algo_entry_count = _count_algorithm_legend_entries(fig)
+        module_algorithm_entries += algo_entry_count
         log_debug(
             "INFO: "
             f"module {module_path} - {context}: "
@@ -589,7 +628,9 @@ def _check_legends_for_module(
                 "(labels/legend)."
             )
         assert_legend_present(fig, context)
-        if not _figure_has_legend(fig):
+        has_legend = _figure_has_legend(fig)
+        is_valid = has_legend and algo_entry_count > 0
+        if not has_legend:
             all_figs_have_legends = False
             log_debug(
                 "AVERTISSEMENT: "
@@ -641,12 +682,38 @@ def _check_legends_for_module(
                     f"place_adaptive_legend non exposé par {module_path}; "
                     f"légende absente pour {context}."
                 )
-        if fail_on_missing_legends and not _figure_has_legend(fig):
-            missing_contexts.append(f"{context} [{source_path}]")
+        if fail_on_missing_legends and not is_valid:
+            reason = (
+                "légende absente"
+                if not has_legend
+                else "aucune entrée d'algorithme"
+            )
+            missing_contexts.append(f"{context} [{source_path}] ({reason})")
     if legend_status is not None:
         module_key = module_path.split(".")[-1]
-        legend_status[module_key] = all_figs_have_legends
+        legend_status[module_key] = all_figs_have_legends and module_algorithm_entries > 0
+    module_is_valid = all_figs_have_legends and module_algorithm_entries > 0
+    if legend_report_rows is not None:
+        legend_report_rows.append(
+            {
+                "module": module_path,
+                "status": "PASS" if module_is_valid else "FAIL",
+                "legend_entries": module_algorithm_entries,
+            }
+        )
+    if legend_validity_by_module is not None:
+        legend_validity_by_module[module_path] = module_is_valid
     return missing_contexts
+
+
+def _write_legend_check_report(rows: list[dict[str, object]]) -> None:
+    with LEGEND_CHECK_REPORT_OUTPUT_PATH.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["module", "status", "legend_entries"],
+        )
+        writer.writeheader()
+        writer.writerows(sorted(rows, key=lambda row: str(row["module"])))
 
 
 def _resolve_plot_requirements(step: str, module_path: str) -> PlotRequirements:
@@ -1741,6 +1808,8 @@ def main(argv: list[str] | None = None) -> None:
     set_default_figure_clamp_enabled(not args.no_figure_clamp)
     status_map: dict[str, PlotStatus] = {}
     step1_legend_status: dict[str, bool] = {}
+    legend_check_report_rows: list[dict[str, object]] = []
+    legend_validity_by_module: dict[str, bool] = {}
     invalid_modules = _preflight_validate_plot_modules()
     _validate_step2_plot_module_registry()
     if invalid_modules:
@@ -2127,6 +2196,8 @@ def main(argv: list[str] | None = None) -> None:
                         previous_figures=previous_figures,
                         fail_on_missing_legends=True,
                         legend_status=step1_legend_status,
+                        legend_report_rows=legend_check_report_rows,
+                        legend_validity_by_module=legend_validity_by_module,
                     )
                     if missing_legends:
                         _register_status(
@@ -2180,6 +2251,8 @@ def main(argv: list[str] | None = None) -> None:
                         previous_figures=previous_figures,
                         fail_on_missing_legends=True,
                         legend_status=step1_legend_status,
+                        legend_report_rows=legend_check_report_rows,
+                        legend_validity_by_module=legend_validity_by_module,
                     )
                     if missing_legends:
                         _register_status(
@@ -2272,6 +2345,8 @@ def main(argv: list[str] | None = None) -> None:
                     previous_figures=previous_figures,
                     fail_on_missing_legends=True,
                     legend_status=step1_legend_status,
+                    legend_report_rows=legend_check_report_rows,
+                    legend_validity_by_module=legend_validity_by_module,
                 )
                 if missing_legends:
                     _register_status(
@@ -2353,6 +2428,25 @@ def main(argv: list[str] | None = None) -> None:
         "INFO: rapport de filtrage écrit: "
         f"{PLOT_DATA_FILTER_REPORT_OUTPUT_PATH.resolve()}"
     )
+    _write_legend_check_report(legend_check_report_rows)
+    log_debug(
+        "INFO: rapport des légendes écrit: "
+        f"{LEGEND_CHECK_REPORT_OUTPUT_PATH.resolve()}"
+    )
+    missing_required_step2_legends = [
+        module
+        for module in STEP2_REQUIRED_LEGEND_MODULES
+        if module in PLOT_MODULES["step2"]
+        and module in legend_validity_by_module
+        and not legend_validity_by_module[module]
+    ]
+    if missing_required_step2_legends:
+        details = ", ".join(missing_required_step2_legends)
+        log_error(
+            "ERREUR: sortie finale bloquée, légende Step2 invalide "
+            f"pour: {details}"
+        )
+        sys.exit(1)
     counts = _summarize_statuses(status_map, steps, [*POST_PLOT_MODULES, manifest_module])
     if args.fail_on_error and counts.get("FAIL", 0) > 0:
         sys.exit(1)
