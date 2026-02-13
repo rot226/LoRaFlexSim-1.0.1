@@ -44,7 +44,15 @@ ALGO_ALIASES = {
     "mixra_h": "mixra_h",
     "mixra_opt": "mixra_opt",
     "ucb1_sf": "ucb1_sf",
+    "ucb1-sf": "ucb1_sf",
 }
+COMMON_CURVE_LABELS = {
+    "adr": "ADR",
+    "mixra_h": "MixRA-H",
+    "mixra_opt": "MixRA-Opt",
+    "ucb1_sf": "UCB1-SF",
+}
+SNIR_MODE_LABELS = {"snir_on": "SNIR on", "snir_off": "SNIR off"}
 TARGET_ALGOS = {"adr", "loba", "mixra_h", "mixra_opt", "ucb1_sf"}
 RIGHT_LEGEND_WIDTH_FACTOR = 1.3
 
@@ -95,6 +103,8 @@ def _label_for_algo(algo: str) -> str:
     canonical = _canonical_algo(algo)
     if canonical is None:
         return algo
+    if canonical in COMMON_CURVE_LABELS:
+        return COMMON_CURVE_LABELS[canonical]
     return algo_label(canonical)
 
 
