@@ -13,6 +13,7 @@ import pandas as pd
 
 from article_c.common.plot_helpers import (
     algo_label,
+    cluster_display_label,
     metric_label,
     snir_label,
     apply_plot_style,
@@ -127,10 +128,10 @@ def _select_cluster_rows(
 ) -> tuple[list[dict[str, object]], str]:
     available_clusters = {row.get("cluster") for row in rows}
     if cluster in available_clusters:
-        return filter_cluster(rows, cluster), cluster
+        return filter_cluster(rows, cluster), cluster_display_label(cluster)
     if "all" in available_clusters:
-        return filter_cluster(rows, "all"), "all"
-    return rows, "all"
+        return filter_cluster(rows, "all"), cluster_display_label("all")
+    return rows, cluster_display_label("all")
 
 
 def main(
