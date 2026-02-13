@@ -140,6 +140,42 @@ def _load_author_curves(path: Path) -> list[AuthorCurve]:
     return curves
 
 
+def _load_results_with_fallback(path: Path, *, step: int) -> list[dict[str, object]]:
+    loader = load_step1_aggregated if step == 1 else load_step2_aggregated
+    try:
+        rows = loader(path)
+        if rows:
+            LOGGER.info("source utilisée: aggregates")
+            return rows
+    except Exception as exc:  # noqa: BLE001 - fallback attendu
+        LOGGER.warning("Impossible de charger %s: %s", path, exc)
+
+    by_size_paths = sorted(path.parent.parent.glob("by_size/size_*/aggregated_results.csv"))
+    if not by_size_paths:
+        return []
+    try:
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            writer: csv.DictWriter[str] | None = None
+            for by_size_path in by_size_paths:
+                with by_size_path.open("r", encoding="utf-8", newline="") as src:
+                    reader = csv.DictReader(src)
+                    if not reader.fieldnames:
+                        continue
+                    if writer is None:
+                        writer = csv.DictWriter(handle, fieldnames=reader.fieldnames)
+                        writer.writeheader()
+                    for row in reader:
+                        writer.writerow(row)
+    except OSError as exc:
+        LOGGER.warning("Agrégation by_size impossible vers %s: %s", path, exc)
+        return []
+
+    rows = loader(path)
+    if rows:
+        LOGGER.info("source utilisée: by_size")
+    return rows
+
+
 def _float_or_none(value: object) -> float | None:
     try:
         return float(value)
@@ -435,8 +471,8 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
 
     apply_plot_style()
 
-    step1_rows = load_step1_aggregated(args.step1_csv)
-    step2_rows = load_step2_aggregated(args.step2_csv)
+    step1_rows = _load_results_with_fallback(args.step1_csv, step=1)
+    step2_rows = _load_results_with_fallback(args.step2_csv, step=2)
 
     snir_modes = args.snir_modes
     step1_rows = _filter_rows(

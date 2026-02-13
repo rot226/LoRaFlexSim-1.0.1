@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import math
+import logging
 from pathlib import Path
 import sys
 import warnings
@@ -39,6 +41,8 @@ from article_c.common.plot_helpers import (
 from plot_defaults import resolve_ieee_figsize
 from article_c.common.plotting_style import label_for
 
+LOGGER = logging.getLogger(__name__)
+
 PREFERRED_ALGOS = (
     "apra",
     "aimi",
@@ -62,15 +66,45 @@ def _load_aggregated_rows(base_dir: Path) -> list[dict[str, object]]:
         base_dir / "step2" / "results" / "aggregates" / "aggregated_results.csv",
     )
     for path in candidates:
-        if not path.exists():
-            continue
+        source = "aggregates"
+        step = 2 if path.parts[-3] == "step2" else 1
         try:
-            if path.parts[-3] == "step2":
-                rows.extend(load_step2_aggregated(path))
-            else:
-                rows.extend(load_step1_aggregated(path))
+            current = (
+                load_step2_aggregated(path)
+                if step == 2
+                else load_step1_aggregated(path)
+            )
+            if current:
+                LOGGER.info("source utilisée: %s", source)
+                rows.extend(current)
+                continue
         except ValueError as exc:
             warnings.warn(str(exc), stacklevel=2)
+        by_size_paths = sorted(
+            path.parent.parent.glob("by_size/size_*/aggregated_results.csv")
+        )
+        if not by_size_paths:
+            continue
+        try:
+            with path.open("w", encoding="utf-8", newline="") as handle:
+                writer: csv.DictWriter[str] | None = None
+                for by_size_path in by_size_paths:
+                    with by_size_path.open("r", encoding="utf-8", newline="") as src:
+                        reader = csv.DictReader(src)
+                        if not reader.fieldnames:
+                            continue
+                        if writer is None:
+                            writer = csv.DictWriter(handle, fieldnames=reader.fieldnames)
+                            writer.writeheader()
+                        for row in reader:
+                            writer.writerow(row)
+        except OSError as exc:
+            warnings.warn(f"Agrégation by_size impossible pour {path}: {exc}", stacklevel=2)
+            continue
+        current = load_step2_aggregated(path) if step == 2 else load_step1_aggregated(path)
+        if current:
+            LOGGER.info("source utilisée: by_size")
+            rows.extend(current)
     return rows
 
 
@@ -209,6 +243,7 @@ def _plot_der_by_cluster(df: pd.DataFrame, clusters: list[str]) -> plt.Figure:
 
 
 def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--formats",
