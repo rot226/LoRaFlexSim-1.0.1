@@ -822,7 +822,7 @@ def _simulate_density(
 
 
 def _plot_summary_pdr(output_dir: Path) -> None:
-    results_path = output_dir / "aggregates" / "aggregated_results.csv"
+    results_path = Path(__file__).resolve().parent / "results" / "aggregates" / "aggregated_results.csv"
     if not results_path.exists():
         log_debug(f"Aucun aggregated_results.csv pour tracer le résumé: {results_path}")
         return
@@ -1328,6 +1328,20 @@ def main(argv: list[str] | None = None) -> None:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         log_info(f"Tailles simulées: {sizes_label}")
     aggregated_path = output_dir / "aggregates" / "aggregated_results.csv"
+    if not aggregated_path.exists() and args.plot_summary:
+        log_debug(
+            "Plot de synthèse: aggregated_results.csv absent, agrégation globale déclenchée."
+        )
+        merge_stats = aggregate_results_by_size(
+            output_dir,
+            write_global_aggregated=True,
+        )
+        log_debug(
+            "Agrégation Step1 globale (plot): "
+            f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
+            "dans results/aggregates/aggregated_results.csv."
+        )
+
     if aggregated_path.exists():
         _step1_post_report(output_dir)
         _check_pdr_consistency(output_dir)
@@ -1337,7 +1351,7 @@ def main(argv: list[str] | None = None) -> None:
     elif args.plot_summary:
         log_debug(
             "Plot de synthèse ignoré: results/aggregates/aggregated_results.csv absent "
-            "(utilisez --flat-output ou make_all_plots.py)."
+            "(aucune agrégation exploitable trouvée)."
         )
 
     _log_step1_key_csv_paths(output_dir)
