@@ -489,8 +489,16 @@ def parse_network_size_list(value: str | Sequence[int]) -> list[int]:
 
 
 def replication_ids(count: int) -> list[int]:
-    """Retourne les identifiants de réplications."""
-    return list(range(count))
+    """Retourne les identifiants de réplications (indexés à partir de 0)."""
+    normalized_count = int(count)
+    if normalized_count <= 0:
+        raise ValueError("Le nombre de réplications doit être >= 1.")
+    return list(range(normalized_count))
+
+
+def replication_dirnames(count: int) -> list[str]:
+    """Construit la liste attendue des dossiers `rep_<R>` pour un total donné."""
+    return [f"rep_{replication}" for replication in replication_ids(count)]
 
 
 def timestamp_tag(with_timezone: bool = True) -> str:

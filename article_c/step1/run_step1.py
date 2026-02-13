@@ -54,6 +54,7 @@ from article_c.common.plot_helpers import (
 from plot_defaults import resolve_ieee_figsize
 from article_c.common.utils import (
     parse_network_size_list,
+    replication_dirnames,
     replication_ids,
     set_deterministic_seed,
 )
@@ -214,6 +215,7 @@ def _read_nested_sizes(output_dir: Path, replications: list[int]) -> set[int]:
     sizes: set[int] = set()
     by_size_dir = output_dir / BY_SIZE_DIRNAME
     missing_rep_dirs: list[Path] = []
+    expected_rep_dirs = replication_dirnames(len(replications))
     for size_dir in sorted(by_size_dir.glob("size_*")):
         if not size_dir.is_dir():
             continue
@@ -222,8 +224,8 @@ def _read_nested_sizes(output_dir: Path, replications: list[int]) -> set[int]:
         except (IndexError, ValueError):
             continue
         rep_paths = [
-            size_dir / f"rep_{replication}" / "aggregated_results.csv"
-            for replication in replications
+            size_dir / rep_dir_name / "aggregated_results.csv"
+            for rep_dir_name in expected_rep_dirs
         ]
         if rep_paths and all(path.exists() for path in rep_paths):
             sizes.add(size)

@@ -24,7 +24,7 @@ if find_spec("article_c") is None:
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.csv_io import aggregate_results_by_size
-from article_c.common.utils import parse_network_size_list
+from article_c.common.utils import parse_network_size_list, replication_dirnames
 from article_c.step1.run_step1 import main as run_step1
 from article_c.step2.run_step2 import main as run_step2
 from article_c.validate_results import main as validate_results
@@ -114,6 +114,19 @@ def _assert_no_global_writes_during_simulation(results_dir: Path, step_label: st
         )
 
 
+def _self_check_replication_layout(
+    size_dir: Path,
+    expected_rep_dirs: list[str],
+) -> tuple[list[str], list[str], list[str]]:
+    """Self-check statique: compare les dossiers `rep_*` attendus vs présents."""
+    expected_sorted = sorted(expected_rep_dirs)
+    actual_sorted = sorted(
+        path.name for path in size_dir.glob("rep_*") if path.is_dir()
+    )
+    missing = sorted(set(expected_sorted) - set(actual_sorted))
+    unexpected = sorted(set(actual_sorted) - set(expected_sorted))
+    return expected_sorted, actual_sorted, missing + unexpected
+
 def _assert_output_layout_compliant(
     results_dir: Path,
     expected_sizes: list[int],
@@ -124,22 +137,25 @@ def _assert_output_layout_compliant(
     by_size_dir = results_dir / "by_size"
     if not by_size_dir.exists():
         raise RuntimeError(f"{step_label}: dossier manquant {by_size_dir.resolve()}.")
-    expected_rep_dirs = {f"rep_{replication}" for replication in range(int(replications_total))}
+    expected_rep_dirs = replication_dirnames(replications_total)
     for size in expected_sizes:
         size_dir = by_size_dir / f"size_{size}"
         if not size_dir.is_dir():
             raise RuntimeError(
                 f"{step_label}: layout invalide, dossier manquant {size_dir.resolve()}."
             )
-        rep_dirs = {path.name for path in size_dir.glob("rep_*") if path.is_dir()}
-        missing_rep_dirs = sorted(expected_rep_dirs - rep_dirs)
-        if missing_rep_dirs:
-            missing_rep_paths = [
-                str((size_dir / rep_dir).resolve()) for rep_dir in missing_rep_dirs
+        expected_dirs_sorted, actual_dirs_sorted, layout_diffs = _self_check_replication_layout(
+            size_dir,
+            expected_rep_dirs,
+        )
+        if layout_diffs:
+            expected_rep_paths = [
+                str((size_dir / rep_dir).resolve()) for rep_dir in expected_dirs_sorted
             ]
             raise RuntimeError(
-                f"{step_label}: layout invalide pour size_{size}, réplications manquantes: "
-                f"{missing_rep_dirs}. Chemins absolus attendus: {missing_rep_paths}."
+                f"{step_label}: layout invalide pour size_{size}, rep attendus={expected_dirs_sorted}, "
+                f"rep réels={actual_dirs_sorted}. Différences={layout_diffs}. "
+                f"Chemins absolus attendus: {expected_rep_paths}."
             )
         _assert_cumulative_sizes_nested(results_dir, {int(size)}, step_label)
 

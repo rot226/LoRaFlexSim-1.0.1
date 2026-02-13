@@ -60,6 +60,7 @@ from article_c.common.utils import (
     ensure_dir,
     parse_cli_args,
     parse_network_size_list,
+    replication_dirnames,
     replication_ids,
     set_deterministic_seed,
     timestamp_tag,
@@ -1319,6 +1320,7 @@ def _read_nested_sizes(base_results_dir: Path, replications: list[int]) -> set[i
     sizes: set[int] = set()
     by_size_dir = base_results_dir / BY_SIZE_DIRNAME
     missing_rep_dirs: list[Path] = []
+    expected_rep_dirs = replication_dirnames(len(replications))
     for size_dir in sorted(by_size_dir.glob("size_*")):
         if not size_dir.is_dir():
             continue
@@ -1327,8 +1329,8 @@ def _read_nested_sizes(base_results_dir: Path, replications: list[int]) -> set[i
         except (IndexError, ValueError):
             continue
         rep_paths = [
-            size_dir / f"rep_{replication}" / "aggregated_results.csv"
-            for replication in replications
+            size_dir / rep_dir_name / "aggregated_results.csv"
+            for rep_dir_name in expected_rep_dirs
         ]
         if rep_paths and all(path.exists() for path in rep_paths):
             sizes.add(size)
