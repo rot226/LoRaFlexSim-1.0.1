@@ -1335,6 +1335,34 @@ def _validate_step2_explicit_config_startup(
     )
 
 
+def _build_report_metadata(skip_step1: bool, skip_step2: bool) -> dict[str, object]:
+    """Construit les métadonnées du rapport final (complet vs partiel)."""
+    skipped_steps: list[str] = []
+    if skip_step1:
+        skipped_steps.append("step1")
+    if skip_step2:
+        skipped_steps.append("step2")
+
+    executed_steps = [step for step in ("step1", "step2") if step not in skipped_steps]
+    if skipped_steps:
+        return {
+            "kind": "partial",
+            "executed_steps": executed_steps,
+            "skipped_steps": skipped_steps,
+            "note": (
+                "Rapport partiel: certaines étapes ont été explicitement ignorées "
+                f"({', '.join(skipped_steps)})."
+            ),
+        }
+
+    return {
+        "kind": "full",
+        "executed_steps": executed_steps,
+        "skipped_steps": [],
+        "note": "Rapport complet: step1 et step2 ont été exécutées.",
+    }
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
@@ -1405,6 +1433,7 @@ def main(argv: list[str] | None = None) -> None:
             "step1_results": str(step1_results_dir),
             "step2_results": str(step2_results_dir),
         },
+        "report": _build_report_metadata(args.skip_step1, args.skip_step2),
     }
     campaign_start = perf_counter()
     reference_network_size = int(round(median(requested_sizes)))
@@ -1611,14 +1640,24 @@ def main(argv: list[str] | None = None) -> None:
             requested_sizes,
             "Step2",
         )
+    report_meta = campaign_summary.get("report", {})
+    if isinstance(report_meta, dict) and report_meta.get("kind") == "partial":
+        log_info(f"[REPORT] {report_meta.get('note', 'Rapport partiel demandé.')}")
+
     log_info("Validation des résultats (article C) en cours...")
     validation_args: list[str] = []
+    if args.skip_step1:
+        validation_args.append("--skip-step1")
     if args.skip_step2:
         validation_args.append("--skip-step2")
     validation_code = validate_results(validation_args)
     campaign_summary["validation"] = {
         "status": "ok" if validation_code == 0 else "failed",
         "exit_code": validation_code,
+        "scope": {
+            "skip_step1": bool(args.skip_step1),
+            "skip_step2": bool(args.skip_step2),
+        },
     }
     campaign_summary_path.write_text(
         json.dumps(campaign_summary, indent=2, ensure_ascii=False) + "\n",
