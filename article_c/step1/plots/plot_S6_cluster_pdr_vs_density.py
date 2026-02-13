@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     SNIR_MODES,
     MetricStatus,
     algo_label,
+    cluster_display_map,
     add_global_legend,
     apply_plot_style,
     assert_legend_present,
@@ -40,12 +41,7 @@ MAX_ALGOS_PER_FIG = 3
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
-    cluster_label_map = {
-        "gold": "C1",
-        "silver": "C2",
-        "bronze": "C3",
-    }
-    return {cluster: cluster_label_map.get(cluster, cluster) for cluster in clusters}
+    return cluster_display_map(clusters)
 
 
 def _algo_key(row: dict[str, object]) -> tuple[str, bool]:
@@ -111,6 +107,8 @@ def _plot_metric_page(
         algo_rows = [row for row in rows if _algo_key(row) == (algo, fallback)]
         for cluster_idx, cluster in enumerate(clusters):
             ax = axes[algo_idx][cluster_idx]
+            if algo_idx == 0:
+                ax.set_title(cluster_labels.get(cluster, cluster))
             cluster_rows = [
                 row for row in algo_rows if row.get("cluster") == cluster
             ]
@@ -125,7 +123,7 @@ def _plot_metric_page(
                 values = [points.get(size, float("nan")) for size in network_sizes]
                 label = (
                     f"{algo_label(algo, fallback)} / "
-                    f"Cluster {cluster_labels.get(cluster, cluster)} "
+                    f"{cluster_labels.get(cluster, cluster)} "
                     f"({SNIR_LABELS[snir_mode]})"
                 )
                 ax.plot(

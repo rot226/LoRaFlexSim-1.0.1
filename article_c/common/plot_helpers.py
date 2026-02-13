@@ -164,6 +164,12 @@ DEFAULT_BOUNDED_RATE_CLAMP = False
 DEFAULT_BOUNDED_RATE_STRICT = False
 MASSIVE_NAN_RATIO = 0.5
 _WARNED_METRIC_ALGO_SNIR_CLUSTER: set[tuple[str, str, str, str]] = set()
+_CLUSTER_BASE_LABELS = {
+    "gold": "Cluster 1",
+    "silver": "Cluster 2",
+    "bronze": "Cluster 3",
+    "all": "All clusters",
+}
 
 
 class MetricCheckSeverity(str, Enum):
@@ -1007,9 +1013,13 @@ def warn_metric_checks_by_group(
         points.sort(key=lambda item: item[0])
         series_values = [value for _, value in points]
         if group_keys_list:
-            details = ", ".join(
-                f"{name}={value}" for name, value in zip(group_keys_list, key, strict=False)
-            )
+            details_items: list[str] = []
+            for name, value in zip(group_keys_list, key, strict=False):
+                if name == "cluster":
+                    details_items.append(f"{name}={cluster_display_label(value)}")
+                else:
+                    details_items.append(f"{name}={value}")
+            details = ", ".join(details_items)
             series_label = f"{label} ({details})"
         else:
             series_label = label
@@ -2723,6 +2733,41 @@ def metric_label(key: str, default: str | None = None) -> str:
     if default is not None:
         return default
     return key
+
+
+def _format_percentage(value: float) -> str:
+    percent = float(value) * 100.0
+    rounded = round(percent)
+    if abs(percent - rounded) < 1e-9:
+        return f"{int(rounded)}%"
+    return f"{percent:.1f}%"
+
+
+def cluster_allocation_percentages() -> dict[str, str]:
+    clusters = list(DEFAULT_CONFIG.qos.clusters)
+    proportions = list(DEFAULT_CONFIG.qos.proportions)
+    count = min(len(clusters), len(proportions))
+    return {
+        str(clusters[idx]): _format_percentage(float(proportions[idx]))
+        for idx in range(count)
+    }
+
+
+def cluster_display_label(cluster: object) -> str:
+    normalized = str(cluster or "").strip().lower()
+    base_label = _CLUSTER_BASE_LABELS.get(normalized)
+    if base_label is None:
+        return str(cluster)
+    if normalized == "all":
+        return base_label
+    allocation = cluster_allocation_percentages().get(normalized)
+    if allocation:
+        return f"{base_label} ({allocation})"
+    return base_label
+
+
+def cluster_display_map(clusters: Iterable[object]) -> dict[str, str]:
+    return {str(cluster): cluster_display_label(cluster) for cluster in clusters}
 
 
 def filter_cluster(rows: list[dict[str, object]], cluster: str) -> list[dict[str, object]]:

@@ -15,6 +15,7 @@ from article_c.common.plot_style import label_for
 from article_c.common.plot_helpers import (
     algo_label,
     metric_label,
+    cluster_display_map,
     apply_plot_style,
     assert_legend_present,
     clear_axis_legends,
@@ -68,7 +69,7 @@ def _title_suffix(network_sizes: list[int]) -> str:
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
-    return {cluster: f"{label_for('legend.cluster')} {idx + 1}" for idx, cluster in enumerate(clusters)}
+    return cluster_display_map(clusters)
 
 
 def _canonical_algo(algo: str) -> str:
@@ -181,7 +182,7 @@ def _plot_metric(
     algorithms = sorted({row["algo"] for row in rows})
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
-        cluster_label = cluster_labels.get(cluster, label_for(cluster))
+        cluster_label = cluster_labels.get(cluster, str(cluster))
         for algo in algorithms:
             points = {
                 int(row["network_size"]): row[metric_key]
@@ -331,7 +332,7 @@ def _plot_raw_metric(
     algorithms = sorted({row["algo"] for row in rows})
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
-        cluster_label = cluster_labels.get(cluster, label_for(cluster))
+        cluster_label = cluster_labels.get(cluster, str(cluster))
         for algo in algorithms:
             algo_rows = [row for row in cluster_rows if row.get("algo") == algo]
             replications = sorted(

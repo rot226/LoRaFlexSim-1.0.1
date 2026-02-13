@@ -17,6 +17,7 @@ from article_c.common.plot_helpers import (
     SNIR_LINESTYLES,
     SNIR_MODES,
     MetricStatus,
+    cluster_display_map,
     add_global_legend,
     apply_plot_style,
     assert_legend_present,
@@ -39,7 +40,7 @@ PDR_TARGETS = (0.90, 0.80, 0.70)
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
-    return {cluster: f"C{idx + 1}" for idx, cluster in enumerate(clusters)}
+    return cluster_display_map(clusters)
 
 
 def _cluster_targets(clusters: list[str]) -> dict[str, float | None]:
@@ -137,7 +138,7 @@ def _plot_metric(rows: list[dict[str, object]], metric_key: str) -> plt.Figure:
             target = cluster_targets.get(cluster)
             target_label = f" (target {target:.2f})" if target is not None else ""
             label = (
-                f"Cluster {cluster_labels.get(cluster, cluster)}"
+                f"{cluster_labels.get(cluster, cluster)}"
                 f"{target_label} ({SNIR_LABELS[snir_mode]})"
             )
             ax.plot(

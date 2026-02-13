@@ -16,6 +16,7 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     assert_legend_present,
     MetricStatus,
+    cluster_display_map,
     ensure_network_size,
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
@@ -56,7 +57,7 @@ def _chunk_algorithms(
 
 
 def _cluster_labels(clusters: list[str]) -> dict[str, str]:
-    return {cluster: f"C{idx + 1}" for idx, cluster in enumerate(clusters)}
+    return cluster_display_map(clusters)
 
 
 def _outage_probability(row: dict[str, object]) -> float:
@@ -112,6 +113,7 @@ def _plot_metric_page(
 
     for ax, cluster in zip(axes, clusters, strict=False):
         cluster_rows = [row for row in rows if row.get("cluster") == cluster]
+        ax.set_title(cluster_labels.get(cluster, cluster))
         plot_metric_by_snir(ax, cluster_rows, metric_key)
         ax.set_xlabel("Network size (nodes)")
         ax.set_ylabel("Outage (prob.)")
