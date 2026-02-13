@@ -37,6 +37,9 @@ STEP2_SUCCESS_RATE_MEAN_LOW_THRESHOLD = 0.20
 LOG_LEVELS = {"quiet": 0, "info": 1, "debug": 2}
 _CURRENT_LOG_LEVEL = LOG_LEVELS["info"]
 
+PREFIX_CONTRACT_ERROR = "[CONTRACT_ERROR]"
+PREFIX_IO_ERROR = "[IO_ERROR]"
+
 
 def set_log_level(level: str) -> None:
     global _CURRENT_LOG_LEVEL
@@ -222,13 +225,15 @@ def _assert_output_layout_compliant(
     """Vérifie la conformité stricte du layout `by_size/size_<N>/rep_<R>`."""
     by_size_dir = results_dir / "by_size"
     if not by_size_dir.exists():
-        raise RuntimeError(f"{step_label}: dossier manquant {by_size_dir.resolve()}.")
+        raise RuntimeError(
+            f"{PREFIX_CONTRACT_ERROR} {step_label}: dossier manquant {by_size_dir.resolve()}."
+        )
     expected_rep_dirs = replication_dirnames(replications_total)
     for size in expected_sizes:
         size_dir = by_size_dir / f"size_{size}"
         if not size_dir.is_dir():
             raise RuntimeError(
-                f"{step_label}: layout invalide, dossier manquant {size_dir.resolve()}."
+                f"{PREFIX_CONTRACT_ERROR} {step_label}: layout invalide, dossier manquant {size_dir.resolve()}."
             )
         expected_dirs_sorted, actual_dirs_sorted, missing_reps, unexpected_reps = _self_check_replication_layout(
             size_dir,
@@ -240,7 +245,7 @@ def _assert_output_layout_compliant(
             ]
             expected_rep_paths = [str((size_dir / rep_dir).resolve()) for rep_dir in expected_dirs_sorted]
             raise RuntimeError(
-                f"{step_label}: layout invalide. Taille concernée=size_{size}. "
+                f"{PREFIX_CONTRACT_ERROR} {step_label}: layout invalide. Taille concernée=size_{size}. "
                 f"Réplications manquantes={missing_reps or 'aucune'}. "
                 f"Réplications inattendues={unexpected_reps or 'aucune'}. "
                 f"Rep attendus={expected_dirs_sorted}, rep réels={actual_dirs_sorted}. "
@@ -470,7 +475,7 @@ def _assert_cumulative_sizes(
     """Valide que le CSV contient bien toutes les tailles attendues jusque-là."""
     if not csv_path.exists():
         raise RuntimeError(
-            f"{step_label}: CSV introuvable pour validation cumulative: {csv_path}"
+            f"{PREFIX_IO_ERROR} {step_label}: CSV introuvable pour validation cumulative: {csv_path}"
         )
     with csv_path.open("r", newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)

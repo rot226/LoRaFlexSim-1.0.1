@@ -6,6 +6,8 @@ from __future__ import annotations
 LOG_LEVELS = {"quiet": 0, "info": 1, "debug": 2}
 _CURRENT_LOG_LEVEL = LOG_LEVELS["info"]
 
+PREFIX_IO_ERROR = "[IO_ERROR]"
+
 
 def set_log_level(level: str) -> None:
     global _CURRENT_LOG_LEVEL
@@ -1282,7 +1284,7 @@ def _extract_network_sizes_from_rows(
 
 def _load_csv_data(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     if not path.exists():
-        raise FileNotFoundError(f"CSV introuvable: {path}")
+        raise FileNotFoundError(f"{PREFIX_IO_ERROR} CSV introuvable: {path}")
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         fieldnames = reader.fieldnames or []

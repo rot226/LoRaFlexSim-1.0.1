@@ -41,6 +41,10 @@ from article_c.common.plot_style import (
 from article_c.common.utils import ensure_dir
 from article_c.common.config import CLUSTER_CANONICAL_TABLE, DEFAULT_CONFIG
 
+PREFIX_SCI_WARN = "[SCI_WARN]"
+PREFIX_IO_ERROR = "[IO_ERROR]"
+
+
 COMMON_PLOT_LABELS: dict[str, dict[str, str]] = {
     "algo": {
         "adr": "ADR",
@@ -873,7 +877,7 @@ def warn_metric_checks(
         if violated:
             _emit_metric_check(
                 MetricCheckSeverity.INFO,
-                f"{label}: tendance non monotone observée (attendu {direction_label}, tolérée).",
+                f"{PREFIX_SCI_WARN} {label}: tendance non monotone observée (attendu {direction_label}, tolérée).",
             )
     return MetricStatus.OK
 
@@ -2452,7 +2456,7 @@ def _layout_rect_from_margins(
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
     if not path.exists():
-        raise FileNotFoundError(f"CSV introuvable: {path}")
+        raise FileNotFoundError(f"{PREFIX_IO_ERROR} CSV introuvable: {path}")
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         return list(reader)
@@ -2460,7 +2464,7 @@ def _read_csv_rows(path: Path) -> list[dict[str, str]]:
 
 def safe_load_csv(path: Path) -> list[dict[str, str]] | None:
     if not path.exists():
-        warnings.warn(f"CSV introuvable: {path}", stacklevel=2)
+        warnings.warn(f"{PREFIX_IO_ERROR} CSV introuvable: {path}", stacklevel=2)
         return None
     try:
         rows = _read_csv_rows(path)
