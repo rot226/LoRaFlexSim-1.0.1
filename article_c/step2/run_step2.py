@@ -797,6 +797,67 @@ def _aggregate_learning_curve(
     return aggregated
 
 
+def _format_clamp_ratio_stats(ratios: Sequence[float]) -> str:
+    if not ratios:
+        return "min=0.0000, max=0.0000, mean=0.0000"
+    clamped_ratios = [max(0.0, min(1.0, float(ratio))) for ratio in ratios]
+    mean_ratio = sum(clamped_ratios) / len(clamped_ratios)
+    return (
+        f"min={min(clamped_ratios):.4f}, "
+        f"max={max(clamped_ratios):.4f}, "
+        f"mean={mean_ratio:.4f}"
+    )
+
+
+def _representative_clamp_samples(
+    rows: Sequence[dict[str, object]],
+    sample_count: int = 3,
+) -> list[dict[str, object]]:
+    if not rows:
+        return []
+    sorted_rows = sorted(rows, key=lambda row: int(row["round"]))
+    if len(sorted_rows) <= sample_count:
+        return [dict(row) for row in sorted_rows]
+    candidate_indices = {0, len(sorted_rows) // 2, len(sorted_rows) - 1}
+    return [dict(sorted_rows[index]) for index in sorted(candidate_indices)]
+
+
+def _log_learning_curve_clamp_overview(
+    learning_curve: Sequence[dict[str, object]],
+) -> None:
+    if not learning_curve:
+        return
+    grouped: dict[tuple[int, str], list[dict[str, object]]] = defaultdict(list)
+    for row in learning_curve:
+        grouped[(int(row["network_size"]), str(row["algo"]))].append(dict(row))
+
+    log_info("Résumé clamp traffic_coeff (par taille/algo):")
+    for (network_size, algo), rows in sorted(grouped.items()):
+        clamp_ratios = [float(row.get("traffic_coeff_clamp_rate", 0.0) or 0.0) for row in rows]
+        stats_label = _format_clamp_ratio_stats(clamp_ratios)
+        sample_label = ", ".join(
+            f"r{int(sample['round'])}={max(0.0, min(1.0, float(sample.get('traffic_coeff_clamp_rate', 0.0) or 0.0))):.3f}"
+            for sample in _representative_clamp_samples(rows)
+        )
+        log_info(
+            f"- taille={network_size}, algo={algo}, rounds={len(rows)}, {stats_label}, "
+            f"échantillons: [{sample_label}]"
+        )
+
+    for (network_size, algo), rows in sorted(grouped.items()):
+        log_debug(
+            f"Détail clamp traffic_coeff (taille={network_size}, algo={algo}, "
+            f"{len(rows)} rounds):"
+        )
+        for row in sorted(rows, key=lambda item: int(item["round"])):
+            clamp_ratio = max(
+                0.0,
+                min(1.0, float(row.get("traffic_coeff_clamp_rate", 0.0) or 0.0)),
+            )
+            log_debug(
+                f"  round={int(row['round'])}, avg_reward={float(row.get('avg_reward', 0.0) or 0.0):.6f}, "
+                f"clamp_ratio={clamp_ratio:.6f}"
+            )
 
 
 def _ensure_csv_within_scope(csv_path: Path, scope_root: Path) -> Path:
@@ -3256,6 +3317,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     if learning_curve_rows:
         learning_curve = _aggregate_learning_curve(learning_curve_rows)
+        _log_learning_curve_clamp_overview(learning_curve)
         learning_curve_header = ["network_size", "density", "round", "algo", "avg_reward"]
         learning_curve_values = [
             [
