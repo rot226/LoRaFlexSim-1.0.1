@@ -344,16 +344,14 @@ def _assert_aggregation_contract_consistent(
     expected_sizes: list[int],
     step_label: str,
 ) -> None:
-    """Vérifie le contrat unique d'agrégation (global + by_size)."""
+    """Vérifie le contrat d'agrégation by_size (format unique autorisé)."""
     global_csv = results_dir / "aggregates" / "aggregated_results.csv"
-    _assert_cumulative_sizes(global_csv, set(expected_sizes), step_label)
+    if global_csv.exists():
+        raise RuntimeError(
+            f"{step_label}: variante flat interdite détectée: {global_csv.resolve()}."
+        )
 
-    global_rows, global_fieldnames = 0, []
-    with global_csv.open("r", newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        global_fieldnames = list(reader.fieldnames or [])
-        global_rows = sum(1 for _ in reader)
-
+    reference_fieldnames: list[str] | None = None
     total_by_size_rows = 0
     for size in expected_sizes:
         size_csv = results_dir / "by_size" / f"size_{size}" / "aggregated_results.csv"
@@ -364,16 +362,17 @@ def _assert_aggregation_contract_consistent(
         with size_csv.open("r", newline="", encoding="utf-8") as handle:
             reader = csv.DictReader(handle)
             size_fieldnames = list(reader.fieldnames or [])
-            if global_fieldnames and size_fieldnames and size_fieldnames != global_fieldnames:
+            if reference_fieldnames is None and size_fieldnames:
+                reference_fieldnames = size_fieldnames
+            elif reference_fieldnames and size_fieldnames and size_fieldnames != reference_fieldnames:
                 raise RuntimeError(
-                    f"{step_label}: schéma incohérent entre global et {size_csv.resolve()}."
+                    f"{step_label}: schéma incohérent entre agrégats by_size ({size_csv.resolve()})."
                 )
             total_by_size_rows += sum(1 for _ in reader)
 
-    if total_by_size_rows != global_rows:
+    if total_by_size_rows == 0:
         raise RuntimeError(
-            f"{step_label}: incohérence d'agrégation finale: "
-            f"lignes by_size={total_by_size_rows} != lignes globales={global_rows}."
+            f"{step_label}: incohérence d'agrégation finale, aucune ligne dans by_size."
         )
 RUN_ALL_PRESETS: dict[str, dict[str, object]] = {
     "article-c": {
@@ -1049,8 +1048,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=False,
         help=(
-            "Mode historique (désactivé par défaut). "
-            "run_all force une exécution isolée par taille sous by_size/."
+            "Option historique désormais interdite. "
+            "run_all impose exclusivement by_size/size_*/rep_*."
         ),
     )
     parser.add_argument(
@@ -1425,6 +1424,8 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.quiet:
         args.log_level = "quiet"
+    if args.flat_output:
+        parser.error("--flat-output est interdit: utilisez exclusivement by_size/size_*/rep_*.")
     set_log_level(args.log_level)
     if args.clean and args.clean_hard:
         raise ValueError("Options incompatibles: utilisez --clean ou --clean-hard, pas les deux.")
@@ -1764,19 +1765,19 @@ def main(argv: list[str] | None = None) -> None:
         log_info("[PHASE] step1-aggregation")
         step1_merge_stats = aggregate_results_by_size(
             step1_results_dir,
-            write_global_aggregated=True,
+            write_global_aggregated=False,
         )
         log_debug(
-            "Step1: agrégation globale finale exécutée "
+            "Step1: consolidation by_size finale exécutée "
             f"({step1_merge_stats['global_row_count']} lignes)."
         )
     if not args.skip_step2:
         step2_merge_stats = aggregate_results_by_size(
             step2_results_dir,
-            write_global_aggregated=True,
+            write_global_aggregated=False,
         )
         log_debug(
-            "Step2: agrégation globale finale exécutée "
+            "Step2: consolidation by_size finale exécutée "
             f"({step2_merge_stats['global_row_count']} lignes)."
         )
     if not args.skip_step1:
