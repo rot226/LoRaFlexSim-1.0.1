@@ -8,6 +8,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 from importlib.util import find_spec
 from pathlib import Path
 from statistics import median
@@ -158,6 +159,88 @@ def _assert_output_layout_compliant(
                 f"Chemins absolus attendus: {expected_rep_paths}."
             )
         _assert_cumulative_sizes_nested(results_dir, {int(size)}, step_label)
+
+
+def _missing_replications_by_size(
+    results_dir: Path,
+    expected_sizes: list[int],
+    replications_total: int,
+) -> dict[int, list[int]]:
+    """Scanne `by_size/size_<N>/rep_<R>` et retourne les réplications manquantes."""
+    by_size_dir = results_dir / "by_size"
+    expected_reps = set(range(1, int(replications_total) + 1))
+    missing_by_size: dict[int, list[int]] = {}
+    for size in expected_sizes:
+        size_dir = by_size_dir / f"size_{int(size)}"
+        existing_reps: set[int] = set()
+        if size_dir.is_dir():
+            for rep_dir in size_dir.glob("rep_*"):
+                if not rep_dir.is_dir():
+                    continue
+                try:
+                    rep_id = int(rep_dir.name.split("rep_", 1)[1])
+                except (IndexError, ValueError):
+                    continue
+                if rep_id > 0:
+                    existing_reps.add(rep_id)
+        missing = sorted(expected_reps - existing_reps)
+        if missing:
+            missing_by_size[int(size)] = missing
+    return missing_by_size
+
+
+def _restore_preserved_rep_dirs(
+    preserved_root: Path,
+    size_dir: Path,
+) -> None:
+    for preserved_rep_dir in sorted(preserved_root.glob("rep_*")):
+        target_rep_dir = size_dir / preserved_rep_dir.name
+        if target_rep_dir.exists():
+            shutil.rmtree(target_rep_dir)
+        shutil.copytree(preserved_rep_dir, target_rep_dir)
+
+
+def _relaunch_missing_replications(
+    *,
+    step_label: str,
+    results_dir: Path,
+    missing_by_size: dict[int, list[int]],
+    build_args,
+    runner,
+    base_args: argparse.Namespace,
+) -> list[tuple[int, int]]:
+    """Relance uniquement les couples (size, rep) absents via filtres de taille/réplication."""
+    relaunched: list[tuple[int, int]] = []
+    for size in sorted(missing_by_size):
+        size_dir = results_dir / "by_size" / f"size_{size}"
+        size_dir.mkdir(parents=True, exist_ok=True)
+        for rep in sorted(missing_by_size[size]):
+            with tempfile.TemporaryDirectory(prefix=f"run_all_{step_label.lower()}_") as tmp_dir_str:
+                tmp_dir = Path(tmp_dir_str)
+                preserved_root = tmp_dir / "preserved"
+                preserved_root.mkdir(parents=True, exist_ok=True)
+                for rep_to_preserve in range(1, int(rep) + 1):
+                    if rep_to_preserve == int(rep):
+                        continue
+                    existing_rep_dir = size_dir / f"rep_{rep_to_preserve}"
+                    if existing_rep_dir.is_dir():
+                        shutil.copytree(existing_rep_dir, preserved_root / existing_rep_dir.name)
+
+                relaunch_args = argparse.Namespace(**vars(base_args))
+                relaunch_args.network_sizes = [int(size)]
+                relaunch_args.replications = int(rep)
+                relaunch_args.flat_output = False
+                relaunch_args.reset_status = False
+                runner(build_args(relaunch_args))
+                _restore_preserved_rep_dirs(preserved_root, size_dir)
+
+            generated_rep_dir = size_dir / f"rep_{rep}"
+            if not generated_rep_dir.is_dir():
+                raise RuntimeError(
+                    f"{step_label}: relance ciblée échouée, dossier manquant {generated_rep_dir.resolve()}."
+                )
+            relaunched.append((int(size), int(rep)))
+    return relaunched
 
 
 
@@ -1362,6 +1445,65 @@ def main(argv: list[str] | None = None) -> None:
         if isinstance(cast_sizes, list):
             cast_sizes.append(size_summary)
         log_info(f"Résumé: taille de réseau {size} terminée.")
+
+    if not args.skip_step1:
+        step1_missing = _missing_replications_by_size(
+            step1_results_dir,
+            requested_sizes,
+            replications_total,
+        )
+        if step1_missing:
+            step1_pairs = [
+                (size, rep)
+                for size in sorted(step1_missing)
+                for rep in step1_missing[size]
+            ]
+            log_info(
+                "[RECOVERY] Step1: réplications manquantes détectées, "
+                f"relance ciblée de {step1_pairs}"
+            )
+            relaunched_step1_pairs = _relaunch_missing_replications(
+                step_label="Step1",
+                results_dir=step1_results_dir,
+                missing_by_size=step1_missing,
+                build_args=_build_step1_args,
+                runner=run_step1,
+                base_args=argparse.Namespace(**vars(args)),
+            )
+            log_info(
+                "[RECOVERY] Step1: couples relancés exactement = "
+                f"{relaunched_step1_pairs}"
+            )
+
+    if not args.skip_step2:
+        step2_missing = _missing_replications_by_size(
+            step2_results_dir,
+            requested_sizes,
+            replications_total,
+        )
+        if step2_missing:
+            step2_pairs = [
+                (size, rep)
+                for size in sorted(step2_missing)
+                for rep in step2_missing[size]
+            ]
+            log_info(
+                "[RECOVERY] Step2: réplications manquantes détectées, "
+                f"relance ciblée de {step2_pairs}"
+            )
+            relaunched_step2_pairs = _relaunch_missing_replications(
+                step_label="Step2",
+                results_dir=step2_results_dir,
+                missing_by_size=step2_missing,
+                build_args=_build_step2_args,
+                runner=run_step2,
+                base_args=argparse.Namespace(**step2_explicit_config),
+            )
+            log_info(
+                "[RECOVERY] Step2: couples relancés exactement = "
+                f"{relaunched_step2_pairs}"
+            )
+
     campaign_summary["total_elapsed_seconds"] = round(perf_counter() - campaign_start, 3)
     if not args.skip_step1:
         # 3) Validation du layout by_size/rep immédiatement après la simulation.
