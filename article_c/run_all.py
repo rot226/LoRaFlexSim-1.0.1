@@ -324,6 +324,7 @@ def _assert_cumulative_sizes_nested(
     max_attempts = 3
     retry_delay_s = 0.25
     found_sizes: set[int] = set()
+    valid_files_count = 0
     scan_debug: list[dict[str, object]] = []
 
     for attempt in range(1, max_attempts + 1):
@@ -346,6 +347,7 @@ def _assert_cumulative_sizes_nested(
         )
 
         found_sizes = set()
+        valid_files_count = 0
         size_entries: list[dict[str, object]] = []
         for size_dir in size_dirs:
             try:
@@ -378,11 +380,20 @@ def _assert_cumulative_sizes_nested(
                     {size_value},
                     step_label,
                 )
+                valid_files_count += 1
             found_sizes.add(size_value)
 
         current_scan["size_entries"] = size_entries
         current_scan["found_sizes"] = sorted(found_sizes)
+        current_scan["valid_files_count"] = valid_files_count
         scan_debug.append(current_scan)
+
+        status = "OK" if expected_sizes_so_far.issubset(found_sizes) else "FAIL"
+        log_info(
+            f"{step_label}: scan cumulatif tentative {attempt}/{max_attempts} | "
+            f"tailles trouvées={sorted(found_sizes)} | "
+            f"fichiers valides={valid_files_count} | statut={status}"
+        )
 
         if expected_sizes_so_far.issubset(found_sizes):
             return
@@ -394,11 +405,17 @@ def _assert_cumulative_sizes_nested(
             )
             sleep(retry_delay_s)
 
-    raise RuntimeError(
+    error_message = (
         f"{step_label}: validation cumulative échouée après {max_attempts} tentatives pour "
         f"{base_results_dir.resolve()}. Tailles attendues={sorted(expected_sizes_so_far)}, "
-        f"tailles trouvées={sorted(found_sizes)}. Diagnostic scan complet={json.dumps(scan_debug, ensure_ascii=False)}"
+        f"tailles trouvées={sorted(found_sizes)}. "
+        f"fichiers valides={valid_files_count}. statut=FAIL"
     )
+    if _CURRENT_LOG_LEVEL >= LOG_LEVELS["debug"]:
+        error_message += (
+            f" Diagnostic scan complet={json.dumps(scan_debug, ensure_ascii=False)}"
+        )
+    raise RuntimeError(error_message)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
