@@ -299,6 +299,56 @@ def _load_dataset_from_by_size(
     )
 
 
+def _write_aggregated_results_from_by_size(
+    *,
+    step: str,
+    cache: dict[tuple[str, str], CsvDataBundle],
+) -> Path:
+    step_label = _resolve_step_label(step)
+    results_dir = _resolve_step_results_dir(step)
+    bundle = _resolve_data_bundle(
+        step=step,
+        csv_name="aggregated_results.csv",
+        source="by_size",
+        cache=cache,
+    )
+    if bundle is None:
+        nested_pattern = results_dir / "by_size" / "size_*" / "aggregated_results.csv"
+        raise FileNotFoundError(
+            f"Préflight impossible pour {step_label}: "
+            f"aucun CSV trouvé via {nested_pattern}."
+        )
+    aggregates_dir = results_dir / "aggregates"
+    aggregates_dir.mkdir(parents=True, exist_ok=True)
+    aggregated_path = aggregates_dir / "aggregated_results.csv"
+    with aggregated_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=bundle.fieldnames)
+        writer.writeheader()
+        writer.writerows(bundle.rows)
+    print(
+        "INFO: Préflight agrégats "
+        f"{step_label}: {len(bundle.rows)} lignes écrites dans {aggregated_path}."
+    )
+    return aggregated_path
+
+
+def _preflight_materialize_aggregates(
+    *,
+    steps: list[str],
+    source: str,
+    cache: dict[tuple[str, str], CsvDataBundle],
+) -> dict[str, Path]:
+    if source != "by_size":
+        return {}
+    aggregated_paths: dict[str, Path] = {}
+    for step in steps:
+        aggregated_paths[step] = _write_aggregated_results_from_by_size(
+            step=step,
+            cache=cache,
+        )
+    return aggregated_paths
+
+
 def _report_missing_csv(
     *,
     step_label: str,
@@ -1685,6 +1735,15 @@ def main(argv: list[str] | None = None) -> None:
     step1_csv: Path | None = None
     step2_csv: Path | None = None
 
+    try:
+        preflight_aggregated_paths = _preflight_materialize_aggregates(
+            steps=steps,
+            source=args.source,
+            cache=step_data_cache,
+        )
+    except FileNotFoundError as exc:
+        parser.error(str(exc))
+
     for step in steps:
         step_label = _resolve_step_label(step)
         primary_bundle = _resolve_data_bundle(
@@ -1703,7 +1762,12 @@ def main(argv: list[str] | None = None) -> None:
             step_errors[step] = f"CSV {step_label} manquant"
             continue
         step_primary_bundle[step] = primary_bundle
-        if args.source == "aggregated" and primary_bundle.source_paths:
+        if args.source == "by_size" and step in preflight_aggregated_paths:
+            if step == "step1":
+                step1_csv = preflight_aggregated_paths[step]
+            else:
+                step2_csv = preflight_aggregated_paths[step]
+        elif args.source == "aggregated" and primary_bundle.source_paths:
             if step == "step1":
                 step1_csv = primary_bundle.source_paths[0]
             else:
@@ -1723,12 +1787,7 @@ def main(argv: list[str] | None = None) -> None:
         step_errors["step2"] = message
 
     if not args.skip_scientific_qa and "step1" in steps and "step2" in steps:
-        if args.source != "aggregated":
-            print(
-                "AVERTISSEMENT: QA scientifique ignorée avec --source by_size "
-                "(nécessite des fichiers agrégés explicites)."
-            )
-        elif step1_csv is not None and step2_csv is not None:
+        if step1_csv is not None and step2_csv is not None:
             from article_c.qa_scientific_checks import run_scientific_checks
 
             qa_code, _ = run_scientific_checks(
