@@ -55,6 +55,15 @@ STEP2_REQUIRED_LEGEND_MODULES = (
     "article_c.step2.plots.plot_RL5",
     "article_c.step2.plots.plot_RL6_cluster_outage_vs_density",
 )
+REQUIRED_REPLICATION_CSVS: dict[str, tuple[str, ...]] = {
+    "step1": ("raw_packets.csv", "raw_metrics.csv", "aggregated_results.csv"),
+    "step2": (
+        "raw_results.csv",
+        "raw_all.csv",
+        "raw_cluster.csv",
+        "aggregated_results.csv",
+    ),
+}
 
 
 class VerificationError(RuntimeError):
@@ -172,6 +181,7 @@ def _check_replication_dirs(expected_replications: int) -> None:
     expected_reps = {f"rep_{idx}" for idx in range(expected_replications)}
     for step in ("step1", "step2"):
         results_dir = BASE_DIR / step / "results"
+        required_csvs = REQUIRED_REPLICATION_CSVS.get(step, ())
         size_dirs = _iter_nested_size_dirs(results_dir)
         for size in EXPECTED_SIZES:
             size_dir = size_dirs.get(size)
@@ -191,6 +201,17 @@ def _check_replication_dirs(expected_replications: int) -> None:
                     f"{step}: réplications manquantes pour {size_dir}: {missing} "
                     f"(attendues: rep_0..rep_{expected_replications - 1})."
                 )
+            for rep_name in sorted(found):
+                rep_dir = size_dir / rep_name
+                missing_csvs = [
+                    csv_name
+                    for csv_name in required_csvs
+                    if not (rep_dir / csv_name).exists()
+                ]
+                if missing_csvs:
+                    raise VerificationError(
+                        f"{step}: CSV obligatoires manquants dans {rep_dir}: {missing_csvs}."
+                    )
 
 
 def _check_step_sizes_completeness() -> list[str]:
