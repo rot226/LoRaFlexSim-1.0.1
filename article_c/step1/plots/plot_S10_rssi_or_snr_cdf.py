@@ -101,10 +101,14 @@ def _as_float(value: str | None) -> float | None:
         return None
 
 
-def _as_bool(value: str | None) -> bool:
-    if value is None or value == "":
+def _as_bool(value: object | None) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
         return False
-    return value.strip().lower() in {"1", "true", "yes", "vrai"}
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "t", "vrai"}
 
 
 def _compute_cdf(values: Iterable[float]) -> tuple[list[float], list[float]]:
