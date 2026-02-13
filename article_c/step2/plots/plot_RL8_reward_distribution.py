@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.lines import Line2D
 
+from article_c.common.csv_io import resolve_step2_input_csv_paths
 from article_c.common.plot_helpers import (
     algo_label,
     apply_plot_style,
@@ -58,30 +59,22 @@ def _load_step2_raw_results(
     *,
     allow_sample: bool = True,
 ) -> list[dict[str, object]]:
-    raw_pattern = results_dir / "by_size" / "size_*" / "rep_*" / "raw_results.csv"
-    raw_paths = sorted(results_dir.glob("by_size/size_*/rep_*/raw_results.csv"))
-    fallback_path = results_dir / "aggregates" / "aggregated_results.csv"
-
     dataframes: list[pd.DataFrame] = []
-    source_label = str(raw_pattern)
-    if raw_paths:
-        for raw_path in raw_paths:
-            df = pd.read_csv(raw_path)
-            if df.empty:
-                continue
-            dataframes.append(df)
-    if not dataframes and fallback_path.exists():
-        df = pd.read_csv(fallback_path)
-        if not df.empty:
-            dataframes.append(df)
-            source_label = str(fallback_path)
-    if not raw_paths and not fallback_path.exists():
+    try:
+        source_paths = resolve_step2_input_csv_paths(results_dir)
+    except FileNotFoundError as exc:
         warnings.warn(
-            "Aucun CSV Step2 trouvé (motif by_size/size_*/rep_*/raw_results.csv, "
-            f"fallback: {fallback_path}).",
+            str(exc),
             stacklevel=2,
         )
         return []
+
+    source_label = str(source_paths[0])
+    for source_path in source_paths:
+        df = pd.read_csv(source_path)
+        if df.empty:
+            continue
+        dataframes.append(df)
 
     if not dataframes:
         warnings.warn(

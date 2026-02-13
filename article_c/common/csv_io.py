@@ -197,6 +197,29 @@ def _coerce_positive_network_size(value: object) -> int:
     return int(size)
 
 
+def resolve_step2_input_csv_paths(results_dir: Path) -> list[Path]:
+    """Résout les CSV d'entrée Step2 selon l'ordre de priorité contractuel.
+
+    Ordre:
+    1. `results/by_size/size_*/rep_*/raw_results.csv`
+    2. `results/aggregates/aggregated_results.csv`
+    3. `FileNotFoundError` explicite.
+    """
+    nested_raw_paths = sorted(results_dir.glob("by_size/size_*/rep_*/raw_results.csv"))
+    if nested_raw_paths:
+        return nested_raw_paths
+
+    aggregated_path = results_dir / "aggregates" / "aggregated_results.csv"
+    if aggregated_path.exists():
+        return [aggregated_path]
+
+    nested_pattern = results_dir / "by_size" / "size_*" / "rep_*" / "raw_results.csv"
+    raise FileNotFoundError(
+        "Aucun CSV Step2 trouvé. Chemins recherchés (dans cet ordre): "
+        f"{nested_pattern} puis {aggregated_path}."
+    )
+
+
 def _missing_value_for_column(column: str) -> object:
     if column in {"network_size", "density"}:
         return math.nan
