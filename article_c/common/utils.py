@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import random
 from datetime import datetime, timezone
 from pathlib import Path
@@ -576,6 +577,10 @@ def assign_clusters(
     if len(clusters) != len(proportions):
         raise ValueError("La liste des clusters doit correspondre aux proportions.")
     total = sum(float(value) for value in proportions)
+    if not math.isclose(total, 1.0, rel_tol=1e-9, abs_tol=1e-6):
+        raise ValueError(
+            "Configuration QoS invalide: la somme des pourcentages doit être 100%."
+        )
     if total <= 0:
         weights = [1.0 for _ in clusters]
     else:
