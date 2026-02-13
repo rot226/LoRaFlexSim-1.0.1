@@ -91,15 +91,31 @@ def _check_required_replication_files(
     if expected_rep_dirs is not None:
         missing_rep_dirs = sorted(expected_rep_dirs - discovered_rep_dirs)
         if missing_rep_dirs:
+            missing_details = []
+            for relative_rep_dir in missing_rep_dirs:
+                parts = Path(relative_rep_dir).parts
+                size_label = next((part for part in parts if part.startswith("size_")), "size_inconnue")
+                rep_label = next((part for part in parts if part.startswith("rep_")), "rep_inconnue")
+                abs_expected = (results_dir / relative_rep_dir).resolve()
+                missing_details.append(
+                    f"taille concernée={size_label}, réplication manquante={rep_label}, "
+                    f"chemin absolu attendu={abs_expected}"
+                )
             tracker.add(
-                f"{step_label}: répertoires de réplication manquants: {', '.join(missing_rep_dirs)}."
+                f"{step_label}: répertoires de réplication manquants: {' ; '.join(missing_details)}."
             )
 
     for rep_dir in rep_dirs:
         for filename in required_files:
             expected = rep_dir / filename
             if not expected.exists():
-                tracker.add(f"{step_label}: fichier obligatoire manquant: {expected}.")
+                size_label = rep_dir.parent.name
+                rep_label = rep_dir.name
+                tracker.add(
+                    f"{step_label}: fichier obligatoire manquant. "
+                    f"Taille concernée={size_label}, réplication manquante={rep_label}, "
+                    f"chemin absolu attendu={expected.resolve()}."
+                )
 
 
 def _check_constant(
