@@ -14,6 +14,7 @@ import argparse
 import csv
 import importlib
 import inspect
+import json
 import re
 import sys
 from pathlib import Path
@@ -37,6 +38,7 @@ from article_c.make_all_plots import (
 SUPPORTED_FORMATS = ("png", "pdf", "eps", "svg")
 EXPECTED_SIZES: tuple[int, ...] = (80, 160, 320, 640, 1280)
 LEGEND_CHECK_REPORT_PATH = BASE_DIR / "legend_check_report.csv"
+SIMULATION_QUALITY_REPORT_PATH = BASE_DIR / "simulation_quality_verify_all.json"
 ALGO_LEGEND_KEYWORDS = ("adr", "mixra", "ucb1")
 STEP2_REQUIRED_LEGEND_MODULES = (
     "article_c.step2.plots.plot_RL1",
@@ -61,6 +63,24 @@ def _build_parser() -> argparse.ArgumentParser:
         "--skip-render-check",
         action="store_true",
         help="N'exécute pas les modules de plots pour les contrôles légende/dimension.",
+    )
+    parser.add_argument(
+        "--success-rate-mean-min-n80",
+        type=float,
+        default=0.80,
+        help="Seuil minimum de success_rate_mean pour la taille 80.",
+    )
+    parser.add_argument(
+        "--collision-dominance-max",
+        type=float,
+        default=0.70,
+        help="Seuil maximum de dominance des collisions (collisions / pertes totales).",
+    )
+    parser.add_argument(
+        "--ucb1-non-zero-success-ratio-min",
+        type=float,
+        default=0.80,
+        help="Seuil minimum de ratio des lignes UCB1 avec success_rate_mean > 0.",
     )
     return parser
 
@@ -309,6 +329,140 @@ def _check_legends_and_sizes() -> list[str]:
     return failures
 
 
+def _to_float(value: object) -> float | None:
+    try:
+        if value in (None, ""):
+            return None
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_int(value: object) -> int | None:
+    try:
+        if value in (None, ""):
+            return None
+        return int(float(str(value).strip()))
+    except (TypeError, ValueError):
+        return None
+
+
+def _read_csv_rows(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return [dict(row) for row in csv.DictReader(handle)]
+
+
+def _assess_simulation_quality(args: argparse.Namespace) -> dict[str, object]:
+    thresholds = {
+        "success_rate_mean_min_n80": float(args.success_rate_mean_min_n80),
+        "collision_dominance_max": float(args.collision_dominance_max),
+        "ucb1_non_zero_success_ratio_min": float(args.ucb1_non_zero_success_ratio_min),
+    }
+    metrics: dict[str, float | None] = {
+        "success_rate_mean_n80": None,
+        "collision_dominance": None,
+        "ucb1_non_zero_success_ratio": None,
+    }
+    reasons: list[str] = []
+    actions: list[str] = []
+
+    diagnostics_path = BASE_DIR / "step2" / "results" / "aggregates" / "diagnostics_step2_by_size.csv"
+    diagnostics_rows = _read_csv_rows(diagnostics_path)
+    for row in diagnostics_rows:
+        size = _to_int(row.get("network_size") or row.get("density"))
+        if size != 80:
+            continue
+        metrics["success_rate_mean_n80"] = _to_float(row.get("success_rate_mean"))
+        break
+
+    success_n80 = metrics["success_rate_mean_n80"]
+    if success_n80 is None:
+        reasons.append("Mesure success_rate_mean_n80 indisponible.")
+        actions.append(
+            "Vérifier la présence de diagnostics_step2_by_size.csv et l'entrée network_size=80."
+        )
+    elif success_n80 < thresholds["success_rate_mean_min_n80"]:
+        reasons.append(
+            "success_rate_mean_n80 "
+            f"{success_n80:.4f} < seuil {thresholds['success_rate_mean_min_n80']:.4f}."
+        )
+        actions.append(
+            "Relancer Step2 pour la taille 80 (plus de réplications / seeds) et inspecter les causes de pertes."
+        )
+
+    losses_path = BASE_DIR / "step2" / "results" / "aggregates" / "loss_causes_histogram.csv"
+    losses_rows = _read_csv_rows(losses_path)
+    if losses_rows:
+        by_cause: dict[str, int] = {}
+        for row in losses_rows:
+            cause = str(row.get("cause", "")).strip().lower()
+            count = _to_int(row.get("count")) or 0
+            if cause:
+                by_cause[cause] = by_cause.get(cause, 0) + count
+        total_losses = sum(by_cause.values())
+        collision_losses = by_cause.get("collisions", 0)
+        metrics["collision_dominance"] = (
+            collision_losses / total_losses if total_losses > 0 else 0.0
+        )
+    collision_dominance = metrics["collision_dominance"]
+    if collision_dominance is None:
+        reasons.append("Mesure collision_dominance indisponible.")
+        actions.append(
+            "Générer/valider loss_causes_histogram.csv pour confirmer la répartition des pertes."
+        )
+    elif collision_dominance > thresholds["collision_dominance_max"]:
+        reasons.append(
+            "collision_dominance "
+            f"{collision_dominance:.4f} > seuil {thresholds['collision_dominance_max']:.4f}."
+        )
+        actions.append(
+            "Réduire la contention radio (duty-cycle/charge), ajuster ADR ou stratégie d'accès pour diminuer les collisions."
+        )
+
+    aggregated_path = BASE_DIR / "step2" / "results" / "aggregates" / "aggregated_results.csv"
+    aggregated_rows = _read_csv_rows(aggregated_path)
+    ucb1_rows = [
+        row for row in aggregated_rows if str(row.get("algorithm", "")).strip().lower() == "ucb1"
+    ]
+    if ucb1_rows:
+        non_zero = 0
+        for row in ucb1_rows:
+            success_value = _to_float(row.get("success_rate_mean"))
+            if success_value is not None and success_value > 0.0:
+                non_zero += 1
+        metrics["ucb1_non_zero_success_ratio"] = non_zero / len(ucb1_rows)
+    ucb1_ratio = metrics["ucb1_non_zero_success_ratio"]
+    if ucb1_ratio is None:
+        reasons.append("Mesure ucb1_non_zero_success_ratio indisponible.")
+        actions.append(
+            "Vérifier aggregated_results.csv et la colonne algorithm pour les lignes UCB1."
+        )
+    elif ucb1_ratio < thresholds["ucb1_non_zero_success_ratio_min"]:
+        reasons.append(
+            "ucb1_non_zero_success_ratio "
+            f"{ucb1_ratio:.4f} < seuil {thresholds['ucb1_non_zero_success_ratio_min']:.4f}."
+        )
+        actions.append(
+            "Réviser la configuration UCB1 (exploration/récompense) et augmenter la durée de convergence."
+        )
+
+    quality = "low" if reasons else "ok"
+    summary: dict[str, object] = {
+        "simulation_quality": quality,
+        "thresholds": thresholds,
+        "metrics": metrics,
+        "messages": reasons,
+        "actions": actions,
+    }
+    SIMULATION_QUALITY_REPORT_PATH.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return summary
+
+
 def main() -> int:
     args = _build_parser().parse_args()
     formats = _parse_formats(args.formats)
@@ -323,13 +477,24 @@ def main() -> int:
     if not args.skip_render_check:
         failures.extend(_check_legends_and_sizes())
 
+    quality_summary = _assess_simulation_quality(args)
+    quality = str(quality_summary.get("simulation_quality", "ok"))
+
     if failures:
         print("FAIL")
         for item in failures:
             print(f"- {item}")
+        print(f"simulation_quality={quality}")
         return 1
 
     print("PASS")
+    print(f"simulation_quality={quality}")
+    if quality == "low":
+        print("QUALITÉ SIMULATION: LOW (figures générées mais interprétation prudente)")
+        for message in quality_summary.get("messages", []):
+            print(f"- {message}")
+        for action in quality_summary.get("actions", []):
+            print(f"  action: {action}")
     return 0
 
 
