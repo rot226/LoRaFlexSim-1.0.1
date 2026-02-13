@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 from pathlib import Path
 from typing import Iterable
 import warnings
@@ -40,8 +39,19 @@ MIXRA_FALLBACK_COLUMNS = ("mixra_opt_fallback", "mixra_fallback", "fallback")
 def _read_rows(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         raise FileNotFoundError(f"Fichier introuvable : {path}")
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        return list(csv.DictReader(handle))
+
+    patterns = [
+        path / "size_*" / "rep_*" / "raw_packets.csv",
+        path / "by_size" / "size_*" / "rep_*" / "raw_packets.csv",
+    ]
+    csv_files = sorted({csv_path for pattern in patterns for csv_path in path.glob(str(pattern.relative_to(path)))})
+    if not csv_files:
+        raise FileNotFoundError("Aucun fichier trouvé.")
+
+    dataframes = [pd.read_csv(csv_path) for csv_path in csv_files]
+    merged_df = pd.concat(dataframes, ignore_index=True, sort=False)
+    merged_df = merged_df.astype(object).where(pd.notna(merged_df), None)
+    return merged_df.to_dict(orient="records")
 
 
 def _pick_column(columns: Iterable[str], candidates: Iterable[str]) -> str | None:
@@ -233,8 +243,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--input",
         type=Path,
-        default=Path(__file__).resolve().parents[1] / "results" / "raw_packets.csv",
-        help="Chemin du fichier raw_packets.csv.",
+        default=Path(__file__).resolve().parents[1] / "results" / "by_size",
+        help="Répertoire contenant size_*/rep_*/raw_packets.csv.",
     )
     parser.add_argument(
         "--metric",
