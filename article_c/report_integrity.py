@@ -46,8 +46,8 @@ class IntegrityIssueCounter:
 STEP_LAYOUT = {
     "step1": {
         "dir_arg": "step1_dir",
-        "flat_files": ("raw_metrics.csv", "aggregated_results.csv"),
-        "nested_files": ("raw_metrics.csv", "aggregated_results.csv"),
+        "flat_files": ("aggregates/aggregated_results.csv",),
+        "nested_files": ("raw_packets.csv", "raw_metrics.csv", "aggregated_results.csv"),
     },
     "step2": {
         "dir_arg": "step2_dir",
@@ -136,7 +136,7 @@ def _read_header(path: Path) -> list[str]:
 
 
 def _parse_sized_rep_path(path: Path) -> tuple[str, int, int] | None:
-    match = re.search(r"size_(\d+)/rep_(\d+)/(.*)$", path.as_posix())
+    match = re.search(r"by_size/size_(\d+)/rep_(\d+)/(.*)$", path.as_posix())
     if not match:
         return None
     return match.group(3), int(match.group(1)), int(match.group(2))
@@ -170,7 +170,7 @@ def _collect_nested_integrity(
         csv_name: {} for csv_name in nested_files
     }
 
-    for path in sorted(step_dir.glob("size_*/rep_*/*.csv")):
+    for path in sorted(step_dir.glob("by_size/size_*/rep_*/*.csv")):
         parsed = _parse_sized_rep_path(path)
         if parsed is None:
             continue
@@ -404,7 +404,6 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     expected_sizes = _parse_int_csv_list(args.network_sizes)
     files = [
-        args.step1_dir / "raw_metrics.csv",
         args.step1_dir / "aggregates" / "aggregated_results.csv",
         args.step2_dir / "raw_results.csv",
         args.step2_dir / "aggregates" / "aggregated_results.csv",

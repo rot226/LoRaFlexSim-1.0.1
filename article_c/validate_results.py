@@ -57,13 +57,36 @@ def _read_csv(path: Path) -> tuple[list[dict[str, object]], list[str]]:
 
 
 def _collect_size_aggregated_csvs(results_dir: Path) -> list[Path]:
-    return sorted(results_dir.glob("by_size/size_*/aggregated_results.csv"))
+    return sorted(results_dir.glob("by_size/size_*/rep_*/aggregated_results.csv"))
 
 
 def _check_by_size_coverage(results_dir: Path, tracker: AnomalyTracker, step_label: str) -> None:
     by_size_paths = _collect_size_aggregated_csvs(results_dir)
     if not by_size_paths:
         tracker.add(f"{step_label}: aucun agrégat by_size trouvé sous {results_dir / 'by_size'}.")
+
+
+def _check_required_replication_files(
+    results_dir: Path,
+    tracker: AnomalyTracker,
+    step_label: str,
+    required_files: tuple[str, ...],
+) -> None:
+    rep_dirs = sorted(
+        path
+        for path in results_dir.glob("by_size/size_*/rep_*")
+        if path.is_dir()
+    )
+    if not rep_dirs:
+        tracker.add(
+            f"{step_label}: aucun dossier de réplication trouvé sous {results_dir / 'by_size'} (attendu: by_size/size_<N>/rep_<R>)."
+        )
+        return
+    for rep_dir in rep_dirs:
+        for filename in required_files:
+            expected = rep_dir / filename
+            if not expected.exists():
+                tracker.add(f"{step_label}: fichier obligatoire manquant: {expected}.")
 
 
 def _check_constant(
@@ -250,18 +273,15 @@ def validate_results(
 ) -> AnomalyTracker:
     tracker = AnomalyTracker(max_samples=max_samples)
     _check_by_size_coverage(step1_dir, tracker, "Step1")
+    _check_required_replication_files(
+        step1_dir,
+        tracker,
+        "Step1",
+        required_files=("raw_packets.csv", "raw_metrics.csv", "aggregated_results.csv"),
+    )
     if not skip_step2:
         _check_by_size_coverage(step2_dir, tracker, "Step2")
 
-    _validate_pdr_file(
-        step1_dir / "raw_metrics.csv",
-        pdr_key="pdr",
-        sent_key="sent",
-        received_key="received",
-        tolerance=tolerance,
-        const_tolerance=const_tolerance,
-        tracker=tracker,
-    )
     _validate_pdr_file(
         step1_dir / "aggregates" / "aggregated_results.csv",
         pdr_key="pdr_mean",
@@ -272,12 +292,6 @@ def validate_results(
         tracker=tracker,
     )
     if not skip_step2:
-        _validate_reward_file(
-            step2_dir / "raw_results.csv",
-            reward_key="reward",
-            const_tolerance=const_tolerance,
-            tracker=tracker,
-        )
         _validate_reward_file(
             step2_dir / "aggregates" / "aggregated_results.csv",
             reward_key="reward_mean",
