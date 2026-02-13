@@ -1011,6 +1011,20 @@ def warn_metric_checks_by_group(
             f"Aucune valeur utilisable pour {label} (clé {median_key}, manque de séries).",
         )
         return
+    def _group_value_labels(group_name: str, group_value: object) -> tuple[str, str]:
+        internal_key = str(group_value)
+        if group_name == "algo":
+            display_value = algo_label(str(group_value))
+        elif group_name == "snir_mode":
+            display_value = snir_label(str(group_value))
+        elif group_name == "cluster":
+            display_value = cluster_display_label(group_value)
+        elif group_name == "metric":
+            display_value = metric_label(str(group_value), default=str(group_value))
+        else:
+            display_value = str(group_value)
+        return display_value, internal_key
+
     for key, points in grouped.items():
         if not points:
             continue
@@ -1019,10 +1033,8 @@ def warn_metric_checks_by_group(
         if group_keys_list:
             details_items: list[str] = []
             for name, value in zip(group_keys_list, key, strict=False):
-                if name == "cluster":
-                    details_items.append(f"{name}={cluster_display_label(value)}")
-                else:
-                    details_items.append(f"{name}={value}")
+                display_value, internal_key = _group_value_labels(name, value)
+                details_items.append(f"{name}={display_value} [key={internal_key}]")
             details = ", ".join(details_items)
             series_label = f"{label} ({details})"
         else:
