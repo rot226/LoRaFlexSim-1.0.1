@@ -374,6 +374,44 @@ def _assert_aggregation_contract_consistent(
         raise RuntimeError(
             f"{step_label}: incohérence d'agrégation finale, aucune ligne dans by_size."
         )
+
+
+def _assert_required_aggregates_present(
+    results_dir: Path,
+    expected_sizes: list[int],
+    step_label: str,
+) -> None:
+    """Valide la présence (et non-vacuité) des agrégats par taille obligatoires."""
+    missing_paths: list[str] = []
+    empty_paths: list[str] = []
+    for size in expected_sizes:
+        aggregate_path = results_dir / "by_size" / f"size_{int(size)}" / "aggregated_results.csv"
+        if not aggregate_path.exists():
+            missing_paths.append(str(aggregate_path.resolve()))
+            continue
+        with aggregate_path.open("r", newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            if sum(1 for _ in reader) == 0:
+                empty_paths.append(str(aggregate_path.resolve()))
+    if missing_paths or empty_paths:
+        raise RuntimeError(
+            f"{PREFIX_CONTRACT_ERROR} {step_label}: agrégats obligatoires invalides. "
+            f"Manquants={missing_paths or 'aucun'}. "
+            f"Vides={empty_paths or 'aucun'}."
+        )
+
+
+def _run_verify_all_strict(replications_total: int) -> None:
+    """Exécute verify_all en mode strict et propage toute exception."""
+    command = [
+        sys.executable,
+        "-m",
+        "article_c.tools.verify_all",
+        "--replications",
+        str(int(replications_total)),
+    ]
+    log_info("[STRICT_PIPELINE] Exécution finale verify_all...")
+    subprocess.run(command, check=True)
 RUN_ALL_PRESETS: dict[str, dict[str, object]] = {
     "article-c": {
         "network_sizes": list(DEFAULT_CONFIG.scenario.network_sizes),
@@ -925,6 +963,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Répertoire de sortie de l'étape 1.",
+    )
+    parser.add_argument(
+        "--strict-pipeline",
+        action="store_true",
+        help=(
+            "Active les contrôles stricts pipeline: vérification stricte du layout, "
+            "agrégats obligatoires, puis verify_all final avec exception propagée."
+        ),
     )
     parser.add_argument(
         "--clean",
@@ -1799,6 +1845,33 @@ def main(argv: list[str] | None = None) -> None:
             requested_sizes,
             "Step2",
         )
+
+    if args.strict_pipeline:
+        log_info("[STRICT_PIPELINE] Contrôles stricts supplémentaires activés.")
+        if not args.skip_step1:
+            _assert_output_layout_compliant(
+                step1_results_dir,
+                requested_sizes,
+                replications_total,
+                "Step1",
+            )
+            _assert_required_aggregates_present(
+                step1_results_dir,
+                requested_sizes,
+                "Step1",
+            )
+        if not args.skip_step2:
+            _assert_output_layout_compliant(
+                step2_results_dir,
+                requested_sizes,
+                replications_total,
+                "Step2",
+            )
+            _assert_required_aggregates_present(
+                step2_results_dir,
+                requested_sizes,
+                "Step2",
+            )
     report_meta = campaign_summary.get("report", {})
     if isinstance(report_meta, dict) and report_meta.get("kind") == "partial":
         log_info(f"[REPORT] {report_meta.get('note', 'Rapport partiel demandé.')}")
@@ -1818,6 +1891,9 @@ def main(argv: list[str] | None = None) -> None:
             "skip_step2": bool(args.skip_step2),
         },
     }
+    if args.strict_pipeline:
+        _run_verify_all_strict(replications_total)
+        campaign_summary["strict_pipeline_verify_all"] = "ok"
     campaign_summary_path.write_text(
         json.dumps(campaign_summary, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
