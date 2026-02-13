@@ -157,6 +157,25 @@ BOUNDED_RATE_MIN = 0.0
 BOUNDED_RATE_MAX = 1.0
 DEFAULT_BOUNDED_RATE_CLAMP = False
 DEFAULT_BOUNDED_RATE_STRICT = False
+MASSIVE_NAN_RATIO = 0.5
+
+
+class MetricCheckSeverity(str, Enum):
+    INFO = "info"
+    WARN = "warn"
+    ERROR = "error"
+
+
+def _emit_metric_check(severity: MetricCheckSeverity, message: str) -> None:
+    if severity is MetricCheckSeverity.INFO:
+        LOGGER.info("[METRIC-CHECK][INFO] %s", message)
+        return
+    if severity is MetricCheckSeverity.WARN:
+        LOGGER.warning("[METRIC-CHECK][WARN] %s", message)
+        warnings.warn(f"[WARN] {message}", stacklevel=3)
+        return
+    LOGGER.error("[METRIC-CHECK][ERROR] %s", message)
+    warnings.warn(f"[ERROR] {message}", stacklevel=3)
 
 
 def set_default_figure_clamp_enabled(enabled: bool) -> None:
@@ -785,28 +804,28 @@ def warn_metric_checks(
         if isinstance(value, (int, float)) and not math.isnan(value):
             cleaned.append(float(value))
     if not cleaned:
-        warnings.warn(
-            f"Aucune valeur exploitable pour {label} (données manquantes).",
-            stacklevel=2,
+        _emit_metric_check(
+            MetricCheckSeverity.ERROR,
+            f"{label}: aucune valeur exploitable (données invalides ou manquantes).",
         )
         return MetricStatus.MISSING
     observed_min = min(cleaned)
     observed_max = max(cleaned)
     if min_value is not None and observed_min < min_value:
-        warnings.warn(
+        _emit_metric_check(
+            MetricCheckSeverity.WARN,
             f"{label}: minimum observé {observed_min:.6g} < borne min {min_value:.6g}.",
-            stacklevel=2,
         )
     if max_value is not None and observed_max > max_value:
-        warnings.warn(
+        _emit_metric_check(
+            MetricCheckSeverity.WARN,
             f"{label}: maximum observé {observed_max:.6g} > borne max {max_value:.6g}.",
-            stacklevel=2,
         )
     metric_state = is_constant_metric(cleaned, threshold=variance_threshold)
     if metric_state is MetricStatus.CONSTANT:
-        warnings.warn(
+        _emit_metric_check(
+            MetricCheckSeverity.WARN,
             f"{label}: variance nulle ou quasi nulle détectée.",
-            stacklevel=2,
         )
         return MetricStatus.CONSTANT
     if expected_monotonic:
@@ -824,9 +843,9 @@ def warn_metric_checks(
             violated = []
             direction_label = direction
         if violated:
-            warnings.warn(
-                f"{label}: séquence non monotone (attendu {direction_label}).",
-                stacklevel=2,
+            _emit_metric_check(
+                MetricCheckSeverity.INFO,
+                f"{label}: tendance non monotone observée (attendu {direction_label}, tolérée).",
             )
     return MetricStatus.OK
 
@@ -845,30 +864,40 @@ def warn_if_inconsistent(series: Mapping[str, object]) -> MetricStatus:
     x_values_raw = series.get("x")
     y_values_raw = series.get("y")
     if not isinstance(x_values_raw, Iterable) or isinstance(x_values_raw, (str, bytes)):
-        warnings.warn(
+        _emit_metric_check(
+            MetricCheckSeverity.ERROR,
             f"{label}: abscisses absentes ou invalides pour les vérifications.",
-            stacklevel=2,
         )
         return MetricStatus.MISSING
     if not isinstance(y_values_raw, Iterable) or isinstance(y_values_raw, (str, bytes)):
-        warnings.warn(
+        _emit_metric_check(
+            MetricCheckSeverity.ERROR,
             f"{label}: ordonnées absentes ou invalides pour les vérifications.",
-            stacklevel=2,
         )
         return MetricStatus.MISSING
 
+    total_pairs = 0
     pairs: list[tuple[float, float]] = []
     for x_value, y_value in zip(x_values_raw, y_values_raw, strict=False):
+        total_pairs += 1
         if not isinstance(x_value, (int, float)) or math.isnan(float(x_value)):
             continue
         if not isinstance(y_value, (int, float)) or math.isnan(float(y_value)):
             continue
         pairs.append((float(x_value), float(y_value)))
 
+    invalid_pairs = total_pairs - len(pairs)
+    invalid_ratio = invalid_pairs / total_pairs if total_pairs else 1.0
+    if total_pairs and invalid_ratio >= MASSIVE_NAN_RATIO:
+        _emit_metric_check(
+            MetricCheckSeverity.ERROR,
+            f"{label}: NaN/valeurs invalides massifs ({invalid_pairs}/{total_pairs}).",
+        )
+
     if not pairs:
-        warnings.warn(
+        _emit_metric_check(
+            MetricCheckSeverity.ERROR,
             f"{label}: aucune paire (x, y) exploitable.",
-            stacklevel=2,
         )
         return MetricStatus.MISSING
 
@@ -893,17 +922,17 @@ def warn_if_inconsistent(series: Mapping[str, object]) -> MetricStatus:
 
     x_deltas = [current - previous for previous, current in zip(x_values, x_values[1:], strict=False)]
     if x_deltas and any(delta < -tolerance for delta in x_deltas):
-        warnings.warn(
+        _emit_metric_check(
+            MetricCheckSeverity.WARN,
             f"{label}: abscisses non triées (possible inversion d'axes).",
-            stacklevel=2,
         )
 
     if len(x_values) > 1:
         x_status = is_constant_metric(x_values, threshold=variance_threshold)
         if x_status is MetricStatus.CONSTANT and is_constant_metric(y_values, threshold=variance_threshold) is not MetricStatus.CONSTANT:
-            warnings.warn(
+            _emit_metric_check(
+                MetricCheckSeverity.WARN,
                 f"{label}: abscisses quasi constantes avec ordonnées variables (possible inversion d'axes).",
-                stacklevel=2,
             )
 
     return metric_status
@@ -925,9 +954,9 @@ def warn_metric_checks_by_group(
     bounded_rate_strict: bool | None = None,
 ) -> None:
     if not rows:
-        warnings.warn(
+        _emit_metric_check(
+            MetricCheckSeverity.ERROR,
             f"Aucune donnée disponible pour {label} (liste vide).",
-            stacklevel=2,
         )
         return
     median_key, _, _ = resolve_percentile_keys(rows, metric_key)
@@ -949,9 +978,9 @@ def warn_metric_checks_by_group(
         key = tuple(row.get(name) for name in group_keys_list)
         grouped.setdefault(key, []).append((float(x_val), float(y_val)))
     if not grouped:
-        warnings.warn(
-            f"Aucune valeur utilisable pour {label} (clé {median_key}).",
-            stacklevel=2,
+        _emit_metric_check(
+            MetricCheckSeverity.ERROR,
+            f"Aucune valeur utilisable pour {label} (clé {median_key}, manque de séries).",
         )
         return
     for key, points in grouped.items():
