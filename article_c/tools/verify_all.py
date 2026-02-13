@@ -216,11 +216,17 @@ def _iter_expected_figures() -> list[tuple[str, Path, str]]:
 def _check_expected_files(formats: tuple[str, ...]) -> list[str]:
     failures: list[str] = []
     for module_path, output_dir, stem in _iter_expected_figures():
-        candidates = [output_dir / f"{stem}.{fmt}" for fmt in formats]
-        if not any(path.exists() for path in candidates):
-            rel_candidates = ", ".join(str(path.relative_to(BASE_DIR)) for path in candidates)
+        png_path = output_dir / f"{stem}.png"
+        if not png_path.exists():
+            candidates = [output_dir / f"{stem}.{fmt}" for fmt in formats]
+            all_candidates = [png_path, *candidates]
+            unique_candidates = list(dict.fromkeys(all_candidates))
+            rel_candidates = ", ".join(
+                str(path.relative_to(BASE_DIR)) for path in unique_candidates
+            )
             failures.append(
-                f"Figure attendue absente pour {module_path}: {rel_candidates}"
+                "Figure attendue absente (PNG requis) pour "
+                f"{module_path}: {rel_candidates}"
             )
     return failures
 
