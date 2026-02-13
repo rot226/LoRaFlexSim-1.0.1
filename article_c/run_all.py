@@ -115,6 +115,39 @@ def _assert_no_global_writes_during_simulation(results_dir: Path, step_label: st
         )
 
 
+def _clean_run_artifacts(*, hard: bool) -> None:
+    """Nettoie les artefacts run_all puis recrée l'arborescence minimale requise."""
+    base_dir = Path(__file__).resolve().parent
+    results_dirs = [
+        (base_dir / "step1" / "results").resolve(),
+        (base_dir / "step2" / "results").resolve(),
+    ]
+    plots_output_dirs = [
+        (base_dir / "step1" / "plots" / "output").resolve(),
+        (base_dir / "step2" / "plots" / "output").resolve(),
+        (base_dir / "plots" / "output").resolve(),
+    ]
+
+    dirs_to_purge = list(results_dirs)
+    if hard:
+        dirs_to_purge.extend(plots_output_dirs)
+
+    for directory in dirs_to_purge:
+        _assert_path_within_scope(directory, base_dir, "RunAllClean")
+        if directory.exists():
+            shutil.rmtree(directory)
+            log_info(f"[CLEAN] dossier supprimé: {directory}")
+
+    required_dirs = list(results_dirs)
+    if hard:
+        required_dirs.extend(plots_output_dirs)
+
+    for directory in required_dirs:
+        _assert_path_within_scope(directory, base_dir, "RunAllClean")
+        directory.mkdir(parents=True, exist_ok=True)
+        log_info(f"[CLEAN] dossier prêt: {directory}")
+
+
 def _self_check_replication_layout(
     size_dir: Path,
     expected_rep_dirs: list[str],
@@ -838,6 +871,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Répertoire de sortie de l'étape 1.",
     )
     parser.add_argument(
+        "--clean",
+        action="store_true",
+        default=False,
+        help=(
+            "Nettoie step1/results et step2/results avant exécution, "
+            "puis recrée les dossiers requis."
+        ),
+    )
+    parser.add_argument(
+        "--clean-hard",
+        action="store_true",
+        default=False,
+        help=(
+            "Purge totale: --clean + suppression de step1/plots/output, "
+            "step2/plots/output et article_c/plots/output."
+        ),
+    )
+    parser.add_argument(
         "--skip-step1",
         action="store_true",
         help="Ignore l'exécution de l'étape 1.",
@@ -1290,6 +1341,10 @@ def main(argv: list[str] | None = None) -> None:
     if args.quiet:
         args.log_level = "quiet"
     set_log_level(args.log_level)
+    if args.clean and args.clean_hard:
+        raise ValueError("Options incompatibles: utilisez --clean ou --clean-hard, pas les deux.")
+    if args.clean or args.clean_hard:
+        _clean_run_artifacts(hard=args.clean_hard)
     if args.preset is not None:
         preset_values = RUN_ALL_PRESETS[args.preset]
         for key, value in preset_values.items():
