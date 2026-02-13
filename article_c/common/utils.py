@@ -337,6 +337,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Active/désactive le clamp des coefficients de trafic (diagnostic).",
     )
     parser.add_argument(
+        "--clamped-nodes-ratio-threshold",
+        type=float,
+        default=step2_defaults.clamped_nodes_ratio_threshold,
+        help=(
+            "Seuil (0..1) de nœuds clampés à partir duquel la charge effective "
+            "est réduite avant calcul des collisions."
+        ),
+    )
+    parser.add_argument(
+        "--clamped-load-adjust-min-scale",
+        type=float,
+        default=step2_defaults.clamped_load_adjust_min_scale,
+        help=(
+            "Borne basse du facteur de réduction de charge appliqué quand le "
+            "seuil de nœuds clampés est dépassé."
+        ),
+    )
+    parser.add_argument(
         "--window-delay-enabled",
         action=argparse.BooleanOptionalAction,
         default=step2_defaults.window_delay_enabled,

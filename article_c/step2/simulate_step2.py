@@ -1660,6 +1660,70 @@ def _log_clamp_ratio_and_adjust(
     )
 
 
+def _compute_clamped_nodes_ratio(clamp_flags: list[bool]) -> float:
+    if not clamp_flags:
+        return 0.0
+    return sum(1 for flag in clamp_flags if flag) / max(len(clamp_flags), 1)
+
+
+def _adjust_effective_load_before_collisions(
+    *,
+    node_windows: list[dict[str, object]],
+    clamped_nodes_ratio: float,
+    clamped_nodes_ratio_threshold: float,
+    clamped_load_adjust_min_scale: float,
+    network_size: int,
+    algo_label: str,
+    round_id: int,
+    airtime_by_sf: dict[int, float],
+    rng: random.Random,
+) -> float:
+    if clamped_nodes_ratio <= clamped_nodes_ratio_threshold:
+        return 1.0
+    if not node_windows:
+        return 1.0
+    effective_scale = _clip(
+        clamped_nodes_ratio_threshold / max(clamped_nodes_ratio, 1e-9),
+        clamped_load_adjust_min_scale,
+        1.0,
+    )
+    if math.isclose(effective_scale, 1.0, rel_tol=1e-9):
+        return 1.0
+    for node_window in node_windows:
+        tx_starts = list(node_window.get("tx_starts", []))
+        tx_channels = list(node_window.get("tx_channels", []))
+        original_count = len(tx_starts)
+        if original_count <= 1:
+            continue
+        adjusted_count = max(1, int(round(original_count * effective_scale)))
+        if adjusted_count >= original_count:
+            continue
+        kept_indices = sorted(rng.sample(range(original_count), adjusted_count))
+        filtered_starts = [tx_starts[i] for i in kept_indices]
+        filtered_channels = [tx_channels[i] for i in kept_indices]
+        sf_value = int(node_window["sf"])
+        airtime_s = airtime_by_sf.get(sf_value, 0.0)
+        node_window["tx_starts"] = filtered_starts
+        node_window["tx_channels"] = filtered_channels
+        node_window["traffic_sent"] = adjusted_count
+        node_window["effective_duration_s"] = _effective_window_duration(
+            filtered_starts,
+            airtime_s,
+            float(node_window.get("effective_duration_s", 0.0)),
+        )
+    logger.warning(
+        "Réduction de charge pré-collisions (taille=%s algo=%s round=%s): "
+        "ratio_noeuds_clampes=%.1f%% (> %.1f%%), facteur=%.3f.",
+        network_size,
+        algo_label,
+        round_id,
+        clamped_nodes_ratio * 100.0,
+        clamped_nodes_ratio_threshold * 100.0,
+        effective_scale,
+    )
+    return effective_scale
+
+
 def _apply_collision_control(
     *,
     network_size: int,
@@ -2206,6 +2270,8 @@ def run_simulation(
     traffic_coeff_clamp_max: float | None = None,
     traffic_coeff_clamp_enabled: bool | None = None,
     traffic_coeff_clamp_alert_threshold: float | None = None,
+    clamped_nodes_ratio_threshold: float | None = None,
+    clamped_load_adjust_min_scale: float | None = None,
     window_delay_enabled: bool | None = None,
     window_delay_range_s: float | None = None,
     shadowing_sigma_db: float | None = None,
@@ -2331,6 +2397,20 @@ def run_simulation(
         if traffic_coeff_clamp_alert_threshold is not None
         else 1.0,
         0.0,
+        1.0,
+    )
+    clamped_nodes_ratio_threshold_value = _clip(
+        float(clamped_nodes_ratio_threshold)
+        if clamped_nodes_ratio_threshold is not None
+        else step2_defaults.clamped_nodes_ratio_threshold,
+        0.0,
+        1.0,
+    )
+    clamped_load_adjust_min_scale_value = _clip(
+        float(clamped_load_adjust_min_scale)
+        if clamped_load_adjust_min_scale is not None
+        else step2_defaults.clamped_load_adjust_min_scale,
+        0.1,
         1.0,
     )
     if traffic_coeff_clamp_enabled is True and not step2_defaults.traffic_coeff_clamp_enabled:
@@ -2884,6 +2964,8 @@ def run_simulation(
                         "link_quality": link_quality,
                     }
                 )
+            clamped_nodes_ratio = _compute_clamped_nodes_ratio(round_clamp_flags)
+            effective_load_adjustment = 1.0
             if clamp_tracking_enabled:
                 (
                     traffic_coeff_scale_value,
@@ -2898,6 +2980,17 @@ def run_simulation(
                     traffic_coeff_scale=traffic_coeff_scale_value,
                     window_duration_s=window_duration_value,
                     tx_window_safety_factor=tx_window_safety_factor,
+                )
+                effective_load_adjustment = _adjust_effective_load_before_collisions(
+                    node_windows=node_windows,
+                    clamped_nodes_ratio=clamped_nodes_ratio,
+                    clamped_nodes_ratio_threshold=clamped_nodes_ratio_threshold_value,
+                    clamped_load_adjust_min_scale=clamped_load_adjust_min_scale_value,
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    airtime_by_sf=airtime_by_sf,
+                    rng=rng,
                 )
             (
                 successes_by_node,
@@ -3354,6 +3447,9 @@ def run_simulation(
                     "traffic_coeff_clamp_alert_triggered": int(
                         traffic_coeff_clamp_alert_triggered
                     ),
+                    "clamped_nodes_ratio": clamped_nodes_ratio,
+                    "effective_load_adjustment": effective_load_adjustment,
+                    "clamped_nodes_ratio_threshold": clamped_nodes_ratio_threshold_value,
                     **snir_meta,
                 }
                 if reward_components is not None:
@@ -3680,6 +3776,8 @@ def run_simulation(
                         "link_quality": link_quality,
                     }
                 )
+            clamped_nodes_ratio = _compute_clamped_nodes_ratio(round_clamp_flags)
+            effective_load_adjustment = 1.0
             if clamp_tracking_enabled:
                 (
                     traffic_coeff_scale_value,
@@ -3694,6 +3792,17 @@ def run_simulation(
                     traffic_coeff_scale=traffic_coeff_scale_value,
                     window_duration_s=window_duration_value,
                     tx_window_safety_factor=tx_window_safety_factor,
+                )
+                effective_load_adjustment = _adjust_effective_load_before_collisions(
+                    node_windows=node_windows,
+                    clamped_nodes_ratio=clamped_nodes_ratio,
+                    clamped_nodes_ratio_threshold=clamped_nodes_ratio_threshold_value,
+                    clamped_load_adjust_min_scale=clamped_load_adjust_min_scale_value,
+                    network_size=network_size_value,
+                    algo_label=algo_label,
+                    round_id=round_id,
+                    airtime_by_sf=airtime_by_sf,
+                    rng=rng,
                 )
             (
                 successes_by_node,
@@ -4129,6 +4238,9 @@ def run_simulation(
                     "traffic_coeff_clamp_alert_triggered": int(
                         traffic_coeff_clamp_alert_triggered
                     ),
+                    "clamped_nodes_ratio": clamped_nodes_ratio,
+                    "effective_load_adjustment": effective_load_adjustment,
+                    "clamped_nodes_ratio_threshold": clamped_nodes_ratio_threshold_value,
                     **snir_meta,
                 }
                 if reward_components is not None:
