@@ -24,8 +24,8 @@ from article_c.common.plot_style import legend_bbox_to_anchor
 
 _STEP1_AGGREGATED_NAME = "aggregated_results.csv"
 _STEP1_MISSING_HINT = (
-    "Exécutez l'agrégation Step1 ou placez des CSV sous "
-    "results/by_size/size_*/rep_*/aggregated_results.csv."
+    "Exécutez le préflight de make_all_plots.py pour générer "
+    "results/aggregates/aggregated_results.csv avant les modules."
 )
 
 
@@ -34,22 +34,12 @@ def load_step1_rows_with_fallback(
     *,
     allow_sample: bool = False,
 ) -> list[dict[str, object]]:
-    """Charge les agrégats Step1 (global puis fallback by_size/rep)."""
+    """Charge uniquement l'agrégat Step1 matérialisé."""
     primary_path = (
         step_dir / "results" / "aggregates" / _STEP1_AGGREGATED_NAME
     )
     if primary_path.is_file():
         return load_step1_aggregated(primary_path, allow_sample=allow_sample)
-
-    fallback_paths = sorted(
-        (step_dir / "results" / "by_size").glob("size_*/rep_*/aggregated_results.csv")
-    )
-    if fallback_paths:
-        rows: list[dict[str, object]] = []
-        for fallback_path in fallback_paths:
-            rows.extend(load_step1_aggregated(fallback_path, allow_sample=allow_sample))
-        if rows:
-            return rows
 
     raise FileNotFoundError(f"CSV introuvable: {primary_path}. {_STEP1_MISSING_HINT}")
 
