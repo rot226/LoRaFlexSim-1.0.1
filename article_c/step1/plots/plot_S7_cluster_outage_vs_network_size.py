@@ -24,7 +24,6 @@ from article_c.common.plot_helpers import (
     filter_mixra_opt_fallback,
     filter_rows_by_network_sizes,
     is_constant_metric,
-    load_step1_aggregated,
     metric_values,
     pad_axes,
     render_metric_status,
@@ -33,6 +32,7 @@ from article_c.common.plot_helpers import (
     warn_metric_checks_by_group,
     warn_if_insufficient_network_sizes,
 )
+from article_c.step1.plots.plot_utils import load_step1_rows_with_fallback
 from plot_defaults import resolve_ieee_figsize
 
 PDR_TARGETS = (0.90, 0.80, 0.70)
@@ -185,8 +185,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     )
     args = parser.parse_args(argv)
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
-    rows = load_step1_aggregated(results_path, allow_sample=allow_sample)
+    rows = load_step1_rows_with_fallback(step_dir, allow_sample=allow_sample)
     if not rows:
         warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)
         return
