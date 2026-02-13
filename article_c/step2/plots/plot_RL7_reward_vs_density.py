@@ -43,7 +43,15 @@ ALGO_ALIASES = {
     "mixra_h": "mixra_h",
     "mixra_opt": "mixra_opt",
     "ucb1_sf": "ucb1_sf",
+    "ucb1-sf": "ucb1_sf",
 }
+COMMON_CURVE_LABELS = {
+    "adr": "ADR",
+    "mixra_h": "MixRA-H",
+    "mixra_opt": "MixRA-Opt",
+    "ucb1_sf": "UCB1-SF",
+}
+SNIR_MODE_LABELS = {"snir_on": "SNIR on", "snir_off": "SNIR off"}
 TARGET_ALGOS = {"adr", "loba", "mixra_h", "mixra_opt", "ucb1_sf"}
 _DENSITY_CONSTANT_WARNED = False
 
@@ -85,6 +93,8 @@ def _label_for_algo(algo: str) -> str:
     canonical = _canonical_algo(algo)
     if canonical is None:
         return algo
+    if canonical in COMMON_CURVE_LABELS:
+        return COMMON_CURVE_LABELS[canonical]
     return algo_label(canonical)
 
 
@@ -149,6 +159,7 @@ def _plot_metric(
         metric_key,
         network_sizes,
         label_fn=lambda algo: _label_for_algo(str(algo)),
+        snir_label_fn=lambda mode: SNIR_MODE_LABELS.get(str(mode), str(mode)),
     )
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
