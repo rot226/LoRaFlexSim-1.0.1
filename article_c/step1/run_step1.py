@@ -1312,23 +1312,29 @@ def main(argv: list[str] | None = None) -> None:
         )
         log_debug(f"Rows per size: {sizes_summary}")
     aggregated_sizes = _read_nested_sizes(output_dir, replications)
+    all_sizes_completed = set(network_sizes).issubset(aggregated_sizes)
     merge_stats = aggregate_results_by_size(
         output_dir,
-        write_global_aggregated=bool(args.global_aggregated),
+        write_global_aggregated=bool(args.global_aggregated and all_sizes_completed),
     )
     log_debug(
         "Agrégation Step1 par taille: "
         f"{merge_stats['size_count']} dossier(s) size_<N>, "
         f"{merge_stats['size_row_count']} ligne(s) consolidée(s)."
     )
-    if bool(args.global_aggregated):
+    if bool(args.global_aggregated and all_sizes_completed):
         log_debug(
             "Agrégation Step1 globale: "
             f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
             "dans results/aggregates/aggregated_results.csv."
         )
+    elif bool(args.global_aggregated):
+        log_debug(
+            "Agrégation Step1 globale ignorée: campagne incomplète "
+            "(all_sizes_completed=False)."
+        )
     missing_sizes = sorted(set(network_sizes) - aggregated_sizes)
-    if missing_sizes:
+    if not all_sizes_completed:
         missing_label = ", ".join(map(str, missing_sizes))
         log_debug(
             "ATTENTION: tailles manquantes dans by_size/, "
@@ -1341,7 +1347,7 @@ def main(argv: list[str] | None = None) -> None:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         log_info(f"Tailles simulées: {sizes_label}")
     aggregated_path = output_dir / "aggregates" / "aggregated_results.csv"
-    if not aggregated_path.exists() and args.plot_summary:
+    if not aggregated_path.exists() and args.plot_summary and all_sizes_completed:
         log_debug(
             "Plot de synthèse: aggregated_results.csv absent, agrégation globale déclenchée."
         )
@@ -1353,6 +1359,11 @@ def main(argv: list[str] | None = None) -> None:
             "Agrégation Step1 globale (plot): "
             f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
             "dans results/aggregates/aggregated_results.csv."
+        )
+    elif not aggregated_path.exists() and args.plot_summary and not all_sizes_completed:
+        log_debug(
+            "Plot de synthèse: agrégation globale ignorée car campagne incomplète "
+            "(all_sizes_completed=False)."
         )
 
     if aggregated_path.exists():
