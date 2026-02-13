@@ -148,6 +148,58 @@ def _clean_run_artifacts(*, hard: bool) -> None:
         log_info(f"[CLEAN] dossier prêt: {directory}")
 
 
+def _write_campaign_state(
+    state_path: Path,
+    *,
+    size: int | None,
+    rep: int | None,
+    step: str | None,
+    status: str,
+) -> None:
+    payload = {
+        "size": size,
+        "rep": rep,
+        "step": step,
+        "status": status,
+    }
+    state_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _read_campaign_state(state_path: Path) -> dict[str, object] | None:
+    if not state_path.exists():
+        return None
+    try:
+        raw = json.loads(state_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, ValueError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    return raw
+
+
+def _find_first_missing_rep(
+    results_dir: Path,
+    size: int,
+    replications_total: int,
+) -> int | None:
+    missing = _missing_replications_by_size(results_dir, [size], replications_total)
+    reps = missing.get(int(size), [])
+    if not reps:
+        return None
+    return int(min(reps))
+
+
+def _remove_done_flag(results_dir: Path, step_label: str) -> None:
+    done_flag = results_dir / "done.flag"
+    _assert_path_within_scope(done_flag, results_dir, step_label)
+    if done_flag.exists():
+        done_flag.unlink()
+        log_debug(f"{step_label}: done.flag supprimé (campagne incomplète).")
+
+
 def _self_check_replication_layout(
     size_dir: Path,
     expected_rep_dirs: list[str],
@@ -1411,6 +1463,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     step1_results_dir = (Path(__file__).resolve().parent / "step1" / "results").resolve()
     step2_results_dir = (Path(__file__).resolve().parent / "step2" / "results").resolve()
+    campaign_state_path = (Path(__file__).resolve().parent / "campaign_state.json").resolve()
     _assert_path_within_scope(step1_results_dir / "run_status_step1.csv", step1_results_dir, "Step1")
     _assert_path_within_scope(step2_results_dir / "run_status_step2.csv", step2_results_dir, "Step2")
     campaign_summary_path = (Path(__file__).resolve().parent / "campaign_summary.json").resolve()
@@ -1441,9 +1494,66 @@ def main(argv: list[str] | None = None) -> None:
     step2_explicit_config = _build_step2_explicit_config(args)
     _validate_step2_explicit_config_startup(args, step2_explicit_config)
     step2_explicit_config["flat_output"] = False
+
+    # Évite tout faux positif de complétion avant la fin effective de la campagne.
+    if not args.skip_step1:
+        _remove_done_flag(step1_results_dir, "Step1")
+    if not args.skip_step2:
+        _remove_done_flag(step2_results_dir, "Step2")
+
+    start_index = 0
+    current_step = "step1"
+    resume_rep = 1
+    previous_state = _read_campaign_state(campaign_state_path)
+    if previous_state is not None:
+        raw_size = previous_state.get("size")
+        raw_step = previous_state.get("step")
+        raw_rep = previous_state.get("rep")
+        if isinstance(raw_size, int) and raw_size in requested_sizes:
+            start_index = requested_sizes.index(raw_size)
+        if isinstance(raw_step, str) and raw_step in {"step1", "step2"}:
+            current_step = raw_step
+        if isinstance(raw_rep, int) and raw_rep > 0:
+            resume_rep = raw_rep
+
+    found_pending = False
+    for idx in range(start_index, len(requested_sizes)):
+        size = int(requested_sizes[idx])
+        steps_to_check = ["step1", "step2"]
+        if idx == start_index and current_step == "step2":
+            steps_to_check = ["step2"]
+        for step_name in steps_to_check:
+            if step_name == "step1" and args.skip_step1:
+                continue
+            if step_name == "step2" and args.skip_step2:
+                continue
+            step_dir = step1_results_dir if step_name == "step1" else step2_results_dir
+            first_missing = _find_first_missing_rep(step_dir, size, replications_total)
+            if first_missing is not None:
+                start_index = idx
+                current_step = step_name
+                resume_rep = first_missing
+                found_pending = True
+                break
+        if found_pending:
+            break
+
+    if not found_pending and previous_state is not None and not (args.skip_step1 and args.skip_step2):
+        log_info("[RESUME] Aucun travail partiel détecté, campagne déjà complète.")
+        start_index = len(requested_sizes)
+
+    if found_pending or start_index > 0 or previous_state is not None:
+        if start_index < len(requested_sizes):
+            log_info(
+                f"[RESUME] Reprise campagne depuis size={requested_sizes[start_index]} "
+                f"rep={resume_rep} step={current_step}."
+            )
+
     step1_status_reset_pending = True
     step2_status_reset_pending = True
-    for size in requested_sizes:
+    for size_index, size in enumerate(requested_sizes):
+        if size_index < start_index:
+            continue
         step1_size_args = argparse.Namespace(**vars(args))
         step1_size_args.network_sizes = [size]
         step2_size_args = argparse.Namespace(**step2_explicit_config)
@@ -1469,7 +1579,15 @@ def main(argv: list[str] | None = None) -> None:
             },
         }
         size_start = perf_counter()
-        if not step1_size_args.skip_step1:
+        if not step1_size_args.skip_step1 and (current_step == "step1"):
+            step1_first_missing = _find_first_missing_rep(step1_results_dir, int(size), replications_total)
+            _write_campaign_state(
+                campaign_state_path,
+                size=int(size),
+                rep=step1_first_missing or 1,
+                step="step1",
+                status="in_progress",
+            )
             log_info(f"[PHASE] step1-simulation size={size}")
             _cleanup_size_directory(step1_results_dir, int(size), "Step1")
             step1_size_args.flat_output = False
@@ -1492,7 +1610,25 @@ def main(argv: list[str] | None = None) -> None:
                 "failed": step1_failed,
                 "elapsed_seconds": round(step1_elapsed, 3),
             }
+            if not step1_size_args.skip_step2:
+                _write_campaign_state(
+                    campaign_state_path,
+                    size=int(size),
+                    rep=1,
+                    step="step2",
+                    status="in_progress",
+                )
+
         if not step1_size_args.skip_step2:
+            if current_step == "step2":
+                step2_first_missing = _find_first_missing_rep(step2_results_dir, int(size), replications_total)
+                _write_campaign_state(
+                    campaign_state_path,
+                    size=int(size),
+                    rep=step2_first_missing or 1,
+                    step="step2",
+                    status="in_progress",
+                )
             _cleanup_size_directory(step2_results_dir, int(size), "Step2")
             step2_size_args.flat_output = False
             step2_size_args.reset_status = step2_status_reset_pending
@@ -1526,6 +1662,17 @@ def main(argv: list[str] | None = None) -> None:
                 if isinstance(reasons, list):
                     for reason in step2_quality.get("reasons", []):
                         reasons.append(f"taille {size}: {reason}")
+        current_step = "step1"
+
+        next_index = size_index + 1
+        if next_index < len(requested_sizes):
+            _write_campaign_state(
+                campaign_state_path,
+                size=int(requested_sizes[next_index]),
+                rep=1,
+                step="step1",
+                status="in_progress",
+            )
         size_summary["elapsed_seconds"] = round(perf_counter() - size_start, 3)
         size_summary["failed"] = int(size_summary["step1"]["failed"]) + int(
             size_summary["step2"]["failed"]
@@ -1534,6 +1681,12 @@ def main(argv: list[str] | None = None) -> None:
         if isinstance(cast_sizes, list):
             cast_sizes.append(size_summary)
         log_info(f"Résumé: taille de réseau {size} terminée.")
+
+        if size_index < len(requested_sizes) - 1:
+            if not args.skip_step1:
+                _remove_done_flag(step1_results_dir, "Step1")
+            if not args.skip_step2:
+                _remove_done_flag(step2_results_dir, "Step2")
 
     if not args.skip_step1:
         step1_missing = _missing_replications_by_size(
@@ -1662,6 +1815,13 @@ def main(argv: list[str] | None = None) -> None:
     campaign_summary_path.write_text(
         json.dumps(campaign_summary, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
+    )
+    _write_campaign_state(
+        campaign_state_path,
+        size=None,
+        rep=None,
+        step=None,
+        status="completed",
     )
     log_info(f"Résumé de campagne écrit: {campaign_summary_path}")
     if validation_code != 0:
