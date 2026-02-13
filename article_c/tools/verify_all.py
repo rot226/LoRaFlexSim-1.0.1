@@ -300,37 +300,37 @@ def _check_expected_files(formats: tuple[str, ...]) -> list[str]:
 
 def _assert_non_empty_csv(path: Path) -> None:
     if not path.exists():
-        raise VerificationError(f"CSV introuvable: {path}")
+        raise VerificationError(f"CSV introuvable: {path.resolve()}")
     if path.stat().st_size <= 0:
-        raise VerificationError(f"CSV vide (taille fichier nulle): {path}")
+        raise VerificationError(f"CSV vide (taille fichier nulle): {path.resolve()}")
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         try:
             first_row = next(reader)
         except StopIteration as exc:
-            raise VerificationError(f"CSV sans ligne de données: {path}") from exc
+            raise VerificationError(f"CSV sans ligne de données: {path.resolve()}") from exc
         if not first_row:
-            raise VerificationError(f"CSV sans colonnes exploitables: {path}")
+            raise VerificationError(f"CSV sans colonnes exploitables: {path.resolve()}")
 
 
 def _assert_csv_has_header_and_data(path: Path) -> None:
     if not path.exists():
-        raise VerificationError(f"CSV introuvable: {path}")
+        raise VerificationError(f"CSV introuvable: {path.resolve()}")
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.reader(handle)
         try:
             header = next(reader)
         except StopIteration as exc:
-            raise VerificationError(f"CSV sans en-tête: {path}") from exc
+            raise VerificationError(f"CSV sans en-tête: {path.resolve()}") from exc
 
         if not any(str(column).strip() for column in header):
-            raise VerificationError(f"CSV avec en-tête invalide: {path}")
+            raise VerificationError(f"CSV avec en-tête invalide: {path.resolve()}")
 
         try:
             _ = next(reader)
         except StopIteration as exc:
             raise VerificationError(
-                f"CSV sans ligne de données après l'en-tête: {path}"
+                f"CSV sans ligne de données après l'en-tête: {path.resolve()}"
             ) from exc
 
 
@@ -353,11 +353,11 @@ def _check_non_empty_csv_files() -> None:
 def _check_png_files_valid() -> None:
     for png_path in sorted(BASE_DIR.glob("**/*.png")):
         if png_path.stat().st_size <= 0:
-            raise VerificationError(f"PNG vide (taille fichier nulle): {png_path}")
+            raise VerificationError(f"PNG vide (taille fichier nulle): {png_path.resolve()}")
         try:
             _ = plt.imread(png_path)
         except Exception as exc:
-            raise VerificationError(f"PNG corrompu/non lisible: {png_path} ({exc})") from exc
+            raise VerificationError(f"PNG corrompu/non lisible: {png_path.resolve()} ({exc})") from exc
 
 
 def _iter_pipeline_log_paths() -> list[Path]:
@@ -381,7 +381,7 @@ def _check_pipeline_logs_for_crash_traces() -> None:
         for signature in CRASH_SIGNATURES:
             if signature in content:
                 raise VerificationError(
-                    f"Trace de crash détectée dans {log_path}: signature '{signature}'."
+                    f"Trace de crash détectée dans {log_path.resolve()}: signature '{signature}'."
                 )
 
         for line_number, line in enumerate(content.splitlines(), start=1):
@@ -394,7 +394,7 @@ def _check_pipeline_logs_for_crash_traces() -> None:
                 continue
             raise VerificationError(
                 "Warning non whiteliste détecté dans "
-                f"{log_path} (ligne {line_number}): {line.strip()}"
+                f"{log_path.resolve()} (ligne {line_number}): {line.strip()}"
             )
 
 

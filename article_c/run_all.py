@@ -139,7 +139,7 @@ def _clean_run_artifacts(*, hard: bool) -> None:
         _assert_path_within_scope(directory, base_dir, "RunAllClean")
         if directory.exists():
             shutil.rmtree(directory)
-            log_info(f"[CLEAN] dossier supprimé: {directory}")
+            log_info(f"[CLEAN] dossier supprimé: {directory.resolve()}")
 
     required_dirs = list(results_dirs)
     if hard:
@@ -148,7 +148,7 @@ def _clean_run_artifacts(*, hard: bool) -> None:
     for directory in required_dirs:
         _assert_path_within_scope(directory, base_dir, "RunAllClean")
         directory.mkdir(parents=True, exist_ok=True)
-        log_info(f"[CLEAN] dossier prêt: {directory}")
+        log_info(f"[CLEAN] dossier prêt: {directory.resolve()}")
 
 
 def _write_campaign_state(
@@ -518,7 +518,7 @@ def _assert_cumulative_sizes(
         reader = csv.DictReader(handle)
         if not reader.fieldnames:
             raise RuntimeError(
-                f"{step_label}: en-têtes CSV absents dans {csv_path}."
+                f"{step_label}: en-têtes CSV absents dans {csv_path.resolve()}."
             )
         fieldnames = {
             name.lstrip("\ufeff").strip() for name in reader.fieldnames if name is not None
@@ -528,7 +528,7 @@ def _assert_cumulative_sizes(
             size_key = "density"
         if size_key is None:
             raise RuntimeError(
-                f"{step_label}: colonnes network_size/density absentes dans {csv_path}."
+                f"{step_label}: colonnes network_size/density absentes dans {csv_path.resolve()}."
             )
         found_sizes: set[int] = set()
         for row in reader:
@@ -541,7 +541,7 @@ def _assert_cumulative_sizes(
                 continue
     if not expected_sizes_so_far.issubset(found_sizes):
         raise RuntimeError(
-            f"{step_label}: validation cumulative échouée pour {csv_path}. "
+            f"{step_label}: validation cumulative échouée pour {csv_path.resolve()}. "
             f"Tailles attendues={sorted(expected_sizes_so_far)}, "
             f"tailles trouvées={sorted(found_sizes)}"
         )
