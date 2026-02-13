@@ -43,7 +43,21 @@ from article_c.make_all_plots import (
 
 SUPPORTED_FORMATS = ("png", "pdf", "eps", "svg")
 EXPECTED_SIZES: tuple[int, ...] = (80, 160, 320, 640, 1280)
-CRASH_SIGNATURES: tuple[str, ...] = ("Traceback", "RuntimeError", "TypeError")
+CRASH_SIGNATURES: tuple[str, ...] = (
+    "Traceback",
+    "RuntimeError",
+    "TypeError",
+    "Unhandled",
+)
+ALLOWED_SCIENTIFIC_WARNING_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"overflow encountered", re.IGNORECASE),
+    re.compile(r"divide by zero", re.IGNORECASE),
+    re.compile(r"invalid value encountered", re.IGNORECASE),
+    re.compile(r"mean of empty slice", re.IGNORECASE),
+    re.compile(r"degrees of freedom <= 0", re.IGNORECASE),
+    re.compile(r"smallsamplewarning", re.IGNORECASE),
+    re.compile(r"precision loss occurred", re.IGNORECASE),
+)
 LEGEND_CHECK_REPORT_PATH = BASE_DIR / "legend_check_report.csv"
 SIMULATION_QUALITY_REPORT_PATH = BASE_DIR / "simulation_quality_verify_all.json"
 ALGO_LEGEND_KEYWORDS = ("adr", "mixra", "ucb1")
@@ -369,6 +383,19 @@ def _check_pipeline_logs_for_crash_traces() -> None:
                 raise VerificationError(
                     f"Trace de crash détectée dans {log_path}: signature '{signature}'."
                 )
+
+        for line_number, line in enumerate(content.splitlines(), start=1):
+            normalized = line.strip().lower()
+            if not normalized:
+                continue
+            if "warning" not in normalized and "warn" not in normalized:
+                continue
+            if any(pattern.search(line) for pattern in ALLOWED_SCIENTIFIC_WARNING_PATTERNS):
+                continue
+            raise VerificationError(
+                "Warning non whiteliste détecté dans "
+                f"{log_path} (ligne {line_number}): {line.strip()}"
+            )
 
 
 def _invoke_module_main(module: ModuleType) -> None:
