@@ -1354,6 +1354,26 @@ def _read_nested_sizes(base_results_dir: Path, replications: list[int]) -> set[i
     return sizes
 
 
+def _missing_replications_by_size(
+    base_results_dir: Path,
+    requested_sizes: list[int],
+    replications: list[int],
+) -> dict[int, list[str]]:
+    by_size_dir = base_results_dir / BY_SIZE_DIRNAME
+    expected_rep_dirs = replication_dirnames(len(replications))
+    missing_by_size: dict[int, list[str]] = {}
+    for size in requested_sizes:
+        size_dir = by_size_dir / f"size_{size}"
+        missing_reps = [
+            rep_dir
+            for rep_dir in expected_rep_dirs
+            if not (size_dir / rep_dir / "aggregated_results.csv").exists()
+        ]
+        if missing_reps:
+            missing_by_size[size] = missing_reps
+    return missing_by_size
+
+
 def _compose_post_simulation_report(
     per_size_stats: dict[int, dict[str, object]],
     per_size_diagnostics: dict[int, dict[str, float]],
@@ -2832,7 +2852,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     aggregated_sizes = _read_nested_sizes(base_results_dir, replications)
     merge_stats = aggregate_results_by_size(
         base_results_dir,
-        write_global_aggregated=bool(args.global_aggregated),
+        write_global_aggregated=True,
     )
     log_debug(
         "Agrégation Step2 par taille: "
@@ -3289,7 +3309,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     aggregated_sizes = _read_nested_sizes(base_results_dir, replications)
     merge_stats = aggregate_results_by_size(
         base_results_dir,
-        write_global_aggregated=bool(args.global_aggregated),
+        write_global_aggregated=True,
     )
     log_debug(
         "Agrégation Step2 par taille: "
@@ -3302,20 +3322,58 @@ def main(argv: Sequence[str] | None = None) -> None:
             f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
             "dans results/aggregates/aggregated_results.csv."
         )
-    missing_sizes = sorted(set(requested_sizes) - aggregated_sizes)
-    if missing_sizes:
-        missing_label = ", ".join(map(str, missing_sizes))
-        log_debug(
-            "ATTENTION: tailles manquantes dans by_size/, "
-            f"done.flag non écrit. Manquantes: {missing_label}"
-        )
-    else:
-        (base_results_dir / "done.flag").write_text("done\n", encoding="utf-8")
+    requested_set = set(requested_sizes)
+    missing_sizes = sorted(requested_set - aggregated_sizes)
+    missing_replications = _missing_replications_by_size(
+        base_results_dir,
+        requested_sizes,
+        replications,
+    )
+    aggregated_path = base_results_dir / "aggregates" / "aggregated_results.csv"
+    global_aggregated_sizes = _read_aggregated_sizes(aggregated_path)
+    global_aggregation_succeeded = (
+        merge_stats.get("global_row_count", 0) > 0
+        and aggregated_path.exists()
+        and requested_set.issubset(global_aggregated_sizes)
+    )
+    done_flag_path = base_results_dir / "done.flag"
+    incomplete_flag_path = base_results_dir / "incomplete.flag"
+    if not missing_sizes and not missing_replications and global_aggregation_succeeded:
+        done_flag_path.write_text("done\n", encoding="utf-8")
+        if incomplete_flag_path.exists():
+            incomplete_flag_path.unlink()
         log_info("done.flag écrit (agrégation complète).")
+    else:
+        if done_flag_path.exists():
+            done_flag_path.unlink()
+        diagnostics: list[str] = [
+            "status=incomplete",
+            f"all_sizes_present={not missing_sizes}",
+            f"all_replications_present={not missing_replications}",
+            f"global_aggregation_succeeded={global_aggregation_succeeded}",
+        ]
+        if missing_sizes:
+            diagnostics.append(f"missing_sizes={','.join(map(str, missing_sizes))}")
+        if missing_replications:
+            rep_details = ";".join(
+                f"size_{size}:{','.join(reps)}"
+                for size, reps in sorted(missing_replications.items())
+            )
+            diagnostics.append(f"missing_replications={rep_details}")
+        missing_global_sizes = sorted(requested_set - global_aggregated_sizes)
+        if missing_global_sizes:
+            diagnostics.append(
+                f"global_missing_sizes={','.join(map(str, missing_global_sizes))}"
+            )
+        diagnostics.append(f"global_row_count={merge_stats.get('global_row_count', 0)}")
+        incomplete_flag_path.write_text("\n".join(diagnostics) + "\n", encoding="utf-8")
+        log_debug(
+            "ATTENTION: campagne incomplète, done.flag non écrit. "
+            "Voir incomplete.flag pour le diagnostic."
+        )
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         log_info(f"Tailles simulées: {sizes_label}")
-    aggregated_path = base_results_dir / "aggregates" / "aggregated_results.csv"
     if aggregated_path.exists():
         if args.plot_summary:
             _plot_summary_reward(base_results_dir)
