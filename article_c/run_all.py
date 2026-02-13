@@ -1282,6 +1282,7 @@ def main(argv: list[str] | None = None) -> None:
         }
         size_start = perf_counter()
         if not step1_size_args.skip_step1:
+            log_info(f"[PHASE] step1-simulation size={size}")
             _cleanup_size_directory(step1_results_dir, int(size), "Step1")
             step1_size_args.flat_output = False
             step1_size_args.reset_status = step1_status_reset_pending
@@ -1347,6 +1348,15 @@ def main(argv: list[str] | None = None) -> None:
         log_info(f"Résumé: taille de réseau {size} terminée.")
     campaign_summary["total_elapsed_seconds"] = round(perf_counter() - campaign_start, 3)
     if not args.skip_step1:
+        # 3) Validation du layout by_size/rep immédiatement après la simulation.
+        _assert_output_layout_compliant(
+            step1_results_dir,
+            requested_sizes,
+            replications_total,
+            "Step1",
+        )
+        # 4) Agrégation globale finale.
+        log_info("[PHASE] step1-aggregation")
         step1_merge_stats = aggregate_results_by_size(
             step1_results_dir,
             write_global_aggregated=True,
@@ -1365,12 +1375,7 @@ def main(argv: list[str] | None = None) -> None:
             f"({step2_merge_stats['global_row_count']} lignes)."
         )
     if not args.skip_step1:
-        _assert_output_layout_compliant(
-            step1_results_dir,
-            requested_sizes,
-            replications_total,
-            "Step1",
-        )
+        # 5) Validation post-agrégation.
         _assert_aggregation_contract_consistent(
             step1_results_dir,
             requested_sizes,
