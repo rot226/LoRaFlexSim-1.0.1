@@ -134,9 +134,12 @@ def _assert_output_layout_compliant(
         rep_dirs = {path.name for path in size_dir.glob("rep_*") if path.is_dir()}
         missing_rep_dirs = sorted(expected_rep_dirs - rep_dirs)
         if missing_rep_dirs:
+            missing_rep_paths = [
+                str((size_dir / rep_dir).resolve()) for rep_dir in missing_rep_dirs
+            ]
             raise RuntimeError(
                 f"{step_label}: layout invalide pour size_{size}, réplications manquantes: "
-                f"{missing_rep_dirs}."
+                f"{missing_rep_dirs}. Chemins absolus attendus: {missing_rep_paths}."
             )
         _assert_cumulative_sizes_nested(results_dir, {int(size)}, step_label)
 

@@ -1318,6 +1318,7 @@ def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
 def _read_nested_sizes(base_results_dir: Path, replications: list[int]) -> set[int]:
     sizes: set[int] = set()
     by_size_dir = base_results_dir / BY_SIZE_DIRNAME
+    missing_rep_dirs: list[Path] = []
     for size_dir in sorted(by_size_dir.glob("size_*")):
         if not size_dir.is_dir():
             continue
@@ -1331,10 +1332,22 @@ def _read_nested_sizes(base_results_dir: Path, replications: list[int]) -> set[i
         ]
         if rep_paths and all(path.exists() for path in rep_paths):
             sizes.add(size)
+            continue
+        for rep_path in rep_paths:
+            if rep_path.exists():
+                continue
+            missing_rep_dirs.append(rep_path.parent.resolve())
     if not sizes:
         log_debug(
             "Aucune taille complète détectée dans les sous-dossiers "
-            f"{base_results_dir / BY_SIZE_DIRNAME / 'size_<N>/rep_<R>'}."
+            f"{(by_size_dir.resolve() / 'size_<N>/rep_<R>')}."
+        )
+    if missing_rep_dirs:
+        missing_dirs_label = ", ".join(str(path) for path in missing_rep_dirs[:5])
+        suffix = "" if len(missing_rep_dirs) <= 5 else " ..."
+        log_debug(
+            "Dossiers de réplication manquants détectés: "
+            f"{missing_dirs_label}{suffix}"
         )
     return sizes
 
