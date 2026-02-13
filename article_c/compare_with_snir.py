@@ -142,15 +142,18 @@ def _load_author_curves(path: Path) -> list[AuthorCurve]:
 
 def _load_results_with_fallback(path: Path, *, step: int) -> list[dict[str, object]]:
     loader = load_step1_aggregated if step == 1 else load_step2_aggregated
+    step_label = f"step{step}"
+
+    results_dir = path.parent.parent if path.parent.name == "aggregates" else path.parent
     try:
         rows = loader(path)
         if rows:
-            LOGGER.info("source utilisée: aggregates")
+            LOGGER.info("source utilisée (%s): %s", step_label, path)
             return rows
     except Exception as exc:  # noqa: BLE001 - fallback attendu
         LOGGER.warning("Impossible de charger %s: %s", path, exc)
 
-    by_size_paths = sorted(path.parent.parent.glob("by_size/size_*/aggregated_results.csv"))
+    by_size_paths = sorted(results_dir.glob("by_size/size_*/aggregated_results.csv"))
     if not by_size_paths:
         return []
     try:
@@ -172,7 +175,11 @@ def _load_results_with_fallback(path: Path, *, step: int) -> list[dict[str, obje
 
     rows = loader(path)
     if rows:
-        LOGGER.info("source utilisée: by_size")
+        LOGGER.info(
+            "source utilisée (%s): %s/by_size/size_*/aggregated_results.csv",
+            step_label,
+            results_dir,
+        )
     return rows
 
 
