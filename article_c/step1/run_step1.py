@@ -53,6 +53,7 @@ from article_c.common.plot_helpers import (
 )
 from plot_defaults import resolve_ieee_figsize
 from article_c.common.utils import (
+    derive_run_seed,
     parse_network_size_list,
     replication_dirnames,
     replication_ids,
@@ -564,7 +565,6 @@ def _simulate_density(
     per_rep_metric_rows: dict[int, list[dict[str, object]]] = {
         replication: [] for replication in replications
     }
-    run_index = 0
     timing_totals = {"sf_assignment_s": 0.0, "interference_s": 0.0, "metrics_s": 0.0}
     timing_runs = 0
     jitter_range_s = float(config.get("jitter_range_s", 30.0))
@@ -595,14 +595,16 @@ def _simulate_density(
             scale=float(config["mixra_opt_budget_scale"]),
         )
     )
-    for algo_index, algo in enumerate(ALGORITHMS):
-        algo_seed_offset = algo_index * 10000
-        log_debug(f"Offset seed utilisé pour {ALGORITHM_LABELS.get(algo, algo)}: {algo_seed_offset}")
+    for algo in ALGORITHMS:
         for snir_mode in snir_modes:
             for replication in replications:
-                base_seed = int(config["seeds_base"]) + size_idx * runs_per_size + run_index
-                seed = base_seed + algo_seed_offset
-                run_index += 1
+                seed = derive_run_seed(
+                    seeds_base=int(config["seeds_base"]),
+                    network_size=int(network_size),
+                    replication=int(replication),
+                    algo=str(algo),
+                    snir_mode=str(snir_mode),
+                )
                 sent = density_to_sent(network_size)
                 result = None
                 for attempt in (1, 2):

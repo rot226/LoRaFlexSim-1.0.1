@@ -57,6 +57,7 @@ from article_c.common.plot_helpers import (
     set_default_export_formats,
 )
 from article_c.common.utils import (
+    derive_run_seed,
     ensure_dir,
     parse_cli_args,
     parse_network_size_list,
@@ -2502,21 +2503,21 @@ def _simulate_density(
     selection_rows: list[dict[str, object]] = []
     learning_curve_rows: list[dict[str, object]] = []
     algorithms = ("adr", "mixra_h", "mixra_opt", "ucb1_sf")
-    algo_offsets = {algo: idx * 10000 for idx, algo in enumerate(algorithms)}
     jitter_range_s = float(config.get("jitter_range_s", 30.0))
     log_debug(f"Jitter range utilisé (s): {jitter_range_s}")
-    offsets_label = ", ".join(
-        f"{algo}={offset}" for algo, offset in algo_offsets.items()
-    )
-    log_debug(f"Offsets de seed par algorithme: {offsets_label}")
     status_csv_path = base_results_dir / "run_status_step2.csv"
 
     _log_effective_traffic_scale_for_density(int(density), config)
 
     for replication in replications:
-        seed = int(config["base_seed"]) + density_idx * 1000 + replication
         for algorithm in algorithms:
-            algorithm_seed = seed + algo_offsets[algorithm]
+            algorithm_seed = derive_run_seed(
+                seeds_base=int(config["base_seed"]),
+                network_size=int(density),
+                replication=int(replication),
+                algo=str(algorithm),
+                snir_mode="snir_on",
+            )
             result = None
             for attempt in (1, 2):
                 try:

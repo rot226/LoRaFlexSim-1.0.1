@@ -498,8 +498,9 @@ python -m article_c.make_all_plots
 
 ## Seeds et réplications
 
-- **Seeds** : l'étape 1 et l'étape 2 utilisent `--seeds_base` (ex: `--network-sizes 100 200 --replications 2 --seeds_base 123`) pour initialiser un seed de base déterministe, puis incrémentent en interne.
+- **Seeds** : l'étape 1 et l'étape 2 dérivent désormais chaque seed depuis le tuple `(seeds_base, network_size, replication, algo, snir_mode)` (SHA-256 stable), et non plus via un incrément global. Formule exacte : `seed = int.from_bytes(sha256(f"{seeds_base}|{network_size}|{replication}|{algo}|{snir_mode}").digest()[:8], 'big') % (2**31 - 1)` (si `0`, seed forcé à `1`).
 - **Réplications** : `--replications` définit le nombre de répétitions par configuration (taille de réseau/algorithme/mode SNIR).
+- **Relance partielle** : relancer uniquement une taille/réplication/algorithme (Step1 ou Step2) reproduit exactement le même seed, donc les mêmes tirages pseudo-aléatoires, tant que le tuple ci-dessus reste identique.
 
 > **Network size = number of nodes (integer)**.
 

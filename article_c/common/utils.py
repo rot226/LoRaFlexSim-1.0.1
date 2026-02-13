@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import math
 import random
 from datetime import datetime, timezone
@@ -480,6 +481,39 @@ def set_deterministic_seed(seed: int | None) -> int:
     random.seed(seed)
     np.random.seed(seed)
     return seed
+
+
+def derive_run_seed(
+    *,
+    seeds_base: int,
+    network_size: int,
+    replication: int,
+    algo: str,
+    snir_mode: str,
+) -> int:
+    """Dérive un seed déterministe à partir d'un tuple de configuration.
+
+    Formule exacte (stable inter-plateformes) :
+
+    1. Concaténer les champs avec `|`:
+       `"{seeds_base}|{network_size}|{replication}|{algo}|{snir_mode}"`.
+    2. Calculer `SHA-256` de cette chaîne UTF-8.
+    3. Interpréter les 8 premiers octets du digest en entier non signé big-endian.
+    4. Réduire modulo `(2**31 - 1)`.
+    5. Si le résultat vaut 0, retourner 1.
+
+    Cette dérivation évite toute dépendance à l'ordre d'itération (utile pour les
+    relances partielles Step1/Step2).
+    """
+
+    key = f"{int(seeds_base)}|{int(network_size)}|{int(replication)}|{algo}|{snir_mode}".encode(
+        "utf-8"
+    )
+    digest = hashlib.sha256(key).digest()
+    derived = int.from_bytes(digest[:8], byteorder="big", signed=False) % (
+        (2**31) - 1
+    )
+    return derived if derived != 0 else 1
 
 
 def parse_network_size_list(value: str | Sequence[int]) -> list[int]:
