@@ -290,9 +290,11 @@ def _load_csv_rows_coerced(path: Path) -> list[dict[str, object]]:
 
 
 def _collect_nested_csvs(results_dir: Path, filename: str) -> list[Path]:
+    by_size_pattern = Path("by_size") / "size_*"
     if filename == "aggregated_results.csv":
-        return sorted(results_dir.glob("by_size/size_*/aggregated_results.csv"))
-    return sorted(results_dir.glob(f"by_size/size_*/rep_*/{filename}"))
+        return sorted(results_dir.glob(str(by_size_pattern / "aggregated_results.csv")))
+    nested_pattern = by_size_pattern / "rep_*" / filename
+    return sorted(results_dir.glob(str(nested_pattern)))
 
 
 def _resolve_step_results_dir(step: str) -> Path:
@@ -328,7 +330,7 @@ def _load_dataset_from_by_size(
     return CsvDataBundle(
         fieldnames=fieldnames,
         rows=rows,
-        label=f"{results_dir}/by_size/size_*/{csv_name}",
+        label=str((results_dir / "by_size" / "size_*" / csv_name).resolve()),
         source_paths=tuple(nested_paths),
     )
 
@@ -342,10 +344,10 @@ def _report_missing_csv(
 ) -> None:
     nested_pattern = results_dir / "by_size" / "size_*" / csv_name
     log_debug(f"ERREUR: CSV {step_label} introuvable pour source={source}.")
-    log_debug(f"Pattern attendu: {nested_pattern}.")
+    log_debug(f"Pattern attendu: {nested_pattern.resolve()}.")
     log_debug(
         "INFO: vérifiez que les simulations ont bien écrit dans "
-        f"{results_dir}."
+        f"{results_dir.resolve()}."
     )
 
 
