@@ -33,6 +33,30 @@ DEFAULT_REPLICATIONS = 10
 STEP2_SUCCESS_RATE_MEAN_LOW_THRESHOLD = 0.20
 
 
+LOG_LEVELS = {"quiet": 0, "info": 1, "debug": 2}
+_CURRENT_LOG_LEVEL = LOG_LEVELS["info"]
+
+
+def set_log_level(level: str) -> None:
+    global _CURRENT_LOG_LEVEL
+    _CURRENT_LOG_LEVEL = LOG_LEVELS[level]
+
+
+def log_info(message: str) -> None:
+    if _CURRENT_LOG_LEVEL >= LOG_LEVELS["info"]:
+        print(message)
+
+
+def log_debug(message: str) -> None:
+    if _CURRENT_LOG_LEVEL >= LOG_LEVELS["debug"]:
+        print(message)
+
+
+def log_error(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
+
 
 def _assert_path_within_scope(path: Path, scope_root: Path, context: str) -> Path:
     resolved_path = path.resolve()
@@ -50,7 +74,7 @@ def _log_existing_key_csv_paths(step_label: str, results_dir: Path) -> None:
     for csv_path in sorted(results_dir.glob("**/*.csv")):
         _assert_path_within_scope(csv_path, results_dir, step_label)
         if any(csv_path.name.startswith(prefix) for prefix in key_csv_names):
-            print(f"{step_label}: CSV clé détecté {csv_path.resolve()}")
+            log_info(f"{step_label}: CSV clé détecté {csv_path.resolve()}")
 
 
 def _cleanup_size_directory(results_dir: Path, network_size: int, step_label: str) -> None:
@@ -59,7 +83,7 @@ def _cleanup_size_directory(results_dir: Path, network_size: int, step_label: st
     if size_dir.exists():
         _assert_path_within_scope(size_dir, results_dir, step_label)
         shutil.rmtree(size_dir)
-        print(f"{step_label}: dossier nettoyé avant simulation isolée: {size_dir.resolve()}")
+        log_debug(f"{step_label}: dossier nettoyé avant simulation isolée: {size_dir.resolve()}")
 
 
 def _remove_global_aggregation_artifacts(results_dir: Path, step_label: str) -> None:
@@ -69,7 +93,7 @@ def _remove_global_aggregation_artifacts(results_dir: Path, step_label: str) -> 
         _assert_path_within_scope(candidate, results_dir, step_label)
         if candidate.exists():
             candidate.unlink()
-            print(f"{step_label}: artefact global supprimé avant campagne: {candidate.resolve()}")
+            log_debug(f"{step_label}: artefact global supprimé avant campagne: {candidate.resolve()}")
 
 
 def _assert_no_global_writes_during_simulation(results_dir: Path, step_label: str) -> None:
@@ -304,7 +328,7 @@ def _assert_cumulative_sizes_nested(
 
     for attempt in range(1, max_attempts + 1):
         size_pattern = str(by_size_dir / "size_*")
-        print(
+        log_debug(
             f"{step_label}: scan cumulatif tentative {attempt}/{max_attempts} "
             f"via le pattern {size_pattern}"
         )
@@ -316,7 +340,7 @@ def _assert_cumulative_sizes_nested(
         }
         size_dirs = sorted(path for path in by_size_dir.glob("size_*") if path.is_dir())
         current_scan["size_dirs"] = [str(path.resolve()) for path in size_dirs]
-        print(
+        log_debug(
             f"{step_label}: dossiers size scannés: "
             f"{current_scan['size_dirs']}"
         )
@@ -330,10 +354,10 @@ def _assert_cumulative_sizes_nested(
                 continue
 
             rep_pattern = str(size_dir / "rep_*")
-            print(f"{step_label}: scan des réplications via le pattern {rep_pattern}")
+            log_debug(f"{step_label}: scan des réplications via le pattern {rep_pattern}")
             rep_dirs = sorted(path for path in size_dir.glob("rep_*") if path.is_dir())
             rep_resolved = [str(path.resolve()) for path in rep_dirs]
-            print(
+            log_debug(
                 f"{step_label}: dossiers rep scannés pour size_{size_value}: "
                 f"{rep_resolved}"
             )
@@ -363,7 +387,7 @@ def _assert_cumulative_sizes_nested(
         if expected_sizes_so_far.issubset(found_sizes):
             return
         if attempt < max_attempts:
-            print(
+            log_debug(
                 f"{step_label}: validation cumulative incomplète "
                 f"(attendues={sorted(expected_sizes_so_far)}, trouvées={sorted(found_sizes)}). "
                 f"Nouvelle tentative dans {retry_delay_s:.2f}s."
@@ -381,6 +405,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour l'exécution complète."""
     parser = argparse.ArgumentParser(
         description="Exécute les étapes 1 et 2 avec des arguments communs."
+    )
+    parser.add_argument(
+        "--log-level",
+        choices=("quiet", "info", "debug"),
+        default="info",
+        help="Niveau de logs (quiet, info, debug).",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Alias de --log-level quiet.",
     )
     parser.add_argument(
         "--preset",
@@ -824,7 +859,7 @@ def _enforce_article_c_branch(allow_non_article_c: bool) -> None:
         return
     current_branch = _get_current_git_branch()
     if current_branch is None:
-        print(
+        log_debug(
             "AVERTISSEMENT: impossible de déterminer la branche Git courante "
             "(archive ZIP, Git absent ou dépôt non initialisé). "
             "Contrôle de branche ignoré."
@@ -832,7 +867,7 @@ def _enforce_article_c_branch(allow_non_article_c: bool) -> None:
         return
     expected_branch = "article_c"
     if current_branch != expected_branch:
-        print(
+        log_debug(
             "AVERTISSEMENT: branche Git attendue 'article_c', "
             f"branche détectée: '{current_branch}'. "
             "Exécution poursuivie pour compatibilité locale/Windows."
@@ -1096,7 +1131,7 @@ def _validate_step2_explicit_config_startup(
 ) -> None:
     """Valide la config explicite Step2 et détecte les attributs manquants."""
     explicit_keys = sorted(step2_explicit_config)
-    print("Step2: clés explicites construites = " + ", ".join(explicit_keys))
+    log_debug("Step2: clés explicites construites = " + ", ".join(explicit_keys))
 
     allowed_internal_keys = {"reset_status"}
     missing_from_args = [
@@ -1120,7 +1155,7 @@ def _validate_step2_explicit_config_startup(
             f"_build_step2_args est manquant: {exc}"
         ) from exc
 
-    print(
+    log_debug(
         "Step2: validation explicite OK, aucune clé ne provoque d'AttributeError."
     )
 
@@ -1128,6 +1163,9 @@ def _validate_step2_explicit_config_startup(
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    if args.quiet:
+        args.log_level = "quiet"
+    set_log_level(args.log_level)
     if args.preset is not None:
         preset_values = RUN_ALL_PRESETS[args.preset]
         for key, value in preset_values.items():
@@ -1135,12 +1173,12 @@ def main(argv: list[str] | None = None) -> None:
                 setattr(args, key, value)
     _enforce_article_c_branch(args.allow_non_article_c)
     if args.auto_safe_profile:
-        print(
+        log_debug(
             "Auto-safe-profile activé par défaut: le profil sécurisé sera appliqué "
             "avant la simulation de l'étape 2."
         )
     else:
-        print(
+        log_debug(
             "Recommandation: activez --auto-safe-profile pour éviter un "
             "success_rate trop faible à l'étape 2."
         )
@@ -1286,14 +1324,14 @@ def main(argv: list[str] | None = None) -> None:
         cast_sizes = campaign_summary["sizes"]
         if isinstance(cast_sizes, list):
             cast_sizes.append(size_summary)
-        print(f"Résumé: taille de réseau {size} terminée.")
+        log_info(f"Résumé: taille de réseau {size} terminée.")
     campaign_summary["total_elapsed_seconds"] = round(perf_counter() - campaign_start, 3)
     if not args.skip_step1:
         step1_merge_stats = aggregate_results_by_size(
             step1_results_dir,
             write_global_aggregated=True,
         )
-        print(
+        log_debug(
             "Step1: agrégation globale finale exécutée "
             f"({step1_merge_stats['global_row_count']} lignes)."
         )
@@ -1302,7 +1340,7 @@ def main(argv: list[str] | None = None) -> None:
             step2_results_dir,
             write_global_aggregated=True,
         )
-        print(
+        log_debug(
             "Step2: agrégation globale finale exécutée "
             f"({step2_merge_stats['global_row_count']} lignes)."
         )
@@ -1330,7 +1368,7 @@ def main(argv: list[str] | None = None) -> None:
             requested_sizes,
             "Step2",
         )
-    print("Validation des résultats (article C) en cours...")
+    log_info("Validation des résultats (article C) en cours...")
     validation_args: list[str] = []
     if args.skip_step2:
         validation_args.append("--skip-step2")
@@ -1343,7 +1381,7 @@ def main(argv: list[str] | None = None) -> None:
         json.dumps(campaign_summary, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
-    print(f"Résumé de campagne écrit: {campaign_summary_path}")
+    log_info(f"Résumé de campagne écrit: {campaign_summary_path}")
     if validation_code != 0:
         raise SystemExit(validation_code)
 

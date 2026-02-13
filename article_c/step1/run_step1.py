@@ -2,10 +2,35 @@
 
 from __future__ import annotations
 
+
+LOG_LEVELS = {"quiet": 0, "info": 1, "debug": 2}
+_CURRENT_LOG_LEVEL = LOG_LEVELS["info"]
+
+
+def set_log_level(level: str) -> None:
+    global _CURRENT_LOG_LEVEL
+    _CURRENT_LOG_LEVEL = LOG_LEVELS[level]
+
+
+def log_info(message: str) -> None:
+    if _CURRENT_LOG_LEVEL >= LOG_LEVELS["info"]:
+        print(message)
+
+
+def log_debug(message: str) -> None:
+    if _CURRENT_LOG_LEVEL >= LOG_LEVELS["debug"]:
+        print(message)
+
+
+def log_error(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
 import argparse
 import csv
 import math
 import random
+import sys
 from collections import Counter
 from multiprocessing import get_context
 from pathlib import Path
@@ -77,7 +102,7 @@ def _log_step1_key_csv_paths(output_dir: Path) -> None:
         csv_path = output_dir / csv_name
         resolved_csv = _ensure_csv_within_scope(csv_path, output_dir)
         if csv_path.exists():
-            print(f"CSV Step1 écrit: {resolved_csv}")
+            log_info(f"CSV Step1 écrit: {resolved_csv}")
 
 
 def _congestion_ratio(network_size: float) -> float:
@@ -166,12 +191,12 @@ def format_global_progress(*, percent: float, elapsed_s: float, eta_s: float) ->
 
 def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
     if not aggregated_path.exists():
-        print(f"Aucun aggregated_results.csv détecté: {aggregated_path}")
+        log_debug(f"Aucun aggregated_results.csv détecté: {aggregated_path}")
         return set()
     with aggregated_path.open("r", newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         if not reader.fieldnames or "network_size" not in reader.fieldnames:
-            print(f"Colonne network_size absente dans {aggregated_path}")
+            log_debug(f"Colonne network_size absente dans {aggregated_path}")
             return set()
         sizes: set[int] = set()
         for row in reader:
@@ -181,7 +206,7 @@ def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
             try:
                 sizes.add(int(float(value)))
             except ValueError:
-                print(f"Valeur network_size invalide détectée: {value}")
+                log_debug(f"Valeur network_size invalide détectée: {value}")
         return sizes
 
 
@@ -202,7 +227,7 @@ def _read_nested_sizes(output_dir: Path, replications: list[int]) -> set[int]:
         if rep_paths and all(path.exists() for path in rep_paths):
             sizes.add(size)
     if not sizes:
-        print(
+        log_debug(
             "Aucune taille complète détectée dans les sous-dossiers "
             f"{output_dir / BY_SIZE_DIRNAME / 'size_<N>/rep_<R>'}."
         )
@@ -212,6 +237,17 @@ def _read_nested_sizes(output_dir: Path, replications: list[int]) -> set[int]:
 def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour l'étape 1."""
     parser = argparse.ArgumentParser(description="Exécute l'étape 1 de l'article C.")
+    parser.add_argument(
+        "--log-level",
+        choices=("quiet", "info", "debug"),
+        default="info",
+        help="Niveau de logs (quiet, info, debug).",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Alias de --log-level quiet.",
+    )
     scenario_defaults = DEFAULT_CONFIG.scenario
     snir_defaults = DEFAULT_CONFIG.snir
     parser.add_argument(
@@ -512,7 +548,7 @@ def _simulate_density(
             )
         ),
     }
-    print(f"Jitter range utilisé (s): {jitter_range_s}")
+    log_debug(f"Jitter range utilisé (s): {jitter_range_s}")
     status_csv_path = output_dir / "run_status_step1.csv"
     runs_per_size = len(ALGORITHMS) * len(snir_modes) * len(replications)
     mixra_opt_budget = (
@@ -526,7 +562,7 @@ def _simulate_density(
     )
     for algo_index, algo in enumerate(ALGORITHMS):
         algo_seed_offset = algo_index * 10000
-        print(f"Offset seed utilisé pour {ALGORITHM_LABELS.get(algo, algo)}: {algo_seed_offset}")
+        log_debug(f"Offset seed utilisé pour {ALGORITHM_LABELS.get(algo, algo)}: {algo_seed_offset}")
         for snir_mode in snir_modes:
             for replication in replications:
                 base_seed = int(config["seeds_base"]) + size_idx * runs_per_size + run_index
@@ -562,13 +598,13 @@ def _simulate_density(
                         )
                         break
                     except Exception as exc:
-                        print(
+                        log_debug(
                             "Échec simulation step1 "
                             f"(size={network_size}, rep={replication}, seed={seed}, "
                             f"algo={algo}, snir={snir_mode}, step=step1, attempt={attempt}/2): {exc}"
                         )
                         if attempt == 1:
-                            print("Retry immédiat (1/1) pour cette simulation unitaire.")
+                            log_debug("Retry immédiat (1/1) pour cette simulation unitaire.")
                         else:
                             with status_csv_path.open("a", newline="", encoding="utf-8") as handle:
                                 writer = csv.DictWriter(
@@ -788,11 +824,11 @@ def _simulate_density(
 def _plot_summary_pdr(output_dir: Path) -> None:
     results_path = output_dir / "aggregates" / "aggregated_results.csv"
     if not results_path.exists():
-        print(f"Aucun aggregated_results.csv pour tracer le résumé: {results_path}")
+        log_debug(f"Aucun aggregated_results.csv pour tracer le résumé: {results_path}")
         return
     rows = load_step1_aggregated(results_path, allow_sample=False)
     if not rows:
-        print("Aucune ligne agrégée disponible pour le plot de synthèse.")
+        log_debug("Aucune ligne agrégée disponible pour le plot de synthèse.")
         return
     rows = filter_cluster(rows, "all")
     rows = filter_mixra_opt_fallback(rows)
@@ -844,7 +880,7 @@ def _check_pdr_formula_for_size(output_dir: Path, reference_size: int = 80) -> N
     raw_rows = _load_csv_rows(raw_path)
     aggregated_rows = _load_csv_rows(aggregated_path)
     if not raw_rows or not aggregated_rows:
-        print(
+        log_debug(
             "Vérification PDR ignorée: raw_metrics.csv ou aggregated_results.csv manquant."
         )
         return
@@ -889,13 +925,13 @@ def _check_pdr_formula_for_size(output_dir: Path, reference_size: int = 80) -> N
         }
 
     if not grouped_raw:
-        print(
+        log_debug(
             f"Aucune ligne brute exploitable pour network_size={reference_size} "
             "dans raw_metrics.csv."
         )
         return
 
-    print(
+    log_debug(
         f"Comparaison PDR (network_size={reference_size}) entre raw_metrics.csv "
         "et aggregated_results.csv:"
     )
@@ -907,9 +943,9 @@ def _check_pdr_formula_for_size(output_dir: Path, reference_size: int = 80) -> N
         aggregated = aggregated_lookup.get(key)
         label = f"algo={key[0]} snir={key[1]} cluster={key[2]} fallback={key[3]}"
         if not aggregated:
-            print(f" - {label}: aucun agrégat trouvé.")
+            log_debug(f" - {label}: aucun agrégat trouvé.")
             continue
-        print(
+        log_debug(
             " - {label}: pdr_mean(raw)={raw_pdr:.4f}, "
             "pdr_mean(agg)={agg_pdr:.4f}, "
             "received_mean/sent_mean(raw)={ratio:.4f}".format(
@@ -925,7 +961,7 @@ def _check_pdr_consistency(output_dir: Path) -> None:
     aggregated_path = output_dir / "aggregates" / "aggregated_results.csv"
     aggregated_rows = _load_csv_rows(aggregated_path)
     if not aggregated_rows:
-        print("Contrôle de cohérence PDR ignoré: aggregated_results.csv manquant.")
+        log_debug("Contrôle de cohérence PDR ignoré: aggregated_results.csv manquant.")
         return
 
     grouped: dict[tuple[str, str, str, str], list[dict[str, float]]] = {}
@@ -973,7 +1009,7 @@ def _check_pdr_consistency(output_dir: Path) -> None:
             continue
         label = f"algo={key[0]} snir={key[1]} cluster={key[2]} fallback={key[3]}"
         sizes = ", ".join(str(int(row["network_size"])) for row in sorted(rows, key=lambda r: r["network_size"]))
-        print(
+        log_debug(
             "Alerte cohérence PDR: sent quasi constant mais received_mean chute "
             f"(ratio={collapse_ratio:.2f}). {label}. Tailles: {sizes}. "
             "Vérifier collisions, pertes, ou une normalisation incorrecte."
@@ -985,7 +1021,7 @@ def _step1_post_report(output_dir: Path, *, write_txt: bool = True) -> None:
     aggregated_path = output_dir / "aggregates" / "aggregated_results.csv"
     aggregated_rows = _load_csv_rows(aggregated_path)
     if not aggregated_rows:
-        print("Post-report ignoré: aggregated_results.csv manquant ou vide.")
+        log_debug("Post-report ignoré: aggregated_results.csv manquant ou vide.")
         return
 
     grouped_by_size: dict[int, list[dict[str, str]]] = {}
@@ -996,7 +1032,7 @@ def _step1_post_report(output_dir: Path, *, write_txt: bool = True) -> None:
         grouped_by_size.setdefault(int(round(network_size)), []).append(row)
 
     if not grouped_by_size:
-        print("Post-report ignoré: aucune taille réseau exploitable.")
+        log_debug("Post-report ignoré: aucune taille réseau exploitable.")
         return
 
     report_lines: list[str] = []
@@ -1102,16 +1138,19 @@ def _step1_post_report(output_dir: Path, *, write_txt: bool = True) -> None:
         report_lines.append("- alertes de collapse détectées: aucune")
 
     report_text = "\n".join(report_lines)
-    print(report_text)
+    log_debug(report_text)
     if write_txt:
         report_path = output_dir / "post_report_step1.txt"
         report_path.write_text(report_text + "\n", encoding="utf-8")
-        print(f"Post-report écrit: {report_path}")
+        log_debug(f"Post-report écrit: {report_path}")
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    if args.quiet:
+        args.log_level = "quiet"
+    set_log_level(args.log_level)
     try:
         export_formats = parse_export_formats(args.formats)
     except ValueError as exc:
@@ -1148,12 +1187,12 @@ def main(argv: list[str] | None = None) -> None:
             writer = csv.DictWriter(handle, fieldnames=status_fieldnames)
             writer.writeheader()
         action = "réinitialisé" if args.reset_status else "initialisé"
-        print(f"Statut Step1 {action}: {status_csv_path.resolve()}")
+        log_info(f"Statut Step1 {action}: {status_csv_path.resolve()}")
     else:
-        print(f"Statut Step1 conservé (mode campagne): {status_csv_path.resolve()}")
+        log_info(f"Statut Step1 conservé (mode campagne): {status_csv_path.resolve()}")
     flat_output = False
     if bool(args.flat_output):
-        print(
+        log_debug(
             "Option --flat-output ignorée: écriture primaire imposée sous by_size/."
         )
     simulated_sizes: list[int] = []
@@ -1223,13 +1262,13 @@ def main(argv: list[str] | None = None) -> None:
                         if completed_runs > 0
                         else 0.0
                     )
-                    print(
+                    log_debug(
                         format_global_progress(
                             percent=percent, elapsed_s=elapsed_s, eta_s=eta_s
                         )
                     )
                 if result.get("timing_summary"):
-                    print(result["timing_summary"])
+                    log_debug(result["timing_summary"])
             results = None
     if worker_count == 1:
         for result in results:
@@ -1245,32 +1284,32 @@ def main(argv: list[str] | None = None) -> None:
                     if completed_runs > 0
                     else 0.0
                 )
-                print(
+                log_debug(
                     format_global_progress(
                         percent=percent, elapsed_s=elapsed_s, eta_s=eta_s
                     )
                 )
             if result.get("timing_summary"):
-                print(result["timing_summary"])
+                log_debug(result["timing_summary"])
 
-    print(f"Rows written: {total_rows}")
+    log_info(f"Rows written: {total_rows}")
     if rows_per_size:
         sizes_summary = ", ".join(
             f"{size}={count}" for size, count in sorted(rows_per_size.items())
         )
-        print(f"Rows per size: {sizes_summary}")
+        log_debug(f"Rows per size: {sizes_summary}")
     aggregated_sizes = _read_nested_sizes(output_dir, replications)
     merge_stats = aggregate_results_by_size(
         output_dir,
         write_global_aggregated=bool(args.global_aggregated),
     )
-    print(
+    log_debug(
         "Agrégation Step1 par taille: "
         f"{merge_stats['size_count']} dossier(s) size_<N>, "
         f"{merge_stats['size_row_count']} ligne(s) consolidée(s)."
     )
     if bool(args.global_aggregated):
-        print(
+        log_debug(
             "Agrégation Step1 globale: "
             f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
             "dans results/aggregates/aggregated_results.csv."
@@ -1278,16 +1317,16 @@ def main(argv: list[str] | None = None) -> None:
     missing_sizes = sorted(set(network_sizes) - aggregated_sizes)
     if missing_sizes:
         missing_label = ", ".join(map(str, missing_sizes))
-        print(
+        log_debug(
             "ATTENTION: tailles manquantes dans by_size/, "
             f"done.flag non écrit. Manquantes: {missing_label}"
         )
     else:
         (output_dir / "done.flag").write_text("done\n", encoding="utf-8")
-        print("done.flag écrit (agrégation complète).")
+        log_info("done.flag écrit (agrégation complète).")
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
-        print(f"Tailles simulées: {sizes_label}")
+        log_info(f"Tailles simulées: {sizes_label}")
     aggregated_path = output_dir / "aggregates" / "aggregated_results.csv"
     if aggregated_path.exists():
         _step1_post_report(output_dir)
@@ -1296,7 +1335,7 @@ def main(argv: list[str] | None = None) -> None:
         if args.plot_summary:
             _plot_summary_pdr(output_dir)
     elif args.plot_summary:
-        print(
+        log_debug(
             "Plot de synthèse ignoré: results/aggregates/aggregated_results.csv absent "
             "(utilisez --flat-output ou make_all_plots.py)."
         )

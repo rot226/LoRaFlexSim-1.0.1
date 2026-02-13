@@ -2,6 +2,30 @@
 
 from __future__ import annotations
 
+
+LOG_LEVELS = {"quiet": 0, "info": 1, "debug": 2}
+_CURRENT_LOG_LEVEL = LOG_LEVELS["info"]
+
+
+def set_log_level(level: str) -> None:
+    global _CURRENT_LOG_LEVEL
+    _CURRENT_LOG_LEVEL = LOG_LEVELS[level]
+
+
+def log_info(message: str) -> None:
+    if _CURRENT_LOG_LEVEL >= LOG_LEVELS["info"]:
+        print(message)
+
+
+def log_debug(message: str) -> None:
+    if _CURRENT_LOG_LEVEL >= LOG_LEVELS["debug"]:
+        print(message)
+
+
+def log_error(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
 import argparse
 import ast
 import csv
@@ -325,7 +349,7 @@ def _write_aggregated_results_from_by_size(
         writer = csv.DictWriter(handle, fieldnames=bundle.fieldnames)
         writer.writeheader()
         writer.writerows(bundle.rows)
-    print(
+    log_debug(
         "INFO: Préflight agrégats "
         f"{step_label}: {len(bundle.rows)} lignes écrites dans {aggregated_path}."
     )
@@ -358,12 +382,12 @@ def _report_missing_csv(
 ) -> None:
     aggregated_path = results_dir / "aggregates" / "aggregated_results.csv"
     nested_pattern = results_dir / "by_size" / "size_*" / csv_name
-    print(f"ERREUR: CSV {step_label} introuvable pour source={source}.")
+    log_debug(f"ERREUR: CSV {step_label} introuvable pour source={source}.")
     if source == "aggregated":
-        print(f"Chemin attendu: {aggregated_path}.")
+        log_debug(f"Chemin attendu: {aggregated_path}.")
     else:
-        print(f"Pattern attendu: {nested_pattern}.")
-    print(
+        log_debug(f"Pattern attendu: {nested_pattern}.")
+    log_debug(
         "INFO: vérifiez que les simulations ont bien écrit dans "
         f"{results_dir}."
     )
@@ -395,6 +419,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI pour générer les figures."""
     parser = argparse.ArgumentParser(
         description="Génère toutes les figures à partir des CSV agrégés."
+    )
+    parser.add_argument(
+        "--log-level",
+        choices=("quiet", "info", "debug"),
+        default="info",
+        help="Niveau de logs (quiet, info, debug).",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Alias de --log-level quiet.",
     )
     parser.add_argument(
         "--preset",
@@ -541,13 +576,13 @@ def _check_legends_for_module(
         for ax in fig.axes:
             _, labels = ax.get_legend_handles_labels()
             legend_count += len([label for label in labels if label])
-        print(
+        log_debug(
             "INFO: "
             f"module {module_path} - {context}: "
             f"{legend_count} légende(s) trouvée(s)."
         )
         if legend_count == 0:
-            print(
+            log_debug(
                 "FAIL: "
                 f"aucune légende détectée pour {context}. "
                 "Chaque figure doit exposer une légende explicite "
@@ -556,7 +591,7 @@ def _check_legends_for_module(
         assert_legend_present(fig, context)
         if not _figure_has_legend(fig):
             all_figs_have_legends = False
-            print(
+            log_debug(
                 "AVERTISSEMENT: "
                 f"légende absente pour {context}. "
                 f"Source: {source_path}"
@@ -570,13 +605,13 @@ def _check_legends_for_module(
                         best_ax = ax
                         best_count = len(handles)
                 if best_ax is None:
-                    print(
+                    log_debug(
                         "AVERTISSEMENT: "
                         f"aucune entrée de légende détectée pour {context}; "
                         "place_adaptive_legend ignoré."
                     )
                 else:
-                    print(
+                    log_debug(
                         "AVERTISSEMENT: "
                         f"tentative de placement automatique de légende pour "
                         f"{context}."
@@ -584,24 +619,24 @@ def _check_legends_for_module(
                     try:
                         place_adaptive_legend(fig, best_ax)
                     except Exception as exc:
-                        print(
+                        log_debug(
                             "AVERTISSEMENT: "
                             f"place_adaptive_legend a échoué pour {context}: {exc}"
                         )
                     else:
                         if _figure_has_legend(fig):
-                            print(
+                            log_debug(
                                 "INFO: "
                                 f"légende ajoutée pour {context}."
                             )
                         else:
-                            print(
+                            log_debug(
                                 "AVERTISSEMENT: "
                                 f"place_adaptive_legend n'a pas créé de légende "
                                 f"pour {context}."
                             )
             else:
-                print(
+                log_debug(
                     "AVERTISSEMENT: "
                     f"place_adaptive_legend non exposé par {module_path}; "
                     f"légende absente pour {context}."
@@ -667,12 +702,12 @@ def _validate_plot_modules_use_save_figure() -> dict[str, str]:
         if issues:
             missing[module_path] = ", ".join(issues)
     if missing_save_figure:
-        print(
+        log_debug(
             "ERREUR: certains scripts de plot ne passent pas par save_figure:\n"
             + "\n".join(f"- {item}" for item in missing_save_figure)
         )
     if missing_plot_style:
-        print(
+        log_debug(
             "ERREUR: certains scripts de plot ne respectent pas apply_plot_style:\n"
             + "\n".join(f"- {item}" for item in missing_plot_style)
         )
@@ -715,7 +750,7 @@ def _validate_plot_modules_no_titles() -> dict[str, str]:
             violations[module_path] = f"usage interdit de set_title/suptitle (lignes: {lines})"
 
     if violations:
-        print(
+        log_debug(
             "ERREUR: titres détectés dans des modules interdits (Step1/Step2/reproduction):\n"
             + "\n".join(f"- {module}: {reason}" for module, reason in violations.items())
         )
@@ -726,7 +761,7 @@ def _preflight_validate_plot_modules() -> dict[str, str]:
     invalid_modules = _validate_plot_modules_use_save_figure()
     invalid_modules.update(_validate_plot_modules_no_titles())
     if invalid_modules:
-        print(
+        log_debug(
             "ERREUR: modules de plots fautifs détectés avant exécution:\n"
             + "\n".join(
                 f"- {module}: {reason}"
@@ -919,9 +954,9 @@ def _write_figures_manifest(
         )
         writer.writeheader()
         writer.writerows(sorted(rows, key=lambda row: (str(row["step"]), str(row["filename"]))))
-    print(f"Manifest des figures écrit: {MANIFEST_OUTPUT_PATH}")
+    log_debug(f"Manifest des figures écrit: {MANIFEST_OUTPUT_PATH}")
     if missing_files:
-        print(
+        log_debug(
             "AVERTISSEMENT: certaines figures attendues sont absentes "
             f"({len(sorted(set(missing_files)))}) ; voir la colonne 'exists' du manifest."
         )
@@ -930,7 +965,7 @@ def _write_figures_manifest(
 def _validate_step2_plot_module_registry() -> list[str]:
     step2_dir = ARTICLE_DIR / "step2" / "plots"
     if not step2_dir.exists():
-        print(
+        log_debug(
             "AVERTISSEMENT: dossier Step2 plots introuvable, "
             "impossible de vérifier la liste PLOT_MODULES."
         )
@@ -941,7 +976,7 @@ def _validate_step2_plot_module_registry() -> list[str]:
     }
     missing = sorted(discovered - set(PLOT_MODULES["step2"]))
     if missing:
-        print(
+        log_debug(
             "AVERTISSEMENT: certains modules Step2 ne sont pas listés "
             "dans PLOT_MODULES['step2']:\n"
             + "\n".join(f"- {module}" for module in missing)
@@ -955,29 +990,29 @@ def _inspect_plot_outputs(
     formats: list[str],
 ) -> None:
     if not output_dir.exists():
-        print(
+        log_debug(
             "AVERTISSEMENT: "
             f"dossier de sortie absent pour {label}: {output_dir}"
         )
         output_dir.mkdir(parents=True, exist_ok=True)
         if label == "Step1":
             formats_label = ",".join(formats) if formats else "png"
-            print(
+            log_debug(
                 "INFO: relancez la commande suivante pour régénérer "
                 "les figures Step1:"
             )
-            print(
+            log_debug(
                 "python -m article_c.make_all_plots "
                 f"--steps step1 --formats {formats_label}"
             )
         return
     if not formats:
-        print(f"INFO: aucun format d'export fourni pour {label}.")
+        log_debug(f"INFO: aucun format d'export fourni pour {label}.")
         return
     primary_format = formats[0]
     primary_files = sorted(output_dir.glob(f"*.{primary_format}"))
     if not primary_files:
-        print(
+        log_debug(
             "AVERTISSEMENT: "
             f"aucun {primary_format.upper()} trouvé pour {label} dans {output_dir}."
         )
@@ -990,13 +1025,13 @@ def _inspect_plot_outputs(
             if not candidate.exists():
                 missing_variants.append(str(candidate))
     if missing_variants:
-        print(
+        log_debug(
             "AVERTISSEMENT: sorties manquantes pour le test visuel:\n"
             + "\n".join(f"- {path}" for path in missing_variants)
         )
     else:
         formats_label = "/".join(fmt.upper() for fmt in formats)
-        print(
+        log_debug(
             f"Test visuel: fichiers {formats_label} présents "
             f"pour {label} dans {output_dir}."
         )
@@ -1020,7 +1055,7 @@ def _analyze_step1_pngs(
 ) -> None:
     png_files = sorted(output_dir.glob("*.png"))
     if not png_files:
-        print("INFO: aucun PNG Step1 à analyser pour le rapport.")
+        log_debug("INFO: aucun PNG Step1 à analyser pour le rapport.")
         return
     sizes = []
     for path in png_files:
@@ -1030,7 +1065,7 @@ def _analyze_step1_pngs(
         except OSError:
             continue
     if not sizes:
-        print("AVERTISSEMENT: impossible de lire les tailles des PNG Step1.")
+        log_debug("AVERTISSEMENT: impossible de lire les tailles des PNG Step1.")
         return
     widths = [width for width, _ in sizes]
     heights = [height for _, height in sizes]
@@ -1090,31 +1125,31 @@ def _analyze_step1_pngs(
         else:
             axes_unknown.append(path.name)
     total = len(png_files)
-    print("\nRapport Step1 (PNG):")
-    print(
+    log_debug("\nRapport Step1 (PNG):")
+    log_debug(
         f"- Légendes: {legend_ok} OK / {legend_missing} manquantes / "
         f"{legend_unknown} inconnues (total {total})."
     )
-    print(
+    log_debug(
         f"- Tailles: médiane {int(median_width)}x{int(median_height)}px, "
         f"{size_ok} conformes / {len(size_outliers)} atypiques."
     )
-    print(
+    log_debug(
         f"- Axes lisibles: {axes_ok} OK / {len(axes_unknown)} à vérifier."
     )
     if size_outliers:
-        print("Détails tailles atypiques:")
+        log_debug("Détails tailles atypiques:")
         for item in size_outliers:
-            print(f"  - {item}")
+            log_debug(f"  - {item}")
     if legend_missing:
-        print(
+        log_debug(
             "Détails légendes manquantes: "
             "voir les logs de génération Step1 pour la liste complète."
         )
     if axes_unknown:
-        print("Détails axes à vérifier:")
+        log_debug("Détails axes à vérifier:")
         for item in axes_unknown:
-            print(f"  - {item}")
+            log_debug(f"  - {item}")
 
 
 def _pick_column(fieldnames: list[str], candidates: tuple[str, ...]) -> str | None:
@@ -1177,7 +1212,7 @@ def _load_csv_data(path: Path) -> tuple[list[str], list[dict[str, str]]]:
 def _load_network_sizes_from_bundles(bundles: list[CsvDataBundle]) -> list[int]:
     sizes: set[int] = set()
     for bundle in bundles:
-        print(f"[network_sizes] Lecture de la source: {bundle.label}")
+        log_debug(f"[network_sizes] Lecture de la source: {bundle.label}")
         fieldnames = bundle.fieldnames
         if "network_size" in fieldnames:
             size_column = "network_size"
@@ -1188,7 +1223,7 @@ def _load_network_sizes_from_bundles(bundles: list[CsvDataBundle]) -> list[int]:
                 f"La source {bundle.label} doit contenir une colonne "
                 "'network_size' ou 'density'."
             )
-        print(
+        log_debug(
             "[network_sizes] Colonne utilisée: "
             f"{size_column}"
             + (" (fallback depuis density)" if size_column == "density" else "")
@@ -1196,13 +1231,13 @@ def _load_network_sizes_from_bundles(bundles: list[CsvDataBundle]) -> list[int]:
         raw_values = [row.get(size_column) for row in bundle.rows]
         non_null_values = [value for value in raw_values if value not in (None, "")]
         dropped_count = len(raw_values) - len(non_null_values)
-        print(
+        log_debug(
             f"[network_sizes] dropna sur '{size_column}': "
             f"{dropped_count} ligne(s) ignorée(s)."
         )
         unique_raw_values = sorted({str(value).strip() for value in non_null_values if str(value).strip()})
         raw_label = ", ".join(unique_raw_values) if unique_raw_values else "aucune"
-        print(f"[network_sizes] Tailles uniques brutes: {raw_label}")
+        log_debug(f"[network_sizes] Tailles uniques brutes: {raw_label}")
 
         cast_errors: list[str] = []
         bundle_sizes: set[int] = set()
@@ -1213,17 +1248,17 @@ def _load_network_sizes_from_bundles(bundles: list[CsvDataBundle]) -> list[int]:
                 cast_errors.append(str(value))
         if cast_errors:
             errors_label = ", ".join(sorted(set(cast_errors)))
-            print(
+            log_debug(
                 "[network_sizes] Erreurs de cast vers int ignorées "
                 f"({len(cast_errors)} ligne(s)): {errors_label}"
             )
         final_bundle_sizes = sorted(bundle_sizes)
         final_label = ", ".join(str(value) for value in final_bundle_sizes) or "aucune"
-        print(f"[network_sizes] Tailles finales conservées pour cette source: {final_label}")
+        log_debug(f"[network_sizes] Tailles finales conservées pour cette source: {final_label}")
         sizes.update(bundle_sizes)
     merged_sizes = sorted(sizes)
     merged_label = ", ".join(str(value) for value in merged_sizes) or "aucune"
-    print(f"[network_sizes] Tailles finales agrégées: {merged_label}")
+    log_debug(f"[network_sizes] Tailles finales agrégées: {merged_label}")
     return merged_sizes
 
 
@@ -1269,7 +1304,7 @@ def _validate_network_sizes(
                 f"Tailles attendues manquantes: {missing_list}.",
                 "Les plots compatibles seront générés malgré tout.",
             ]
-            print("\n".join(message_lines))
+            log_debug("\n".join(message_lines))
     return missing_by_source
 
 
@@ -1284,7 +1319,7 @@ def _validate_plot_data(
 ) -> tuple[bool, str, dict[str, object]]:
     def _log_filter(filter_name: str, before: int, after: int, detail: str = "") -> None:
         suffix = f" ({detail})" if detail else ""
-        print(
+        log_debug(
             f"[validate_plot_data] Filtre {filter_name}: "
             f"{before} -> {after} ligne(s){suffix}."
         )
@@ -1305,8 +1340,8 @@ def _validate_plot_data(
         "reason": "",
     }
 
-    print(f"[validate_plot_data] Module: {module_path}")
-    print(f"[validate_plot_data] CSV: {data_bundle.label}")
+    log_debug(f"[validate_plot_data] Module: {module_path}")
+    log_debug(f"[validate_plot_data] CSV: {data_bundle.label}")
     for extra_name in requirements.extra_csv_names:
         if source == "aggregated":
             missing_extra = all(
@@ -1316,7 +1351,7 @@ def _validate_plot_data(
         else:
             missing_extra = not _collect_nested_csvs(_resolve_step_results_dir(step), extra_name)
         if missing_extra:
-            print(
+            log_debug(
                 "AVERTISSEMENT: "
                 f"{module_path} nécessite {extra_name}, figure ignorée."
             )
@@ -1324,7 +1359,7 @@ def _validate_plot_data(
             report["reason"] = f"CSV manquant ({extra_name})"
             return False, f"CSV manquant ({extra_name})", report
     fieldnames, rows = data_bundle.fieldnames, data_bundle.rows
-    print(
+    log_debug(
         "[validate_plot_data] Colonnes disponibles: "
         f"{', '.join(fieldnames) if fieldnames else 'aucune'}"
     )
@@ -1335,7 +1370,7 @@ def _validate_plot_data(
     report["after_snir_filter_rows"] = len(rows)
     report["after_cluster_filter_rows"] = len(rows)
     if not fieldnames:
-        print(
+        log_debug(
             "AVERTISSEMENT: "
             f"CSV vide pour {module_path}, figure ignorée."
         )
@@ -1360,9 +1395,9 @@ def _validate_plot_data(
         )
         raw_sizes_label = ", ".join(raw_unique_sizes) if raw_unique_sizes else "aucune"
         final_sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
-        print(f"[validate_plot_data] Colonne taille utilisée: {size_col} ({fallback_note})")
-        print(f"[validate_plot_data] Tailles uniques brutes: {raw_sizes_label}")
-        print(f"[validate_plot_data] Tailles finales: {final_sizes_label}")
+        log_debug(f"[validate_plot_data] Colonne taille utilisée: {size_col} ({fallback_note})")
+        log_debug(f"[validate_plot_data] Tailles uniques brutes: {raw_sizes_label}")
+        log_debug(f"[validate_plot_data] Tailles finales: {final_sizes_label}")
         dropped_empty = sum(1 for value in size_raw if value in (None, ""))
         cast_errors = 0
         for value in size_raw:
@@ -1388,17 +1423,17 @@ def _validate_plot_data(
         min_network_sizes = requirements.min_network_sizes
     if len(sizes) < min_network_sizes:
         sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
-        print(
+        log_debug(
             "Tailles détectées dans "
             f"{data_bundle.label}: {sizes_label}."
         )
-        print(
+        log_debug(
             "WARNING: "
             f"{module_path} nécessite au moins "
             f"{min_network_sizes} taille(s) disponible(s), "
             "figure ignorée."
         )
-        print(f"CSV path: {data_bundle.label}")
+        log_debug(f"CSV path: {data_bundle.label}")
         report["status"] = "SKIP"
         report["reason"] = "tailles de réseau insuffisantes"
         return False, "tailles de réseau insuffisantes", report
@@ -1407,14 +1442,14 @@ def _validate_plot_data(
         if sizes and sizes < expected_set:
             expected_label = ", ".join(str(size) for size in expected_sizes)
             sizes_label = ", ".join(str(size) for size in sorted(sizes))
-            print(
+            log_debug(
                 "AVERTISSEMENT: "
                 f"{module_path} est généré avec un jeu réduit "
                 f"({sizes_label}) au lieu de {expected_label}."
             )
     if len(sizes) == 1 and min_network_sizes == 1:
         sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
-        print(
+        log_debug(
             "AVERTISSEMENT: "
             f"{module_path} est généré avec une seule taille "
             f"({sizes_label})."
@@ -1422,7 +1457,7 @@ def _validate_plot_data(
     if requirements.required_any_columns:
         metric_col = _pick_column(fieldnames, requirements.required_any_columns)
         if metric_col is None:
-            print(
+            log_debug(
                 "AVERTISSEMENT: "
                 f"{module_path} nécessite une colonne RSSI/SNR, "
                 "figure ignorée."
@@ -1435,12 +1470,12 @@ def _validate_plot_data(
         snir_col = _pick_column(
             fieldnames, ("snir_mode", "snir_state", "snir", "with_snir")
         )
-        print(
+        log_debug(
             "[validate_plot_data] Colonnes utilisées pour filtrage: "
             f"algo={algo_col or 'absente'}, snir={snir_col or 'absente'}"
         )
         if not algo_col or not snir_col:
-            print(
+            log_debug(
                 "AVERTISSEMENT: "
                 f"{module_path} nécessite les colonnes algo/snir_mode, "
                 "figure ignorée."
@@ -1513,7 +1548,7 @@ def _validate_plot_data(
         ]
         if missing_algos or missing_snir:
             sizes_label = ", ".join(str(size) for size in sorted(sizes)) or "aucune"
-            print(
+            log_debug(
                 "Tailles détectées dans "
                 f"{data_bundle.label}: {sizes_label}."
             )
@@ -1522,7 +1557,7 @@ def _validate_plot_data(
                 details.append(f"algos manquants: {', '.join(missing_algos)}")
             if missing_snir:
                 details.append(f"SNIR manquants: {', '.join(missing_snir)}")
-            print(
+            log_debug(
                 "AVERTISSEMENT: "
                 f"{module_path} incomplet ({' ; '.join(details)}), "
                 "figure ignorée."
@@ -1562,14 +1597,14 @@ def _write_plot_data_filter_report(report_rows: list[dict[str, object]]) -> None
 
 
 def _print_plot_data_filter_report_for_module(report_row: dict[str, object]) -> None:
-    print("[plot_data_filter_report] Détail module SKIP:")
-    print(
+    log_debug("[plot_data_filter_report] Détail module SKIP:")
+    log_debug(
         "  - module="
         f"{report_row['module_path']}, status={report_row['status']}, "
         f"reason={report_row['reason']}"
     )
-    print(f"  - csv={report_row['csv_path']}")
-    print(
+    log_debug(f"  - csv={report_row['csv_path']}")
+    log_debug(
         "  - lignes: "
         f"initial={report_row['initial_rows']}, "
         f"après_cast_type={report_row['after_cast_type_rows']}, "
@@ -1620,9 +1655,9 @@ def _summarize_statuses(
     post_modules: list[str],
 ) -> dict[str, int]:
     counts = {"OK": 0, "FAIL": 0, "SKIP": 0}
-    print("\nRésumé d'exécution des plots:")
+    log_info("\nRésumé d'exécution des plots:")
     for step in steps:
-        print(f"\n{step.upper()}:")
+        log_debug(f"\n{step.upper()}:")
         for module_path in PLOT_MODULES[step]:
             entry = status_map.get(module_path)
             if entry is None:
@@ -1632,9 +1667,9 @@ def _summarize_statuses(
                 status_label = entry.status
                 message = entry.message
             counts[status_label] = counts.get(status_label, 0) + 1
-            print(f"- {module_path}: {status_label} ({message})")
+            log_debug(f"- {module_path}: {status_label} ({message})")
     if post_modules:
-        print("\nPOST:")
+        log_debug("\nPOST:")
         for module_path in post_modules:
             entry = status_map.get(module_path)
             if entry is None:
@@ -1644,9 +1679,9 @@ def _summarize_statuses(
                 status_label = entry.status
                 message = entry.message
             counts[status_label] = counts.get(status_label, 0) + 1
-            print(f"- {module_path}: {status_label} ({message})")
+            log_debug(f"- {module_path}: {status_label} ({message})")
     total = sum(counts.values())
-    print(
+    log_debug(
         "\nBilan: "
         f"{counts['OK']} OK / {counts['FAIL']} FAIL / "
         f"{counts['SKIP']} SKIP (total {total})."
@@ -1690,6 +1725,9 @@ def main(argv: list[str] | None = None) -> None:
 
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    if args.quiet:
+        args.log_level = "quiet"
+    set_log_level(args.log_level)
     if args.preset is not None:
         preset_values = MAKE_ALL_PLOTS_PRESETS[args.preset]
         for key, value in preset_values.items():
@@ -1782,7 +1820,7 @@ def main(argv: list[str] | None = None) -> None:
             "Step1 et Step2 pointent vers le même CSV agrégé. "
             "Vérifiez que chaque étape écrit dans son dossier results."
         )
-        print(f"ERREUR: {message}")
+        log_error(f"ERREUR: {message}")
         step_errors["step1"] = message
         step_errors["step2"] = message
 
@@ -1822,7 +1860,7 @@ def main(argv: list[str] | None = None) -> None:
             }
         )
         if not network_sizes:
-            print(
+            log_debug(
                 "Aucune taille de réseau détectée dans les CSV, "
                 "aucun plot n'a été généré."
             )
@@ -1832,11 +1870,11 @@ def main(argv: list[str] | None = None) -> None:
     if "step2" in steps:
         step2_sizes = step_network_sizes.get("step2", [])
         if len(step2_sizes) < 2:
-            print(
+            log_debug(
                 "AVERTISSEMENT: Step2 contient moins de 2 tailles. "
                 "Les plots seront validés individuellement."
             )
-            print(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
+            log_debug(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
         if args.network_sizes:
             expected_sizes = args.network_sizes
         elif "step1" in step_network_sizes:
@@ -1847,11 +1885,11 @@ def main(argv: list[str] | None = None) -> None:
             missing_sizes = sorted(set(expected_sizes) - set(step2_sizes))
             if missing_sizes:
                 missing_label = ", ".join(str(size) for size in missing_sizes)
-                print("WARNING: Step2 ne contient pas toutes les tailles attendues.")
-                print(f"Tailles attendues manquantes: {missing_label}")
-                print(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
-                print("Commande PowerShell pour terminer Step2 (mode reprise):")
-                print(_suggest_step2_resume_command(expected_sizes))
+                log_debug("WARNING: Step2 ne contient pas toutes les tailles attendues.")
+                log_debug(f"Tailles attendues manquantes: {missing_label}")
+                log_debug(f"Tailles Step2 détectées: {step2_sizes or 'aucune'}")
+                log_debug("Commande PowerShell pour terminer Step2 (mode reprise):")
+                log_debug(_suggest_step2_resume_command(expected_sizes))
 
     plot_data_filter_report_rows: list[dict[str, object]] = []
     manifest_context_by_module: dict[str, ManifestContext] = {}
@@ -1953,14 +1991,14 @@ def main(argv: list[str] | None = None) -> None:
                 step2_sizes = step_network_sizes.get("step2", [])
                 intersection = sorted(set(step1_sizes) & set(step2_sizes))
                 if len(intersection) < 2:
-                    print(
+                    log_debug(
                         "WARNING: "
                         "plot_RL10_reward_vs_pdr_scatter nécessite au moins "
                         "2 tailles communes entre Step1 et Step2."
                     )
-                    print(f"Tailles Step1: {step1_sizes or 'aucune'}")
-                    print(f"Tailles Step2: {step2_sizes or 'aucune'}")
-                    print(f"Intersection: {intersection or 'aucune'}")
+                    log_debug(f"Tailles Step1: {step1_sizes or 'aucune'}")
+                    log_debug(f"Tailles Step2: {step2_sizes or 'aucune'}")
+                    log_debug(f"Intersection: {intersection or 'aucune'}")
                     regen_sizes = step2_sizes or step1_sizes
                     command = (
                         _suggest_regeneration_command(
@@ -1971,11 +2009,11 @@ def main(argv: list[str] | None = None) -> None:
                         else None
                     )
                     if command:
-                        print(
+                        log_debug(
                             "Exemple pour régénérer Step1 "
                             "(PowerShell):"
                         )
-                        print(command)
+                        log_debug(command)
                     _register_status(
                         status_map,
                         step=step,
@@ -2049,15 +2087,15 @@ def main(argv: list[str] | None = None) -> None:
                     if step2_sizes
                     else "none"
                 )
-                print(f"Detected sizes: {sizes_label}")
-                print(f"Plotting Step2: {figure}")
+                log_debug(f"Detected sizes: {sizes_label}")
+                log_debug(f"Plotting Step2: {figure}")
                 if expected_sizes and step2_sizes:
                     expected_set = {int(size) for size in expected_sizes}
                     step2_set = {int(size) for size in step2_sizes}
                     if step2_set < expected_set:
                         expected_label = ", ".join(str(size) for size in expected_sizes)
                         reduced_label = ", ".join(str(size) for size in step2_sizes)
-                        print(
+                        log_debug(
                             "WARNING: "
                             f"{module_path} utilise un jeu réduit "
                             f"({reduced_label}) au lieu de {expected_label}."
@@ -2073,8 +2111,8 @@ def main(argv: list[str] | None = None) -> None:
                     if step1_network_sizes
                     else "none"
                 )
-                print(f"Detected sizes: {sizes_label}")
-                print(f"Plotting Step1: {figure}")
+                log_debug(f"Detected sizes: {sizes_label}")
+                log_debug(f"Plotting Step1: {figure}")
                 try:
                     previous_figures = set(plt.get_fignums())
                     module = _run_plot_module(
@@ -2107,10 +2145,10 @@ def main(argv: list[str] | None = None) -> None:
                         message="plot généré",
                     )
                 except Exception as exc:
-                    print(
+                    log_debug(
                         f"ERREUR: échec du plot {module_path}: {exc}"
                     )
-                    print("INFO: batch poursuivi (module suivant).")
+                    log_debug("INFO: batch poursuivi (module suivant).")
                     traceback.print_exc()
                     _register_status(
                         status_map,
@@ -2160,10 +2198,10 @@ def main(argv: list[str] | None = None) -> None:
                         message="plot généré",
                     )
                 except Exception as exc:
-                    print(
+                    log_debug(
                         f"ERREUR: échec du plot {module_path}: {exc}"
                     )
-                    print("INFO: batch poursuivi (module suivant).")
+                    log_debug("INFO: batch poursuivi (module suivant).")
                     traceback.print_exc()
                     _register_status(
                         status_map,
@@ -2252,10 +2290,10 @@ def main(argv: list[str] | None = None) -> None:
                     message="plot généré",
                 )
             except Exception as exc:
-                print(
+                log_debug(
                     f"ERREUR: échec du plot {module_path}: {exc}"
                 )
-                print("INFO: batch poursuivi (module suivant).")
+                log_debug("INFO: batch poursuivi (module suivant).")
                 traceback.print_exc()
                 _register_status(
                     status_map,
@@ -2309,9 +2347,9 @@ def main(argv: list[str] | None = None) -> None:
             status="FAIL",
             message=str(exc),
         )
-        print(f"ERREUR: génération du manifest impossible: {exc}")
+        log_error(f"ERREUR: génération du manifest impossible: {exc}")
     _write_plot_data_filter_report(plot_data_filter_report_rows)
-    print(
+    log_debug(
         "INFO: rapport de filtrage écrit: "
         f"{PLOT_DATA_FILTER_REPORT_OUTPUT_PATH.resolve()}"
     )
