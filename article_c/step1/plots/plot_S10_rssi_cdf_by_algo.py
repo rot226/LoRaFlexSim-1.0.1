@@ -112,6 +112,37 @@ def _as_bool(value: object | None) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "y", "t", "vrai"}
 
 
+
+
+def _to_int_set(values: Iterable[object] | None) -> set[int]:
+    result: set[int] = set()
+    if not values:
+        return result
+    for value in values:
+        if value is None or value == "":
+            continue
+        try:
+            result.add(int(float(value)))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def _warn_if_single_size_detected_with_multi_request(
+    requested_sizes: Iterable[object] | None,
+    detected_sizes: Iterable[object] | None,
+) -> None:
+    requested = sorted(_to_int_set(requested_sizes))
+    detected = sorted(_to_int_set(detected_sizes))
+    if len(requested) > 1 and len(detected) == 1:
+        warnings.warn(
+            f"Une seule taille de réseau détectée ({detected[0]}) "
+            + "alors que plusieurs tailles étaient demandées ("
+            + ", ".join(str(size) for size in requested)
+            + "). Cause probable : simulation incomplète ou résultats manquants pour certaines tailles.",
+            stacklevel=2,
+        )
+
 def _compute_cdf(values: Iterable[float]) -> tuple[list[float], list[float]]:
     sorted_values = sorted(values)
     total = len(sorted_values)
@@ -302,6 +333,7 @@ def main(enable_suptitle: bool = False) -> None:
     rows, _ = filter_rows_by_network_sizes(rows, args.network_sizes)
     df = pd.DataFrame(rows)
     network_sizes = sorted(df["network_size"].unique())
+    _warn_if_single_size_detected_with_multi_request(args.network_sizes, network_sizes)
     warn_if_insufficient_network_sizes(network_sizes)
     plot_cdf_by_algo(
         rows,
