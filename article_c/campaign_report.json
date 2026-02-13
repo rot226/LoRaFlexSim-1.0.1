@@ -1,0 +1,18 @@
+{
+  "campaign": "article_c",
+  "statut": {
+    "Step1": "non_demarre",
+    "Step2": "non_demarre"
+  },
+  "couverture": {
+    "tailles": [],
+    "replications": []
+  },
+  "fichiers_generes": [],
+  "anomalies_warnings": {
+    "critical": [],
+    "high": [],
+    "medium": [],
+    "low": []
+  }
+}
