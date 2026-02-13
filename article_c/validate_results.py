@@ -71,6 +71,7 @@ def _check_required_replication_files(
     tracker: AnomalyTracker,
     step_label: str,
     required_files: tuple[str, ...],
+    expected_rep_dirs: set[str] | None = None,
 ) -> None:
     rep_dirs = sorted(
         path
@@ -82,6 +83,18 @@ def _check_required_replication_files(
             f"{step_label}: aucun dossier de réplication trouvé sous {results_dir / 'by_size'} (attendu: by_size/size_<N>/rep_<R>)."
         )
         return
+
+    discovered_rep_dirs = {
+        str(path.relative_to(results_dir).as_posix())
+        for path in rep_dirs
+    }
+    if expected_rep_dirs is not None:
+        missing_rep_dirs = sorted(expected_rep_dirs - discovered_rep_dirs)
+        if missing_rep_dirs:
+            tracker.add(
+                f"{step_label}: répertoires de réplication manquants: {', '.join(missing_rep_dirs)}."
+            )
+
     for rep_dir in rep_dirs:
         for filename in required_files:
             expected = rep_dir / filename
@@ -272,6 +285,11 @@ def validate_results(
     skip_step2: bool,
 ) -> AnomalyTracker:
     tracker = AnomalyTracker(max_samples=max_samples)
+    step1_rep_dirs = {
+        str(path.relative_to(step1_dir).as_posix())
+        for path in step1_dir.glob("by_size/size_*/rep_*")
+        if path.is_dir()
+    }
     _check_by_size_coverage(step1_dir, tracker, "Step1")
     _check_required_replication_files(
         step1_dir,
@@ -281,6 +299,13 @@ def validate_results(
     )
     if not skip_step2:
         _check_by_size_coverage(step2_dir, tracker, "Step2")
+        _check_required_replication_files(
+            step2_dir,
+            tracker,
+            "Step2",
+            required_files=("raw_results.csv",),
+            expected_rep_dirs=step1_rep_dirs or None,
+        )
 
     _validate_pdr_file(
         step1_dir / "aggregates" / "aggregated_results.csv",
