@@ -158,6 +158,7 @@ BOUNDED_RATE_MAX = 1.0
 DEFAULT_BOUNDED_RATE_CLAMP = False
 DEFAULT_BOUNDED_RATE_STRICT = False
 MASSIVE_NAN_RATIO = 0.5
+_WARNED_METRIC_ALGO_SNIR_CLUSTER: set[tuple[str, str, str, str]] = set()
 
 
 class MetricCheckSeverity(str, Enum):
@@ -208,6 +209,15 @@ def _bounded_metric_context(row: Mapping[str, object]) -> str:
     return f"algo={algo}, size={size}, cluster={cluster}"
 
 
+def _bounded_metric_warn_key(metric_key: str, row: Mapping[str, object]) -> tuple[str, str, str, str]:
+    return (
+        str(metric_key),
+        str(row.get("algo", "?")),
+        str(row.get("snir_mode", "?")),
+        str(row.get("cluster", "?")),
+    )
+
+
 def validate_bounded_rate_metric_rows(
     rows: list[dict[str, object]],
     metric_key: str,
@@ -246,7 +256,10 @@ def validate_bounded_rate_metric_rows(
             f"({context})"
         )
         out_of_bounds.append(message)
-        LOGGER.warning(message)
+        warn_key = _bounded_metric_warn_key(metric_key, row)
+        if warn_key not in _WARNED_METRIC_ALGO_SNIR_CLUSTER:
+            _WARNED_METRIC_ALGO_SNIR_CLUSTER.add(warn_key)
+            LOGGER.warning(message)
 
         if is_strict:
             raise ValueError(message)
