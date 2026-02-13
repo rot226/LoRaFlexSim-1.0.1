@@ -246,10 +246,41 @@ def _assert_non_empty_csv(path: Path) -> None:
             raise VerificationError(f"CSV sans colonnes exploitables: {path}")
 
 
+def _assert_csv_has_header_and_data(path: Path) -> None:
+    if not path.exists():
+        raise VerificationError(f"CSV introuvable: {path}")
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.reader(handle)
+        try:
+            header = next(reader)
+        except StopIteration as exc:
+            raise VerificationError(f"CSV sans en-tête: {path}") from exc
+
+        if not any(str(column).strip() for column in header):
+            raise VerificationError(f"CSV avec en-tête invalide: {path}")
+
+        try:
+            _ = next(reader)
+        except StopIteration as exc:
+            raise VerificationError(
+                f"CSV sans ligne de données après l'en-tête: {path}"
+            ) from exc
+
+
+def _iter_mandatory_csv_targets() -> list[Path]:
+    patterns = ("**/raw_*.csv", "**/aggregated_results.csv", "**/run_status_*.csv")
+    targets: set[Path] = set()
+    for pattern in patterns:
+        targets.update(path for path in BASE_DIR.glob(pattern) if path.is_file())
+    return sorted(targets)
+
+
 def _check_non_empty_csv_files() -> None:
     csv_paths = sorted(BASE_DIR.glob("**/*.csv"))
     for csv_path in csv_paths:
         _assert_non_empty_csv(csv_path)
+    for csv_path in _iter_mandatory_csv_targets():
+        _assert_csv_has_header_and_data(csv_path)
 
 
 def _check_png_files_valid() -> None:
