@@ -6,6 +6,7 @@ import csv
 import logging
 import math
 import re
+import textwrap
 import warnings
 from contextlib import contextmanager
 from collections.abc import Mapping
@@ -125,6 +126,10 @@ MAX_IMAGE_DIM_PX = 12000
 MAX_IMAGE_TOTAL_PIXELS = 120_000_000
 MAX_FIGSIZE_INCH_SINGLE = (12.0, 8.0)
 MAX_FIGSIZE_INCH_MULTIPANEL = (14.0, 10.0)
+EXTERNAL_LEGEND_MAX_COLS = 3
+EXTERNAL_LEGEND_MAX_COLS_RIGHT = 2
+EXTERNAL_LEGEND_MAX_FONTSIZE = 10
+EXTERNAL_LEGEND_WRAP_WIDTH = 26
 AXES_TITLE_Y = 1.02
 SUPTITLE_TOP_RATIO = 0.85
 FIGURE_SUBPLOT_TOP = FIGURE_MARGINS["top"]
@@ -1406,6 +1411,8 @@ def place_adaptive_legend(
     if not handles:
         return LegendPlacement(None, "none", 0, None)
 
+    external_labels = _bounded_external_labels(labels)
+
     label_count = len(labels)
     preferred_loc = "right"
     max_items_right = max(max_items_right, label_count)
@@ -1452,16 +1459,21 @@ def place_adaptive_legend(
         legend_style = {
             "loc": "center left",
             "bbox_to_anchor": (anchor_x, 0.5),
-            "ncol": 1,
+            "ncol": min(1, EXTERNAL_LEGEND_MAX_COLS_RIGHT),
             "frameon": False,
+            "fontsize": EXTERNAL_LEGEND_MAX_FONTSIZE,
         }
         legend_rows = 1
     else:
         legend_style = dict(LEGEND_STYLE)
-        legend_style["ncol"] = legend_ncol
+        legend_style["ncol"] = min(legend_ncol, EXTERNAL_LEGEND_MAX_COLS)
+        legend_style["fontsize"] = min(
+            float(legend_style.get("fontsize", EXTERNAL_LEGEND_MAX_FONTSIZE)),
+            EXTERNAL_LEGEND_MAX_FONTSIZE,
+        )
         legend_style["bbox_to_anchor"] = legend_bbox_to_anchor(legend_rows=legend_rows)
 
-    legend = fig.legend(handles, labels, **legend_style)
+    legend = fig.legend(handles, external_labels, **legend_style)
     if legend_loc == "above":
         bbox_to_anchor = legend_bbox_to_anchor(legend=legend, legend_rows=legend_rows)
         legend.set_bbox_to_anchor(bbox_to_anchor)
@@ -1586,18 +1598,28 @@ def _legend_style(
         if label_count is not None:
             target_ncol = max(1, int(math.ceil(label_count / 6)))
             target_ncol = min(label_count, target_ncol)
+            target_ncol = min(target_ncol, EXTERNAL_LEGEND_MAX_COLS_RIGHT)
             ncol, legend_rows = _legend_layout_from_fig(fig, label_count, target_ncol)
             legend_style["ncol"] = ncol
         else:
             legend_style["ncol"] = 1
+        legend_style["fontsize"] = min(
+            float(legend_style.get("fontsize", LEGEND_STYLE.get("fontsize", EXTERNAL_LEGEND_MAX_FONTSIZE))),
+            EXTERNAL_LEGEND_MAX_FONTSIZE,
+        )
         return legend_style, legend_rows
     legend_style = dict(LEGEND_STYLE)
     legend_rows = 1
     if label_count is not None:
         ncol = int(legend_style.get("ncol", label_count) or 1)
         ncol = min(label_count, max(1, ncol))
+        ncol = min(ncol, EXTERNAL_LEGEND_MAX_COLS)
         ncol, legend_rows = _legend_layout_from_fig(fig, label_count, ncol)
         legend_style["ncol"] = ncol
+    legend_style["fontsize"] = min(
+        float(legend_style.get("fontsize", LEGEND_STYLE.get("fontsize", EXTERNAL_LEGEND_MAX_FONTSIZE))),
+        EXTERNAL_LEGEND_MAX_FONTSIZE,
+    )
     legend_style["bbox_to_anchor"] = legend_bbox_to_anchor(legend_rows=legend_rows)
     return legend_style, legend_rows
 
@@ -1955,6 +1977,13 @@ def save_figure(
         pad_inches = max(default_pad, 0.06)
     elif has_external_legend:
         pad_inches = max(default_pad, 0.08)
+    LOGGER.debug(
+        "save_figure: bbox=%r, pad_inches=%.3f, external_legend=%s, formats=%s",
+        effective_bbox,
+        pad_inches,
+        has_external_legend,
+        ",".join(selected_formats),
+    )
     for ext in selected_formats:
         save_figure_path(
             fig,
@@ -2050,10 +2079,17 @@ def save_figure_path(
     if bbox_inches is None:
         bbox_inches = "tight" if not avoid_tight_bbox else False
     if avoid_tight_bbox and bbox_inches == "tight":
+        LOGGER.debug("bbox_inches='tight' désactivé (_avoid_tight_bbox activé).")
         bbox_inches = False
     if bbox_inches is not False:
         safe_bbox = _safe_bbox_inches(fig, bbox_inches)
-        savefig_style["bbox_inches"] = safe_bbox
+        if safe_bbox in (False, None):
+            LOGGER.debug(
+                "bbox_inches=%r neutralisé après fallback de sécurité.",
+                bbox_inches,
+            )
+        else:
+            savefig_style["bbox_inches"] = safe_bbox
     default_dpi = BASE_DPI if configured_dpi is None else float(configured_dpi)
     safe_dpi = _safe_dpi(fig, default_dpi)
     if format_name == "eps":
@@ -2069,8 +2105,10 @@ def _safe_bbox_inches(
     bbox_inches: str | bool | None,
 ) -> str | bool | None:
     if bbox_inches is False:
+        LOGGER.debug("_safe_bbox_inches: bbox explicitement désactivé.")
         return None
     if bool(getattr(fig, "_avoid_tight_bbox", False)):
+        LOGGER.debug("_safe_bbox_inches: _avoid_tight_bbox actif, bbox désactivé.")
         return None
     if bbox_inches != "tight":
         return bbox_inches if isinstance(bbox_inches, str) or bbox_inches is None else None
@@ -2112,7 +2150,67 @@ def _safe_bbox_inches(
             max_height_in,
         )
         return False
+    LOGGER.debug(
+        "_safe_bbox_inches: bbox tight conservé (%.2f x %.2f in <= %.2f x %.2f).",
+        bbox_width_in,
+        bbox_height_in,
+        max_width_in,
+        max_height_in,
+    )
     return bbox_inches
+
+
+def _bounded_external_labels(labels: list[str]) -> list[str]:
+    bounded_labels: list[str] = []
+    for label in labels:
+        normalized_label = str(label or "").strip()
+        if not normalized_label:
+            bounded_labels.append(normalized_label)
+            continue
+        wrapped = textwrap.fill(normalized_label, width=EXTERNAL_LEGEND_WRAP_WIDTH)
+        bounded_labels.append(wrapped)
+    return bounded_labels
+
+
+def _set_figure_size_with_clamp(
+    fig: plt.Figure,
+    width_in: float,
+    height_in: float,
+    *,
+    reason: str,
+    max_size: tuple[float, float] | None = None,
+) -> bool:
+    target_width = float(width_in)
+    target_height = float(height_in)
+    if max_size is None:
+        max_size = MAX_FIGSIZE_INCH_MULTIPANEL if len(fig.axes) > 1 else MAX_FIGSIZE_INCH_SINGLE
+    max_width, max_height = max_size
+    scale = min(max_width / max(target_width, 1e-6), max_height / max(target_height, 1e-6), 1.0)
+    clamped_width = target_width * scale
+    clamped_height = target_height * scale
+    clamped = not math.isclose(clamped_width, target_width) or not math.isclose(clamped_height, target_height)
+    if clamped:
+        LOGGER.debug(
+            "Figure size clamp appliqué (%s): %.2f x %.2f -> %.2f x %.2f in (max %.2f x %.2f).",
+            reason,
+            target_width,
+            target_height,
+            clamped_width,
+            clamped_height,
+            max_width,
+            max_height,
+        )
+    else:
+        LOGGER.debug(
+            "Figure size conservée (%s): %.2f x %.2f in (max %.2f x %.2f).",
+            reason,
+            target_width,
+            target_height,
+            max_width,
+            max_height,
+        )
+    fig.set_size_inches(clamped_width, clamped_height, forward=True)
+    return clamped
 
 
 def _safe_dpi(fig: plt.Figure, dpi: float) -> float:
@@ -2148,23 +2246,26 @@ def _apply_figure_size_clamp(
         max_size = (
             MAX_FIGSIZE_INCH_MULTIPANEL if len(fig.axes) > 1 else MAX_FIGSIZE_INCH_SINGLE
         )
-    max_width, max_height = max_size
-    scale = min(max_width / fig_width_in, max_height / fig_height_in, 1.0)
-    clamped_width = fig_width_in * scale
-    clamped_height = fig_height_in * scale
-    if clamped_width == fig_width_in and clamped_height == fig_height_in:
-        return False
-    LOGGER.warning(
-        "Taille de figure clampée à %.2f x %.2f in (plafond %.2f x %.2f, était %.2f x %.2f in).",
-        clamped_width,
-        clamped_height,
-        max_width,
-        max_height,
+    clamped = _set_figure_size_with_clamp(
+        fig,
         fig_width_in,
         fig_height_in,
+        reason="clamp automatique",
+        max_size=max_size,
     )
-    fig.set_size_inches(clamped_width, clamped_height, forward=True)
-    return True
+    if clamped:
+        clamped_width, clamped_height = fig.get_size_inches()
+        max_width, max_height = max_size
+        LOGGER.warning(
+            "Taille de figure clampée à %.2f x %.2f in (plafond %.2f x %.2f, était %.2f x %.2f in).",
+            clamped_width,
+            clamped_height,
+            max_width,
+            max_height,
+            fig_width_in,
+            fig_height_in,
+        )
+    return clamped
 
 
 def apply_figure_layout(
@@ -2187,7 +2288,12 @@ def apply_figure_layout(
     extra_legend_rows = max(0, legend_rows - 1)
     reserved_top = 0.0
     if figsize is not None:
-        fig.set_size_inches(*figsize, forward=True)
+        _set_figure_size_with_clamp(
+            fig,
+            float(figsize[0]),
+            float(figsize[1]),
+            reason="figsize explicite apply_figure_layout",
+        )
     if not full_canvas and _resolve_figure_clamp(figure_clamp):
         _apply_figure_size_clamp(fig)
     if margins is None:
