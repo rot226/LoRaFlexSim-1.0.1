@@ -24,6 +24,11 @@ from types import ModuleType
 import matplotlib.pyplot as plt
 from importlib.util import find_spec
 
+try:
+    from PIL import Image
+except ImportError:  # pragma: no cover - dépend de l'environnement
+    Image = None  # type: ignore[assignment]
+
 if find_spec("article_c") is None:
     repo_root = Path(__file__).resolve().parents[2]
     sys.path.insert(0, str(repo_root))
@@ -227,6 +232,33 @@ def _check_expected_files(formats: tuple[str, ...]) -> list[str]:
             failures.append(
                 "Figure attendue absente (PNG requis) pour "
                 f"{module_path}: {rel_candidates}"
+            )
+            continue
+
+        if png_path.stat().st_size <= 0:
+            failures.append(
+                "Figure attendue corrompue/vide (taille nulle) pour "
+                f"{module_path}: {png_path.relative_to(BASE_DIR)}"
+            )
+            continue
+
+        if Image is not None:
+            try:
+                with Image.open(png_path) as image:
+                    image.verify()
+            except Exception as exc:
+                failures.append(
+                    "Figure attendue corrompue (lecture PIL impossible) pour "
+                    f"{module_path}: {png_path.relative_to(BASE_DIR)} ({exc})"
+                )
+                continue
+
+        try:
+            _ = plt.imread(png_path)
+        except Exception as exc:
+            failures.append(
+                "Figure attendue corrompue (lecture matplotlib impossible) pour "
+                f"{module_path}: {png_path.relative_to(BASE_DIR)} ({exc})"
             )
     return failures
 
