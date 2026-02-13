@@ -29,13 +29,12 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     filter_cluster,
     is_constant_metric,
-    load_step1_aggregated,
     render_metric_status,
     save_figure,
     warn_metric_checks,
     warn_if_insufficient_network_sizes,
 )
-from article_c.step1.plots.plot_utils import configure_figure
+from article_c.step1.plots.plot_utils import configure_figure, load_step1_rows_with_fallback
 from plot_defaults import resolve_ieee_figsize
 
 
@@ -378,7 +377,6 @@ def main(
         allow_sample = False
     step_dir = Path(__file__).resolve().parents[1]
     raw_results_path = step_dir / "results" / "raw_packets.csv"
-    aggregated_results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
     sf_values = list(DEFAULT_CONFIG.radio.spreading_factors)
     raw_rows = _read_raw_rows(raw_results_path)
     sf_rows = [row for row in raw_rows if _parse_sf_selected(row.get("sf_selected")) is not None]
@@ -404,10 +402,7 @@ def main(
             for (algo, fallback, snir_mode), values in distribution_by_group.items()
         ]
     else:
-        rows = load_step1_aggregated(
-            aggregated_results_path,
-            allow_sample=allow_sample,
-        )
+        rows = load_step1_rows_with_fallback(step_dir, allow_sample=allow_sample)
         if not rows:
             warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)
             return
@@ -422,10 +417,7 @@ def main(
         for row in rows
     ]
     rows = filter_mixra_opt_fallback(rows)
-    size_rows = load_step1_aggregated(
-        aggregated_results_path,
-        allow_sample=allow_sample,
-    )
+    size_rows = load_step1_rows_with_fallback(step_dir, allow_sample=allow_sample)
     if not size_rows:
         warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)
         return

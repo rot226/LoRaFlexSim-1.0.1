@@ -19,9 +19,9 @@ from article_c.common.plot_helpers import (
     apply_plot_style,
     assert_legend_present,
     filter_mixra_opt_fallback,
-    load_step1_aggregated,
     save_figure,
 )
+from article_c.step1.plots.plot_utils import load_step1_rows_with_fallback
 from plot_defaults import resolve_ieee_figsize
 
 NETWORK_SIZES = [80, 160, 320, 640, 1280]
@@ -108,9 +108,7 @@ def _plot(df: pd.DataFrame) -> plt.Figure:
 def main() -> None:
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
-
-    rows = load_step1_aggregated(results_path, allow_sample=True)
+    rows = load_step1_rows_with_fallback(step_dir, allow_sample=True)
     if not rows:
         warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)
         return

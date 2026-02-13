@@ -26,7 +26,6 @@ from article_c.common.plot_helpers import (
     filter_rows_by_network_sizes,
     is_constant_metric,
     legend_handles_for_algos_snir,
-    load_step1_aggregated,
     metric_values,
     render_metric_status,
     save_figure,
@@ -34,6 +33,7 @@ from article_c.common.plot_helpers import (
     warn_metric_checks_by_group,
     warn_if_insufficient_network_sizes,
 )
+from article_c.step1.plots.plot_utils import load_step1_rows_with_fallback
 from plot_defaults import resolve_ieee_figsize
 
 MAX_ALGOS_PER_FIG = 3
@@ -222,8 +222,7 @@ def main(argv: list[str] | None = None, allow_sample: bool = True) -> None:
     )
     args = parser.parse_args(argv)
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
-    rows = load_step1_aggregated(results_path, allow_sample=allow_sample)
+    rows = load_step1_rows_with_fallback(step_dir, allow_sample=allow_sample)
     if not rows:
         warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)
         return
