@@ -2757,10 +2757,18 @@ def canonical_cluster_id(cluster: object) -> str:
 def cluster_allocation_percentages() -> dict[str, str]:
     clusters = list(DEFAULT_CONFIG.qos.clusters)
     proportions = list(DEFAULT_CONFIG.qos.proportions)
-    count = min(len(clusters), len(proportions))
+    if len(clusters) != len(proportions):
+        raise ValueError(
+            "Configuration QoS invalide: nombre de clusters et de parts différent."
+        )
+    total = sum(float(value) for value in proportions)
+    if not math.isclose(total, 1.0, rel_tol=1e-9, abs_tol=1e-6):
+        raise ValueError(
+            "Configuration QoS invalide: la somme des pourcentages doit être 100%."
+        )
     return {
-        canonical_cluster_id(clusters[idx]): _format_percentage(float(proportions[idx]))
-        for idx in range(count)
+        canonical_cluster_id(cluster): _format_percentage(float(proportion))
+        for cluster, proportion in zip(clusters, proportions, strict=False)
     }
 
 
