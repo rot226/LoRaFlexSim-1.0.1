@@ -1,184 +1,198 @@
-"""Smoke test pipeline article C.
+"""Pipeline reproductible (clean -> run_all -> make_all_plots -> verify_all).
 
-Exécute un pipeline minimal :
-1) Step1 + Step2 sur N=80, replications=1
-2) agrégation Step1/Step2
-3) make_all_plots
-4) validations (agrégats, plots, légendes RL, absence de FAIL bloquant)
-
-Retourne un code non-zéro en cas d'échec.
+Objectif:
+- enchaîner automatiquement les 4 étapes contractuelles ;
+- échouer immédiatement au premier écart (code retour non nul) ;
+- écrire un rapport final JSON avec le détail des étapes.
 """
 
 from __future__ import annotations
 
-import csv
+import argparse
+import json
 import subprocess
 import sys
 import time
+from dataclasses import dataclass, asdict
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-ARTICLE_DIR = ROOT_DIR / "article_c"
-STEP1_AGG = ARTICLE_DIR / "step1" / "results" / "aggregates" / "aggregated_results.csv"
-STEP2_AGG = ARTICLE_DIR / "step2" / "results" / "aggregates" / "aggregated_results.csv"
-LEGEND_REPORT = ARTICLE_DIR / "legend_check_report.csv"
-STEP1_PLOTS_DIR = ARTICLE_DIR / "step1" / "plots" / "output"
-STEP2_PLOTS_DIR = ARTICLE_DIR / "step2" / "plots" / "output"
-
-REQUIRED_LEGEND_MODULES = {
-    "article_c.step2.plots.plot_RL1",
-    "article_c.step2.plots.plot_RL2",
-    "article_c.step2.plots.plot_RL3",
-    "article_c.step2.plots.plot_RL4",
-    "article_c.step2.plots.plot_RL6_cluster_outage_vs_density",
-    "article_c.step2.plots.plot_RL7_reward_vs_density",
-}
+DEFAULT_SIZES = (80, 160, 320, 640, 1280)
+DEFAULT_REPORT_PATH = ROOT_DIR / "article_c" / "smoke_pipeline_report.json"
 
 
-def _run(cmd: list[str]) -> tuple[int, str]:
-    print(f"$ {' '.join(cmd)}")
-    completed = subprocess.run(
-        cmd,
-        cwd=str(ROOT_DIR),
-        text=True,
-        capture_output=True,
-        check=False,
+@dataclass
+class StepReport:
+    name: str
+    command: list[str]
+    started_at: float
+    ended_at: float
+    duration_s: float
+    returncode: int
+    status: str
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Exécute un pipeline reproductible: clean, run_all, make_all_plots, verify_all."
+        )
     )
-    output = (completed.stdout or "") + ("\n" + completed.stderr if completed.stderr else "")
-    if output.strip():
-        print(output.strip())
-    return completed.returncode, output
+    parser.add_argument(
+        "--network-sizes",
+        type=int,
+        nargs="+",
+        default=list(DEFAULT_SIZES),
+        help="Tailles réseau passées à run_all et make_all_plots.",
+    )
+    parser.add_argument(
+        "--replications",
+        type=int,
+        default=5,
+        help="Nombre de réplications passées à run_all et verify_all.",
+    )
+    parser.add_argument(
+        "--seeds-base",
+        type=int,
+        default=1,
+        help="Graine de base passée à run_all.",
+    )
+    parser.add_argument(
+        "--log-level",
+        choices=("quiet", "info", "debug"),
+        default="info",
+        help="Niveau de log pour run_all.",
+    )
+    parser.add_argument(
+        "--report-path",
+        type=Path,
+        default=DEFAULT_REPORT_PATH,
+        help="Fichier JSON du rapport final.",
+    )
+    return parser
 
 
-def _csv_has_rows(path: Path) -> bool:
-    if not path.exists():
-        return False
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        return any(True for _ in reader)
+def _run_step(name: str, command: list[str]) -> StepReport:
+    print(f"\n=== [{name}] ===")
+    print("$", " ".join(command))
+    started = time.time()
+    completed = subprocess.run(command, cwd=ROOT_DIR, check=False)
+    ended = time.time()
+    status = "ok" if completed.returncode == 0 else "failed"
+    print(f"[{name}] status={status} returncode={completed.returncode} duration={ended - started:.2f}s")
+    return StepReport(
+        name=name,
+        command=command,
+        started_at=started,
+        ended_at=ended,
+        duration_s=ended - started,
+        returncode=completed.returncode,
+        status=status,
+    )
 
 
-def _count_recent_plot_files(directory: Path, *, since_epoch: float) -> int:
-    if not directory.exists():
-        return 0
-    count = 0
-    for path in directory.iterdir():
-        if path.suffix.lower() not in {".png", ".pdf", ".eps", ".svg"}:
-            continue
-        try:
-            mtime = path.stat().st_mtime
-        except FileNotFoundError:
-            continue
-        if mtime >= since_epoch:
-            count += 1
-    return count
+def _write_report(report_path: Path, payload: dict[str, object]) -> None:
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def _check_required_legends() -> list[str]:
-    errors: list[str] = []
-    if not LEGEND_REPORT.exists():
-        return [f"Rapport des légendes absent: {LEGEND_REPORT}"]
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+    python = sys.executable
+    sizes = [str(value) for value in args.network_sizes]
 
-    by_module: dict[str, dict[str, str]] = {}
-    with LEGEND_REPORT.open("r", encoding="utf-8", newline="") as handle:
-        for row in csv.DictReader(handle):
-            module = str(row.get("module", "")).strip()
-            if module:
-                by_module[module] = row
-
-    for module in sorted(REQUIRED_LEGEND_MODULES):
-        row = by_module.get(module)
-        if row is None:
-            errors.append(f"Légende non vérifiée (module absent du rapport): {module}")
-            continue
-        status = str(row.get("status", "")).strip().upper()
-        legend_entries = str(row.get("legend_entries", "")).strip()
-        try:
-            legend_entries_value = int(float(legend_entries or "0"))
-        except ValueError:
-            legend_entries_value = 0
-        if status != "PASS" or legend_entries_value <= 0:
-            errors.append(
-                f"Légende invalide pour {module}: status={status}, legend_entries={legend_entries_value}"
-            )
-    return errors
-
-
-def main() -> int:
-    failures: list[str] = []
-
-    make_all_plots_started_at = 0.0
-    commands = [
-        [
-            sys.executable,
-            "-m",
-            "article_c.step1.run_step1",
-            "--network-sizes",
-            "80",
-            "--replications",
-            "1",
-            "--workers",
-            "1",
-        ],
-        [
-            sys.executable,
-            "-m",
-            "article_c.step2.run_step2",
-            "--network-sizes",
-            "80",
-            "--replications",
-            "1",
-            "--workers",
-            "1",
-        ],
-        [sys.executable, "-m", "article_c.tools.aggregate_step1"],
-        [sys.executable, "-m", "article_c.tools.aggregate_step2"],
-        [
-            sys.executable,
-            "article_c/make_all_plots.py",
-            "--network-sizes",
-            "80",
-        ],
+    steps: list[tuple[str, list[str]]] = [
+        (
+            "clean",
+            [
+                python,
+                "-m",
+                "article_c.run_all",
+                "--allow-non-article-c",
+                "--clean-hard",
+                "--skip-step1",
+                "--skip-step2",
+                "--log-level",
+                args.log_level,
+            ],
+        ),
+        (
+            "run_all",
+            [
+                python,
+                "-m",
+                "article_c.run_all",
+                "--allow-non-article-c",
+                "--network-sizes",
+                *sizes,
+                "--replications",
+                str(args.replications),
+                "--seeds_base",
+                str(args.seeds_base),
+                "--log-level",
+                args.log_level,
+            ],
+        ),
+        (
+            "make_all_plots",
+            [
+                python,
+                "-m",
+                "article_c.make_all_plots",
+                "--network-sizes",
+                *sizes,
+            ],
+        ),
+        (
+            "verify_all",
+            [
+                python,
+                "-m",
+                "article_c.tools.verify_all",
+                "--replications",
+                str(args.replications),
+            ],
+        ),
     ]
 
-    make_all_plots_output = ""
-    for cmd in commands:
-        if "article_c/make_all_plots.py" in " ".join(cmd):
-            make_all_plots_started_at = time.time()
-        rc, output = _run(cmd)
-        if rc != 0:
-            failures.append(f"Commande en échec (code {rc}): {' '.join(cmd)}")
-        if "article_c/make_all_plots.py" in " ".join(cmd):
-            make_all_plots_output = output
+    pipeline_started = time.time()
+    executed_reports: list[StepReport] = []
+    failure_reason = ""
 
-    if not _csv_has_rows(STEP1_AGG):
-        failures.append(f"Agrégat Step1 absent ou vide: {STEP1_AGG}")
-    if not _csv_has_rows(STEP2_AGG):
-        failures.append(f"Agrégat Step2 absent ou vide: {STEP2_AGG}")
+    for name, command in steps:
+        report = _run_step(name, command)
+        executed_reports.append(report)
+        if report.returncode != 0:
+            failure_reason = (
+                f"Écart contractuel détecté à l'étape '{name}' "
+                f"(code retour {report.returncode})."
+            )
+            break
 
-    if _count_recent_plot_files(STEP1_PLOTS_DIR, since_epoch=make_all_plots_started_at) < 1:
-        failures.append("Aucun plot Step1 généré pendant make_all_plots")
-    if _count_recent_plot_files(STEP2_PLOTS_DIR, since_epoch=make_all_plots_started_at) < 1:
-        failures.append("Aucun plot Step2 généré pendant make_all_plots")
+    pipeline_ended = time.time()
+    success = not failure_reason
 
-    failures.extend(_check_required_legends())
+    final_payload: dict[str, object] = {
+        "success": success,
+        "failure_reason": failure_reason,
+        "network_sizes": args.network_sizes,
+        "replications": args.replications,
+        "seeds_base": args.seeds_base,
+        "pipeline_started_at": pipeline_started,
+        "pipeline_ended_at": pipeline_ended,
+        "pipeline_duration_s": pipeline_ended - pipeline_started,
+        "executed_steps": [asdict(item) for item in executed_reports],
+        "skipped_steps": [name for name, _ in steps[len(executed_reports):]],
+    }
+    _write_report(args.report_path, final_payload)
 
-    blocking_fail_markers = (
-        "sortie finale bloquée",
-        "ERREUR: sortie finale bloquée",
-    )
-    lowered_output = make_all_plots_output.lower()
-    if any(marker.lower() in lowered_output for marker in blocking_fail_markers):
-        failures.append("Détection d'un FAIL bloquant dans la sortie de make_all_plots")
+    print("\n=== RAPPORT FINAL ===")
+    print(f"- success: {success}")
+    if failure_reason:
+        print(f"- failure_reason: {failure_reason}")
+    print(f"- report_path: {args.report_path}")
 
-    if failures:
-        print("\nSMOKE PIPELINE: FAIL")
-        for item in failures:
-            print(f"- {item}")
-        return 1
-
-    print("\nSMOKE PIPELINE: PASS")
-    return 0
+    return 0 if success else 1
 
 
 if __name__ == "__main__":
