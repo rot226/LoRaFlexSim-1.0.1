@@ -10,6 +10,64 @@ Ce dossier contient une structure minimale pour les scripts de l'article C.
 - `run_all.py` : exécute toutes les étapes.
 - `make_all_plots.py` : génère tous les graphes disponibles.
 
+## Contrat de sortie
+
+### 1) Sorties de simulation (granularité fine)
+
+Le layout canonique des sorties brutes est :
+
+- `article_c/step1/results/by_size/size_<N>/rep_<R>/...`
+- `article_c/step2/results/by_size/size_<N>/rep_<R>/...`
+
+où :
+
+- `<N>` = taille réseau (`network_size`),
+- `<R>` = index de réplication.
+
+### 2) Fichiers agrégés (entrées des plots)
+
+Les scripts de tracé consomment en priorité les agrégats globaux dans :
+
+- `article_c/step1/results/aggregates/aggregated_results.csv`
+- `article_c/step2/results/aggregates/aggregated_results.csv`
+
+Des variantes existent aussi dans le même dossier `results/aggregates/` :
+
+- `aggregated_results_by_size.csv`
+- `aggregated_results_by_replication.csv`
+
+### 3) Scripts qui produisent les agrégats
+
+- Exécution complète : `python -m article_c.run_all` (agrège Step1 + Step2).
+- Exécution par étape :
+  - `python -m article_c.step1.run_step1 ...`
+  - `python -m article_c.step2.run_step2 ...`
+- Agrégation seule (sans relancer la simulation) :
+  - `python -m article_c.tools.aggregate_step1`
+  - `python -m article_c.tools.aggregate_step2`
+
+### 4) Scripts qui consomment ces agrégats
+
+- Orchestrateur figures : `python -m article_c.make_all_plots`
+- Pipeline de comparaison : `python -m article_c.all_plot_compare`
+- Comparaison SNIR : `python -m article_c.compare_with_snir`
+- DER par cluster : `python -m article_c.plot_cluster_der`
+- Modules de tracé Step1/Step2 sous `article_c/step1/plots/` et `article_c/step2/plots/` (appelés notamment par `make_all_plots`).
+
+### 5) Exemple Windows 11 (PowerShell)
+
+```powershell
+# 1) Simulation + agrégation (layout by_size/size_<N>/rep_<R>)
+python -m article_c.run_all --network-sizes 80 160 320 640 1280 --replications 5 --seeds_base 1
+
+# 2) (Optionnel) Régénérer uniquement les agrégats à partir de by_size
+python -m article_c.tools.aggregate_step1
+python -m article_c.tools.aggregate_step2
+
+# 3) Générer les plots à partir de results/aggregates/...
+python -m article_c.make_all_plots --formats png,eps,pdf --no-suptitle
+```
+
 ## Modèle radio et SNIR
 
 - **Modèle radio (proxy)** : l'étape 1 génère des nœuds avec des niveaux SNR/RSSI aléatoires et applique des seuils par SF pour estimer la QoS, puis approxime les collisions via une capacité par SF (proxy de charge). Les algorithmes ADR/MixRA sont des heuristiques simplifiées pour produire des valeurs reproductibles.
