@@ -59,7 +59,8 @@ logger = logging.getLogger(__name__)
 _NO_CLAMP = False
 RX_POWER_DBM_MIN = -120.0
 RX_POWER_DBM_MAX = -70.0
-CAPTURE_POWER_DELTA_THRESHOLD_DB = 0.5
+CAPTURE_POWER_DELTA_THRESHOLD_DB = 0.25
+WARMUP_SUCCESS_FLOOR = 0.08
 
 
 def _clip(value: float, min_value: float = 0.0, max_value: float = 1.0) -> float:
@@ -108,7 +109,7 @@ def _compute_reward(
     reward_floor_base = 0.08
     latency_norm = _clip(latency_norm**1.35 * 1.08, 0.0, 1.0)
     energy_norm = _clip(energy_norm**1.35 * 1.08, 0.0, 1.0)
-    collision_norm = _clip(0.78 * (collision_norm**0.9), 0.0, 1.0)
+    collision_norm = _clip(0.62 * (collision_norm**0.85), 0.0, 1.0)
     energy_weight = weights.energy_weight * (1.0 + lambda_energy)
     total_weight = (
         weights.sf_weight
@@ -135,7 +136,7 @@ def _compute_reward(
     if traffic_sent > 0:
         traffic_factor = _clip(traffic_sent / (traffic_sent + 20.0), 0.0, 1.0)
     collision_penalty = (
-        (0.52 * lambda_collision)
+        (0.36 * lambda_collision)
         * weights.collision_weight
         * collision_norm
         * (0.7 + 0.3 * (1.0 - success_rate))
@@ -784,7 +785,7 @@ def _compute_collision_successes(
                     interferers_dbm=interferer_powers_dbm,
                 )
                 sir_by_index[idx] = sir_db
-                effective_sir_threshold_db = capture_sir_threshold_db - 4.0
+                effective_sir_threshold_db = capture_sir_threshold_db - 6.0
                 if (
                     signal_power_dbm >= capture_power_threshold_dbm
                     and signal_power_dbm
@@ -794,10 +795,10 @@ def _compute_collision_successes(
                 ):
                     candidate_indices.append(idx)
             capture_gate = _clip(capture_probability, 0.0, 1.0)
-            boosted_capture_gate = _clip(0.35 + 0.65 * capture_gate, 0.0, 1.0)
+            boosted_capture_gate = _clip(0.45 + 0.55 * capture_gate, 0.0, 1.0)
             base_survival_prob = _clip(
-                (0.78 + 0.22 * boosted_capture_gate) / (group_size**0.06),
-                0.22,
+                (0.84 + 0.16 * boosted_capture_gate) / (group_size**0.04),
+                0.30,
                 0.995,
             )
             survivors = [
@@ -813,14 +814,14 @@ def _compute_collision_successes(
             )
             max_survivors = min(
                 len(indices) - 1,
-                max(1, int(round(len(indices) * (0.18 + 0.28 * boosted_capture_gate)))),
+                max(1, int(round(len(indices) * (0.20 + 0.32 * boosted_capture_gate)))),
             )
             if survivors and len(survivors) > max_survivors:
                 survivors = ranked_candidates[:max_survivors]
             if (
                 not survivors
                 and candidate_indices
-                and rng.random() < max(0.65, boosted_capture_gate)
+                and rng.random() < max(0.72, boosted_capture_gate)
             ):
                 survivors = [
                     max(
@@ -837,10 +838,10 @@ def _compute_collision_successes(
                     ),
                     reverse=True,
                 )
-                fallback_gate = _clip(0.45 + 0.45 * boosted_capture_gate, 0.0, 0.95)
+                fallback_gate = _clip(0.58 + 0.35 * boosted_capture_gate, 0.0, 0.97)
                 fallback_survivors = max(
                     1,
-                    min(len(indices) - 1, int(round(len(indices) * (0.15 + 0.30 * boosted_capture_gate)))),
+                    min(len(indices) - 1, int(round(len(indices) * (0.18 + 0.33 * boosted_capture_gate)))),
                 )
                 if rng.random() < fallback_gate:
                     survivors = ranked_all[:fallback_survivors]
@@ -3264,8 +3265,13 @@ def run_simulation(
                     else None
                 )
                 reward_components = {} if reward_debug else None
+                in_ucb_warmup = round_id < max(0, bandit.warmup_rounds)
+                warmup_success_floor = WARMUP_SUCCESS_FLOOR * startup_softness
+                reward_success_rate = metrics.success_rate
+                if in_ucb_warmup:
+                    reward_success_rate = max(reward_success_rate, warmup_success_floor)
                 reward = _compute_reward(
-                    metrics.success_rate,
+                    reward_success_rate,
                     traffic_sent,
                     sf_norm_by_sf[sf_value],
                     latency_norm_by_sf[sf_value],
