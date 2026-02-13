@@ -476,14 +476,16 @@ def _check_legends_and_sizes() -> list[str]:
                     failures.append(f"{context}: {reason}.")
                     module_has_valid_legend = False
 
-                width_in, height_in = fig.get_size_inches()
+                size_inches = fig.get_size_inches()
+                width_in = float(size_inches[0])
+                height_in = float(size_inches[1])
                 if width_in <= 0 or height_in <= 0:
                     failures.append(
                         f"{context}: dimension invalide ({width_in:.2f}x{height_in:.2f} in)."
                     )
-                if width_in > 15.0:
+                if fig.get_size_inches()[0] > 15.0:
                     failures.append(
-                        f"{context}: largeur de figure > 15 in ({width_in:.2f} in)."
+                        f"{context}: module fautif '{module_path}' (largeur de figure > 15 in, {width_in:.2f} in)."
                     )
             legend_validity_by_module[module_path] = module_has_valid_legend
             legend_report_rows.append(
