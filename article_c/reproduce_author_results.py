@@ -843,13 +843,45 @@ def plot_fig8(
 
 
 def _load_results(path: Path, step: int) -> list[dict[str, object]]:
+    loader = load_step1_aggregated if step == 1 else load_step2_aggregated
+    source = "aggregates"
     try:
-        if step == 1:
-            return load_step1_aggregated(path, allow_sample=False)
-        return load_step2_aggregated(path, allow_sample=False)
+        rows = loader(path, allow_sample=False)
+        if rows:
+            LOGGER.info("source utilisée: %s", source)
+            return rows
     except Exception as exc:  # noqa: BLE001 - utile pour rapporter l'absence de CSV
         LOGGER.warning("Impossible de charger %s: %s", path, exc)
+
+    by_size_paths = sorted(path.parent.parent.glob("by_size/size_*/aggregated_results.csv"))
+    if not by_size_paths:
         return []
+
+    try:
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            writer: csv.DictWriter[str] | None = None
+            for by_size_path in by_size_paths:
+                with by_size_path.open("r", encoding="utf-8", newline="") as src:
+                    reader = csv.DictReader(src)
+                    if not reader.fieldnames:
+                        continue
+                    if writer is None:
+                        writer = csv.DictWriter(handle, fieldnames=reader.fieldnames)
+                        writer.writeheader()
+                    for row in reader:
+                        writer.writerow(row)
+    except OSError as exc:
+        LOGGER.warning("Agrégation by_size impossible vers %s: %s", path, exc)
+        return []
+
+    try:
+        rows = loader(path, allow_sample=False)
+    except Exception as exc:  # noqa: BLE001 - utile pour rapporter l'absence de CSV
+        LOGGER.warning("Impossible de charger %s après agrégation by_size: %s", path, exc)
+        return []
+    if rows:
+        LOGGER.info("source utilisée: by_size")
+    return rows
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
