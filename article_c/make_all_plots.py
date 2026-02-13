@@ -103,6 +103,12 @@ PLOT_MODULES = {
     ],
 }
 
+REQUIRED_PLOT_MODULES_BY_STEP: dict[str, set[str]] = {
+    step: {module_path for module_path, _ in module_entries}
+    for step, module_entries in EXPECTED_FIGURES_BY_STEP.items()
+    if step in PLOT_MODULES
+}
+
 POST_PLOT_MODULES = [
     "article_c.reproduce_author_results",
     "article_c.compare_with_snir",
@@ -212,6 +218,10 @@ class CsvDataBundle:
     rows: list[dict[str, str]]
     label: str
     source_paths: tuple[Path, ...]
+
+
+class MandatoryFigureDataError(RuntimeError):
+    """Erreur contrôlée quand une figure obligatoire n'a pas ses données."""
 
 
 PLOT_REQUIREMENTS = {
@@ -943,6 +953,10 @@ def _format_size_dirs(values: tuple[int, ...]) -> str:
     return ";".join(f"size_{value}" for value in values)
 
 
+def _is_required_plot_module(step: str, module_path: str) -> bool:
+    return module_path in REQUIRED_PLOT_MODULES_BY_STEP.get(step, set())
+
+
 def _compute_size_status(
     *,
     requested_sizes: tuple[int, ...],
@@ -1383,6 +1397,7 @@ def _validate_plot_data(
     requirements: PlotRequirements,
     expected_sizes: list[int] | None,
     source: str,
+    required_figure: bool,
 ) -> tuple[bool, str, dict[str, object]]:
     def _log_filter(filter_name: str, before: int, after: int, detail: str = "") -> None:
         suffix = f" ({detail})" if detail else ""
@@ -1437,6 +1452,10 @@ def _validate_plot_data(
     report["after_snir_filter_rows"] = len(rows)
     report["after_cluster_filter_rows"] = len(rows)
     if not fieldnames:
+        if required_figure:
+            raise MandatoryFigureDataError(
+                f"Figure obligatoire {module_path}: CSV vide ({data_bundle.label})."
+            )
         log_debug(
             "AVERTISSEMENT: "
             f"CSV vide pour {module_path}, figure ignorée."
@@ -2012,6 +2031,7 @@ def main(argv: list[str] | None = None) -> None:
             if module_path in status_map and status_map[module_path].status == "FAIL":
                 continue
             requirements = _resolve_plot_requirements(step, module_path)
+            required_figure = _is_required_plot_module(step, module_path)
             data_bundle = _resolve_data_bundle(
                 step=step,
                 csv_name=requirements.csv_name,
@@ -2041,13 +2061,30 @@ def main(argv: list[str] | None = None) -> None:
                     size_status=size_status,
                     size_message=size_message,
                 )
-                _register_status(
-                    status_map,
-                    step=step,
-                    module_path=module_path,
-                    status="SKIP",
-                    message=f"CSV manquant ({requirements.csv_name})",
-                )
+                if required_figure:
+                    exc = MandatoryFigureDataError(
+                        f"Figure obligatoire {module_path}: CSV manquant ({requirements.csv_name})."
+                    )
+                    log_error(f"ERREUR: {exc}")
+                    _register_status(
+                        status_map,
+                        step=step,
+                        module_path=module_path,
+                        status="FAIL",
+                        message=str(exc),
+                    )
+                else:
+                    log_debug(
+                        "AVERTISSEMENT: "
+                        f"CSV manquant ({requirements.csv_name}) pour {module_path}, figure ignorée."
+                    )
+                    _register_status(
+                        status_map,
+                        step=step,
+                        module_path=module_path,
+                        status="SKIP",
+                        message=f"CSV manquant ({requirements.csv_name})",
+                    )
                 continue
             rl10_network_sizes: list[int] | None = None
             if (
@@ -2097,14 +2134,26 @@ def main(argv: list[str] | None = None) -> None:
                 or step_network_sizes.get(step)
                 or network_sizes
             )
-            is_valid, reason, report_row = _validate_plot_data(
-                step=step,
-                module_path=module_path,
-                data_bundle=data_bundle,
-                requirements=requirements,
-                expected_sizes=expected_sizes,
-                source=args.source,
-            )
+            try:
+                is_valid, reason, report_row = _validate_plot_data(
+                    step=step,
+                    module_path=module_path,
+                    data_bundle=data_bundle,
+                    requirements=requirements,
+                    expected_sizes=expected_sizes,
+                    source=args.source,
+                    required_figure=required_figure,
+                )
+            except MandatoryFigureDataError as exc:
+                log_error(f"ERREUR: {exc}")
+                _register_status(
+                    status_map,
+                    step=step,
+                    module_path=module_path,
+                    status="FAIL",
+                    message=str(exc),
+                )
+                continue
             plot_data_filter_report_rows.append(report_row)
             detected_sizes = tuple(int(size) for size in report_row.get("detected_sizes", ()))
             requested_sizes = tuple(int(size) for size in report_row.get("requested_sizes", ()))
