@@ -54,19 +54,46 @@ def _title_suffix(network_sizes: list[int]) -> str:
 
 
 def _load_step2_raw_results(
-    results_path: Path,
+    results_dir: Path,
     *,
     allow_sample: bool = True,
 ) -> list[dict[str, object]]:
-    if not results_path.exists():
-        warnings.warn(f"CSV Step2 manquant: {results_path}", stacklevel=2)
+    raw_pattern = results_dir / "by_size" / "size_*" / "rep_*" / "raw_results.csv"
+    raw_paths = sorted(results_dir.glob("by_size/size_*/rep_*/raw_results.csv"))
+    fallback_path = results_dir / "aggregates" / "aggregated_results.csv"
+
+    dataframes: list[pd.DataFrame] = []
+    source_label = str(raw_pattern)
+    if raw_paths:
+        for raw_path in raw_paths:
+            df = pd.read_csv(raw_path)
+            if df.empty:
+                continue
+            dataframes.append(df)
+    if not dataframes and fallback_path.exists():
+        df = pd.read_csv(fallback_path)
+        if not df.empty:
+            dataframes.append(df)
+            source_label = str(fallback_path)
+    if not raw_paths and not fallback_path.exists():
+        warnings.warn(
+            "Aucun CSV Step2 trouvé (motif by_size/size_*/rep_*/raw_results.csv, "
+            f"fallback: {fallback_path}).",
+            stacklevel=2,
+        )
         return []
-    df = pd.read_csv(results_path)
-    if df.empty:
+
+    if not dataframes:
+        warnings.warn(
+            "CSV Step2 présents mais vides; figure ignorée.",
+            stacklevel=2,
+        )
         return []
+
+    df = pd.concat(dataframes, ignore_index=True)
     if "reward" not in df.columns:
         warnings.warn(
-            f"Colonne reward manquante dans {results_path.name}; figure ignorée.",
+            f"Colonne reward manquante dans les données Step2 ({source_label}); figure ignorée.",
             stacklevel=2,
         )
         return []
@@ -380,8 +407,8 @@ def main(
     if network_sizes is not None and _has_invalid_network_sizes(network_sizes):
         return
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "raw_all.csv"
-    rows = _load_step2_raw_results(results_path, allow_sample=allow_sample)
+    results_dir = step_dir / "results"
+    rows = _load_step2_raw_results(results_dir, allow_sample=allow_sample)
     if not rows:
         warnings.warn("CSV Step2 manquant ou vide, figure ignorée.", stacklevel=2)
         return
