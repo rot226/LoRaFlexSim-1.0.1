@@ -13,6 +13,8 @@ import pandas as pd
 
 from article_c.common.plot_helpers import (
     algo_label,
+    metric_label,
+    snir_label,
     apply_plot_style,
     assert_legend_present,
     ensure_network_size,
@@ -34,24 +36,6 @@ from article_c.common.plot_helpers import (
 )
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
-ALGO_ALIASES = {
-    "adr": "adr",
-    "loba": "loba",
-    "lo_ba": "loba",
-    "lora_baseline": "loba",
-    "lorawan_baseline": "loba",
-    "mixra_h": "mixra_h",
-    "mixra_opt": "mixra_opt",
-    "ucb1_sf": "ucb1_sf",
-    "ucb1-sf": "ucb1_sf",
-}
-COMMON_CURVE_LABELS = {
-    "adr": "ADR",
-    "mixra_h": "MixRA-H",
-    "mixra_opt": "MixRA-Opt",
-    "ucb1_sf": "UCB1-SF",
-}
-SNIR_MODE_LABELS = {"snir_on": "SNIR on", "snir_off": "SNIR off"}
 TARGET_ALGOS = {"adr", "loba", "mixra_h", "mixra_opt", "ucb1_sf"}
 _DENSITY_CONSTANT_WARNED = False
 
@@ -78,25 +62,12 @@ def _title_suffix(network_sizes: list[int]) -> str:
     return ""
 
 
-def _normalize_algo_label(value: object) -> str:
-    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
-
-
-def _canonical_algo(algo: str) -> str | None:
-    normalized = _normalize_algo_label(algo)
-    if not normalized:
-        return None
-    return ALGO_ALIASES.get(normalized, normalized)
+def _canonical_algo(algo: str) -> str:
+    return str(algo or "").strip().lower().replace("-", "_").replace(" ", "_")
 
 
 def _label_for_algo(algo: str) -> str:
-    canonical = _canonical_algo(algo)
-    if canonical is None:
-        return algo
-    if canonical in COMMON_CURVE_LABELS:
-        return COMMON_CURVE_LABELS[canonical]
-    return algo_label(canonical)
-
+    return algo_label(algo)
 
 def _filter_algorithms(rows: list[dict[str, object]]) -> list[dict[str, object]]:
     normalized_labels = {
@@ -104,7 +75,6 @@ def _filter_algorithms(rows: list[dict[str, object]]) -> list[dict[str, object]]
         for row in rows
         if row.get("algo") is not None
     }
-    normalized_labels.discard(None)
     allowed = TARGET_ALGOS | normalized_labels
     filtered = [
         row for row in rows if _canonical_algo(str(row.get("algo", ""))) in allowed
@@ -159,12 +129,12 @@ def _plot_metric(
         metric_key,
         network_sizes,
         label_fn=lambda algo: _label_for_algo(str(algo)),
-        snir_label_fn=lambda mode: SNIR_MODE_LABELS.get(str(mode), str(mode)),
+        snir_label_fn=lambda mode: snir_label(str(mode)),
     )
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (nodes)")
-    ax.set_ylabel("Reward (a.u., median, p10–p90)")
+    ax.set_ylabel(metric_label("reward"))
     place_adaptive_legend(fig, ax, preferred_loc="right")
     return fig
 

@@ -14,6 +14,7 @@ from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.plot_style import label_for
 from article_c.common.plot_helpers import (
     algo_label,
+    metric_label,
     apply_plot_style,
     assert_legend_present,
     clear_axis_legends,
@@ -35,24 +36,6 @@ from article_c.common.plot_helpers import (
 )
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
-ALGO_ALIASES = {
-    "adr": "adr",
-    "loba": "loba",
-    "lo_ba": "loba",
-    "lora_baseline": "loba",
-    "lorawan_baseline": "loba",
-    "mixra_h": "mixra_h",
-    "mixra_opt": "mixra_opt",
-    "ucb1_sf": "ucb1_sf",
-    "ucb1-sf": "ucb1_sf",
-}
-COMMON_CURVE_LABELS = {
-    "adr": "ADR",
-    "mixra_h": "MixRA-H",
-    "mixra_opt": "MixRA-Opt",
-    "ucb1_sf": "UCB1-SF",
-}
-SNIR_MODE_LABELS = {"snir_on": "SNIR on", "snir_off": "SNIR off"}
 TARGET_ALGOS = {"adr", "loba", "mixra_h", "mixra_opt", "ucb1_sf"}
 RIGHT_LEGEND_WIDTH_FACTOR = 1.3
 
@@ -88,25 +71,12 @@ def _cluster_labels(clusters: list[str]) -> dict[str, str]:
     return {cluster: f"{label_for('legend.cluster')} {idx + 1}" for idx, cluster in enumerate(clusters)}
 
 
-def _normalize_algo_label(value: object) -> str:
-    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
-
-
-def _canonical_algo(algo: str) -> str | None:
-    normalized = _normalize_algo_label(algo)
-    if not normalized:
-        return None
-    return ALGO_ALIASES.get(normalized, normalized)
+def _canonical_algo(algo: str) -> str:
+    return str(algo or "").strip().lower().replace("-", "_").replace(" ", "_")
 
 
 def _label_for_algo(algo: str) -> str:
-    canonical = _canonical_algo(algo)
-    if canonical is None:
-        return algo
-    if canonical in COMMON_CURVE_LABELS:
-        return COMMON_CURVE_LABELS[canonical]
-    return algo_label(canonical)
-
+    return algo_label(algo)
 
 def _extract_success_rate(row: dict[str, object]) -> float | None:
     for key in ("success_rate_mean", "success_rate", "success_mean"):
@@ -140,7 +110,6 @@ def _filter_algorithms(rows: list[dict[str, object]]) -> list[dict[str, object]]
         for row in rows
         if row.get("algo") is not None
     }
-    normalized_labels.discard(None)
     allowed = TARGET_ALGOS | normalized_labels
     filtered = [
         row for row in rows if _canonical_algo(str(row.get("algo", ""))) in allowed
@@ -234,7 +203,7 @@ def _plot_metric(
             values = [points.get(size, float("nan")) for size in network_sizes]
             ax.plot(network_sizes, values, marker="o", label=_label_for_algo(str(algo)))
         ax.set_xlabel(label_for("x.network_size"))
-        ax.set_ylabel(f"{label_for('y.outage')} — {cluster_label}")
+        ax.set_ylabel(f"{metric_label('outage')} — {cluster_label}")
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     clear_axis_legends(axes)
@@ -390,7 +359,7 @@ def _plot_raw_metric(
                     label=label,
                 )
         ax.set_xlabel(label_for("x.network_size"))
-        ax.set_ylabel(f"{label_for('y.outage_raw')} — {cluster_label}")
+        ax.set_ylabel(f"{metric_label('outage_raw')} — {cluster_label}")
         ax.set_xticks(network_sizes)
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     clear_axis_legends(axes)
