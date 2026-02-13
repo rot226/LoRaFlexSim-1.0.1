@@ -2,11 +2,36 @@
 
 from __future__ import annotations
 
+
+LOG_LEVELS = {"quiet": 0, "info": 1, "debug": 2}
+_CURRENT_LOG_LEVEL = LOG_LEVELS["info"]
+
+
+def set_log_level(level: str) -> None:
+    global _CURRENT_LOG_LEVEL
+    _CURRENT_LOG_LEVEL = LOG_LEVELS[level]
+
+
+def log_info(message: str) -> None:
+    if _CURRENT_LOG_LEVEL >= LOG_LEVELS["info"]:
+        print(message)
+
+
+def log_debug(message: str) -> None:
+    if _CURRENT_LOG_LEVEL >= LOG_LEVELS["debug"]:
+        print(message)
+
+
+def log_error(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
 from collections import defaultdict
 import csv
 import json
 import logging
 import math
+import sys
 from multiprocessing import get_context
 from pathlib import Path
 import shutil
@@ -206,7 +231,7 @@ def _run_auto_tuning_before_campaign(
                     "adjustment_applied": adjustment_applied,
                 }
             )
-            print(
+            log_debug(
                 "Mini-évaluation auto-tuning "
                 f"(tentative {attempt}/{AUTO_TUNING_MAX_ATTEMPTS}, N={AUTO_TUNING_MINI_EVAL_NETWORK_SIZE}) "
                 f"success_rate_mean={success_mean:.4f}, "
@@ -242,14 +267,14 @@ def _run_auto_tuning_before_campaign(
     log_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    print(f"Auto-tuning Step2: journal écrit dans {log_path}.")
+    log_debug(f"Auto-tuning Step2: journal écrit dans {log_path}.")
     return payload
 
 
 def _clamp_rx_power_dbm(value_dbm: float) -> float:
     clamped = max(RX_POWER_DBM_MIN, min(RX_POWER_DBM_MAX, value_dbm))
     if not math.isclose(clamped, value_dbm, abs_tol=1e-12):
-        print(
+        log_debug(
             "WARNING: rx_power_dbm hors plage admissible "
             f"({value_dbm:.2f} dBm). Valeur clampée à {clamped:.2f} dBm "
             f"(bornes {RX_POWER_DBM_MIN:.2f}..{RX_POWER_DBM_MAX:.2f} dBm)."
@@ -265,7 +290,7 @@ def _log_default_profile_if_needed(args: object) -> None:
     if getattr(args, "safe_profile", False):
         return
     defaults = DEFAULT_CONFIG.step2
-    print(
+    log_debug(
         "Profil standard adouci (par défaut) : "
         f"capture_probability={defaults.capture_probability}, "
         f"network_load_min/max={defaults.network_load_min}/{defaults.network_load_max}, "
@@ -378,7 +403,7 @@ def _log_effective_traffic_scale_for_density(density: int, config: dict[str, obj
     )
     traffic_coeff_scale = float(config["traffic_coeff_scale"])
     effective_traffic_scale = traffic_coeff_scale * load_factor
-    print(
+    log_debug(
         "Traffic scale effectif par taille: "
         f"taille={int(density)}, "
         f"traffic_coeff_scale={traffic_coeff_scale:.4f}, "
@@ -414,13 +439,13 @@ def _apply_safe_profile_with_log(args: object, reason: str) -> None:
     _set_value("max_penalty_ratio", STEP2_SAFE_CONFIG.max_penalty_ratio)
     _set_value("shadowing_sigma_db", STEP2_SAFE_CONFIG.shadowing_sigma_db)
 
-    print(f"Profil sécurisé activé ({reason}).")
+    log_debug(f"Profil sécurisé activé ({reason}).")
     if not changes:
-        print("Aucun paramètre modifié par le profil sécurisé.")
+        log_debug("Aucun paramètre modifié par le profil sécurisé.")
         return
-    print("Paramètres modifiés par le profil sécurisé:")
+    log_debug("Paramètres modifiés par le profil sécurisé:")
     for name, previous, value in sorted(changes):
-        print(f"- {name}: {previous} -> {value}")
+        log_debug(f"- {name}: {previous} -> {value}")
 
 
 def _build_safe_profile_config(
@@ -495,25 +520,25 @@ def _build_super_safe_profile_config(
 def _log_safe_profile_switch(
     density: int, reason: str, changes: list[tuple[str, object, object]]
 ) -> None:
-    print(f"Bascule profil sécurisé pour la taille {density} ({reason}).")
+    log_debug(f"Bascule profil sécurisé pour la taille {density} ({reason}).")
     if not changes:
-        print("Aucun paramètre modifié pour la relance en profil sécurisé.")
+        log_debug("Aucun paramètre modifié pour la relance en profil sécurisé.")
         return
-    print("Paramètres appliqués pour la relance en profil sécurisé:")
+    log_debug("Paramètres appliqués pour la relance en profil sécurisé:")
     for name, previous, value in sorted(changes):
-        print(f"- {name}: {previous} -> {value}")
+        log_debug(f"- {name}: {previous} -> {value}")
 
 
 def _log_super_safe_profile_switch(
     density: int, reason: str, changes: list[tuple[str, object, object]]
 ) -> None:
-    print(f"Bascule profil super sécurisé pour la taille {density} ({reason}).")
+    log_debug(f"Bascule profil super sécurisé pour la taille {density} ({reason}).")
     if not changes:
-        print("Aucun paramètre modifié pour la relance super sécurisée.")
+        log_debug("Aucun paramètre modifié pour la relance super sécurisée.")
         return
-    print("Paramètres appliqués pour la relance super sécurisée:")
+    log_debug("Paramètres appliqués pour la relance super sécurisée:")
     for name, previous, value in sorted(changes):
-        print(f"- {name}: {previous} -> {value}")
+        log_debug(f"- {name}: {previous} -> {value}")
 
 
 def _update_safe_profile_config(config: dict[str, object], args: object) -> None:
@@ -609,7 +634,7 @@ def _log_step2_key_csv_paths(output_dir: Path) -> None:
         csv_path = output_dir / csv_name
         resolved_csv = _ensure_csv_within_scope(csv_path, output_dir)
         if csv_path.exists():
-            print(f"CSV Step2 écrit: {resolved_csv}")
+            log_info(f"CSV Step2 écrit: {resolved_csv}")
 
 def _compute_density(network_size: int) -> float:
     radius_m = float(DEFAULT_CONFIG.scenario.radius_m)
@@ -621,8 +646,8 @@ def _compute_density(network_size: int) -> float:
 def _log_results_written(output_dir: Path, row_count: int) -> None:
     raw_path = _ensure_csv_within_scope(output_dir / "raw_results.csv", output_dir)
     aggregated_path = _ensure_csv_within_scope(output_dir / "aggregated_results.csv", output_dir)
-    print(f"Append rows: {row_count} -> {raw_path}")
-    print(f"Append rows: {row_count} -> {aggregated_path}")
+    log_debug(f"Append rows: {row_count} -> {raw_path}")
+    log_debug(f"Append rows: {row_count} -> {aggregated_path}")
 
 
 def _assert_flat_output_files(output_dir: Path, density: int | float) -> None:
@@ -635,14 +660,14 @@ def _assert_flat_output_files(output_dir: Path, density: int | float) -> None:
             "ERREUR: fichiers de sortie attendus absents après "
             f"write_simulation_results pour la taille {density}: {missing_label}"
         )
-        print(message)
+        log_debug(message)
         raise FileNotFoundError(message)
 
 
 def _log_unique_network_sizes(output_dir: Path) -> None:
     raw_path = output_dir / "raw_results.csv"
     if not raw_path.exists():
-        print(f"Aucun raw_results.csv détecté: {raw_path}")
+        log_debug(f"Aucun raw_results.csv détecté: {raw_path}")
         return
     with raw_path.open("r", newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
@@ -652,9 +677,9 @@ def _log_unique_network_sizes(output_dir: Path) -> None:
         ]
         reader.fieldnames = fieldnames
         headers_label = ", ".join(fieldnames or [])
-        print(f"Headers lus dans {raw_path}: {headers_label or 'aucun'}")
+        log_debug(f"Headers lus dans {raw_path}: {headers_label or 'aucun'}")
         if not fieldnames or "network_size" not in fieldnames:
-            print(f"Colonne network_size absente dans {raw_path}")
+            log_debug(f"Colonne network_size absente dans {raw_path}")
             return
         values: list[float] = []
         lines_read = 0
@@ -672,19 +697,19 @@ def _log_unique_network_sizes(output_dir: Path) -> None:
             try:
                 values.append(float(value))
             except ValueError:
-                print(f"Valeur network_size invalide détectée: {value}")
+                log_debug(f"Valeur network_size invalide détectée: {value}")
     if any(value == 0.0 for value in values):
-        print(
+        log_debug(
             "ERREUR: network_size à 0.0 détecté dans raw_results.csv, vérifiez la configuration."
         )
     sizes = sorted({int(value) for value in values})
     if not sizes:
-        print(
+        log_debug(
             "Aucune taille détectée dans raw_results.csv "
             f"(lignes lues: {lines_read}, lignes valides: {valid_lines})."
         )
     sizes_label = ", ".join(map(str, sizes)) if sizes else "aucune"
-    print(f"Tailles détectées dans raw_results: {sizes_label}")
+    log_debug(f"Tailles détectées dans raw_results: {sizes_label}")
 
 
 def _summarize_success_collision(
@@ -739,17 +764,17 @@ def _assert_flat_output_sizes(
             "ERREUR: write_simulation_results manquant pour certaines tailles "
             f"simulées (flat_output=True): {missing_label}"
         )
-        print(message)
+        log_debug(message)
         raise RuntimeError(message)
 
 
 def _log_step2_autonomous_inputs(args: object, reference_network_size: int) -> None:
     """Journalise les entrées explicites utilisées par Step2 (sans Step1)."""
-    print(
+    log_debug(
         "Step2 autonome: paramètres explicites uniquement "
         "(network_size, seed, RL, trafic, canal)."
     )
-    print(
+    log_debug(
         "Step2 paramètres explicites: "
         f"seed={getattr(args, 'seeds_base', None)}, "
         f"reference_network_size={reference_network_size}, "
@@ -765,7 +790,7 @@ def _log_step2_autonomous_inputs(args: object, reference_network_size: int) -> N
 
 def _log_rx_power_diagnostics(requested_dbm: float, effective_dbm: float) -> None:
     clamped = _is_rx_power_clamped(requested_dbm, effective_dbm)
-    print(
+    log_debug(
         "Diagnostic rx_power_dbm: "
         f"requested={requested_dbm:.2f} dBm, "
         f"effective={effective_dbm:.2f} dBm, "
@@ -984,7 +1009,7 @@ def _summarize_post_simulation(
 
 
 def _log_size_diagnostics(density: int, metrics: dict[str, float]) -> None:
-    print(
+    log_debug(
         "Diagnostic taille "
         f"{density}: succès min/max = {metrics['success_min']:.4f}/"
         f"{metrics['success_max']:.4f}, "
@@ -1021,19 +1046,19 @@ def _verify_metric_variation(size_metrics: dict[int, dict[str, float]]) -> None:
         metrics.get("throughput_success_mean", 0.0) for metrics in size_metrics.values()
     ]
     if not _has_variation(success_means):
-        print(
+        log_debug(
             "ERREUR: le success_rate moyen ne varie pas avec la taille du réseau."
         )
     if not _has_variation(collision_means):
-        print(
+        log_debug(
             "ERREUR: les collisions moyennes ne varient pas avec la taille du réseau."
         )
     if not _has_variation(reward_means):
-        print(
+        log_debug(
             "ERREUR: le reward_mean moyen ne varie pas avec la taille du réseau."
         )
     if not _has_variation(throughput_means):
-        print(
+        log_debug(
             "ERREUR: le throughput_success_mean ne varie pas avec la taille du réseau."
         )
 
@@ -1049,7 +1074,7 @@ def _has_traceable_outputs(base_results_dir: Path) -> bool:
 
 def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
     if not aggregated_path.exists():
-        print(f"Aucun aggregated_results.csv détecté: {aggregated_path}")
+        log_debug(f"Aucun aggregated_results.csv détecté: {aggregated_path}")
         return set()
     with aggregated_path.open("r", newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
@@ -1059,18 +1084,18 @@ def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
         ]
         reader.fieldnames = fieldnames
         preview = ", ".join(fieldnames[:6]) if fieldnames else "aucun"
-        print(f"Premiers headers lus dans {aggregated_path}: {preview}")
+        log_debug(f"Premiers headers lus dans {aggregated_path}: {preview}")
         size_key = None
         if "network_size" in fieldnames:
             size_key = "network_size"
         elif "density" in fieldnames:
             size_key = "density"
-            print(
+            log_debug(
                 f"Colonne network_size absente dans {aggregated_path}, "
                 "fallback sur density."
             )
         else:
-            print(
+            log_debug(
                 f"Colonnes network_size/density absentes dans {aggregated_path}"
             )
             return set()
@@ -1090,11 +1115,11 @@ def _read_aggregated_sizes(aggregated_path: Path) -> set[int]:
             try:
                 sizes.add(int(float(value)))
             except ValueError:
-                print(
+                log_debug(
                     f"Valeur {size_key} invalide détectée: {value}"
                 )
         if not sizes:
-            print(
+            log_debug(
                 "Aucune taille détectée dans aggregated_results.csv "
                 f"(lignes lues: {lines_read}, lignes valides: {valid_lines})."
             )
@@ -1118,7 +1143,7 @@ def _read_nested_sizes(base_results_dir: Path, replications: list[int]) -> set[i
         if rep_paths and all(path.exists() for path in rep_paths):
             sizes.add(size)
     if not sizes:
-        print(
+        log_debug(
             "Aucune taille complète détectée dans les sous-dossiers "
             f"{base_results_dir / BY_SIZE_DIRNAME / 'size_<N>/rep_<R>'}."
         )
@@ -1586,7 +1611,7 @@ def _write_post_simulation_report(
     )
     report_path = output_dir / "post_simulation_report.txt"
     report_path.write_text(report + "\n", encoding="utf-8")
-    print(report)
+    log_debug(report)
 
 
 def _compute_quantiles(values: list[float], quantiles: Sequence[float]) -> dict[float, float]:
@@ -2080,9 +2105,9 @@ def _write_step2_diagnostics_exports(
         algo_sf_rows,
     )
 
-    print("Résumé compact diagnostics_by_size_algo_sf (Step2):")
+    log_debug("Résumé compact diagnostics_by_size_algo_sf (Step2):")
     if not compact_by_size:
-        print("- aucun échantillon cluster=all exploitable.")
+        log_debug("- aucun échantillon cluster=all exploitable.")
     for size in sorted(compact_by_size):
         rows = compact_by_size[size]
         if not rows:
@@ -2093,7 +2118,7 @@ def _write_step2_diagnostics_exports(
             sum(row["capture_success_ratio"] for row in rows) / len(rows)
         )
         snir_mean = sum(row["snir_mean"] for row in rows) / len(rows)
-        print(
+        log_debug(
             f"- taille {size}: success={success_mean:.4f}, "
             f"collisions={collisions_ratio:.3f}, capture={capture_ratio_mean:.3f}, "
             f"snir={snir_mean:.2f}"
@@ -2108,11 +2133,11 @@ def _detect_low_success_first_size(
     success_mean = float(diagnostics.get("success_mean", 0.0))
     if success_mean >= threshold:
         return False
-    print(
+    log_debug(
         "AVERTISSEMENT: première taille avec success_rate moyen trop bas "
         f"détectée ({density})."
     )
-    print(
+    log_debug(
         "Résumé première taille sous le seuil: success_mean="
         f"{success_mean:.4f}, min={diagnostics.get('success_min', 0.0):.4f}, "
         f"max={diagnostics.get('success_max', 0.0):.4f} "
@@ -2162,7 +2187,7 @@ def _load_step2_aggregated_with_errors(
     aggregated_path: Path,
 ) -> list[dict[str, object]]:
     if not aggregated_path.exists():
-        print(f"Aucun aggregated_results.csv détecté: {aggregated_path}")
+        log_debug(f"Aucun aggregated_results.csv détecté: {aggregated_path}")
         return []
     rows: list[dict[str, object]] = []
     with aggregated_path.open("r", newline="", encoding="utf-8") as handle:
@@ -2189,7 +2214,7 @@ def _plot_summary_reward(output_dir: Path) -> None:
     aggregated_path = output_dir / "aggregates" / "aggregated_results.csv"
     rows = _load_step2_aggregated_with_errors(aggregated_path)
     if not rows:
-        print("Aucune ligne agrégée disponible pour le plot de synthèse.")
+        log_debug("Aucune ligne agrégée disponible pour le plot de synthèse.")
         return
     rows = [
         row
@@ -2197,7 +2222,7 @@ def _plot_summary_reward(output_dir: Path) -> None:
         if row.get("cluster") == "all" and row.get("snir_mode") == "snir_on"
     ]
     if not rows:
-        print("Aucune ligne agrégée filtrée pour le plot de synthèse.")
+        log_debug("Aucune ligne agrégée filtrée pour le plot de synthèse.")
         return
     apply_plot_style()
     import matplotlib.pyplot as plt
@@ -2255,11 +2280,11 @@ def _simulate_density(
     algorithms = ("adr", "mixra_h", "mixra_opt", "ucb1_sf")
     algo_offsets = {algo: idx * 10000 for idx, algo in enumerate(algorithms)}
     jitter_range_s = float(config.get("jitter_range_s", 30.0))
-    print(f"Jitter range utilisé (s): {jitter_range_s}")
+    log_debug(f"Jitter range utilisé (s): {jitter_range_s}")
     offsets_label = ", ".join(
         f"{algo}={offset}" for algo, offset in algo_offsets.items()
     )
-    print(f"Offsets de seed par algorithme: {offsets_label}")
+    log_debug(f"Offsets de seed par algorithme: {offsets_label}")
     status_csv_path = base_results_dir / "run_status_step2.csv"
 
     _log_effective_traffic_scale_for_density(int(density), config)
@@ -2349,13 +2374,13 @@ def _simulate_density(
                     )
                     break
                 except Exception as exc:
-                    print(
+                    log_debug(
                         "Échec simulation step2 "
                         f"(size={density}, rep={replication}, seed={algorithm_seed}, "
                         f"algo={algorithm}, step=step2, attempt={attempt}/2): {exc}"
                     )
                     if attempt == 1:
-                        print("Retry immédiat (1/1) pour cette simulation unitaire.")
+                        log_debug("Retry immédiat (1/1) pour cette simulation unitaire.")
                     else:
                         with status_csv_path.open("a", newline="", encoding="utf-8") as handle:
                             writer = csv.DictWriter(
@@ -2437,9 +2462,12 @@ def _simulate_density(
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_cli_args(argv)
+    if getattr(args, "quiet", False):
+        args.log_level = "quiet"
+    set_log_level(getattr(args, "log_level", "info"))
     if getattr(args, "no_clamp", False):
         if getattr(args, "traffic_coeff_clamp_enabled", False):
-            print("Option --no-clamp: désactivation du clamp traffic_coeff.")
+            log_debug("Option --no-clamp: désactivation du clamp traffic_coeff.")
         args.traffic_coeff_clamp_enabled = False
     _log_default_profile_if_needed(args)
     if getattr(args, "auto_safe_profile", False) and not getattr(args, "safe_profile", False):
@@ -2465,7 +2493,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     requested_sizes = list(densities)
     flat_output = False
     if bool(args.flat_output):
-        print(
+        log_debug(
             "Option --flat-output ignorée: écriture primaire imposée sous by_size/."
         )
     if getattr(args, "reference_network_size", None) is not None:
@@ -2477,7 +2505,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     else:
         reference_network_size = int(round(median(requested_sizes)))
         reference_source = "médiane des tailles demandées"
-    print(
+    log_debug(
         "Référence réseau utilisée pour l'étape 2: "
         f"{reference_network_size} ({reference_source})."
     )
@@ -2503,9 +2531,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             writer = csv.DictWriter(handle, fieldnames=status_fieldnames)
             writer.writeheader()
         action = "réinitialisé" if args.reset_status else "initialisé"
-        print(f"Statut Step2 {action}: {status_csv_path.resolve()}")
+        log_info(f"Statut Step2 {action}: {status_csv_path.resolve()}")
     else:
-        print(f"Statut Step2 conservé (mode campagne): {status_csv_path.resolve()}")
+        log_info(f"Statut Step2 conservé (mode campagne): {status_csv_path.resolve()}")
     timestamp_dir: Path | None = None
     if args.timestamp:
         timestamp_dir = base_results_dir / timestamp_tag(with_timezone=True)
@@ -2513,7 +2541,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     aggregated_path = base_results_dir / "aggregates" / "aggregated_results.csv"
     if _is_non_empty_file(aggregated_path):
         size_bytes = aggregated_path.stat().st_size
-        print(
+        log_debug(
             "aggregated_results.csv existant détecté "
             f"({size_bytes} octets) : aucune réinitialisation."
         )
@@ -2581,7 +2609,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if str(auto_tuning_payload.get("status", "")) == "failed_tuning":
         raise SystemExit("failed_tuning")
     _sync_args_from_auto_tuned_config(args, config)
-    print(
+    log_debug(
         "Paramètres Step2 retenus après auto-tuning: "
         f"traffic_load_scale_step2={float(config['traffic_coeff_scale']):.4f}, "
         f"collision_size_min={float(config['collision_size_min']):.4f}, "
@@ -2594,13 +2622,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         base_results_dir,
         write_global_aggregated=bool(args.global_aggregated),
     )
-    print(
+    log_debug(
         "Agrégation Step2 par taille: "
         f"{merge_stats['size_count']} dossier(s) size_<N>, "
         f"{merge_stats['size_row_count']} ligne(s) consolidée(s)."
     )
     if bool(args.global_aggregated):
-        print(
+        log_debug(
             "Agrégation Step2 globale: "
             f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
             "dans results/aggregates/aggregated_results.csv."
@@ -2611,13 +2639,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     existing_label = ", ".join(map(str, existing_sizes)) if existing_sizes else "aucune"
     if args.resume:
         densities = remaining_sizes
-        print("Mode reprise activé: exclusion des tailles déjà agrégées.")
+        log_debug("Mode reprise activé: exclusion des tailles déjà agrégées.")
     simulated_targets = densities if args.resume else requested_sizes
     simulated_label = (
         ", ".join(map(str, simulated_targets)) if simulated_targets else "aucune"
     )
-    print(f"Tailles déjà présentes dans les sous-dossiers by_size/: {existing_label}")
-    print(f"Tailles à simuler: {simulated_label}")
+    log_debug(f"Tailles déjà présentes dans les sous-dossiers by_size/: {existing_label}")
+    log_debug(f"Tailles à simuler: {simulated_label}")
     safe_profile_active = bool(getattr(args, "safe_profile", False))
     load_clamp_min, load_clamp_max = _resolve_load_clamps(
         DEFAULT_CONFIG.step2,
@@ -2659,7 +2687,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         args, "safe_profile", False
     ):
         if worker_count > 1:
-            print(
+            log_debug(
                 "Auto-safe-profile actif: exécution séquentielle pour détecter "
                 "la première taille sous le seuil."
             )
@@ -2741,7 +2769,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                         )
                         _update_safe_profile_config(config, args)
                         if not rerun_safe:
-                            print(
+                            log_debug(
                                 "Relance de la taille "
                                 f"{density} avec le profil sécurisé."
                             )
@@ -2776,7 +2804,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                                 rerun_super_safe = True
                             safe_profile_sizes.add(int(result["density"]))
                     else:
-                        print(
+                        log_debug(
                             "Astuce: utilisez --auto-safe-profile pour basculer "
                             "automatiquement vers STEP2_SAFE_CONFIG."
                         )
@@ -2872,7 +2900,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 if should_rerun:
                     low_sizes.append((int(density), success_mean))
             if low_sizes:
-                print(
+                log_debug(
                     "Relance séquentielle en profil sécurisé pour les tailles "
                     "sous le seuil."
                 )
@@ -2942,7 +2970,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                     )
                     safe_profile_sizes.add(int(final_result["density"]))
 
-    print(f"Rows written: {total_rows}")
+    log_info(f"Rows written: {total_rows}")
     if flat_output and simulated_sizes:
         _assert_flat_output_sizes(base_results_dir, simulated_sizes)
     _verify_metric_variation(size_diagnostics)
@@ -2972,7 +3000,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "Contrôle qualité strict ignoré: sorties traçables détectées, "
                 "la génération des figures continue."
             )
-            print(f"ATTENTION: {warning_message}")
+            log_debug(f"ATTENTION: {warning_message}")
             quality_summary = _assert_success_rate_threshold(
                 size_post_stats,
                 strict=False,
@@ -3070,13 +3098,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         base_results_dir,
         write_global_aggregated=bool(args.global_aggregated),
     )
-    print(
+    log_debug(
         "Agrégation Step2 par taille: "
         f"{merge_stats['size_count']} dossier(s) size_<N>, "
         f"{merge_stats['size_row_count']} ligne(s) consolidée(s)."
     )
     if bool(args.global_aggregated):
-        print(
+        log_debug(
             "Agrégation Step2 globale: "
             f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
             "dans results/aggregates/aggregated_results.csv."
@@ -3084,22 +3112,22 @@ def main(argv: Sequence[str] | None = None) -> None:
     missing_sizes = sorted(set(requested_sizes) - aggregated_sizes)
     if missing_sizes:
         missing_label = ", ".join(map(str, missing_sizes))
-        print(
+        log_debug(
             "ATTENTION: tailles manquantes dans by_size/, "
             f"done.flag non écrit. Manquantes: {missing_label}"
         )
     else:
         (base_results_dir / "done.flag").write_text("done\n", encoding="utf-8")
-        print("done.flag écrit (agrégation complète).")
+        log_info("done.flag écrit (agrégation complète).")
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
-        print(f"Tailles simulées: {sizes_label}")
+        log_info(f"Tailles simulées: {sizes_label}")
     aggregated_path = base_results_dir / "aggregates" / "aggregated_results.csv"
     if aggregated_path.exists():
         if args.plot_summary:
             _plot_summary_reward(base_results_dir)
     elif args.plot_summary:
-        print(
+        log_debug(
             "Plot de synthèse ignoré: aggregated_results.csv absent "
             "(utilisez make_all_plots.py)."
         )

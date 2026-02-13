@@ -23,6 +23,17 @@ def ensure_dir(path: Path) -> None:
 def build_arg_parser() -> argparse.ArgumentParser:
     """Construit le parseur d'arguments CLI."""
     parser = argparse.ArgumentParser(description="Outils CLI pour l'article C.")
+    parser.add_argument(
+        "--log-level",
+        choices=("quiet", "info", "debug"),
+        default="info",
+        help="Niveau de logs (quiet, info, debug).",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Alias de --log-level quiet.",
+    )
     snir_defaults = DEFAULT_CONFIG.snir
     step2_defaults = DEFAULT_CONFIG.step2
     parser.add_argument(
