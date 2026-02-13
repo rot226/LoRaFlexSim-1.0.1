@@ -167,8 +167,8 @@ Import-Csv article_c/scientific_qa_report.csv | Format-Table -AutoSize
 Contrôles de présence rapides :
 
 ```powershell
-Test-Path article_c/step1/results/aggregated_results.csv
-Test-Path article_c/step2/results/aggregated_results.csv
+Test-Path article_c/step1/results/aggregates/aggregated_results.csv
+Test-Path article_c/step2/results/aggregates/aggregated_results.csv
 Test-Path article_c/figures_manifest.csv
 Test-Path article_c/step2/results/diagnostics_step2_by_size.csv
 Test-Path article_c/scientific_qa_report.csv
@@ -518,23 +518,18 @@ Les résultats sont écrits dans `article_c/step*/results/` et les figures dans 
 
 ## Résultats
 
-Les scripts écrivent les CSV dans deux formats :
+Le mode officiel est le format imbriqué **by_size** :
 
-- **Format imbriqué (nested)** : chaque taille/réplication écrit dans
-  `article_c/step*/results/size_<N>/rep_<R>/` (`raw_metrics.csv` ou
-  `raw_results.csv`, plus un `aggregated_results.csv` local par réplication).
-- **Format flat** : les CSV sont directement au niveau de
-  `article_c/step*/results/` (`raw_metrics.csv` ou `raw_results.csv` + un
-  `aggregated_results.csv` global).
+- **Étape 1 (obligatoire par réplication)** :
+  - `article_c/step1/results/by_size/size_<N>/rep_<R>/raw_packets.csv`
+  - `article_c/step1/results/by_size/size_<N>/rep_<R>/raw_metrics.csv`
+  - `article_c/step1/results/by_size/size_<N>/rep_<R>/aggregated_results.csv`
+- **Étape 1 (obligatoire après agrégation globale)** :
+  `article_c/step1/results/aggregates/aggregated_results.csv`
 
-Les **plots de synthèse** (ex. courbes globales) et `validate_results.py`
-attendent des CSV **flat** (présence de `aggregated_results.csv` dans
-`article_c/step*/results/`). Pensez à activer `--flat-output` sur `run_all.py`,
-`run_step1.py` et `run_step2.py` pour écrire ces fichiers directement.
-
-Si vous avez uniquement un format imbriqué, `make_all_plots.py` peut servir de
-**fallback d'agrégation** : il reconstitue les `aggregated_results.csv` flat à
-partir des sous-dossiers avant de lancer les figures.
+Dans ce mode officiel, `validate_results.py` et `report_integrity.py` ne
+requièrent plus la présence de `article_c/step1/results/raw_metrics.csv` ni de
+`article_c/step*/results/raw_results.csv` à la racine de `results/`.
 
 ## End-to-end paper campaign (Windows 11)
 
@@ -543,7 +538,7 @@ Objectif : enchaîner une campagne complète « simulation + figures papier + co
 ### 1) Exécution complète (preset article-c)
 
 ```powershell
-python -m article_c.run_all --preset article-c --flat-output
+python -m article_c.run_all --preset article-c
 ```
 
 ### 2) Génération des figures IEEE-ready
@@ -556,8 +551,8 @@ python -m article_c.all_plot_compare --export-csv --output-dir article_c/plots/o
 ### 3) Checks attendus après exécution
 
 - Présence des agrégats :
-  - `article_c/step1/results/aggregated_results.csv`
-  - `article_c/step2/results/aggregated_results.csv`
+  - `article_c/step1/results/aggregates/aggregated_results.csv`
+  - `article_c/step2/results/aggregates/aggregated_results.csv`
 - Présence des figures clés :
   - `article_c/plots/output/fig4_der_by_cluster.png`
   - `article_c/plots/output/fig5_der_by_load.png`
@@ -572,8 +567,8 @@ python -m article_c.all_plot_compare --export-csv --output-dir article_c/plots/o
 ### 4) Vérifications rapides (PowerShell)
 
 ```powershell
-Test-Path article_c/step1/results/aggregated_results.csv
-Test-Path article_c/step2/results/aggregated_results.csv
+Test-Path article_c/step1/results/aggregates/aggregated_results.csv
+Test-Path article_c/step2/results/aggregates/aggregated_results.csv
 Get-ChildItem article_c/plots/output -Filter "fig*.png"
 Get-ChildItem article_c/plots/output/compare_with_snir -Filter "*.png"
 Get-ChildItem article_c/plots/output/compare_all/csv -Filter "*.csv"
@@ -587,8 +582,8 @@ Get-ChildItem article_c/plots/output/compare_all/csv -Filter "*.csv"
 - **Activation venv impossible en PowerShell**
   - Utiliser `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` puis réactiver.
 - **Aucun plot généré**
-  - Vérifier la présence des CSV agrégés (`aggregated_results.csv`) dans `step1/results` et `step2/results`.
-  - Relancer avec `--flat-output`.
+  - Vérifier la présence des CSV agrégés (`aggregates/aggregated_results.csv`) dans `step1/results` et `step2/results`.
+  - Relancer l'agrégation (`python -m article_c.tools.aggregate_step1` et `python -m article_c.tools.aggregate_step2`).
 - **Erreur d'encodage / caractères accentués illisibles**
   - Forcer UTF-8 dans le terminal avant exécution :
     - PowerShell : `$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)`
