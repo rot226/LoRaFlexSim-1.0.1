@@ -1196,11 +1196,8 @@ def _extract_network_sizes_from_rows(
     fieldnames: list[str],
     rows: list[dict[str, str]],
 ) -> set[int]:
-    if "network_size" in fieldnames:
-        size_key = "network_size"
-    elif "density" in fieldnames:
-        size_key = "density"
-    else:
+    size_key = _resolve_network_size_column(fieldnames)
+    if size_key is None:
         return set()
     sizes: set[int] = set()
     for row in rows:
@@ -1212,6 +1209,14 @@ def _extract_network_sizes_from_rows(
         except ValueError:
             continue
     return sizes
+
+
+def _resolve_network_size_column(fieldnames: list[str]) -> str | None:
+    if "network_size" in fieldnames:
+        return "network_size"
+    if "density" in fieldnames:
+        return "density"
+    return None
 
 
 def _load_csv_data(path: Path) -> tuple[list[str], list[dict[str, str]]]:
@@ -1229,11 +1234,8 @@ def _load_network_sizes_from_bundles(bundles: list[CsvDataBundle]) -> list[int]:
     for bundle in bundles:
         log_debug(f"[network_sizes] Lecture de la source: {bundle.label}")
         fieldnames = bundle.fieldnames
-        if "network_size" in fieldnames:
-            size_column = "network_size"
-        elif "density" in fieldnames:
-            size_column = "density"
-        else:
+        size_column = _resolve_network_size_column(fieldnames)
+        if size_column is None:
             raise ValueError(
                 f"La source {bundle.label} doit contenir une colonne "
                 "'network_size' ou 'density'."
@@ -1393,12 +1395,7 @@ def _validate_plot_data(
         return False, "CSV vide", report
     sizes = _extract_network_sizes_from_rows(fieldnames, rows)
     report["detected_sizes"] = tuple(sorted(int(size) for size in sizes))
-    if "network_size" in fieldnames:
-        size_col = "network_size"
-    elif "density" in fieldnames:
-        size_col = "density"
-    else:
-        size_col = None
+    size_col = _resolve_network_size_column(fieldnames)
     if size_col is None:
         _log_filter("fallback taille", len(rows), len(rows), "aucune colonne network_size/density")
     else:

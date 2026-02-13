@@ -25,6 +25,7 @@ def test_collect_nested_csvs_detects_file_in_by_size(tmp_path) -> None:
 
 
 def test_preflight_validate_plot_modules_lists_all_issues(monkeypatch, capsys) -> None:
+    make_all_plots.set_log_level("debug")
     monkeypatch.setattr(
         make_all_plots,
         "_validate_plot_modules_use_save_figure",

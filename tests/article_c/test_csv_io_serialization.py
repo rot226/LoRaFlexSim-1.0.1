@@ -36,7 +36,7 @@ def test_write_simulation_results_normalizes_network_size_and_density_types(tmp_
     assert raw_row["network_size"] == "10"
     assert raw_row["density"] == "10.0"
     assert aggregated_row["network_size"] == "10"
-    assert aggregated_row["density"] == "10.0"
+    assert "density" not in aggregated_row
 
 
 @pytest.mark.parametrize("invalid_size", [None, "", -1, "-2", float("nan"), float("inf")])

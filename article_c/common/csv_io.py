@@ -32,7 +32,6 @@ STEP2_EXPECTED_METRICS = ("reward", "success_rate")
 MERGE_KEYS = ("network_size", "algo", "snir_mode", "cluster", "replication")
 CANONICAL_ID_COLUMNS = (
     "network_size",
-    "density",
     "algo",
     "snir_mode",
     "cluster",
@@ -286,6 +285,13 @@ def _coerce_density(value: object) -> float:
     if density < 0:
         raise ValueError("density doit être positive.")
     return float(density)
+
+
+def _resolve_network_size_with_density_fallback(row: dict[str, object]) -> int:
+    network_size = row.get("network_size")
+    if network_size in (None, "") and row.get("density") not in (None, ""):
+        network_size = row.get("density")
+    return _coerce_positive_network_size(network_size)
 
 
 def _parse_bool(value: object) -> bool | None:
@@ -618,7 +624,6 @@ def _aggregate_rows(
     step_label: str,
 ) -> list[dict[str, object]]:
     groups: dict[tuple[object, ...], list[dict[str, object]]] = defaultdict(list)
-    has_computed_density = _has_computed_density(rows)
     missing_expected_metrics = [
         metric for metric in expected_metrics if not any(metric in row for row in rows)
     ]
@@ -631,12 +636,7 @@ def _aggregate_rows(
         )
     numeric_keys = _collect_numeric_keys(rows, group_keys) - set(missing_expected_metrics)
     for row in rows:
-        if row.get("network_size") in (None, "") and row.get("density") not in (None, ""):
-            row["network_size"] = row["density"]
-        if row.get("network_size") not in (None, ""):
-            row["network_size"] = _coerce_positive_network_size(row["network_size"])
-        if row.get("density") not in (None, ""):
-            row["density"] = _coerce_density(row["density"])
+        row["network_size"] = _resolve_network_size_with_density_fallback(row)
         group_key = tuple(row.get(key) for key in group_keys)
         groups[group_key].append(row)
 
@@ -661,22 +661,7 @@ def _aggregate_rows(
         aggregated_row["network_size"] = _coerce_positive_network_size(
             aggregated_row["network_size"]
         )
-        if aggregated_row.get("density") in (None, ""):
-            density_values = [
-                row.get("density")
-                for row in valid_grouped_rows
-                if isinstance(row.get("density"), (int, float))
-            ]
-            if density_values:
-                aggregated_row["density"] = _coerce_density(
-                    sum(density_values) / len(density_values)
-                )
-            elif not has_computed_density:
-                aggregated_row["density"] = _coerce_density(
-                    aggregated_row.get("network_size")
-                )
-        elif aggregated_row.get("density") not in (None, ""):
-            aggregated_row["density"] = _coerce_density(aggregated_row["density"])
+        aggregated_row.pop("density", None)
         for key in sorted(numeric_keys):
             values = [
                 row[key]
@@ -815,6 +800,10 @@ def aggregate_results_by_size(
                         for key, value in row.items()
                         if key is not None
                     }
+                    normalized_row["network_size"] = str(
+                        _resolve_network_size_with_density_fallback(normalized_row)
+                    )
+                    normalized_row.pop("density", None)
                     normalized_row["source_size_dir"] = size_dir.name
                     size_rows.append(normalized_row)
 
@@ -823,6 +812,10 @@ def aggregate_results_by_size(
 
         if "source_size_dir" not in seen_headers:
             header_order.append("source_size_dir")
+        if "network_size" not in seen_headers:
+            header_order.insert(0, "network_size")
+        if "density" in header_order:
+            header_order.remove("density")
 
         atomic_write_csv(
             size_dir / "aggregated_results.csv",
@@ -1031,29 +1024,14 @@ def write_simulation_results(
         step_label="Step2",
     )
     _log_control_table(aggregated_rows, "aggregated_results.csv")
-    has_computed_density = _has_computed_density(aggregated_rows)
     for row in aggregated_rows:
-        if row.get("network_size") in (None, "") and row.get("density") not in (None, ""):
-            row["network_size"] = row["density"]
-        if row.get("network_size") not in (None, ""):
-            row["network_size"] = _coerce_positive_network_size(row["network_size"])
-        if (
-            row.get("density") in (None, "")
-            and row.get("network_size") not in (None, "")
-            and not has_computed_density
-        ):
-            row["density"] = _coerce_density(row["network_size"])
-        elif row.get("density") not in (None, ""):
-            row["density"] = _coerce_density(row["density"])
+        row["network_size"] = _resolve_network_size_with_density_fallback(row)
+        row.pop("density", None)
     aggregated_header = (
         list(aggregated_rows[0].keys()) if aggregated_rows else list(BASE_GROUP_KEYS)
     )
-    if "network_size" not in aggregated_header and "density" in aggregated_header:
-        density_index = aggregated_header.index("density")
-        aggregated_header.insert(density_index, "network_size")
-    if "density" not in aggregated_header and "network_size" in aggregated_header:
-        size_index = aggregated_header.index("network_size")
-        aggregated_header.insert(size_index + 1, "density")
+    if "density" in aggregated_header:
+        aggregated_header.remove("density")
     append_or_merge_csv(
         aggregated_path,
         aggregated_header,

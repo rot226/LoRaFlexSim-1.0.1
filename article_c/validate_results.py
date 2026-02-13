@@ -56,6 +56,14 @@ def _read_csv(path: Path) -> tuple[list[dict[str, object]], list[str]]:
     return rows, fieldnames
 
 
+def _resolve_network_size_column(fieldnames: list[str]) -> str | None:
+    if "network_size" in fieldnames:
+        return "network_size"
+    if "density" in fieldnames:
+        return "density"
+    return None
+
+
 def _collect_size_aggregated_csvs(results_dir: Path) -> list[Path]:
     return sorted(results_dir.glob("by_size/size_*/rep_*/aggregated_results.csv"))
 
@@ -221,6 +229,9 @@ def _validate_pdr_file(
     if not fieldnames:
         tracker.add(f"{label}: fichier manquant ou vide.")
         return
+    if _resolve_network_size_column(fieldnames) is None:
+        tracker.add(f"{label}: colonne network_size absente (fallback density non disponible).")
+        return
     missing_columns = [key for key in (pdr_key, sent_key, received_key) if key not in fieldnames]
     if missing_columns:
         tracker.add(
@@ -272,6 +283,9 @@ def _validate_reward_file(
     label = f"{path}"
     if not fieldnames:
         tracker.add(f"{label}: fichier manquant ou vide.")
+        return
+    if _resolve_network_size_column(fieldnames) is None:
+        tracker.add(f"{label}: colonne network_size absente (fallback density non disponible).")
         return
     if reward_key not in fieldnames:
         tracker.add(f"{label}: colonne {reward_key} absente.")
