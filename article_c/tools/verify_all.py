@@ -1,11 +1,12 @@
 """Vérifications globales des résultats/figures de l'article C.
 
-Échec (code non-zéro) si l'une des conditions suivantes est détectée :
-- Une taille attendue ne possède pas son dossier de résultats séparé.
-- Step1/Step2 aggregated_results.csv ne couvrent pas toutes les tailles [80,160,320,640,1280].
-- Une figure attendue est absente.
-- Une figure générée ne contient pas de légende.
-- Dimension anormale (>12 in) pour une figure mono-panel.
+Échec (code non-zéro) si une condition bloquante est détectée via exception explicite :
+- tailles réseau attendues manquantes (Step1/Step2),
+- réplications attendues manquantes (rep_0..rep_{R-1}) pour chaque taille,
+- CSV vides ou sans ligne de données,
+- PNG vides/corrompus,
+- figures requises absentes, sans légende ou largeur > 15 pouces,
+- traces de crash détectées dans les logs pipeline.
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ from article_c.make_all_plots import (
 
 SUPPORTED_FORMATS = ("png", "pdf", "eps", "svg")
 EXPECTED_SIZES: tuple[int, ...] = (80, 160, 320, 640, 1280)
+CRASH_SIGNATURES: tuple[str, ...] = ("Traceback", "RuntimeError", "TypeError")
 LEGEND_CHECK_REPORT_PATH = BASE_DIR / "legend_check_report.csv"
 SIMULATION_QUALITY_REPORT_PATH = BASE_DIR / "simulation_quality_verify_all.json"
 ALGO_LEGEND_KEYWORDS = ("adr", "mixra", "ucb1")
@@ -50,6 +52,10 @@ STEP2_REQUIRED_LEGEND_MODULES = (
 )
 
 
+class VerificationError(RuntimeError):
+    """Erreur explicite de vérification pipeline."""
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Vérifie les CSV/figures (présence, légende, dimensions)."
@@ -58,6 +64,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--formats",
         default=",".join(SUPPORTED_FORMATS),
         help="Formats acceptés pour valider la présence des figures (csv).",
+    )
+    parser.add_argument(
+        "--replications",
+        type=int,
+        default=5,
+        help="Nombre attendu de réplications par taille (rep_0..rep_{R-1}).",
     )
     parser.add_argument(
         "--skip-render-check",
@@ -147,6 +159,35 @@ def _check_separate_size_dirs() -> list[str]:
     return failures
 
 
+def _check_replication_dirs(expected_replications: int) -> None:
+    if expected_replications <= 0:
+        raise VerificationError(
+            f"Valeur invalide pour --replications={expected_replications} (attendu > 0)."
+        )
+    expected_reps = {f"rep_{idx}" for idx in range(expected_replications)}
+    for step in ("step1", "step2"):
+        results_dir = BASE_DIR / step / "results"
+        size_dirs = _iter_nested_size_dirs(results_dir)
+        for size in EXPECTED_SIZES:
+            size_dir = size_dirs.get(size)
+            if size_dir is None:
+                raise VerificationError(
+                    f"{step}: dossier de taille manquant: {results_dir / 'by_size' / f'size_{size}'} "
+                    f"(ou {results_dir / f'size_{size}'})."
+                )
+            found = {
+                path.name
+                for path in size_dir.glob("rep_*")
+                if path.is_dir() and re.fullmatch(r"rep_\d+", path.name)
+            }
+            missing = sorted(expected_reps - found)
+            if missing:
+                raise VerificationError(
+                    f"{step}: réplications manquantes pour {size_dir}: {missing} "
+                    f"(attendues: rep_0..rep_{expected_replications - 1})."
+                )
+
+
 def _check_step_sizes_completeness() -> list[str]:
     failures: list[str] = []
     expected = set(EXPECTED_SIZES)
@@ -182,6 +223,62 @@ def _check_expected_files(formats: tuple[str, ...]) -> list[str]:
                 f"Figure attendue absente pour {module_path}: {rel_candidates}"
             )
     return failures
+
+
+def _assert_non_empty_csv(path: Path) -> None:
+    if not path.exists():
+        raise VerificationError(f"CSV introuvable: {path}")
+    if path.stat().st_size <= 0:
+        raise VerificationError(f"CSV vide (taille fichier nulle): {path}")
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        try:
+            first_row = next(reader)
+        except StopIteration as exc:
+            raise VerificationError(f"CSV sans ligne de données: {path}") from exc
+        if not first_row:
+            raise VerificationError(f"CSV sans colonnes exploitables: {path}")
+
+
+def _check_non_empty_csv_files() -> None:
+    csv_paths = sorted(BASE_DIR.glob("**/*.csv"))
+    for csv_path in csv_paths:
+        _assert_non_empty_csv(csv_path)
+
+
+def _check_png_files_valid() -> None:
+    for png_path in sorted(BASE_DIR.glob("**/*.png")):
+        if png_path.stat().st_size <= 0:
+            raise VerificationError(f"PNG vide (taille fichier nulle): {png_path}")
+        try:
+            _ = plt.imread(png_path)
+        except Exception as exc:
+            raise VerificationError(f"PNG corrompu/non lisible: {png_path} ({exc})") from exc
+
+
+def _iter_pipeline_log_paths() -> list[Path]:
+    patterns = (
+        "pipeline*.log",
+        "*pipeline*.txt",
+        "logs/**/*.log",
+        "logs/**/*.txt",
+        "results/**/*.log",
+        "results/**/*.txt",
+    )
+    all_paths: set[Path] = set()
+    for pattern in patterns:
+        all_paths.update(path for path in BASE_DIR.glob(pattern) if path.is_file())
+    return sorted(all_paths)
+
+
+def _check_pipeline_logs_for_crash_traces() -> None:
+    for log_path in _iter_pipeline_log_paths():
+        content = log_path.read_text(encoding="utf-8", errors="ignore")
+        for signature in CRASH_SIGNATURES:
+            if signature in content:
+                raise VerificationError(
+                    f"Trace de crash détectée dans {log_path}: signature '{signature}'."
+                )
 
 
 def _invoke_module_main(module: ModuleType) -> None:
@@ -290,16 +387,13 @@ def _check_legends_and_sizes() -> list[str]:
                     module_has_valid_legend = False
 
                 width_in, height_in = fig.get_size_inches()
-                # Règle demandée: dimensions anormales (single-plot >12 in)
-                # + garde-fou dimensions non-positives.
                 if width_in <= 0 or height_in <= 0:
                     failures.append(
                         f"{context}: dimension invalide ({width_in:.2f}x{height_in:.2f} in)."
                     )
-                if len(fig.axes) <= 1 and (width_in > 12.0 or height_in > 12.0):
+                if width_in > 15.0:
                     failures.append(
-                        f"{context}: dimension anormale pour mono-panel "
-                        f"({width_in:.2f}x{height_in:.2f} in)."
+                        f"{context}: largeur de figure > 15 in ({width_in:.2f} in)."
                     )
             legend_validity_by_module[module_path] = module_has_valid_legend
             legend_report_rows.append(
@@ -467,25 +561,34 @@ def main() -> int:
     args = _build_parser().parse_args()
     formats = _parse_formats(args.formats)
 
-    failures: list[str] = []
+    try:
+        separate_size_failures = _check_separate_size_dirs()
+        if separate_size_failures:
+            raise VerificationError("\n".join(separate_size_failures))
+        size_completeness_failures = _check_step_sizes_completeness()
+        if size_completeness_failures:
+            raise VerificationError("\n".join(size_completeness_failures))
+        _check_replication_dirs(args.replications)
+        _check_non_empty_csv_files()
+        _check_png_files_valid()
 
-    failures.extend(_check_separate_size_dirs())
-    failures.extend(_check_step_sizes_completeness())
+        expected_files_failures = _check_expected_files(formats)
+        if expected_files_failures:
+            raise VerificationError("\n".join(expected_files_failures))
 
-    failures.extend(_check_expected_files(formats))
+        if not args.skip_render_check:
+            render_failures = _check_legends_and_sizes()
+            if render_failures:
+                raise VerificationError("\n".join(render_failures))
 
-    if not args.skip_render_check:
-        failures.extend(_check_legends_and_sizes())
+        _check_pipeline_logs_for_crash_traces()
+    except VerificationError as exc:
+        print("FAIL")
+        print(f"- {exc}")
+        return 1
 
     quality_summary = _assess_simulation_quality(args)
     quality = str(quality_summary.get("simulation_quality", "ok"))
-
-    if failures:
-        print("FAIL")
-        for item in failures:
-            print(f"- {item}")
-        print(f"simulation_quality={quality}")
-        return 1
 
     print("PASS")
     print(f"simulation_quality={quality}")
