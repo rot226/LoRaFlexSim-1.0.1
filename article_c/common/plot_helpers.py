@@ -40,15 +40,29 @@ from article_c.common.plot_style import (
 from article_c.common.utils import ensure_dir
 from article_c.common.config import DEFAULT_CONFIG
 
-ALGO_LABELS = {
-    "adr": "ADR",
-    "apra": "APRA",
-    "aimi": "Aimi",
-    "loba": "LoBa",
-    "mixra_h": "MixRA-H",
-    "mixra_opt": "MixRA-Opt",
-    "ucb1_sf": "UCB1-SF",
+COMMON_PLOT_LABELS: dict[str, dict[str, str]] = {
+    "algo": {
+        "adr": "ADR",
+        "apra": "APRA",
+        "aimi": "Aimi",
+        "loba": "LoBa",
+        "mixra_h": "MixRA-H",
+        "mixra_opt": "MixRA-Opt",
+        "ucb1_sf": "UCB1-SF",
+    },
+    "snir": {
+        "snir_on": "SNIR on",
+        "snir_off": "SNIR off",
+    },
+    "metric": {
+        "reward": "Reward (a.u., median, p10–p90)",
+        "success_rate": "Success rate (prob., median, p10–p90)",
+        "airtime_per_success": "Airtime per success (s, median, p10–p90)",
+        "outage": "Outage (prob.)",
+        "outage_raw": "Outage (raw, prob.)",
+    },
 }
+ALGO_LABELS = COMMON_PLOT_LABELS["algo"]
 ALGO_COLORS = {
     "adr": "#333333",
     "apra": "#6a3d9a",
@@ -83,10 +97,8 @@ ALGO_ALIASES = {
     "ucb1-sf": "ucb1_sf",
 }
 SNIR_MODES = ("snir_on", "snir_off")
-SNIR_LABELS = {
-    "snir_on": "SNIR on",
-    "snir_off": "SNIR off",
-}
+SNIR_LABELS = COMMON_PLOT_LABELS["snir"]
+METRIC_LABELS = COMMON_PLOT_LABELS["metric"]
 SNIR_LINESTYLES = {
     "snir_on": "-",
     "snir_off": "--",
@@ -2549,6 +2561,20 @@ def algo_labels(algorithms: Iterable[object]) -> list[str]:
 def algo_label(algo: str, fallback: bool = False) -> str:
     canonical = _normalize_algo(algo)
     return ALGO_LABELS.get(canonical, algo)
+
+
+def snir_label(mode: str) -> str:
+    normalized = str(mode or "").strip().lower()
+    return SNIR_LABELS.get(normalized, mode)
+
+
+def metric_label(key: str, default: str | None = None) -> str:
+    normalized = str(key or "").strip().lower()
+    if normalized in METRIC_LABELS:
+        return METRIC_LABELS[normalized]
+    if default is not None:
+        return default
+    return key
 
 
 def filter_cluster(rows: list[dict[str, object]], cluster: str) -> list[dict[str, object]]:

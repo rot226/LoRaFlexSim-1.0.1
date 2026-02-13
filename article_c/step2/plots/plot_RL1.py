@@ -13,6 +13,8 @@ import pandas as pd
 
 from article_c.common.plot_helpers import (
     algo_label,
+    metric_label,
+    snir_label,
     apply_plot_style,
     assert_legend_present,
     MetricStatus,
@@ -33,20 +35,6 @@ from article_c.common.plot_helpers import (
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
 TARGET_CLUSTER = "gold"
-ALGO_ALIASES = {
-    "adr": "adr",
-    "mixra_h": "mixra_h",
-    "mixra_opt": "mixra_opt",
-    "ucb1_sf": "ucb1_sf",
-    "ucb1-sf": "ucb1_sf",
-}
-COMMON_CURVE_LABELS = {
-    "adr": "ADR",
-    "mixra_h": "MixRA-H",
-    "mixra_opt": "MixRA-Opt",
-    "ucb1_sf": "UCB1-SF",
-}
-SNIR_MODE_LABELS = {"snir_on": "SNIR on", "snir_off": "SNIR off"}
 
 
 def _normalized_network_sizes(network_sizes: list[int] | None) -> list[int] | None:
@@ -71,17 +59,8 @@ def _title_suffix(network_sizes: list[int]) -> str:
     return ""
 
 
-def _canonical_algo(algo: object) -> str:
-    normalized = str(algo or "").strip().lower().replace("-", "_").replace(" ", "_")
-    return ALGO_ALIASES.get(normalized, normalized)
-
-
 def _label_for_algo(algo: object) -> str:
-    canonical = _canonical_algo(algo)
-    if canonical in COMMON_CURVE_LABELS:
-        return COMMON_CURVE_LABELS[canonical]
-    return algo_label(canonical) if canonical else str(algo)
-
+    return algo_label(str(algo))
 
 def _plot_metric(
     rows: list[dict[str, object]],
@@ -132,12 +111,12 @@ def _plot_metric(
         metric_key,
         network_sizes,
         label_fn=lambda algo: _label_for_algo(algo),
-        snir_label_fn=lambda mode: SNIR_MODE_LABELS.get(str(mode), str(mode)),
+        snir_label_fn=lambda mode: snir_label(str(mode)),
     )
     ax.set_xticks(network_sizes)
     ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
     ax.set_xlabel("Network size (nodes)")
-    ax.set_ylabel(f"Reward {cluster_label} (a.u., median, p10–p90)")
+    ax.set_ylabel(f"{metric_label('reward')} — {cluster_label}")
     place_adaptive_legend(fig, ax, preferred_loc="right")
     return fig
 
