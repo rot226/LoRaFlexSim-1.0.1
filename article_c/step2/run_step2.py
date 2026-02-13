@@ -82,6 +82,7 @@ AUTO_TUNING_SUCCESS_THRESHOLD = 0.10
 AUTO_TUNING_MAX_ATTEMPTS = 3
 AUTO_TUNING_MINI_EVAL_NETWORK_SIZE = 80
 AUTO_TUNING_MIN_MEASURABLE_GAIN = 1e-4
+AUTO_TUNING_STAGNATION_PATIENCE = 3
 SUCCESS_ZERO_RATIO_THRESHOLD = 0.95
 BY_SIZE_DIRNAME = "by_size"
 
@@ -155,6 +156,51 @@ def _apply_structured_auto_tuning_adjustments(
     _clamp_collision_bounds(tuned_config)
 
 
+def _apply_aggressive_auto_tuning_adjustments(tuned_config: dict[str, object]) -> None:
+    tuned_config["traffic_coeff_scale"] = max(
+        0.08, float(tuned_config["traffic_coeff_scale"]) * 0.55
+    )
+    tuned_config["network_load_min"] = max(
+        0.55, float(tuned_config.get("network_load_min", 0.8)) - 0.10
+    )
+    tuned_config["network_load_max"] = max(
+        float(tuned_config["network_load_min"]) + 0.20,
+        float(tuned_config.get("network_load_max", 1.8)) - 0.20,
+    )
+    tuned_config["traffic_coeff_clamp_enabled"] = True
+    tuned_config["traffic_coeff_clamp_min"] = max(
+        0.05, float(tuned_config.get("traffic_coeff_clamp_min", 0.10)) - 0.03
+    )
+    tuned_config["traffic_coeff_clamp_max"] = max(
+        float(tuned_config["traffic_coeff_clamp_min"]) + 0.05,
+        float(tuned_config.get("traffic_coeff_clamp_max", 0.95)) - 0.10,
+    )
+
+    _soften_collision_config(tuned_config)
+    tuned_config["collision_size_min"] = max(
+        0.45, float(tuned_config["collision_size_min"]) - 0.05
+    )
+    tuned_config["collision_size_under_max"] = max(
+        0.62, float(tuned_config["collision_size_under_max"]) - 0.06
+    )
+    tuned_config["collision_size_over_max"] = max(
+        0.80, float(tuned_config["collision_size_over_max"]) - 0.08
+    )
+    _clamp_collision_bounds(tuned_config)
+
+
+def _extract_collision_ratio(diagnostics: dict[str, object]) -> float:
+    for key in ("collision_ratio", "collision_mean", "collision_rate", "collision"):
+        value = diagnostics.get(key)
+        if value is None:
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return 0.0
+
+
 def _run_auto_tuning_before_campaign(
     config: dict[str, object],
     replications: list[int],
@@ -167,6 +213,9 @@ def _run_auto_tuning_before_campaign(
     success_reached = False
     measurable_gain_detected = False
     previous_success_mean: float | None = None
+    previous_collision_ratio: float | None = None
+    consecutive_no_gain = 0
+    stagnant_detected = False
     auto_tuning_tmp_dir = base_results_dir / "_auto_tuning_tmp"
     if auto_tuning_tmp_dir.exists():
         shutil.rmtree(auto_tuning_tmp_dir)
@@ -191,19 +240,47 @@ def _run_auto_tuning_before_campaign(
                     diagnostics.get("success_mean", 0.0),
                 )
             )
+            collision_ratio = _extract_collision_ratio(diagnostics)
             delta_success = (
                 success_mean - previous_success_mean
                 if previous_success_mean is not None
                 else None
             )
+            delta_collision_ratio = (
+                collision_ratio - previous_collision_ratio
+                if previous_collision_ratio is not None
+                else None
+            )
             if delta_success is not None and delta_success > AUTO_TUNING_MIN_MEASURABLE_GAIN:
                 measurable_gain_detected = True
+
+            min_collision_gain = -AUTO_TUNING_MIN_MEASURABLE_GAIN
+            no_min_improvement = False
+            if delta_success is not None and delta_collision_ratio is not None:
+                no_min_improvement = (
+                    delta_success <= AUTO_TUNING_MIN_MEASURABLE_GAIN
+                    and delta_collision_ratio >= min_collision_gain
+                )
+
+            if no_min_improvement:
+                consecutive_no_gain += 1
+            else:
+                consecutive_no_gain = 0
+
+            if consecutive_no_gain >= AUTO_TUNING_STAGNATION_PATIENCE:
+                stagnant_detected = True
 
             accepted = success_mean >= AUTO_TUNING_SUCCESS_THRESHOLD
             params_after = dict(params_before)
             adjustment_applied = False
+            adjustment_mode = "none"
             if not accepted and attempt < AUTO_TUNING_MAX_ATTEMPTS:
-                _apply_structured_auto_tuning_adjustments(tuned_config, attempt)
+                if no_min_improvement:
+                    _apply_aggressive_auto_tuning_adjustments(tuned_config)
+                    adjustment_mode = "aggressive"
+                else:
+                    _apply_structured_auto_tuning_adjustments(tuned_config, attempt)
+                    adjustment_mode = "structured"
                 params_after = _extract_auto_tuning_params(tuned_config)
                 adjustment_applied = True
 
@@ -215,32 +292,44 @@ def _run_auto_tuning_before_campaign(
                     "seed_base": int(config["base_seed"]),
                     "before": {
                         "success_rate_mean": previous_success_mean,
+                        "collision_ratio": previous_collision_ratio,
                         "parameters": params_before,
                     },
                     "after": {
                         "success_rate_mean": success_mean,
+                        "collision_ratio": collision_ratio,
                         "parameters": params_after,
                     },
                     "success_rate_mean": success_mean,
+                    "collision_ratio": collision_ratio,
                     "delta_success_rate_mean": delta_success,
+                    "delta_collision_ratio": delta_collision_ratio,
                     "measurable_gain": (
                         delta_success is not None
                         and delta_success > AUTO_TUNING_MIN_MEASURABLE_GAIN
                     ),
+                    "minimal_improvement_reached": not no_min_improvement,
+                    "consecutive_no_gain": consecutive_no_gain,
                     "accepted": accepted,
                     "adjustment_applied": adjustment_applied,
+                    "adjustment_mode": adjustment_mode,
                 }
             )
             log_debug(
                 "Mini-évaluation auto-tuning "
                 f"(tentative {attempt}/{AUTO_TUNING_MAX_ATTEMPTS}, N={AUTO_TUNING_MINI_EVAL_NETWORK_SIZE}) "
                 f"success_rate_mean={success_mean:.4f}, "
-                f"delta={delta_success if delta_success is not None else float('nan'):.4f}."
+                f"delta_success={delta_success if delta_success is not None else float('nan'):.4f}, "
+                f"delta_collision={delta_collision_ratio if delta_collision_ratio is not None else float('nan'):.4f}."
             )
             previous_success_mean = success_mean
+            previous_collision_ratio = collision_ratio
             if accepted:
                 selected_attempt = attempt
                 success_reached = True
+                break
+            if stagnant_detected:
+                selected_attempt = attempt
                 break
         config.update(tuned_config)
     finally:
@@ -248,8 +337,12 @@ def _run_auto_tuning_before_campaign(
 
     selected_parameters = _extract_auto_tuning_params(config)
     status = "success" if success_reached else "completed_without_threshold"
+    if stagnant_detected:
+        status = "stagnant"
     if not success_reached and not measurable_gain_detected:
         status = "failed_tuning"
+    if stagnant_detected:
+        status = "stagnant"
 
     payload = {
         "status": status,
@@ -257,6 +350,7 @@ def _run_auto_tuning_before_campaign(
         "threshold": AUTO_TUNING_SUCCESS_THRESHOLD,
         "min_measurable_gain": AUTO_TUNING_MIN_MEASURABLE_GAIN,
         "max_attempts": AUTO_TUNING_MAX_ATTEMPTS,
+        "stagnation_patience": AUTO_TUNING_STAGNATION_PATIENCE,
         "selected_attempt": selected_attempt,
         "success_reached": success_reached,
         "measurable_gain_detected": measurable_gain_detected,
