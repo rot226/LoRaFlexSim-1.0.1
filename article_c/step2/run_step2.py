@@ -430,6 +430,101 @@ def _aggregate_selection_probs(
     return aggregated
 
 
+def _rl5_selection_prob_path(results_dir: Path) -> Path:
+    return results_dir / "aggregates" / "rl5_selection_prob.csv"
+
+
+def _build_rl5_rows_from_ucb1_traces(base_results_dir: Path) -> list[dict[str, object]]:
+    by_size_dir = base_results_dir / BY_SIZE_DIRNAME
+    if not by_size_dir.exists():
+        return []
+
+    round_sf_votes: dict[tuple[int, int, int], dict[int, int]] = defaultdict(dict)
+    for raw_path in sorted(by_size_dir.glob("size_*/raw_results.csv")):
+        with raw_path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                if row.get("algo") != "ucb1_sf" or row.get("cluster") != "all":
+                    continue
+                try:
+                    network_size = int(float(row["network_size"]))
+                    replication = int(float(row.get("replication", "")))
+                    round_id = int(float(row["round"]))
+                    sf_value = int(float(row["sf"]))
+                except (KeyError, TypeError, ValueError):
+                    continue
+                key = (network_size, replication, round_id)
+                votes = round_sf_votes.setdefault(key, {})
+                votes[sf_value] = votes.get(sf_value, 0) + 1
+
+    if not round_sf_votes:
+        return []
+
+    selected_sf_by_round: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
+    available_sfs: dict[int, set[int]] = defaultdict(set)
+    for (network_size, replication, round_id), votes in round_sf_votes.items():
+        if not votes:
+            continue
+        selected_sf = max(votes.items(), key=lambda item: item[1])[0]
+        selected_sf_by_round[(network_size, replication)].append((round_id, selected_sf))
+        available_sfs[network_size].add(selected_sf)
+
+    if not selected_sf_by_round:
+        return []
+
+    reconstructed_rows: list[dict[str, object]] = []
+    for (network_size, _replication), timeline in sorted(selected_sf_by_round.items()):
+        counts: dict[int, int] = {sf: 0 for sf in sorted(available_sfs[network_size])}
+        total = 0
+        for round_id, sf_value in sorted(timeline):
+            counts[sf_value] = counts.get(sf_value, 0) + 1
+            total += 1
+            for sf, count in counts.items():
+                reconstructed_rows.append(
+                    {
+                        "network_size": network_size,
+                        "density": _compute_density(network_size),
+                        "round": round_id,
+                        "sf": sf,
+                        "selection_prob": count / total if total > 0 else 0.0,
+                    }
+                )
+    return _aggregate_selection_probs(reconstructed_rows)
+
+
+def _write_rl5_selection_prob_csv(
+    rows: list[dict[str, object]],
+    base_results_dir: Path,
+    timestamp_dir: Path | None,
+) -> None:
+    rl5_header = ["network_size", "density", "round", "sf", "selection_prob"]
+    rl5_values = [
+        [
+            row["network_size"],
+            row["density"],
+            row["round"],
+            row["sf"],
+            row["selection_prob"],
+        ]
+        for row in rows
+    ]
+    rl5_path = _ensure_csv_within_scope(
+        _rl5_selection_prob_path(base_results_dir), base_results_dir
+    )
+    write_rows(rl5_path, rl5_header, rl5_values)
+
+    legacy_rl5_path = _ensure_csv_within_scope(
+        base_results_dir / "rl5_selection_prob.csv", base_results_dir
+    )
+    write_rows(legacy_rl5_path, rl5_header, rl5_values)
+
+    if timestamp_dir is not None:
+        timestamp_rl5_path = _ensure_csv_within_scope(
+            _rl5_selection_prob_path(timestamp_dir), base_results_dir
+        )
+        write_rows(timestamp_rl5_path, rl5_header, rl5_values)
+
+
 def _format_size_factor_table(
     sizes: Sequence[int],
     reference_size: int,
@@ -3121,26 +3216,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     if selection_rows:
         rl5_rows = _aggregate_selection_probs(selection_rows)
-        rl5_path = _ensure_csv_within_scope(
-            base_results_dir / "rl5_selection_prob.csv", base_results_dir
-        )
-        rl5_header = ["network_size", "density", "round", "sf", "selection_prob"]
-        rl5_values = [
-            [
-                row["network_size"],
-                row["density"],
-                row["round"],
-                row["sf"],
-                row["selection_prob"],
-            ]
-            for row in rl5_rows
-        ]
-        write_rows(rl5_path, rl5_header, rl5_values)
-        if timestamp_dir is not None:
-            rl5_timestamp_path = _ensure_csv_within_scope(
-                timestamp_dir / "rl5_selection_prob.csv", base_results_dir
-            )
-            write_rows(rl5_timestamp_path, rl5_header, rl5_values)
+        _write_rl5_selection_prob_csv(rl5_rows, base_results_dir, timestamp_dir)
 
     if learning_curve_rows:
         learning_curve = _aggregate_learning_curve(learning_curve_rows)
@@ -3233,6 +3309,21 @@ def main(argv: Sequence[str] | None = None) -> None:
             "Plot de synthèse ignoré: aggregated_results.csv absent "
             "(utilisez make_all_plots.py)."
         )
+
+    rl5_path = _rl5_selection_prob_path(base_results_dir)
+    if not rl5_path.exists():
+        fallback_rows = _build_rl5_rows_from_ucb1_traces(base_results_dir)
+        if fallback_rows:
+            _write_rl5_selection_prob_csv(fallback_rows, base_results_dir, timestamp_dir)
+            log_info(
+                "rl5_selection_prob.csv reconstruit depuis les traces UCB1 "
+                f"dans {rl5_path}."
+            )
+        else:
+            log_debug(
+                "Aucune trace UCB1 exploitable pour reconstruire "
+                "rl5_selection_prob.csv."
+            )
 
     _log_step2_key_csv_paths(base_results_dir)
 
