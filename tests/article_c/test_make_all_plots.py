@@ -51,3 +51,58 @@ def test_preflight_validate_plot_modules_lists_all_issues(monkeypatch, capsys) -
     assert "modules de plots fautifs détectés avant exécution" in captured.out
     assert "article_c.step1.plots.plot_S1" in captured.out
     assert "article_c.step1.plots.plot_S2" in captured.out
+
+
+def test_run_plot_module_requires_source_parameter(monkeypatch) -> None:
+    class FakeModule:
+        @staticmethod
+        def main() -> None:
+            return None
+
+    monkeypatch.setattr(make_all_plots.importlib, "import_module", lambda _: FakeModule)
+
+    try:
+        make_all_plots._run_plot_module(
+            "fake.module",
+            source="by_size",
+        )
+    except TypeError as exc:
+        assert "ignore la source contractuelle" in str(exc)
+    else:
+        raise AssertionError("Un module sans paramètre source doit échouer.")
+
+
+def test_run_plot_module_logs_effective_source(monkeypatch) -> None:
+    logged: list[str] = []
+
+    class FakeModule:
+        LAST_EFFECTIVE_SOURCE = "by_size"
+
+        @staticmethod
+        def main(source: str) -> None:
+            assert source == "by_size"
+
+    monkeypatch.setattr(make_all_plots.importlib, "import_module", lambda _: FakeModule)
+    monkeypatch.setattr(make_all_plots, "log_info", logged.append)
+
+    make_all_plots._run_plot_module("fake.module", source="by_size")
+
+    assert logged == ["[fake.module] source effective=by_size"]
+
+
+def test_run_plot_module_fails_if_effective_source_differs(monkeypatch) -> None:
+    class FakeModule:
+        LAST_EFFECTIVE_SOURCE = "aggregates"
+
+        @staticmethod
+        def main(source: str) -> None:
+            assert source == "by_size"
+
+    monkeypatch.setattr(make_all_plots.importlib, "import_module", lambda _: FakeModule)
+
+    try:
+        make_all_plots._run_plot_module("fake.module", source="by_size")
+    except RuntimeError as exc:
+        assert "source non contractuelle" in str(exc)
+    else:
+        raise AssertionError("Une source effective divergente doit échouer.")

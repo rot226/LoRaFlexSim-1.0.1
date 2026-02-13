@@ -222,6 +222,9 @@ class CsvDataBundle:
     source_paths: tuple[Path, ...]
 
 
+CONTRACTUAL_SOURCES = ("aggregates", "by_size")
+
+
 class MandatoryFigureDataError(RuntimeError):
     """Erreur contrôlée quand une figure obligatoire n'a pas ses données."""
 
@@ -335,6 +338,25 @@ def _load_dataset_from_by_size(
     )
 
 
+def _load_dataset_from_aggregates(
+    *,
+    results_dir: Path,
+    csv_name: str,
+) -> CsvDataBundle | None:
+    aggregate_path = results_dir / "aggregates" / csv_name
+    if not aggregate_path.exists():
+        return None
+    fieldnames, rows = _load_csv_data(aggregate_path)
+    if not fieldnames or not rows:
+        return None
+    return CsvDataBundle(
+        fieldnames=fieldnames,
+        rows=rows,
+        label=str(aggregate_path.resolve()),
+        source_paths=(aggregate_path,),
+    )
+
+
 def _report_missing_csv(
     *,
     step_label: str,
@@ -342,9 +364,12 @@ def _report_missing_csv(
     source: str,
     csv_name: str,
 ) -> None:
-    nested_pattern = results_dir / "by_size" / "size_*" / csv_name
+    if source == "by_size":
+        expected_pattern = results_dir / "by_size" / "size_*" / csv_name
+    else:
+        expected_pattern = results_dir / "aggregates" / csv_name
     log_debug(f"ERREUR: CSV {step_label} introuvable pour source={source}.")
-    log_debug(f"Pattern attendu: {nested_pattern.resolve()}.")
+    log_debug(f"Pattern attendu: {expected_pattern.resolve()}.")
     log_debug(
         "INFO: vérifiez que les simulations ont bien écrit dans "
         f"{results_dir.resolve()}."
@@ -362,9 +387,14 @@ def _resolve_data_bundle(
     if cache_key in cache:
         return cache[cache_key]
     results_dir = _resolve_step_results_dir(step)
-    if source != "by_size":
-        raise ValueError("Source CSV non supportée. Utilisez uniquement --source by_size.")
-    bundle = _load_dataset_from_by_size(results_dir=results_dir, csv_name=csv_name)
+    if source == "by_size":
+        bundle = _load_dataset_from_by_size(results_dir=results_dir, csv_name=csv_name)
+    elif source == "aggregates":
+        bundle = _load_dataset_from_aggregates(results_dir=results_dir, csv_name=csv_name)
+    else:
+        raise ValueError(
+            "Source CSV non supportée. Utilisez --source aggregates ou --source by_size."
+        )
     if bundle is not None:
         cache[cache_key] = bundle
     return bundle
@@ -404,11 +434,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--source",
-        choices=("by_size",),
+        choices=CONTRACTUAL_SOURCES,
         default="by_size",
         help=(
-            "Source des données CSV: by_size fusionne size_*/aggregated_results.csv en mémoire "
-            "(défaut). Les variantes flat/historiques sont interdites."
+            "Source des données CSV: by_size fusionne size_*/aggregated_results.csv en mémoire, "
+            "aggregates lit results/aggregates/aggregated_results.csv."
         ),
     )
     parser.add_argument(
@@ -470,7 +500,10 @@ def _run_plot_module(
     network_sizes: list[int] | None = None,
     allow_sample: bool = True,
     enable_suptitle: bool = True,
+    source: str,
 ) -> object:
+    if source not in CONTRACTUAL_SOURCES:
+        raise ValueError(f"Source contractuelle inconnue: {source}")
     module = importlib.import_module(module_path)
     if not hasattr(module, "main"):
         raise AttributeError(f"Module {module_path} sans fonction main().")
@@ -487,10 +520,24 @@ def _run_plot_module(
         kwargs["network_sizes"] = network_sizes
     if "enable_suptitle" in parameters or supports_kwargs:
         kwargs["enable_suptitle"] = enable_suptitle
+    if "source" in parameters or supports_kwargs:
+        kwargs["source"] = source
+    else:
+        raise TypeError(
+            f"Module {module_path} ignore la source contractuelle: "
+            "ajoutez le paramètre `source` à main()."
+        )
     if kwargs:
         module.main(**kwargs)
     else:
         module.main()
+    resolved_source = getattr(module, "LAST_EFFECTIVE_SOURCE", source)
+    if str(resolved_source) != source:
+        raise RuntimeError(
+            f"Module {module_path} a résolu une source non contractuelle "
+            f"({resolved_source!r} au lieu de {source!r})."
+        )
+    log_info(f"[{module_path}] source effective={resolved_source}")
     return module
 
 
@@ -2149,6 +2196,7 @@ def main(argv: list[str] | None = None) -> None:
                         network_sizes=step1_network_sizes,
                         allow_sample=False,
                         enable_suptitle=enable_suptitle,
+                        source=args.source,
                     )
                     missing_legends = _check_legends_for_module(
                         module_path=module_path,
@@ -2204,6 +2252,7 @@ def main(argv: list[str] | None = None) -> None:
                         network_sizes=step2_network_sizes,
                         allow_sample=False,
                         enable_suptitle=enable_suptitle,
+                        source=args.source,
                     )
                     missing_legends = _check_legends_for_module(
                         module_path=module_path,
