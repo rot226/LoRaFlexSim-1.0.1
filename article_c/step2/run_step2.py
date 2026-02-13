@@ -22,6 +22,10 @@ def log_debug(message: str) -> None:
         print(message)
 
 
+def is_debug_logging_enabled() -> bool:
+    return _CURRENT_LOG_LEVEL >= LOG_LEVELS["debug"]
+
+
 def log_error(message: str) -> None:
     print(message, file=sys.stderr)
 
@@ -809,6 +813,15 @@ def _format_clamp_ratio_stats(ratios: Sequence[float]) -> str:
     )
 
 
+def _format_clamp_sample(sample: dict[str, object]) -> str:
+    clamp_ratio = max(
+        0.0,
+        min(1.0, float(sample.get("traffic_coeff_clamp_rate", 0.0) or 0.0)),
+    )
+    avg_reward = float(sample.get("avg_reward", 0.0) or 0.0)
+    return f"r{int(sample['round'])}(clamp={clamp_ratio:.3f}, reward={avg_reward:.3f})"
+
+
 def _representative_clamp_samples(
     rows: Sequence[dict[str, object]],
     sample_count: int = 3,
@@ -836,13 +849,16 @@ def _log_learning_curve_clamp_overview(
         clamp_ratios = [float(row.get("traffic_coeff_clamp_rate", 0.0) or 0.0) for row in rows]
         stats_label = _format_clamp_ratio_stats(clamp_ratios)
         sample_label = ", ".join(
-            f"r{int(sample['round'])}={max(0.0, min(1.0, float(sample.get('traffic_coeff_clamp_rate', 0.0) or 0.0))):.3f}"
+            _format_clamp_sample(sample)
             for sample in _representative_clamp_samples(rows)
         )
         log_info(
-            f"- taille={network_size}, algo={algo}, rounds={len(rows)}, {stats_label}, "
-            f"échantillons: [{sample_label}]"
+            f"- taille={network_size}, algo={algo}, compteur={len(rows)}, "
+            f"ratios clampés ({stats_label}), échantillons: [{sample_label}]"
         )
+
+    if not is_debug_logging_enabled():
+        return
 
     for (network_size, algo), rows in sorted(grouped.items()):
         log_debug(
