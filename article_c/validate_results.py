@@ -298,21 +298,24 @@ def validate_results(
     tolerance: float,
     const_tolerance: float,
     max_samples: int,
+    skip_step1: bool,
     skip_step2: bool,
 ) -> AnomalyTracker:
     tracker = AnomalyTracker(max_samples=max_samples)
-    step1_rep_dirs = {
-        str(path.relative_to(step1_dir).as_posix())
-        for path in step1_dir.glob("by_size/size_*/rep_*")
-        if path.is_dir()
-    }
-    _check_by_size_coverage(step1_dir, tracker, "Step1")
-    _check_required_replication_files(
-        step1_dir,
-        tracker,
-        "Step1",
-        required_files=("raw_packets.csv", "raw_metrics.csv", "aggregated_results.csv"),
-    )
+    step1_rep_dirs: set[str] = set()
+    if not skip_step1:
+        step1_rep_dirs = {
+            str(path.relative_to(step1_dir).as_posix())
+            for path in step1_dir.glob("by_size/size_*/rep_*")
+            if path.is_dir()
+        }
+        _check_by_size_coverage(step1_dir, tracker, "Step1")
+        _check_required_replication_files(
+            step1_dir,
+            tracker,
+            "Step1",
+            required_files=("raw_packets.csv", "raw_metrics.csv", "aggregated_results.csv"),
+        )
     if not skip_step2:
         _check_by_size_coverage(step2_dir, tracker, "Step2")
         _check_required_replication_files(
@@ -323,15 +326,16 @@ def validate_results(
             expected_rep_dirs=step1_rep_dirs or None,
         )
 
-    _validate_pdr_file(
-        step1_dir / "aggregates" / "aggregated_results.csv",
-        pdr_key="pdr_mean",
-        sent_key="sent_mean",
-        received_key="received_mean",
-        tolerance=tolerance,
-        const_tolerance=const_tolerance,
-        tracker=tracker,
-    )
+    if not skip_step1:
+        _validate_pdr_file(
+            step1_dir / "aggregates" / "aggregated_results.csv",
+            pdr_key="pdr_mean",
+            sent_key="sent_mean",
+            received_key="received_mean",
+            tolerance=tolerance,
+            const_tolerance=const_tolerance,
+            tracker=tracker,
+        )
     if not skip_step2:
         _validate_reward_file(
             step2_dir / "aggregates" / "aggregated_results.csv",
@@ -377,6 +381,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Nombre maximal d'anomalies détaillées à afficher.",
     )
     parser.add_argument(
+        "--skip-step1",
+        action="store_true",
+        help="Ignore les contrôles de l'étape 1.",
+    )
+    parser.add_argument(
         "--skip-step2",
         action="store_true",
         help="Ignore les contrôles de l'étape 2.",
@@ -393,9 +402,17 @@ def main(argv: list[str] | None = None) -> int:
         tolerance=args.tolerance,
         const_tolerance=args.const_tolerance,
         max_samples=args.max_samples,
+        skip_step1=args.skip_step1,
         skip_step2=args.skip_step2,
     )
-    scope_label = "Step1" if args.skip_step2 else "résultats"
+    if args.skip_step1 and args.skip_step2:
+        scope_label = "aucune étape (validation contournée)"
+    elif args.skip_step1:
+        scope_label = "Step2"
+    elif args.skip_step2:
+        scope_label = "Step1"
+    else:
+        scope_label = "résultats"
     if tracker.has_anomalies():
         print(f"Anomalies détectées ({scope_label}): {tracker.count}.")
         for message in tracker.samples:
