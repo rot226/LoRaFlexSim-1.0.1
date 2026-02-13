@@ -11,6 +11,26 @@ RESULTS_DIR = BASE_DIR / "results"
 PLOTS_DIR = BASE_DIR / "plots"
 
 
+CLUSTER_CANONICAL_TABLE: dict[str, dict[str, tuple[str, ...] | str]] = {
+    "cluster_1": {
+        "base_label": "Cluster 1",
+        "aliases": ("cluster_1", "gold"),
+    },
+    "cluster_2": {
+        "base_label": "Cluster 2",
+        "aliases": ("cluster_2", "silver"),
+    },
+    "cluster_3": {
+        "base_label": "Cluster 3",
+        "aliases": ("cluster_3", "bronze"),
+    },
+    "all": {
+        "base_label": "All clusters",
+        "aliases": ("all",),
+    },
+}
+
+
 @dataclass(frozen=True)
 class RadioConfig:
     """Paramètres radio."""
@@ -51,7 +71,7 @@ class SNIRConfig:
 class QoSConfig:
     """Paramètres QoS."""
 
-    clusters: Sequence[str] = ("gold", "silver", "bronze")
+    clusters: Sequence[str] = ("cluster_1", "cluster_2", "cluster_3")
     proportions: Sequence[float] = (0.2, 0.3, 0.5)
 
 

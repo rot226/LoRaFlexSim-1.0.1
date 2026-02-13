@@ -39,7 +39,7 @@ from article_c.common.plot_style import (
     tight_layout_rect_from_margins,
 )
 from article_c.common.utils import ensure_dir
-from article_c.common.config import DEFAULT_CONFIG
+from article_c.common.config import CLUSTER_CANONICAL_TABLE, DEFAULT_CONFIG
 
 COMMON_PLOT_LABELS: dict[str, dict[str, str]] = {
     "algo": {
@@ -165,10 +165,14 @@ DEFAULT_BOUNDED_RATE_STRICT = False
 MASSIVE_NAN_RATIO = 0.5
 _WARNED_METRIC_ALGO_SNIR_CLUSTER: set[tuple[str, str, str, str]] = set()
 _CLUSTER_BASE_LABELS = {
-    "gold": "Cluster 1",
-    "silver": "Cluster 2",
-    "bronze": "Cluster 3",
-    "all": "All clusters",
+    cluster_id: str(config["base_label"])
+    for cluster_id, config in CLUSTER_CANONICAL_TABLE.items()
+}
+_CLUSTER_ALIASES = {
+    alias.strip().lower(): cluster_id
+    for cluster_id, config in CLUSTER_CANONICAL_TABLE.items()
+    for alias in config.get("aliases", ())
+    if alias
 }
 
 
@@ -2743,21 +2747,28 @@ def _format_percentage(value: float) -> str:
     return f"{percent:.1f}%"
 
 
+def canonical_cluster_id(cluster: object) -> str:
+    normalized = str(cluster or "").strip().lower()
+    if not normalized:
+        return ""
+    return _CLUSTER_ALIASES.get(normalized, normalized)
+
+
 def cluster_allocation_percentages() -> dict[str, str]:
     clusters = list(DEFAULT_CONFIG.qos.clusters)
     proportions = list(DEFAULT_CONFIG.qos.proportions)
     count = min(len(clusters), len(proportions))
     return {
-        str(clusters[idx]): _format_percentage(float(proportions[idx]))
+        canonical_cluster_id(clusters[idx]): _format_percentage(float(proportions[idx]))
         for idx in range(count)
     }
 
 
 def cluster_display_label(cluster: object) -> str:
-    normalized = str(cluster or "").strip().lower()
+    normalized = canonical_cluster_id(cluster)
     base_label = _CLUSTER_BASE_LABELS.get(normalized)
     if base_label is None:
-        return str(cluster)
+        return str(cluster or "")
     if normalized == "all":
         return base_label
     allocation = cluster_allocation_percentages().get(normalized)
@@ -2767,12 +2778,20 @@ def cluster_display_label(cluster: object) -> str:
 
 
 def cluster_display_map(clusters: Iterable[object]) -> dict[str, str]:
-    return {str(cluster): cluster_display_label(cluster) for cluster in clusters}
+    return {
+        canonical_cluster_id(cluster): cluster_display_label(cluster)
+        for cluster in clusters
+    }
 
 
 def filter_cluster(rows: list[dict[str, object]], cluster: str) -> list[dict[str, object]]:
+    target_cluster = canonical_cluster_id(cluster)
     if any("cluster" in row for row in rows):
-        return [row for row in rows if row.get("cluster") == cluster]
+        return [
+            row
+            for row in rows
+            if canonical_cluster_id(row.get("cluster")) == target_cluster
+        ]
     return rows
 
 
