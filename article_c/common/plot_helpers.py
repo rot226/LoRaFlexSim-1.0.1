@@ -2791,7 +2791,26 @@ def plot_metric_by_algo(
     network_sizes: list[int],
     *,
     label_fn: Callable[[object], str] | None = None,
+    snir_label_fn: Callable[[object], str] | None = None,
+    **kwargs: object,
 ) -> None:
+    del kwargs
+
+    def _curve_label(algo_value: object) -> str:
+        base_label = label_fn(algo_value)
+        if snir_label_fn is None:
+            return base_label
+        algo_rows = [row for row in rows if row.get("algo") == algo_value]
+        snir_modes = {
+            str(row.get("snir_mode")).strip()
+            for row in algo_rows
+            if row.get("snir_mode") is not None
+        }
+        if len(snir_modes) != 1:
+            return base_label
+        only_mode = next(iter(snir_modes))
+        return f"{base_label} ({snir_label_fn(only_mode)})"
+
     median_key, lower_key, upper_key = resolve_percentile_keys(rows, metric_key)
     validate_bounded_rate_metric_rows(rows, median_key)
     if lower_key:
@@ -2843,20 +2862,20 @@ def plot_metric_by_algo(
                         [value],
                         yerr=yerr,
                         fmt="o",
-                        label=label_fn(algo),
+                        label=_curve_label(algo),
                     )
                     trace_count += 1
                     continue
-            ax.scatter([only_size], [value], label=label_fn(algo))
+            ax.scatter([only_size], [value], label=_curve_label(algo))
             trace_count += 1
             continue
         values = [_value_or_nan(points.get(size, float("nan"))) for size in network_sizes]
-        line = ax.plot(network_sizes, values, marker="o", label=label_fn(algo))[0]
+        line = ax.plot(network_sizes, values, marker="o", label=_curve_label(algo))[0]
         warn_if_inconsistent(
             {
                 "x": network_sizes,
                 "y": values,
-                "label": str(label_fn(algo)),
+                "label": str(_curve_label(algo)),
             }
         )
         if any(math.isfinite(value) for value in values):
