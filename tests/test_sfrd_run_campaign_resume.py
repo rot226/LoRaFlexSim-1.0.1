@@ -10,6 +10,13 @@ import pytest
 run_campaign = importlib.import_module("sfrd.cli.run_campaign")
 
 
+def _find_entry(state: dict, seed: int) -> dict:
+    for payload in state.get("runs", {}).values():
+        if isinstance(payload, dict) and payload.get("seed") == seed:
+            return payload
+    raise AssertionError(f"Entrée seed={seed} introuvable dans campaign_state.json")
+
+
 def _build_args(logs_root: Path, *, force_rerun: bool = False, replications: int = 2) -> Namespace:
     return Namespace(
         network_sizes=[10],
@@ -74,8 +81,8 @@ def test_resume_skips_completed_runs_and_updates_state(tmp_path, monkeypatch):
     assert calls == [101]
 
     state = json.loads((logs_root / "campaign_state.json").read_text(encoding="utf-8"))
-    assert state["runs"]["SNIR_OFF|ns_10|algo_UCB|seed_100"]["status"] == "done"
-    assert state["runs"]["SNIR_OFF|ns_10|algo_UCB|seed_101"]["status"] == "done"
+    assert _find_entry(state, 100)["status"] == "done"
+    assert _find_entry(state, 101)["status"] == "done"
 
 
 def test_resume_relaunches_failed_incomplete_and_pending(tmp_path, monkeypatch):
@@ -93,14 +100,22 @@ def test_resume_relaunches_failed_incomplete_and_pending(tmp_path, monkeypatch):
     (logs_root / "campaign_state.json").write_text(
         json.dumps(
             {
-                "runs": {
-                    "SNIR_OFF|ns_10|algo_UCB|seed_100": "failed",
-                    "SNIR_OFF|ns_10|algo_UCB|seed_101": "incomplete",
-                    "SNIR_OFF|ns_10|algo_UCB|seed_102": "pending",
-                    "SNIR_OFF|ns_10|algo_UCB|seed_103": "done",
+                    "runs": {
+                        "SNIR_OFF|ns_10|algo_UCB|seed_100": "failed",
+                        "SNIR_OFF|ns_10|algo_UCB|seed_101": "incomplete",
+                        "SNIR_OFF|ns_10|algo_UCB|seed_102": "pending",
+                        "SNIR_OFF|ns_10|algo_UCB|seed_103": {
+                            "snir": "OFF",
+                            "network_size": 10,
+                            "algo": "UCB",
+                            "seed": 103,
+                            "status": "done",
+                            "paths": {},
+                            "duration_s": 1.2,
+                        },
+                    }
                 }
-            }
-        ),
+            ),
         encoding="utf-8",
     )
 
@@ -171,11 +186,11 @@ def test_force_rerun_ignores_existing_artifacts(tmp_path, monkeypatch):
 
     assert calls == [100, 101]
     state = json.loads((logs_root / "campaign_state.json").read_text(encoding="utf-8"))
-    assert state["runs"]["SNIR_OFF|ns_10|algo_UCB|seed_100"]["status"] == "done"
-    assert state["runs"]["SNIR_OFF|ns_10|algo_UCB|seed_101"]["status"] == "done"
+    assert _find_entry(state, 100)["status"] == "done"
+    assert _find_entry(state, 101)["status"] == "done"
 
 
-def test_keyboard_interrupt_marks_run_incomplete(tmp_path, monkeypatch):
+def test_keyboard_interrupt_marks_run_incomplete_and_writes_missing_report(tmp_path, monkeypatch):
     logs_root = tmp_path / "logs"
 
     def _fake_runner(**kwargs):
@@ -184,13 +199,18 @@ def test_keyboard_interrupt_marks_run_incomplete(tmp_path, monkeypatch):
     monkeypatch.setattr(run_campaign, "_parse_args", lambda: _build_args(logs_root, replications=1))
     monkeypatch.setattr(run_campaign, "_load_run_single_campaign", lambda: _fake_runner)
 
-    with pytest.raises(KeyboardInterrupt):
-        run_campaign.main()
+    run_campaign.main()
 
     state = json.loads((logs_root / "campaign_state.json").read_text(encoding="utf-8"))
-    entry = state["runs"]["SNIR_OFF|ns_10|algo_UCB|seed_100"]
+    entry = _find_entry(state, 100)
     assert entry["status"] == "incomplete"
     assert isinstance(entry["duration_s"], float)
+
+    missing_report = logs_root / "campaign_missing_combinations.csv"
+    assert missing_report.exists()
+    report_lines = missing_report.read_text(encoding="utf-8").splitlines()
+    assert report_lines[0] == "snir,network_size,algorithm,seed,status"
+    assert report_lines[1] == "OFF,10,UCB,100,missing"
 
 
 def test_run_campaign_aborts_on_raw_vs_summary_pdr_divergence(tmp_path, monkeypatch):

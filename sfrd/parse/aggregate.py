@@ -121,11 +121,75 @@ def _write_csv(path: Path, headers: list[str], rows: list[dict[str, Any]]) -> No
         writer.writerows(rows)
 
 
-def aggregate_logs(logs_root: str | Path) -> Path:
+def _load_expected_runs(logs_root: Path) -> set[tuple[str, int, str, int]]:
+    state_path = logs_root / "campaign_state.json"
+    if not state_path.exists():
+        return set()
+
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, ValueError):
+        return set()
+
+    runs = payload.get("runs") if isinstance(payload, dict) else None
+    if not isinstance(runs, dict):
+        return set()
+
+    expected: set[tuple[str, int, str, int]] = set()
+    for run_payload in runs.values():
+        if not isinstance(run_payload, dict):
+            continue
+        try:
+            snir = _normalize_snir(run_payload.get("snir", ""))
+            network_size = _to_int(run_payload.get("network_size", 0))
+            algorithm = str(run_payload.get("algo", "")).strip()
+            seed = _to_int(run_payload.get("seed", -1))
+        except (ValueError, TypeError):
+            continue
+        if snir not in {"ON", "OFF"} or network_size <= 0 or not algorithm or seed < 0:
+            continue
+        expected.add((snir, network_size, algorithm, seed))
+    return expected
+
+
+def _compute_completeness_rows(
+    expected_runs: set[tuple[str, int, str, int]],
+    available_runs: set[tuple[str, int, str, int]],
+) -> list[dict[str, Any]]:
+    expected_by_combo: dict[tuple[str, int, str], set[int]] = defaultdict(set)
+    available_by_combo: dict[tuple[str, int, str], set[int]] = defaultdict(set)
+
+    for snir, network_size, algorithm, seed in expected_runs:
+        expected_by_combo[(snir, network_size, algorithm)].add(seed)
+    for snir, network_size, algorithm, seed in available_runs:
+        available_by_combo[(snir, network_size, algorithm)].add(seed)
+
+    rows: list[dict[str, Any]] = []
+    for snir, network_size, algorithm in sorted(expected_by_combo):
+        expected_seeds = expected_by_combo[(snir, network_size, algorithm)]
+        available_seeds = available_by_combo.get((snir, network_size, algorithm), set())
+        missing = sorted(expected_seeds - available_seeds)
+        rows.append(
+            {
+                "snir": snir,
+                "network_size": network_size,
+                "algorithm": algorithm,
+                "expected_runs": len(expected_seeds),
+                "available_runs": len(available_seeds),
+                "is_complete": "yes" if not missing else "no",
+                "missing_seeds": ",".join(str(seed) for seed in missing),
+            }
+        )
+    return rows
+
+
+def aggregate_logs(logs_root: str | Path, *, allow_partial: bool = False) -> Path:
     """Agrège les fichiers ``campaign_summary.json`` en sorties CSV dédiées."""
 
     root = Path(logs_root)
     summaries = sorted(root.glob("SNIR_*/ns_*/algo_*/seed_*/campaign_summary.json"))
+    expected_runs = _load_expected_runs(root)
+    available_runs: set[tuple[str, int, str, int]] = set()
 
     metric_sums: dict[tuple[int, str, str], dict[str, float]] = defaultdict(
         lambda: {"pdr": 0.0, "throughput": 0.0, "energy": 0.0, "count": 0.0}
@@ -143,6 +207,10 @@ def aggregate_logs(logs_root: str | Path) -> Path:
         network_size = _to_int(contract.get("network_size", 0))
         algorithm = str(contract.get("algorithm", "")).strip()
         snir = _normalize_snir(contract.get("snir_mode", ""))
+        if not algorithm or snir not in {"ON", "OFF"}:
+            continue
+        seed = _to_int(contract.get("seed", summary_path.parent.name.replace("seed_", "")))
+        available_runs.add((snir, network_size, algorithm, seed))
 
         key = (network_size, algorithm, snir)
         metric_sums[key]["pdr"] += _extract_metric(metrics, "pdr", "PDR")
@@ -275,6 +343,35 @@ def aggregate_logs(logs_root: str | Path) -> Path:
         learning_rows,
     )
 
+    completeness_rows = _compute_completeness_rows(expected_runs, available_runs)
+    _write_csv(
+        output_root / "campaign_completeness.csv",
+        [
+            "snir",
+            "network_size",
+            "algorithm",
+            "expected_runs",
+            "available_runs",
+            "is_complete",
+            "missing_seeds",
+        ],
+        completeness_rows,
+    )
+
+    if expected_runs and not allow_partial:
+        missing = sorted(expected_runs - available_runs)
+        if missing:
+            preview = ", ".join(
+                f"{snir}/ns_{size}/algo_{algo}/seed_{seed}"
+                for snir, size, algo, seed in missing[:8]
+            )
+            suffix = " ..." if len(missing) > 8 else ""
+            raise RuntimeError(
+                "Agrégation incomplète: "
+                f"{len(missing)} run(s) manquant(s). Exemples: {preview}{suffix}. "
+                "Relancer avec --allow-partial pour agréger uniquement le disponible."
+            )
+
     return output_root
 
 
@@ -286,6 +383,11 @@ def _parse_args() -> argparse.Namespace:
         default=Path("sfrd/logs"),
         help="Racine des logs (contient SNIR_OFF/SNIR_ON)",
     )
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Agrège uniquement les runs disponibles même si la campagne est incomplète.",
+    )
     return parser.parse_args()
 
 
@@ -293,7 +395,7 @@ def main() -> None:
     """Exécution principale."""
 
     args = _parse_args()
-    path = aggregate_logs(args.logs_root)
+    path = aggregate_logs(args.logs_root, allow_partial=args.allow_partial)
     print(f"Agrégation écrite: {path}")
 
 

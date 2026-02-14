@@ -90,3 +90,31 @@ def test_validate_outputs_blocks_release_on_matrix_incomplete(tmp_path: Path) ->
     assert result.returncode == 1
     report = (output_root / "release_report.txt").read_text(encoding="utf-8")
     assert "matrix_completeness" in report
+
+
+def test_validate_outputs_partial_mode_is_diagnostic(tmp_path: Path) -> None:
+    output_root = tmp_path / "sfrd_output"
+    _seed_valid_output(output_root)
+
+    pdr_path = output_root / "SNIR_OFF" / "pdr_results.csv"
+    rows = pdr_path.read_text(encoding="utf-8").splitlines()
+    pdr_path.write_text("\n".join(rows[:-1]) + "\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "sfrd.cli.validate_outputs",
+            "--output-root",
+            str(output_root),
+            "--mode",
+            "partial",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    report = (output_root / "release_report.txt").read_text(encoding="utf-8")
+    assert "[warning] (matrix_completeness)" in report

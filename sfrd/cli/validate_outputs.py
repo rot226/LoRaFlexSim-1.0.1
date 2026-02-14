@@ -71,6 +71,15 @@ def _parse_args() -> argparse.Namespace:
         default=Path("sfrd/output"),
         help="Dossier racine contenant SNIR_OFF/, SNIR_ON/ et learning_curve_ucb.csv",
     )
+    parser.add_argument(
+        "--mode",
+        choices=["strict", "partial"],
+        default="strict",
+        help=(
+            "Mode strict: exige une matrice complète et tous les CSV. "
+            "Mode partial: diagnostic tolérant pour campagnes incomplètes."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -225,7 +234,7 @@ def _collect_unique_runs(output_root: Path) -> set[tuple[int, str, str]]:
     return runs
 
 
-def _validate_matrix_completeness(output_root: Path) -> list[ValidationAnomaly]:
+def _validate_matrix_completeness(output_root: Path, *, mode: str) -> list[ValidationAnomaly]:
     anomalies: list[ValidationAnomaly] = []
     expected = {
         (size, algo, snir)
@@ -240,7 +249,7 @@ def _validate_matrix_completeness(output_root: Path) -> list[ValidationAnomaly]:
         suffix = " ..." if len(missing) > 8 else ""
         anomalies.append(
             ValidationAnomaly(
-                severity="critical",
+                severity="critical" if mode == "strict" else "warning",
                 category="matrix_completeness",
                 message=(
                     "Matrice incomplète (5 tailles x 4 algos x 2 SNIR): "
@@ -359,6 +368,7 @@ def main() -> None:
 
     args = _parse_args()
     output_root: Path = args.output_root
+    mode: str = args.mode
 
     anomalies: list[ValidationAnomaly] = []
     validated_files: list[Path] = []
@@ -369,17 +379,21 @@ def main() -> None:
             validated_files.append(csv_path)
             print(f"[OK] {csv_path}")
         except (FileNotFoundError, ValueError) as exc:
+            severity = "critical" if mode == "strict" else "warning"
             anomalies.append(
                 ValidationAnomaly(
-                    severity="critical",
+                    severity=severity,
                     category="csv_validation",
                     message=str(exc),
                 )
             )
-            print(f"[ERROR] {exc}")
+            if severity == "critical":
+                print(f"[ERROR] {exc}")
+            else:
+                print(f"[WARN] {exc}")
 
     anomalies.extend(_validate_internal_coherence(output_root))
-    anomalies.extend(_validate_matrix_completeness(output_root))
+    anomalies.extend(_validate_matrix_completeness(output_root, mode=mode))
     realized_runs = len(_collect_unique_runs(output_root))
     report_path = _write_release_report(
         output_root,
@@ -394,7 +408,10 @@ def main() -> None:
         print(f"Validation release échouée: {len(anomalies)} anomalie(s), dont critique(s).")
         sys.exit(1)
 
-    print("Validation release réussie: aucune anomalie critique.")
+    if mode == "partial" and anomalies:
+        print("Validation partielle terminée: anomalies non critiques signalées (diagnostic).")
+    else:
+        print("Validation release réussie: aucune anomalie critique.")
 
 
 if __name__ == "__main__":
