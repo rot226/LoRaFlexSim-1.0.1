@@ -25,7 +25,7 @@ if find_spec("article_c") is None:
 
 from article_c.common.config import DEFAULT_CONFIG
 from article_c.common.csv_io import aggregate_results_by_size
-from article_c.common.utils import parse_network_size_list, replication_dirnames
+from article_c.common.utils import parse_network_size_list, replication_dirnames, replication_ids
 from article_c.step1.run_step1 import main as run_step1
 from article_c.step2.run_step2 import main as run_step2
 from article_c.validate_results import main as validate_results
@@ -263,7 +263,7 @@ def _missing_replications_by_size(
 ) -> dict[int, list[int]]:
     """Scanne `by_size/size_<N>/rep_<R>` et retourne les réplications manquantes."""
     by_size_dir = results_dir / "by_size"
-    expected_reps = set(range(1, int(replications_total) + 1))
+    expected_reps = set(replication_ids(replications_total))
     missing_by_size: dict[int, list[int]] = {}
     for size in expected_sizes:
         size_dir = by_size_dir / f"size_{int(size)}"
@@ -276,8 +276,7 @@ def _missing_replications_by_size(
                     rep_id = int(rep_dir.name.split("rep_", 1)[1])
                 except (IndexError, ValueError):
                     continue
-                if rep_id > 0:
-                    existing_reps.add(rep_id)
+                existing_reps.add(rep_id)
         missing = sorted(expected_reps - existing_reps)
         if missing:
             missing_by_size[int(size)] = missing
@@ -314,7 +313,7 @@ def _relaunch_missing_replications(
                 tmp_dir = Path(tmp_dir_str)
                 preserved_root = tmp_dir / "preserved"
                 preserved_root.mkdir(parents=True, exist_ok=True)
-                for rep_to_preserve in range(1, int(rep) + 1):
+                for rep_to_preserve in range(int(rep)):
                     if rep_to_preserve == int(rep):
                         continue
                     existing_rep_dir = size_dir / f"rep_{rep_to_preserve}"
@@ -323,7 +322,7 @@ def _relaunch_missing_replications(
 
                 relaunch_args = argparse.Namespace(**vars(base_args))
                 relaunch_args.network_sizes = [int(size)]
-                relaunch_args.replications = int(rep)
+                relaunch_args.replications = int(rep) + 1
                 relaunch_args.flat_output = False
                 relaunch_args.reset_status = False
                 runner(build_args(relaunch_args))
