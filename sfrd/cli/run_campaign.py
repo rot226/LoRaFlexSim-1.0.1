@@ -259,6 +259,19 @@ def _parse_algorithms(raw_values: list[str]) -> list[str]:
         raise argparse.ArgumentTypeError("--algos ne contient aucune valeur valide")
     return algorithms
 
+def _format_seconds(value: float | None) -> str:
+    """Formate une durée en secondes pour les logs de heartbeat."""
+
+    if value is None:
+        return "n/a"
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    if not math.isfinite(seconds) or seconds < 0.0:
+        return "n/a"
+    return f"{seconds:.1f}s"
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -515,6 +528,23 @@ def main() -> None:
                     run_entry["duration_s"] = None
                     _write_campaign_state(state_path, runs_state)
                     try:
+                        heartbeat_interval_s = 45.0
+
+                        def _heartbeat(status: dict[str, object]) -> None:
+                            elapsed_s = perf_counter() - t0
+                            sim_time = _format_seconds(status.get("sim_time_s"))
+                            events_processed = int(status.get("events_processed") or 0)
+                            last_qos_refresh = _format_seconds(status.get("last_qos_refresh_sim_time"))
+                            logger.info(
+                                (
+                                    f"still running | run_id={run_context['run_id']} | "
+                                    f"elapsed={elapsed_s:.1f}s | sim_time={sim_time} | "
+                                    f"events_processed={events_processed} | "
+                                    f"last_qos_refresh={last_qos_refresh}"
+                                ),
+                                extra={**run_context, "statut": "heartbeat"},
+                            )
+
                         result = run_single_campaign(
                             network_size=int(network_size),
                             algorithm=str(algorithm),
@@ -523,6 +553,8 @@ def main() -> None:
                             warmup_s=float(args.warmup_s),
                             output_dir=run_dir,
                             ucb_config_path=args.ucb_config,
+                            heartbeat_callback=_heartbeat,
+                            heartbeat_interval_s=heartbeat_interval_s,
                         )
                         duration_s = perf_counter() - t0
                         metrics = result.get("summary", {}).get("metrics", {})
