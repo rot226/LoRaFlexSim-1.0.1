@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,7 @@ DEFAULT_NODE_COUNTS: Sequence[int] = (1000, 5000, 10000, 13000, 15000)
 DEFAULT_TX_PERIODS: Sequence[float] = (600.0, 300.0, 150.0)
 DEFAULT_SIMULATION_DURATION_S = 24.0 * 3600.0
 DEFAULT_REPLICATIONS = 5
+DEFAULT_HEARTBEAT_INTERVAL_S = 30.0
 MAX_REPLICATIONS = 5
 VALIDATION_NODE_COUNTS: Sequence[int] = (1000, 5000, 10000)
 VALIDATION_TX_PERIODS: Sequence[float] = (600.0, 300.0, 150.0)
@@ -43,6 +45,44 @@ FREQUENCIES_HZ = [
 ]
 DEFAULT_SNIR_STATES: Sequence[bool] = (False, True)
 STATE_LABELS = {True: "snir_on", False: "snir_off"}
+HEARTBEAT_STEP_CHUNK = 5_000
+
+
+def _run_with_heartbeat(
+    simulator: Simulator,
+    *,
+    run_index: int,
+    total_runs: int,
+    max_time: float | None,
+    quiet: bool,
+    heartbeat_interval_s: float,
+) -> None:
+    """Exécute une simulation longue avec heartbeat périodique côté campagne."""
+
+    if heartbeat_interval_s <= 0:
+        simulator.run(max_time=max_time)
+        return
+
+    start_time = time.monotonic()
+    next_heartbeat = start_time + heartbeat_interval_s
+    last_processed = simulator.events_processed
+
+    while simulator.event_queue and simulator.running:
+        simulator.run(max_steps=HEARTBEAT_STEP_CHUNK, max_time=max_time)
+        processed = simulator.events_processed
+        if processed == last_processed:
+            break
+        last_processed = processed
+
+        now = time.monotonic()
+        if not quiet and now >= next_heartbeat:
+            elapsed_s = int(now - start_time)
+            print(
+                f"still running... [run {run_index}/{total_runs}] elapsed={elapsed_s}s "
+                f"events={processed}"
+            )
+            while next_heartbeat <= now:
+                next_heartbeat += heartbeat_interval_s
 
 
 @dataclass(frozen=True)
@@ -682,6 +722,7 @@ def run_bench(
     simulation_duration_s: float | None = DEFAULT_SIMULATION_DURATION_S,
     mixra_solver: str = "auto",
     quiet: bool = False,
+    heartbeat_interval_s: float = DEFAULT_HEARTBEAT_INTERVAL_S,
     progress_callback: Callable[[int, int, Dict[str, Any]], None] | None = None,
     mode: str = "benchmark",
 ) -> Dict[str, Any]:
@@ -758,7 +799,14 @@ def run_bench(
                                 f"Échec de l'initialisation pour {spec.label} ({state_label}), la simulation est ignorée."
                             )
                         raise
-                    simulator.run(max_time=simulation_duration_s)
+                    _run_with_heartbeat(
+                        simulator,
+                        run_index=run_index,
+                        total_runs=total_runs,
+                        max_time=simulation_duration_s,
+                        quiet=quiet,
+                        heartbeat_interval_s=heartbeat_interval_s,
+                    )
                     base_metrics = simulator.get_metrics()
                     effective_use_snir = _effective_snir_state(simulator, use_snir)
                     base_metrics.update(
