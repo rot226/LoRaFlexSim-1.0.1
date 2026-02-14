@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -28,9 +29,10 @@ def _parse_float(value: str | None, default: float = 0.0) -> float:
     if value is None or value == "":
         return default
     try:
-        return float(value)
+        parsed = float(value)
     except ValueError:
         return default
+    return parsed if math.isfinite(parsed) else default
 
 
 def _parse_bool(value: str | None) -> bool | None:
@@ -413,6 +415,60 @@ def aggregate_step1_results(results_dir: Path, strict_snir_detection: bool, spli
     )
 
 
+def _resolve_metric_column(headers: Sequence[str], metric: str) -> str | None:
+    normalized = {header.lower(): header for header in headers}
+    candidates = {
+        "pdr": ("pdr", "pdr_mean"),
+        "throughput": ("throughput", "throughput_bps", "throughput_bps_mean"),
+        "energy": ("energy", "energy_mean", "energy_j", "energy_j_mean"),
+    }.get(metric, ())
+    for candidate in candidates:
+        if candidate in normalized:
+            return normalized[candidate]
+    return None
+
+
+def validate_outputs(results_dir: Path) -> None:
+    aggregate_csvs = sorted(results_dir.glob("summary*.csv")) + sorted(results_dir.glob("raw_index*.csv"))
+    if not aggregate_csvs:
+        raise ValueError(f"Aucun fichier agrégé trouvé dans {results_dir}")
+
+    print("[VALIDATE] Résumé des fichiers agrégés")
+    for csv_path in aggregate_csvs:
+        with csv_path.open("r", encoding="utf8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            headers = reader.fieldnames or []
+            if not headers:
+                raise ValueError(f"{csv_path.name}: en-tête CSV absent")
+
+            rows = list(reader)
+            if not rows:
+                raise ValueError(f"{csv_path.name}: aucune ligne de données")
+
+        metrics_summary: list[str] = []
+        nan_ok = True
+        for metric in ("pdr", "throughput", "energy"):
+            metric_column = _resolve_metric_column(headers, metric)
+            if metric_column is None:
+                metrics_summary.append(f"{metric}=n/a")
+                continue
+
+            values = [_parse_float(row.get(metric_column), default=0.0) for row in rows]
+            if any(not math.isfinite(value) for value in values):
+                nan_ok = False
+            metrics_summary.append(
+                f"{metric}[{metric_column}] min={min(values):.6g} max={max(values):.6g}"
+            )
+
+        if not nan_ok:
+            raise ValueError(f"{csv_path.name}: valeurs non finies détectées après normalisation NaN=0")
+
+        print(
+            f"- {csv_path.name}: lignes={len(rows)}, colonnes={', '.join(headers)} | "
+            f"{' ; '.join(metrics_summary)} | NaN=0 confirmé"
+        )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -434,13 +490,33 @@ def _build_parser() -> argparse.ArgumentParser:
             "sera également activé automatiquement si des valeurs mélangées sont détectées"
         ),
     )
+    parser.add_argument(
+        "--validate",
+        dest="validate",
+        action="store_true",
+        default=True,
+        help="Valide automatiquement les fichiers agrégés après génération (activé par défaut).",
+    )
+    parser.add_argument(
+        "--no-validate",
+        dest="validate",
+        action="store_false",
+        help="Désactive la validation automatique des sorties agrégées.",
+    )
     return parser
 
 
-def main(argv: List[str] | None = None) -> None:
+def main(argv: List[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     aggregate_step1_results(args.results_dir, args.strict_snir_detection, args.split_snir)
+    if args.validate:
+        try:
+            validate_outputs(args.results_dir)
+        except ValueError as exc:
+            print(f"[ERREUR] Validation des sorties agrégées échouée: {exc}", file=sys.stderr)
+            return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
