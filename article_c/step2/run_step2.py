@@ -2768,7 +2768,11 @@ def _simulate_density(
     }
 
 
-def main(argv: Sequence[str] | None = None) -> None:
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    write_global_aggregated: bool | None = None,
+) -> None:
     args = parse_cli_args(argv)
     if getattr(args, "quiet", False):
         args.log_level = "quiet"
@@ -2928,20 +2932,30 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     aggregated_sizes = _read_nested_sizes(base_results_dir, replications)
+    should_write_global_aggregated = (
+        bool(args.global_aggregated)
+        if write_global_aggregated is None
+        else bool(write_global_aggregated)
+    )
     merge_stats = aggregate_results_by_size(
         base_results_dir,
-        write_global_aggregated=True,
+        write_global_aggregated=should_write_global_aggregated,
     )
     log_debug(
-        "Agrégation Step2 par taille: "
+        "Agrégation Step2 par taille (intermédiaire): "
         f"{merge_stats['size_count']} dossier(s) size_<N>, "
         f"{merge_stats['size_row_count']} ligne(s) consolidée(s)."
     )
-    if bool(args.global_aggregated):
+    if should_write_global_aggregated:
         log_debug(
-            "Agrégation Step2 globale: "
+            "Agrégation Step2 globale finale: "
             f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
             "dans results/aggregates/aggregated_results.csv."
+        )
+    else:
+        log_debug(
+            "Agrégation Step2 globale finale désactivée pour cette exécution "
+            "(mode campagne orchestrée)."
         )
     requested_set = set(requested_sizes)
     existing_sizes = sorted(requested_set & aggregated_sizes)
@@ -3386,20 +3400,30 @@ def main(argv: Sequence[str] | None = None) -> None:
             write_rows(clamp_rate_timestamp_path, clamp_rate_header, clamp_rate_values)
 
     aggregated_sizes = _read_nested_sizes(base_results_dir, replications)
+    should_write_global_aggregated = (
+        bool(args.global_aggregated)
+        if write_global_aggregated is None
+        else bool(write_global_aggregated)
+    )
     merge_stats = aggregate_results_by_size(
         base_results_dir,
-        write_global_aggregated=True,
+        write_global_aggregated=should_write_global_aggregated,
     )
     log_debug(
-        "Agrégation Step2 par taille: "
+        "Agrégation Step2 par taille (intermédiaire): "
         f"{merge_stats['size_count']} dossier(s) size_<N>, "
         f"{merge_stats['size_row_count']} ligne(s) consolidée(s)."
     )
-    if bool(args.global_aggregated):
+    if should_write_global_aggregated:
         log_debug(
-            "Agrégation Step2 globale: "
+            "Agrégation Step2 globale finale: "
             f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
             "dans results/aggregates/aggregated_results.csv."
+        )
+    else:
+        log_debug(
+            "Agrégation Step2 globale finale désactivée pour cette exécution "
+            "(mode campagne orchestrée)."
         )
     requested_set = set(requested_sizes)
     missing_sizes = sorted(requested_set - aggregated_sizes)
@@ -3417,11 +3441,20 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     done_flag_path = base_results_dir / "done.flag"
     incomplete_flag_path = base_results_dir / "incomplete.flag"
-    if not missing_sizes and not missing_replications and global_aggregation_succeeded:
+    aggregation_ready = not missing_sizes and not missing_replications
+    global_aggregation_required = should_write_global_aggregated
+    if aggregation_ready and (
+        not global_aggregation_required or global_aggregation_succeeded
+    ):
         done_flag_path.write_text("done\n", encoding="utf-8")
         if incomplete_flag_path.exists():
             incomplete_flag_path.unlink()
-        log_info("done.flag écrit (agrégation complète).")
+        log_info(
+            "done.flag écrit (agrégation par taille complète"
+            + (", agrégation globale finale incluse)."
+               if global_aggregation_required
+               else ", agrégation globale finale différée).")
+        )
     else:
         if done_flag_path.exists():
             done_flag_path.unlink()
@@ -3429,6 +3462,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             "status=incomplete",
             f"all_sizes_present={not missing_sizes}",
             f"all_replications_present={not missing_replications}",
+            f"global_aggregation_required={global_aggregation_required}",
             f"global_aggregation_succeeded={global_aggregation_succeeded}",
         ]
         if missing_sizes:
@@ -3439,12 +3473,13 @@ def main(argv: Sequence[str] | None = None) -> None:
                 for size, reps in sorted(missing_replications.items())
             )
             diagnostics.append(f"missing_replications={rep_details}")
-        missing_global_sizes = sorted(requested_set - global_aggregated_sizes)
-        if missing_global_sizes:
-            diagnostics.append(
-                f"global_missing_sizes={','.join(map(str, missing_global_sizes))}"
-            )
-        diagnostics.append(f"global_row_count={merge_stats.get('global_row_count', 0)}")
+        if global_aggregation_required:
+            missing_global_sizes = sorted(requested_set - global_aggregated_sizes)
+            if missing_global_sizes:
+                diagnostics.append(
+                    f"global_missing_sizes={','.join(map(str, missing_global_sizes))}"
+                )
+            diagnostics.append(f"global_row_count={merge_stats.get('global_row_count', 0)}")
         incomplete_flag_path.write_text("\n".join(diagnostics) + "\n", encoding="utf-8")
         log_debug(
             "ATTENTION: campagne incomplète, done.flag non écrit. "

@@ -1223,6 +1223,7 @@ def _build_step1_args(args: argparse.Namespace) -> list[str]:
         step1_args.append(
             "--plot-summary" if args.plot_summary else "--no-plot-summary"
         )
+    step1_args.append("--no-global-aggregated")
     if args.flat_output is not None:
         step1_args.append("--flat-output" if args.flat_output else "--no-flat-output")
     if args.profile_timing is not None:
@@ -1353,6 +1354,7 @@ def _build_step2_args(args: argparse.Namespace) -> list[str]:
         )
     if args.flat_output is not None:
         step2_args.append("--flat-output" if args.flat_output else "--no-flat-output")
+    step2_args.append("--no-global-aggregated")
     if getattr(args, "reset_status", False):
         step2_args.append("--reset-status")
     return step2_args
@@ -1645,7 +1647,10 @@ def main(argv: list[str] | None = None) -> None:
             step1_size_args.flat_output = False
             step1_size_args.reset_status = step1_status_reset_pending
             step_start = perf_counter()
-            run_step1(_build_step1_args(step1_size_args))
+            run_step1(
+                _build_step1_args(step1_size_args),
+                write_global_aggregated=False,
+            )
             step1_status_reset_pending = False
             _assert_no_global_writes_during_simulation(step1_results_dir, "Step1")
             _assert_cumulative_sizes_nested(
@@ -1685,7 +1690,10 @@ def main(argv: list[str] | None = None) -> None:
             step2_size_args.flat_output = False
             step2_size_args.reset_status = step2_status_reset_pending
             step_start = perf_counter()
-            run_step2(_build_step2_args(step2_size_args))
+            run_step2(
+                _build_step2_args(step2_size_args),
+                write_global_aggregated=False,
+            )
             step2_status_reset_pending = False
             _assert_no_global_writes_during_simulation(step2_results_dir, "Step2")
             _assert_cumulative_sizes_nested(
@@ -1807,31 +1815,20 @@ def main(argv: list[str] | None = None) -> None:
             replications_total,
             "Step1",
         )
-        # 4) Agrégation globale finale.
-        log_info("[PHASE] step1-aggregation")
-        step1_merge_stats = aggregate_results_by_size(
-            step1_results_dir,
-            write_global_aggregated=False,
-        )
-        log_debug(
-            "Step1: consolidation by_size finale exécutée "
-            f"({step1_merge_stats['global_row_count']} lignes)."
-        )
-    if not args.skip_step2:
-        step2_merge_stats = aggregate_results_by_size(
-            step2_results_dir,
-            write_global_aggregated=False,
-        )
-        log_debug(
-            "Step2: consolidation by_size finale exécutée "
-            f"({step2_merge_stats['global_row_count']} lignes)."
-        )
-    if not args.skip_step1:
-        # 5) Validation post-agrégation.
+        # 4) Validation post-agrégation par taille (sans global).
         _assert_aggregation_contract_consistent(
             step1_results_dir,
             requested_sizes,
             "Step1",
+        )
+        log_info("[PHASE] step1-aggregation-by-size")
+        step1_merge_stats = aggregate_results_by_size(
+            step1_results_dir,
+            write_global_aggregated=True,
+        )
+        log_info(
+            "Step1: agrégation globale finale écrite "
+            f"({step1_merge_stats['global_row_count']} lignes)."
         )
     if not args.skip_step2:
         _assert_output_layout_compliant(
@@ -1844,6 +1841,15 @@ def main(argv: list[str] | None = None) -> None:
             step2_results_dir,
             requested_sizes,
             "Step2",
+        )
+        log_info("[PHASE] step2-aggregation-by-size")
+        step2_merge_stats = aggregate_results_by_size(
+            step2_results_dir,
+            write_global_aggregated=True,
+        )
+        log_info(
+            "Step2: agrégation globale finale écrite "
+            f"({step2_merge_stats['global_row_count']} lignes)."
         )
 
     if args.strict_pipeline:
