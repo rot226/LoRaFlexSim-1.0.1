@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import json
 import logging
@@ -297,6 +298,61 @@ def _format_seconds(value: float | None) -> str:
     return f"{seconds:.1f}s"
 
 
+def _build_expected_runs(args: argparse.Namespace) -> set[tuple[str, int, str, int]]:
+    expected: set[tuple[str, int, str, int]] = set()
+    for snir_mode in args.snir:
+        for network_size in args.network_sizes:
+            for algorithm in args.algos:
+                for replication_index in range(1, args.replications + 1):
+                    seed = args.seeds_base + replication_index - 1
+                    expected.add((snir_mode, int(network_size), str(algorithm), int(seed)))
+    return expected
+
+
+def _collect_completed_runs(logs_root: Path) -> set[tuple[str, int, str, int]]:
+    completed: set[tuple[str, int, str, int]] = set()
+    for summary_path in logs_root.glob("SNIR_*/ns_*/algo_*/seed_*/campaign_summary.json"):
+        try:
+            payload = json.loads(summary_path.read_text(encoding="utf-8"))
+            contract = payload.get("contract", {})
+            snir_mode = str(contract.get("snir_mode", "")).strip().upper()
+            network_size = int(contract.get("network_size", 0))
+            algorithm = str(contract.get("algorithm", "")).strip()
+            seed = int(contract.get("seed", -1))
+        except (json.JSONDecodeError, OSError, ValueError, TypeError):
+            continue
+        if snir_mode in {"ON", "OFF"} and network_size > 0 and algorithm and seed >= 0:
+            completed.add((snir_mode, network_size, algorithm, seed))
+    return completed
+
+
+def _write_missing_combinations_report(
+    logs_root: Path,
+    expected_runs: set[tuple[str, int, str, int]],
+    completed_runs: set[tuple[str, int, str, int]],
+) -> Path:
+    report_path = logs_root / "campaign_missing_combinations.csv"
+    missing = sorted(expected_runs - completed_runs)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    with report_path.open("w", encoding="utf-8", newline="") as handle:
+        csv_writer = csv.DictWriter(
+            handle,
+            fieldnames=["snir", "network_size", "algorithm", "seed", "status"],
+        )
+        csv_writer.writeheader()
+        for snir_mode, network_size, algorithm, seed in missing:
+            csv_writer.writerow(
+                {
+                    "snir": snir_mode,
+                    "network_size": network_size,
+                    "algorithm": algorithm,
+                    "seed": seed,
+                    "status": "missing",
+                }
+            )
+    return report_path
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Lance une matrice de runs SFRD (SNIR x taille x algo x réplication)."
@@ -393,7 +449,7 @@ def main() -> None:
     run_single_campaign = _load_run_single_campaign()
     logs_root: Path = args.logs_root
     logs_root.mkdir(parents=True, exist_ok=True)
-    state_path = Path("sfrd/logs/campaign_state.json")
+    state_path = logs_root / "campaign_state.json"
     runs_state = _load_campaign_state(state_path)
 
     logger.info(
@@ -419,6 +475,8 @@ def main() -> None:
     epsilon = 1e-9
 
     stop_campaign = False
+    interrupted_by_user = False
+    expected_runs = _build_expected_runs(args)
 
     for snir_mode in args.snir:
         snir_folder = f"SNIR_{snir_mode}"
@@ -723,7 +781,8 @@ def main() -> None:
                             "Interruption clavier: run marqué incomplete.",
                             extra={**run_context, "statut": "incomplete"},
                         )
-                        raise
+                        interrupted_by_user = True
+                        break
                     except Exception as exc:  # pragma: no cover - robustesse CLI
                         duration_s = perf_counter() - t0
                         run_status = {
@@ -754,9 +813,15 @@ def main() -> None:
                         _write_campaign_state(state_path, runs_state)
                 if stop_campaign:
                     break
+                if interrupted_by_user:
+                    break
             if stop_campaign:
                 break
+            if interrupted_by_user:
+                break
         if stop_campaign:
+            break
+        if interrupted_by_user:
             break
 
     if stop_campaign:
@@ -773,8 +838,26 @@ def main() -> None:
         encoding="utf-8",
     )
 
+    if interrupted_by_user:
+        completed_set = _collect_completed_runs(logs_root)
+        missing_report = _write_missing_combinations_report(logs_root, expected_runs, completed_set)
+        logger.warning(
+            (
+                "Ctrl+C détecté: agrégation partielle proposée automatiquement. "
+                f"Combinaisons manquantes listées dans {missing_report.resolve()}"
+            ),
+            extra={"statut": "partial_suggested"},
+        )
+        if not args.skip_aggregate:
+            aggregate_path = aggregate_logs(logs_root, allow_partial=True)
+            logger.info(
+                f"Agrégation partielle terminée: {Path(aggregate_path).resolve()}",
+                extra={"statut": "partial_aggregated"},
+            )
+        return
+
     if not args.skip_aggregate:
-        aggregate_path = aggregate_logs(logs_root)
+        aggregate_path = aggregate_logs(logs_root, allow_partial=False)
         aggregate_root = Path(aggregate_path)
         final_csv_paths = [
             aggregate_root / "SNIR_OFF" / "pdr_results.csv",
