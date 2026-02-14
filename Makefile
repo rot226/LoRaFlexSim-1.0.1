@@ -9,4 +9,5 @@ validate:
 	pytest -k "lorawan or class_a or rx_windows or adr or flora_energy"
 	pytest -k "mobility"
 	pytest -k "rest_api or web_api"
+	pytest -k "plot_modules_source_contract or run_all_contract_guards or run_all_relaunch_missing_replications"
 	python scripts/run_validation.py
