@@ -1182,7 +1182,11 @@ def _step1_post_report(output_dir: Path, *, write_txt: bool = True) -> None:
         log_debug(f"Post-report écrit: {report_path}")
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(
+    argv: list[str] | None = None,
+    *,
+    write_global_aggregated: bool | None = None,
+) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
     if args.quiet:
@@ -1336,22 +1340,32 @@ def main(argv: list[str] | None = None) -> None:
         )
         log_debug(f"Rows per size: {sizes_summary}")
     requested_sizes_set = set(network_sizes)
+    should_write_global_aggregated = (
+        bool(args.global_aggregated)
+        if write_global_aggregated is None
+        else bool(write_global_aggregated)
+    )
     aggregated_sizes = _read_nested_sizes(output_dir, replications)
     all_sizes_completed = requested_sizes_set.issubset(aggregated_sizes)
     merge_stats = aggregate_results_by_size(
         output_dir,
-        write_global_aggregated=True,
+        write_global_aggregated=should_write_global_aggregated,
     )
     log_debug(
-        "Agrégation Step1 par taille: "
+        "Agrégation Step1 par taille (intermédiaire): "
         f"{merge_stats['size_count']} dossier(s) size_<N>, "
         f"{merge_stats['size_row_count']} ligne(s) consolidée(s)."
     )
-    if bool(args.global_aggregated):
+    if should_write_global_aggregated:
         log_debug(
-            "Agrégation Step1 globale: "
+            "Agrégation Step1 globale finale: "
             f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
             "dans results/aggregates/aggregated_results.csv."
+        )
+    else:
+        log_debug(
+            "Agrégation Step1 globale finale désactivée pour cette exécution "
+            "(mode campagne orchestrée)."
         )
     missing_sizes = sorted(set(network_sizes) - aggregated_sizes)
     missing_replications = _missing_replications_by_size(output_dir, network_sizes, replications)
@@ -1364,11 +1378,20 @@ def main(argv: list[str] | None = None) -> None:
     )
     done_flag_path = output_dir / "done.flag"
     incomplete_flag_path = output_dir / "incomplete.flag"
-    if all_sizes_completed and not missing_replications and global_aggregation_succeeded:
+    aggregation_ready = all_sizes_completed and not missing_replications
+    global_aggregation_required = should_write_global_aggregated
+    if aggregation_ready and (
+        not global_aggregation_required or global_aggregation_succeeded
+    ):
         (output_dir / "done.flag").write_text("done\n", encoding="utf-8")
         if incomplete_flag_path.exists():
             incomplete_flag_path.unlink()
-        log_info("done.flag écrit (agrégation complète).")
+        log_info(
+            "done.flag écrit (agrégation par taille complète"
+            + (", agrégation globale finale incluse)."
+               if global_aggregation_required
+               else ", agrégation globale finale différée).")
+        )
     else:
         if done_flag_path.exists():
             done_flag_path.unlink()
@@ -1376,6 +1399,7 @@ def main(argv: list[str] | None = None) -> None:
             "status=incomplete",
             f"all_sizes_present={all_sizes_completed}",
             f"all_replications_present={not missing_replications}",
+            f"global_aggregation_required={global_aggregation_required}",
             f"global_aggregation_succeeded={global_aggregation_succeeded}",
         ]
         if missing_sizes:
@@ -1386,12 +1410,13 @@ def main(argv: list[str] | None = None) -> None:
                 for size, reps in sorted(missing_replications.items())
             )
             diagnostics.append(f"missing_replications={rep_details}")
-        missing_global_sizes = sorted(requested_sizes_set - global_aggregated_sizes)
-        if missing_global_sizes:
-            diagnostics.append(
-                f"global_missing_sizes={','.join(map(str, missing_global_sizes))}"
-            )
-        diagnostics.append(f"global_row_count={merge_stats.get('global_row_count', 0)}")
+        if global_aggregation_required:
+            missing_global_sizes = sorted(requested_sizes_set - global_aggregated_sizes)
+            if missing_global_sizes:
+                diagnostics.append(
+                    f"global_missing_sizes={','.join(map(str, missing_global_sizes))}"
+                )
+            diagnostics.append(f"global_row_count={merge_stats.get('global_row_count', 0)}")
         incomplete_flag_path.write_text("\n".join(diagnostics) + "\n", encoding="utf-8")
         log_debug(
             "ATTENTION: campagne incomplète, done.flag non écrit. "
@@ -1400,7 +1425,12 @@ def main(argv: list[str] | None = None) -> None:
     if simulated_sizes:
         sizes_label = ",".join(str(size) for size in simulated_sizes)
         log_info(f"Tailles simulées: {sizes_label}")
-    if not aggregated_path.exists() and args.plot_summary and all_sizes_completed:
+    if (
+        not aggregated_path.exists()
+        and args.plot_summary
+        and all_sizes_completed
+        and should_write_global_aggregated
+    ):
         log_debug(
             "Plot de synthèse: aggregated_results.csv absent, agrégation globale déclenchée."
         )
@@ -1413,10 +1443,20 @@ def main(argv: list[str] | None = None) -> None:
             f"{merge_stats['global_row_count']} ligne(s) écrite(s) "
             "dans results/aggregates/aggregated_results.csv."
         )
-    elif not aggregated_path.exists() and args.plot_summary and not all_sizes_completed:
+    elif (
+        not aggregated_path.exists()
+        and args.plot_summary
+        and not all_sizes_completed
+        and should_write_global_aggregated
+    ):
         log_debug(
             "Plot de synthèse: agrégation globale ignorée car campagne incomplète "
             "(all_sizes_completed=False)."
+        )
+    elif not aggregated_path.exists() and args.plot_summary and not should_write_global_aggregated:
+        log_debug(
+            "Plot de synthèse: agrégation globale finale désactivée "
+            "(mode campagne orchestrée)."
         )
 
     if aggregated_path.exists():
