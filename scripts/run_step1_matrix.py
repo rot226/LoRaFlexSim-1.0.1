@@ -13,12 +13,18 @@ des résultats.
 from __future__ import annotations
 
 import argparse
+import csv
+import math
+import sys
 from pathlib import Path
 from typing import Iterable, Sequence
 
-import run_step1_experiments
-
 ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from scripts import run_step1_experiments
+from scripts.aggregate_step1_results import aggregate_step1_results, validate_outputs
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
 
 DEFAULT_ALGOS: Sequence[str] = ("adr", "apra", "mixra_h", "mixra_opt")
@@ -28,6 +34,18 @@ DEFAULT_NODE_COUNTS: Sequence[int] = (1000, 5000, 10000, 13000, 15000)
 DEFAULT_PACKET_INTERVALS: Sequence[float] = (600.0, 300.0, 150.0)
 DEFAULT_DURATION = 6 * 3600.0
 STATE_LABELS = {True: "snir_on", False: "snir_off"}
+PRECHECK_NODE_COUNTS: Sequence[int] = (80,)
+PRECHECK_SEEDS: Sequence[int] = (1, 2)
+PRECHECK_SNIR_STATES: Sequence[bool] = (False, True)
+PRECHECK_REQUIRED_COLUMNS: Sequence[str] = (
+    "algorithm",
+    "num_nodes",
+    "random_seed",
+    "PDR",
+    "DER",
+    "with_snir",
+    "snir_state",
+)
 
 
 def _parse_bool(value: str) -> bool:
@@ -70,6 +88,14 @@ def _snir_window_path(value: str | float | None) -> str | None:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--precheck",
+        action="store_true",
+        help=(
+            "Exécute un pré-vol bloquant (N=80, seeds=1..2, tous algos, SNIR on/off), "
+            "puis valide les sorties avant de lancer la campagne complète."
+        ),
+    )
     parser.add_argument(
         "--algos",
         nargs="+",
@@ -221,6 +247,76 @@ def _run_one(
     run_step1_experiments.main(argv)
 
 
+def _mini_csv_paths(results_dir: Path) -> list[Path]:
+    csv_paths = sorted(results_dir.rglob("*.csv"))
+    return [
+        path
+        for path in csv_paths
+        if path.name not in {"summary.csv", "raw_index.csv", "summary_snir_on.csv", "summary_snir_off.csv", "raw_index_snir_on.csv", "raw_index_snir_off.csv"}
+    ]
+
+
+def _validate_precheck_business_rules(results_dir: Path) -> None:
+    csv_paths = _mini_csv_paths(results_dir)
+    if not csv_paths:
+        raise ValueError("Aucun CSV de simulation trouvé dans le dossier de pré-vol.")
+
+    found_positive_pdr = False
+    for csv_path in csv_paths:
+        if csv_path.stat().st_size == 0:
+            raise ValueError(f"Fichier CSV vide détecté: {csv_path}")
+        with csv_path.open("r", encoding="utf8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            headers = reader.fieldnames or []
+            missing_columns = [name for name in PRECHECK_REQUIRED_COLUMNS if name not in headers]
+            if missing_columns:
+                raise ValueError(
+                    f"Colonnes manquantes dans {csv_path}: {', '.join(missing_columns)}"
+                )
+            rows = list(reader)
+            if not rows:
+                raise ValueError(f"Aucune donnée dans {csv_path}")
+            for row in rows:
+                try:
+                    pdr = float(row.get("PDR", "0") or 0.0)
+                except ValueError:
+                    pdr = 0.0
+                if math.isfinite(pdr) and pdr > 0.0:
+                    found_positive_pdr = True
+
+    if not found_positive_pdr:
+        raise ValueError("Contrôle métier échoué: aucun PDR strictement positif détecté dans la matrice de pré-vol.")
+
+
+def _run_precheck(*, args: argparse.Namespace, snir_states: Sequence[bool]) -> None:
+    precheck_dir = args.results_dir / "precheck"
+    print(f"[PRECHECK] Pré-vol activé: exécution mini-matrice dans {precheck_dir}")
+    for use_snir in PRECHECK_SNIR_STATES:
+        if use_snir not in snir_states:
+            continue
+        for seed in PRECHECK_SEEDS:
+            for nodes in PRECHECK_NODE_COUNTS:
+                for packet_interval in args.packet_intervals:
+                    for algorithm in DEFAULT_ALGOS:
+                        _run_one(
+                            algorithm=algorithm,
+                            nodes=nodes,
+                            packet_interval=packet_interval,
+                            seed=seed,
+                            use_snir=use_snir,
+                            snir_window=None,
+                            duration=args.duration,
+                            results_dir=precheck_dir,
+                            skip_existing=False,
+                            fading_std_db=args.fading_std_db,
+                        )
+
+    aggregate_step1_results(precheck_dir, strict_snir_detection=True, split_snir=True)
+    validate_outputs(precheck_dir)
+    _validate_precheck_business_rules(precheck_dir)
+    print("[PRECHECK][OK] Pré-vol validé, lancement de la campagne complète.")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -233,6 +329,15 @@ def main(argv: list[str] | None = None) -> None:
         parser.error(
             "--fading-std-db est obligatoire lorsque SNIR est activé (recommandé : 2 à 4 dB)."
         )
+
+    if args.precheck:
+        try:
+            _run_precheck(args=args, snir_states=snir_states)
+        except Exception as exc:
+            parser.error(
+                "Pré-vol bloquant échoué; campagne interrompue. "
+                f"Détail: {exc}"
+            )
 
     snir_windows: list[str | float | None]
     if args.snir_windows is None:
