@@ -9,6 +9,7 @@ existante.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 import threading
@@ -338,6 +339,154 @@ def _ensure_snir_state_effective(csv_row: Mapping[str, object]) -> None:
         raise ValueError("Le CSV exporté doit contenir le champ snir_state_effective.")
 
 
+def _channel_decode_parameters(channel: object | None) -> dict[str, object]:
+    if channel is None:
+        return {}
+    return {
+        "capture_mode": "flora" if bool(getattr(channel, "flora_capture", False)) else (
+            "advanced" if bool(getattr(channel, "advanced_capture", False)) else "basic"
+        ),
+        "capture_threshold_dB": getattr(channel, "capture_threshold_dB", None),
+        "capture_window_symbols": getattr(channel, "capture_window_symbols", None),
+        "snir_window": getattr(channel, "snir_window", None),
+        "snir_threshold_db": getattr(channel, "capture_threshold_dB", None),
+        "noise_floor_dB": getattr(channel, "noise_floor_dB", None),
+        "interference_dB": getattr(channel, "interference_dB", None),
+        "orthogonal_sf": getattr(channel, "orthogonal_sf", None),
+        "alpha_isf": getattr(channel, "alpha_isf", None),
+        "snir_model": getattr(channel, "snir_model", None),
+        "marginal_snir_margin_db": getattr(channel, "marginal_snir_margin_db", None),
+        "marginal_snir_drop_prob": getattr(channel, "marginal_snir_drop_prob", None),
+        "snir_fading_std": getattr(channel, "snir_fading_std", None),
+        "noise_floor_std": getattr(channel, "noise_floor_std", None),
+    }
+
+
+def _resolve_primary_channel(simulator: Simulator) -> object | None:
+    multichannel = getattr(simulator, "multichannel", None)
+    channels = list(getattr(multichannel, "channels", []) or [])
+    if channels:
+        return channels[0]
+    return getattr(simulator, "channel", None)
+
+
+def _snir_switch_report(simulator: Simulator, requested_use_snir: bool) -> dict[str, object]:
+    channel = _resolve_primary_channel(simulator)
+    decode_parameters = _channel_decode_parameters(channel)
+    use_snir_effective = bool(getattr(channel, "use_snir", requested_use_snir)) if channel else requested_use_snir
+    return {
+        "snir_mode_requested": STATE_LABELS.get(requested_use_snir, "snir_unknown"),
+        "snir_mode_effective": STATE_LABELS.get(use_snir_effective, "snir_unknown"),
+        "decode_gate": {
+            "off": "RSSI/SNR historique (sans SNIR explicite)",
+            "on": "RSSI + SNIR explicite (signal / (bruit + interférences))",
+            "changed": True,
+        },
+        "collision_model": {
+            "off": decode_parameters.get("capture_mode"),
+            "on": decode_parameters.get("capture_mode"),
+            "changed": False,
+        },
+        "capture_effect": {
+            "off": {
+                "capture_threshold_dB": decode_parameters.get("capture_threshold_dB"),
+                "capture_window_symbols": decode_parameters.get("capture_window_symbols"),
+            },
+            "on": {
+                "capture_threshold_dB": decode_parameters.get("capture_threshold_dB"),
+                "capture_window_symbols": decode_parameters.get("capture_window_symbols"),
+            },
+            "changed": False,
+        },
+        "snir_thresholds": {
+            "off": {
+                "capture_threshold_dB": decode_parameters.get("capture_threshold_dB"),
+                "marginal_snir_margin_db": decode_parameters.get("marginal_snir_margin_db"),
+                "marginal_snir_drop_prob": decode_parameters.get("marginal_snir_drop_prob"),
+            },
+            "on": {
+                "capture_threshold_dB": decode_parameters.get("capture_threshold_dB"),
+                "marginal_snir_margin_db": decode_parameters.get("marginal_snir_margin_db"),
+                "marginal_snir_drop_prob": decode_parameters.get("marginal_snir_drop_prob"),
+            },
+            "changed": False,
+        },
+        "interference_treatment": {
+            "off": {
+                "snir_window": decode_parameters.get("snir_window"),
+                "noise_floor_dB": decode_parameters.get("noise_floor_dB"),
+                "interference_dB": decode_parameters.get("interference_dB"),
+                "orthogonal_sf": decode_parameters.get("orthogonal_sf"),
+                "alpha_isf": decode_parameters.get("alpha_isf"),
+                "snir_model": decode_parameters.get("snir_model"),
+            },
+            "on": {
+                "snir_window": decode_parameters.get("snir_window"),
+                "noise_floor_dB": decode_parameters.get("noise_floor_dB"),
+                "interference_dB": decode_parameters.get("interference_dB"),
+                "orthogonal_sf": decode_parameters.get("orthogonal_sf"),
+                "alpha_isf": decode_parameters.get("alpha_isf"),
+                "snir_model": decode_parameters.get("snir_model"),
+            },
+            "changed": False,
+        },
+    }
+
+
+def _write_run_config(
+    output_dir: Path,
+    *,
+    args: argparse.Namespace,
+    simulator: Simulator,
+    effective_use_snir: bool,
+) -> Path:
+    primary_channel = _resolve_primary_channel(simulator)
+    radio_parameters = _channel_decode_parameters(primary_channel)
+    run_config = {
+        "seed": args.seed,
+        "algorithm": args.algorithm,
+        "mixra_solver": args.mixra_solver,
+        "simulation": {
+            "num_nodes": args.nodes,
+            "packet_interval_s": args.packet_interval,
+            "duration_s": args.duration,
+            "pure_poisson": args.pure_poisson,
+            "fading_model": args.fading_model,
+            "payload_bytes": PAYLOAD_BYTES,
+        },
+        "snir": {
+            "requested": bool(args.use_snir),
+            "effective": bool(effective_use_snir),
+            "state_requested": STATE_LABELS.get(args.use_snir, "snir_unknown"),
+            "state_effective": STATE_LABELS.get(effective_use_snir, "snir_unknown"),
+            "window": _snir_window_label(_resolve_snir_window(simulator)),
+            "switches": _snir_switch_report(simulator, bool(args.use_snir)),
+        },
+        "radio": radio_parameters,
+        "qos": {
+            "qos_active": bool(getattr(simulator, "qos_active", False)),
+            "qos_algorithm": getattr(simulator, "qos_algorithm", None),
+            "adr_node": bool(getattr(simulator, "adr_node", False)),
+            "adr_server": bool(getattr(simulator, "adr_server", False)),
+            "learning_method": sorted(
+                {
+                    str(getattr(node, "learning_method", ""))
+                    for node in (getattr(simulator, "nodes", []) or [])
+                    if getattr(node, "learning_method", "")
+                }
+            ),
+        },
+        "channel_config_path": str(args.channel_config) if args.channel_config else None,
+        "skip_lorawan_validation": bool(args.skip_lorawan_validation),
+    }
+    run_config_path = output_dir / "run_config.json"
+    run_config_path.write_text(
+        json.dumps(run_config, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return run_config_path
+
+
 def _ensure_multichannel_snir_consistency(
     simulator: Simulator,
     requested: bool | None = None,
@@ -516,6 +665,12 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
     interval_label = int(args.packet_interval) if float(args.packet_interval).is_integer() else args.packet_interval
     csv_path = output_dir / f"{args.algorithm}_N{args.nodes}_T{interval_label}{_snir_suffix(effective_use_snir)}.csv"
     _write_csv(csv_path, csv_row)
+    run_config_path = _write_run_config(
+        output_dir,
+        args=args,
+        simulator=simulator,
+        effective_use_snir=effective_use_snir,
+    )
 
     if not args.quiet:
         cluster_pdr = enriched.get("qos_cluster_pdr", {}) or {}
@@ -526,6 +681,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
             f"DER={enriched.get('DER', 0.0):.3f} | Collisions={int(enriched.get('collisions', 0))} "
             f"| Jain={enriched.get('jain_index', 0.0):.3f} | Capacité={enriched.get('throughput_bps', 0.0):.1f} bps"
         )
+        print(f"Configuration run exportée dans {run_config_path}")
 
     return {"metrics": enriched, "csv_path": csv_path}
 
