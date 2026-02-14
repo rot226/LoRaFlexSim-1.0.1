@@ -438,7 +438,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="by_size",
         help=(
             "Source des données CSV: by_size fusionne size_*/aggregated_results.csv en mémoire, "
-            "aggregates lit results/aggregates/aggregated_results.csv."
+            "aggregates lit results/aggregates/aggregated_results.csv. "
+            "Contrat: make_all_plots propage cette valeur aux post-modules compatibles "
+            "(main(source=...) ou CLI --source) et journalise la source effective résolue."
         ),
     )
     parser.add_argument(
@@ -1752,7 +1754,10 @@ def _run_post_module(
     args_list: list[str],
     *,
     close_figures: bool,
+    source: str,
 ) -> object:
+    if source not in CONTRACTUAL_SOURCES:
+        raise ValueError(f"Source contractuelle inconnue: {source}")
     module = importlib.import_module(module_path)
     if not hasattr(module, "main"):
         raise AttributeError(f"Module {module_path} sans fonction main().")
@@ -1767,6 +1772,8 @@ def _run_post_module(
         kwargs["argv"] = args_list
     if "close_figures" in parameters or supports_kwargs:
         kwargs["close_figures"] = close_figures
+    if "source" in parameters or supports_kwargs:
+        kwargs["source"] = source
     if kwargs:
         module.main(**kwargs)
     else:
@@ -2302,6 +2309,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     if post_ready:
         post_formats = ",".join(export_formats)
+        post_effective_sources: dict[str, str] = {}
         post_args: dict[str, list[str]] = {
             "article_c.reproduce_author_results": [
                 "--step1-results",
@@ -2310,6 +2318,8 @@ def main(argv: list[str] | None = None) -> None:
                 str(step2_csv),
                 "--formats",
                 post_formats,
+                "--source",
+                args.source,
             ],
             "article_c.compare_with_snir": [
                 "--step1-csv",
@@ -2318,6 +2328,8 @@ def main(argv: list[str] | None = None) -> None:
                 str(step2_csv),
                 "--formats",
                 post_formats,
+                "--source",
+                args.source,
             ],
             "article_c.plot_cluster_der": [
                 "--formats",
@@ -2349,7 +2361,12 @@ def main(argv: list[str] | None = None) -> None:
                     module_path,
                     post_args.get(module_path, []),
                     close_figures=False,
+                    source=args.source,
                 )
+                resolved_source = str(
+                    getattr(module, "LAST_EFFECTIVE_SOURCE", args.source)
+                )
+                post_effective_sources[module_path] = resolved_source
                 missing_legends = _check_legends_for_module(
                     module_path=module_path,
                     module=module,
@@ -2388,6 +2405,18 @@ def main(argv: list[str] | None = None) -> None:
                     status="FAIL",
                     message=str(exc),
                 )
+        if post_effective_sources:
+            log_info("\nVérification de cohérence des sources (post-modules):")
+            for module_path, effective_source in post_effective_sources.items():
+                if effective_source == args.source:
+                    log_info(
+                        f"[post][OK] {module_path}: source effective={effective_source}"
+                    )
+                else:
+                    log_info(
+                        f"[post][WARN] {module_path}: source effective={effective_source} "
+                        f"(demandée={args.source})"
+                    )
     else:
         skip_reason = "comparaisons ignorées (Step1/Step2 indisponibles)"
         for module_path in POST_PLOT_MODULES:
