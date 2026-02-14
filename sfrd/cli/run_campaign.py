@@ -5,10 +5,68 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import logging
+from datetime import datetime
 from pathlib import Path
 from time import perf_counter
 
 from sfrd.parse.aggregate import aggregate_logs
+
+
+class _CampaignContextFilter(logging.Filter):
+    """Injecte des champs de contexte par défaut pour le formatage des logs."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        defaults = {
+            "run_id": "-",
+            "snir": "-",
+            "algo": "-",
+            "network_size": "-",
+            "seed": "-",
+            "statut": "-",
+        }
+        for key, value in defaults.items():
+            if not hasattr(record, key):
+                setattr(record, key, value)
+        return True
+
+
+def _configure_logging() -> tuple[logging.Logger, Path]:
+    """Configure le logger campagne: console INFO + fichier DEBUG."""
+
+    logger = logging.getLogger("sfrd.campaign")
+    logger.setLevel(logging.DEBUG)
+    logger.handlers.clear()
+    logger.propagate = False
+
+    logs_dir = Path("sfrd/logs")
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    log_path = logs_dir / f"campaign_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+    formatter = logging.Formatter(
+        fmt=(
+            "%(asctime)s | run_id=%(run_id)s | snir=%(snir)s | algo=%(algo)s | "
+            "network_size=%(network_size)s | seed=%(seed)s | statut=%(statut)s | "
+            "%(levelname)s | %(message)s"
+        ),
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    context_filter = _CampaignContextFilter()
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    console_handler.addFilter(context_filter)
+    logger.addHandler(console_handler)
+
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    file_handler.addFilter(context_filter)
+    logger.addHandler(file_handler)
+
+    return logger, log_path
 
 
 def _load_run_single_campaign():
@@ -116,9 +174,19 @@ def main() -> None:
     """Exécution principale."""
 
     args = _parse_args()
+    logger, campaign_log_path = _configure_logging()
     run_single_campaign = _load_run_single_campaign()
     logs_root: Path = args.logs_root
     logs_root.mkdir(parents=True, exist_ok=True)
+
+    logger.info(
+        "Démarrage de campagne.",
+        extra={"statut": "start"},
+    )
+    logger.info(
+        f"Journal campagne: {campaign_log_path.resolve()}",
+        extra={"statut": "log_path"},
+    )
 
     run_index: list[dict[str, object]] = []
     total_runs = len(args.network_sizes) * len(args.algos) * len(args.snir) * args.replications
@@ -158,10 +226,25 @@ def main() -> None:
                         encoding="utf-8",
                     )
 
-                    print(
-                        f"[{current_run}/{total_runs}] "
-                        f"SNIR={snir_mode} | N={network_size} | algo={algorithm} | "
-                        f"seed={seed} | start"
+                    run_context = {
+                        "run_id": f"{current_run}/{total_runs}",
+                        "snir": snir_mode,
+                        "algo": algorithm,
+                        "network_size": network_size,
+                        "seed": seed,
+                    }
+
+                    logger.info(
+                        "Run démarré.",
+                        extra={**run_context, "statut": "start"},
+                    )
+                    logger.debug(
+                        (
+                            "Chemins fichiers bruts attendus: "
+                            f"raw_packets.csv={run_dir / 'raw_packets.csv'} ; "
+                            f"raw_energy.csv={run_dir / 'raw_energy.csv'}"
+                        ),
+                        extra={**run_context, "statut": "raw_paths"},
                     )
 
                     t0 = perf_counter()
@@ -198,9 +281,20 @@ def main() -> None:
                             }
                         )
                         completed_runs += 1
-                        print(
-                            f"[{current_run}/{total_runs}] done | duration={duration_s:.1f}s | "
-                            f"tx={tx} | success={success} | pdr={pdr:.4f}"
+                        logger.info(
+                            (
+                                f"Run terminé: duration={duration_s:.1f}s | tx={tx} | "
+                                f"success={success} | pdr={pdr:.4f}"
+                            ),
+                            extra={**run_context, "statut": "completed"},
+                        )
+                        logger.debug(
+                            (
+                                f"Résumé run: {Path(result['summary_path']).resolve()} | "
+                                f"raw_packets.csv={run_dir / 'raw_packets.csv'} | "
+                                f"raw_energy.csv={run_dir / 'raw_energy.csv'}"
+                            ),
+                            extra={**run_context, "statut": "artifacts"},
                         )
                     except Exception as exc:  # pragma: no cover - robustesse CLI
                         duration_s = perf_counter() - t0
@@ -214,11 +308,17 @@ def main() -> None:
                             encoding="utf-8",
                         )
                         failed_runs += 1
-                        print(
-                            f"[{current_run}/{total_runs}] done | duration={duration_s:.1f}s | "
-                            "tx=NA | success=NA | pdr=NA"
+                        logger.error(
+                            (
+                                "Run échoué: "
+                                f"duration={duration_s:.1f}s | tx=NA | success=NA | pdr=NA"
+                            ),
+                            extra={**run_context, "statut": "failed"},
                         )
-                        print(f"[{current_run}/{total_runs}] error: {exc}")
+                        logger.exception(
+                            f"Erreur run: {exc}",
+                            extra={**run_context, "statut": "failed"},
+                        )
 
     (logs_root / "campaign_runs.json").write_text(
         json.dumps(run_index, indent=2, ensure_ascii=False, sort_keys=True),
@@ -227,11 +327,37 @@ def main() -> None:
 
     if not args.skip_aggregate:
         aggregate_path = aggregate_logs(logs_root)
-        print(f"Agrégation terminée: {aggregate_path}")
+        aggregate_root = Path(aggregate_path)
+        final_csv_paths = [
+            aggregate_root / "SNIR_OFF" / "pdr_results.csv",
+            aggregate_root / "SNIR_OFF" / "throughput_results.csv",
+            aggregate_root / "SNIR_OFF" / "energy_results.csv",
+            aggregate_root / "SNIR_OFF" / "sf_distribution.csv",
+            aggregate_root / "SNIR_ON" / "pdr_results.csv",
+            aggregate_root / "SNIR_ON" / "throughput_results.csv",
+            aggregate_root / "SNIR_ON" / "energy_results.csv",
+            aggregate_root / "SNIR_ON" / "sf_distribution.csv",
+            aggregate_root / "learning_curve_ucb.csv",
+        ]
+        logger.info(
+            f"Agrégation terminée: {aggregate_root.resolve()}",
+            extra={"statut": "aggregated"},
+        )
+        for csv_path in final_csv_paths:
+            logger.info(
+                f"CSV final généré: {csv_path.resolve()}",
+                extra={"statut": "final_csv"},
+            )
     else:
-        print("Agrégation automatique ignorée (--skip-aggregate).")
+        logger.info(
+            "Agrégation automatique ignorée (--skip-aggregate).",
+            extra={"statut": "skipped"},
+        )
 
-    print(f"completed={completed_runs}, failed={failed_runs}, total={total_runs}")
+    logger.info(
+        f"Bilan campagne: completed={completed_runs}, failed={failed_runs}, total={total_runs}",
+        extra={"statut": "done"},
+    )
 
 
 if __name__ == "__main__":
