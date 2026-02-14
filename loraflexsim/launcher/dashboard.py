@@ -1,4 +1,5 @@
 import inspect
+import json
 import os
 import sys
 import math
@@ -63,6 +64,7 @@ total_runs = 1
 current_run = 0
 runs_events: list[pd.DataFrame] = []
 runs_metrics: list[dict] = []
+runs_configs: list[dict] = []
 auto_fast_forward = False
 timeline_fig = go.Figure()
 last_event_index = 0
@@ -118,6 +120,65 @@ def _validate_positive_inputs() -> bool:
         export_message.object = "⚠️ L'intervalle doit être supérieur à 0 !"
         return False
     return True
+
+
+def _validate_critical_launch_inputs() -> bool:
+    """Validate critical parameters required to produce meaningful uplinks."""
+
+    if int(num_gateways_input.value) <= 0:
+        export_message.object = "⚠️ Au moins une gateway est requise pour lancer la simulation !"
+        return False
+
+    if int(packets_input.value) <= 0:
+        export_message.object = (
+            "⚠️ Uplink désactivé : définissez un nombre de paquets par nœud strictement positif."
+        )
+        return False
+
+    if float(real_time_duration_input.value) <= 0:
+        export_message.object = (
+            "⚠️ Durée de simulation invalide : la durée réelle doit être strictement positive."
+        )
+        return False
+
+    return True
+
+
+def _build_run_config(seed_offset: int = 0) -> dict:
+    """Build a normalized run configuration payload for audit and diff."""
+
+    seed_val = int(seed_input.value)
+    run_seed = seed_val + seed_offset if seed_val != 0 else None
+    run_index = current_run if current_run > 0 else seed_offset + 1
+
+    return {
+        "run": run_index,
+        "seed": run_seed,
+        "warmup_intervals": 0,
+        "simulation_duration_s": float(real_time_duration_input.value),
+        "uplink_enabled": int(packets_input.value) > 0,
+        "traffic": {
+            "mode": "Random" if mode_select.value == "Aléatoire" else "Periodic",
+            "packet_interval_s": float(interval_input.value),
+            "first_packet_interval_s": float(first_packet_input.value),
+            "packets_per_node": int(packets_input.value),
+            "payload_size_bytes": int(payload_size_input.value),
+        },
+        "radio": {
+            "snir_mode": bool(qos_snir_toggle.value),
+            "collision_capture_model": "flora" if flora_mode_toggle.value else "omnet",
+            "phy_model": "flora" if flora_mode_toggle.value else "omnet",
+            "fixed_sf": int(sf_value_input.value) if fixed_sf_checkbox.value else None,
+            "fixed_tx_power_dbm": float(tx_power_input.value) if fixed_power_checkbox.value else None,
+            "num_channels": int(num_channels_input.value),
+            "channel_distribution": "random" if channel_dist_select.value == "Aléatoire" else "round-robin",
+        },
+        "topology": {
+            "num_nodes": int(num_nodes_input.value),
+            "num_gateways": int(num_gateways_input.value),
+            "area_size_m": float(area_input.value),
+        },
+    }
 
 
 # --- Utilitaires QoS -------------------------------------------------------
@@ -832,14 +893,9 @@ def setup_simulation(seed_offset: int = 0):
         export_message.object = "⚠️ Simulation déjà en cours !"
         return
 
-    # Valider que des paquets ou une durée réelle sont définis
-    if int(packets_input.value) <= 0 and float(real_time_duration_input.value) <= 0:
-        export_message.object = (
-            "⚠️ Définissez un nombre de paquets ou une durée réelle supérieurs à 0 !"
-        )
-        return
-
     if not _validate_positive_inputs():
+        return
+    if not _validate_critical_launch_inputs():
         return
 
     if qos_toggle.value:
@@ -933,6 +989,7 @@ def setup_simulation(seed_offset: int = 0):
         seed=seed,
         phy_model="flora" if flora_mode_toggle.value else "omnet",
     )
+    sim.run_config = _build_run_config(seed_offset)
     setattr(sim, "paused", False)
 
 
@@ -1064,34 +1121,30 @@ def setup_simulation(seed_offset: int = 0):
 
 # --- Bouton "Lancer la simulation" ---
 def on_start(event):
-    global total_runs, current_run, runs_events, runs_metrics
+    global total_runs, current_run, runs_events, runs_metrics, runs_configs
 
     # Vérifier qu'une simulation n'est pas déjà en cours
     if sim is not None and getattr(sim, "running", False):
         export_message.object = "⚠️ Simulation déjà en cours !"
         return
 
-    # Valider les entrées avant de démarrer
-    if int(packets_input.value) <= 0 and float(real_time_duration_input.value) <= 0:
-        export_message.object = (
-            "⚠️ Définissez un nombre de paquets ou une durée réelle supérieurs à 0 !"
-        )
-        return
-
     if not _validate_positive_inputs():
+        return
+    if not _validate_critical_launch_inputs():
         return
 
     total_runs = int(num_runs_input.value)
     current_run = 1
     runs_events.clear()
     runs_metrics.clear()
+    runs_configs.clear()
     setup_simulation(seed_offset=0)
 
 
 # --- Bouton "Arrêter la simulation" ---
 def on_stop(event):
     global sim, sim_callback, chrono_callback, map_anim_callback, start_time, max_real_time, paused
-    global current_run, total_runs, runs_events, auto_fast_forward
+    global current_run, total_runs, runs_events, auto_fast_forward, runs_configs
     # If called programmatically (e.g. after fast_forward), allow cleanup even
     # if the simulation has already stopped.
     if sim is None or (event is not None and not getattr(sim, "running", False)):
@@ -1126,6 +1179,14 @@ def on_stop(event):
         runs_metrics.append(sim.get_metrics())
     except Exception:
         pass
+
+    run_config = getattr(sim, "run_config", None)
+    if isinstance(run_config, dict):
+        config_payload = dict(run_config)
+        config_payload.setdefault("run", current_run)
+        if runs_metrics:
+            config_payload["pdr_percent"] = float(runs_metrics[-1].get("PDR", 0.0))
+        runs_configs.append(config_payload)
 
     if current_run < total_runs:
         if runs_metrics:
@@ -1218,7 +1279,7 @@ def on_stop(event):
 def exporter_csv(event=None):
     """Export simulation results as normalized CSV files in the current directory."""
     dest_dir = os.getcwd()
-    global runs_events, runs_metrics
+    global runs_events, runs_metrics, runs_configs
 
     if not runs_events:
         export_message.object = "⚠️ Lance la simulation d'abord !"
@@ -1282,9 +1343,20 @@ def exporter_csv(event=None):
         metrics_path = os.path.join(dest_dir, "raw_energy.csv")
         raw_energy_df.to_csv(metrics_path, index=False, encoding="utf-8")
 
+        written_configs: list[str] = []
+        for idx, run_cfg in enumerate(runs_configs, start=1):
+            cfg_path = os.path.join(dest_dir, f"run_{idx}_config.json")
+            with open(cfg_path, "w", encoding="utf-8") as cfg_file:
+                json.dump(run_cfg, cfg_file, indent=2, ensure_ascii=False, sort_keys=True)
+            written_configs.append(cfg_path)
+
+        config_summary = ""
+        if written_configs:
+            cfg_links = "<br>".join(f"Config run {i + 1}: <b>{path}</b>" for i, path in enumerate(written_configs))
+            config_summary = f"<br>{cfg_links}"
         export_message.object = (
             f"✅ Résultats exportés : <b>{packets_path}</b><br>"
-            f"Métriques : <b>{metrics_path}</b><br>(Ouvre-les avec Excel ou pandas)"
+            f"Métriques : <b>{metrics_path}</b>{config_summary}<br>(Ouvre-les avec Excel ou pandas)"
         )
 
         try:
