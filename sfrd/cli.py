@@ -154,6 +154,8 @@ def run_campaign(
             "collisions": int(metrics.get("collisions", 0)),
             "tx_attempted": int(metrics.get("tx_attempted", 0)),
             "rx_delivered": int(metrics.get("rx_delivered", 0)),
+            "qos_refresh_benchmark": metrics.get("qos_refresh_benchmark", {}),
+            "runtime_profile_s": metrics.get("runtime_profile_s", {}),
             "ucb_learning_curve": learning_curve,
         },
     }
