@@ -60,7 +60,47 @@ def _is_run_completed(run_dir: Path) -> bool:
     return all(path.is_file() for path in required_files)
 
 
-def _load_campaign_state(state_path: Path) -> dict[str, str]:
+def _normalize_run_entry(run_id: str, payload: object) -> dict[str, object] | None:
+    """Normalise une entrée de run du state file, ancien ou nouveau format."""
+
+    if isinstance(payload, str):
+        return {
+            "status": payload,
+            "snir": None,
+            "network_size": None,
+            "algo": None,
+            "seed": None,
+            "paths": {},
+            "duration_s": None,
+        }
+
+    if not isinstance(payload, dict):
+        return None
+
+    status = payload.get("status")
+    if not isinstance(status, str):
+        return None
+
+    paths = payload.get("paths", {})
+    if not isinstance(paths, dict):
+        paths = {}
+
+    duration_s = payload.get("duration_s")
+    if not isinstance(duration_s, (float, int)):
+        duration_s = None
+
+    return {
+        "status": status,
+        "snir": payload.get("snir"),
+        "network_size": payload.get("network_size"),
+        "algo": payload.get("algo"),
+        "seed": payload.get("seed"),
+        "paths": dict(paths),
+        "duration_s": float(duration_s) if duration_s is not None else None,
+    }
+
+
+def _load_campaign_state(state_path: Path) -> dict[str, dict[str, object]]:
     """Charge l'index de progression des runs."""
 
     if not state_path.exists():
@@ -74,15 +114,21 @@ def _load_campaign_state(state_path: Path) -> dict[str, str]:
     runs = payload.get("runs")
     if not isinstance(runs, dict):
         return {}
-    valid_status = {"pending", "done", "failed"}
-    state: dict[str, str] = {}
-    for run_id, status in runs.items():
-        if isinstance(run_id, str) and isinstance(status, str) and status in valid_status:
-            state[run_id] = status
+    valid_status = {"pending", "running", "done", "failed", "incomplete"}
+    state: dict[str, dict[str, object]] = {}
+    for run_id, run_payload in runs.items():
+        if not isinstance(run_id, str):
+            continue
+        entry = _normalize_run_entry(run_id, run_payload)
+        if entry is None:
+            continue
+        if entry["status"] not in valid_status:
+            continue
+        state[run_id] = entry
     return state
 
 
-def _write_campaign_state(state_path: Path, runs_state: dict[str, str]) -> None:
+def _write_campaign_state(state_path: Path, runs_state: dict[str, dict[str, object]]) -> None:
     """Persist l'index de progression des runs."""
 
     state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -94,6 +140,30 @@ def _write_campaign_state(state_path: Path, runs_state: dict[str, str]) -> None:
         json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True),
         encoding="utf-8",
     )
+
+
+def _new_run_entry(
+    *,
+    snir_mode: str,
+    network_size: int,
+    algorithm: str,
+    seed: int,
+    run_dir: Path,
+) -> dict[str, object]:
+    return {
+        "snir": snir_mode,
+        "network_size": network_size,
+        "algo": algorithm,
+        "seed": seed,
+        "status": "pending",
+        "paths": {
+            "run_dir": str(run_dir),
+            "summary": str(run_dir / "campaign_summary.json"),
+            "raw_packets": str(run_dir / "raw_packets.csv"),
+            "raw_energy": str(run_dir / "raw_energy.csv"),
+        },
+        "duration_s": None,
+    }
 
 
 def _configure_logging() -> tuple[logging.Logger, Path]:
@@ -359,31 +429,73 @@ def main() -> None:
                         seed=int(seed),
                     )
 
-                    if run_key not in runs_state:
-                        runs_state[run_key] = "pending"
+                    run_entry = runs_state.get(run_key)
+                    if run_entry is None:
+                        run_entry = _new_run_entry(
+                            snir_mode=snir_mode,
+                            network_size=int(network_size),
+                            algorithm=str(algorithm),
+                            seed=int(seed),
+                            run_dir=run_dir,
+                        )
+                        runs_state[run_key] = run_entry
                         _write_campaign_state(state_path, runs_state)
+                    else:
+                        run_entry.update(
+                            {
+                                "snir": snir_mode,
+                                "network_size": int(network_size),
+                                "algo": str(algorithm),
+                                "seed": int(seed),
+                            }
+                        )
+                        run_paths = run_entry.get("paths")
+                        if not isinstance(run_paths, dict):
+                            run_paths = {}
+                        run_paths.update(
+                            {
+                                "run_dir": str(run_dir),
+                                "summary": str(run_dir / "campaign_summary.json"),
+                                "raw_packets": str(run_dir / "raw_packets.csv"),
+                                "raw_energy": str(run_dir / "raw_energy.csv"),
+                            }
+                        )
+                        run_entry["paths"] = run_paths
 
                     if args.force_rerun:
+                        run_entry["status"] = "pending"
+                        run_entry["duration_s"] = None
+                        _write_campaign_state(state_path, runs_state)
                         logger.info(
                             "Run marqué pour relance forcée (--force-rerun).",
                             extra={**run_context, "statut": "rerun"},
                         )
-                    elif args.resume and _is_run_completed(run_dir):
-                        runs_state[run_key] = "done"
-                        _write_campaign_state(state_path, runs_state)
-                        skipped_runs += 1
-                        run_index.append(
-                            {
-                                **run_input,
-                                "run_dir": str(run_dir),
-                                "summary_path": str(run_dir / "campaign_summary.json"),
-                            }
-                        )
-                        logger.info(
-                            "Run déjà terminé: SKIPPED.",
-                            extra={**run_context, "statut": "skipped"},
-                        )
-                        continue
+                    elif args.resume:
+                        run_status = str(run_entry.get("status", "pending")).strip().lower()
+                        has_valid_artifacts = _is_run_completed(run_dir)
+                        if run_status == "done" and has_valid_artifacts:
+                            skipped_runs += 1
+                            run_index.append(
+                                {
+                                    **run_input,
+                                    "run_dir": str(run_dir),
+                                    "summary_path": str(run_dir / "campaign_summary.json"),
+                                }
+                            )
+                            logger.info(
+                                "Run déjà terminé: SKIPPED.",
+                                extra={**run_context, "statut": "skipped"},
+                            )
+                            continue
+                        if run_status == "done" and not has_valid_artifacts:
+                            logger.warning(
+                                "Run marqué done mais artefacts invalides: relance.",
+                                extra={**run_context, "statut": "resume_invalid_artifacts"},
+                            )
+                        if run_status in {"failed", "incomplete", "pending", "running", "done"}:
+                            run_entry["status"] = "pending"
+                            run_entry["duration_s"] = None
+                            _write_campaign_state(state_path, runs_state)
 
                     logger.info(
                         "Run démarré.",
@@ -399,6 +511,9 @@ def main() -> None:
                     )
 
                     t0 = perf_counter()
+                    run_entry["status"] = "running"
+                    run_entry["duration_s"] = None
+                    _write_campaign_state(state_path, runs_state)
                     try:
                         result = run_single_campaign(
                             network_size=int(network_size),
@@ -494,7 +609,8 @@ def main() -> None:
                             }
                         )
                         completed_runs += 1
-                        runs_state[run_key] = "done"
+                        run_entry["status"] = "done"
+                        run_entry["duration_s"] = duration_s
                         _write_campaign_state(state_path, runs_state)
                         logger.info(
                             (
@@ -513,7 +629,8 @@ def main() -> None:
                         )
                     except MetricsInconsistentError as exc:
                         failed_runs += 1
-                        runs_state[run_key] = "failed"
+                        run_entry["status"] = "failed"
+                        run_entry["duration_s"] = None
                         _write_campaign_state(state_path, runs_state)
                         logger.error(
                             f"Run échoué: {exc}",
@@ -521,6 +638,16 @@ def main() -> None:
                         )
                         stop_campaign = True
                         break
+                    except KeyboardInterrupt:
+                        duration_s = perf_counter() - t0
+                        run_entry["status"] = "incomplete"
+                        run_entry["duration_s"] = duration_s
+                        _write_campaign_state(state_path, runs_state)
+                        logger.warning(
+                            "Interruption clavier: run marqué incomplete.",
+                            extra={**run_context, "statut": "incomplete"},
+                        )
+                        raise
                     except Exception as exc:  # pragma: no cover - robustesse CLI
                         duration_s = perf_counter() - t0
                         run_status = {
@@ -533,7 +660,8 @@ def main() -> None:
                             encoding="utf-8",
                         )
                         failed_runs += 1
-                        runs_state[run_key] = "failed"
+                        run_entry["status"] = "failed"
+                        run_entry["duration_s"] = duration_s
                         _write_campaign_state(state_path, runs_state)
                         logger.error(
                             (
