@@ -157,6 +157,7 @@ DEFAULT_BOUNDED_RATE_CLAMP = False
 DEFAULT_BOUNDED_RATE_STRICT = False
 MASSIVE_NAN_RATIO = 0.5
 _WARNED_METRIC_ALGO_SNIR_CLUSTER: set[tuple[str, str, str, str]] = set()
+_WARNED_METRIC_CHECKS: set[tuple[str, str, str]] = set()
 _CLUSTER_BASE_LABELS = {
     cluster_id: str(config["base_label"])
     for cluster_id, config in CLUSTER_CANONICAL_TABLE.items()
@@ -171,6 +172,7 @@ _CLUSTER_ALIASES = {
 
 class MetricCheckSeverity(str, Enum):
     INFO = "info"
+    SKIP = "skip"
     WARN = "warn"
     ERROR = "error"
 
@@ -179,12 +181,28 @@ def _emit_metric_check(severity: MetricCheckSeverity, message: str) -> None:
     if severity is MetricCheckSeverity.INFO:
         LOGGER.info("[METRIC-CHECK][INFO] %s", message)
         return
+    if severity is MetricCheckSeverity.SKIP:
+        LOGGER.info("[METRIC-CHECK][SKIP] %s", message)
+        return
     if severity is MetricCheckSeverity.WARN:
         LOGGER.warning("[METRIC-CHECK][WARN] %s", message)
         warnings.warn(f"[WARN] {message}", stacklevel=3)
         return
     LOGGER.error("[METRIC-CHECK][ERROR] %s", message)
     warnings.warn(f"[ERROR] {message}", stacklevel=3)
+
+
+def _emit_metric_check_once(
+    severity: MetricCheckSeverity,
+    message: str,
+    *,
+    dedup_key: tuple[str, str, str] | None = None,
+) -> None:
+    if dedup_key is not None and severity is MetricCheckSeverity.WARN:
+        if dedup_key in _WARNED_METRIC_CHECKS:
+            return
+        _WARNED_METRIC_CHECKS.add(dedup_key)
+    _emit_metric_check(severity, message)
 
 
 def set_default_figure_clamp_enabled(enabled: bool) -> None:
@@ -814,6 +832,7 @@ def warn_metric_checks(
     values: Iterable[float],
     label: str,
     *,
+    x_values: Iterable[float] | None = None,
     min_value: float | None = None,
     max_value: float | None = None,
     expected_monotonic: str | None = None,
@@ -842,6 +861,28 @@ def warn_metric_checks(
             MetricCheckSeverity.WARN,
             f"{label}: maximum observé {observed_max:.6g} > borne max {max_value:.6g}.",
         )
+
+    x_cleaned: list[float] = []
+    if x_values is not None:
+        for x_value in x_values:
+            if isinstance(x_value, (int, float)) and not math.isnan(float(x_value)):
+                x_cleaned.append(float(x_value))
+    unique_sizes = len(set(x_cleaned)) if x_cleaned else 0
+    if unique_sizes <= 1:
+        cause = "campagne partielle (une seule network_size)"
+        _emit_metric_check(
+            MetricCheckSeverity.SKIP,
+            f"{label}: contrôle de variance ignoré ({cause}).",
+        )
+        return MetricStatus.OK
+    if len(cleaned) < 3:
+        cause = f"n tailles insuffisantes ({len(cleaned)} points valides)"
+        _emit_metric_check(
+            MetricCheckSeverity.SKIP,
+            f"{label}: contrôle de variance ignoré ({cause}).",
+        )
+        return MetricStatus.OK
+
     metric_state = is_constant_metric(cleaned, threshold=variance_threshold)
     if metric_state is MetricStatus.CONSTANT:
         _emit_metric_check(
@@ -882,6 +923,11 @@ def warn_if_inconsistent(series: Mapping[str, object]) -> MetricStatus:
     """
 
     label = str(series.get("label", "série"))
+    metric_warn_key = (
+        str(series.get("algo", "?")),
+        str(series.get("snir_mode", "?")),
+        str(series.get("metric", "?")),
+    )
     x_values_raw = series.get("x")
     y_values_raw = series.get("y")
     if not isinstance(x_values_raw, Iterable) or isinstance(x_values_raw, (str, bytes)):
@@ -934,6 +980,7 @@ def warn_if_inconsistent(series: Mapping[str, object]) -> MetricStatus:
     metric_status = warn_metric_checks(
         y_values,
         label,
+        x_values=x_values,
         min_value=series.get("min_value") if isinstance(series.get("min_value"), (int, float)) else None,
         max_value=series.get("max_value") if isinstance(series.get("max_value"), (int, float)) else None,
         expected_monotonic=str(monotonic) if monotonic else None,
@@ -943,17 +990,19 @@ def warn_if_inconsistent(series: Mapping[str, object]) -> MetricStatus:
 
     x_deltas = [current - previous for previous, current in zip(x_values, x_values[1:], strict=False)]
     if x_deltas and any(delta < -tolerance for delta in x_deltas):
-        _emit_metric_check(
+        _emit_metric_check_once(
             MetricCheckSeverity.WARN,
             f"{label}: abscisses non triées (possible inversion d'axes).",
+            dedup_key=metric_warn_key,
         )
 
     if len(x_values) > 1:
         x_status = is_constant_metric(x_values, threshold=variance_threshold)
         if x_status is MetricStatus.CONSTANT and is_constant_metric(y_values, threshold=variance_threshold) is not MetricStatus.CONSTANT:
-            _emit_metric_check(
+            _emit_metric_check_once(
                 MetricCheckSeverity.WARN,
                 f"{label}: abscisses quasi constantes avec ordonnées variables (possible inversion d'axes).",
+                dedup_key=metric_warn_key,
             )
 
     return metric_status
@@ -1043,6 +1092,9 @@ def warn_metric_checks_by_group(
                 "expected_monotonic": expected_monotonic,
                 "monotonic_tolerance": monotonic_tolerance,
                 "variance_threshold": variance_threshold,
+                "algo": key[group_keys_list.index("algo")] if "algo" in group_keys_list else "?",
+                "snir_mode": key[group_keys_list.index("snir_mode")] if "snir_mode" in group_keys_list else "?",
+                "metric": metric_key,
             }
         )
 
