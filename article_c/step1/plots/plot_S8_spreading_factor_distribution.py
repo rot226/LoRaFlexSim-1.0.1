@@ -404,7 +404,11 @@ def main(
             for (algo, fallback, snir_mode), values in distribution_by_group.items()
         ]
     else:
-        rows = load_step1_rows_with_fallback(step_dir, allow_sample=allow_sample)
+        rows = load_step1_rows_with_fallback(
+            step_dir,
+            allow_sample=allow_sample,
+            source=LAST_EFFECTIVE_SOURCE,
+        )
         if not rows:
             warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)
             return
@@ -419,7 +423,11 @@ def main(
         for row in rows
     ]
     rows = filter_mixra_opt_fallback(rows)
-    size_rows = load_step1_rows_with_fallback(step_dir, allow_sample=allow_sample)
+    size_rows = load_step1_rows_with_fallback(
+        step_dir,
+        allow_sample=allow_sample,
+        source=LAST_EFFECTIVE_SOURCE,
+    )
     if not size_rows:
         warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)
         return
