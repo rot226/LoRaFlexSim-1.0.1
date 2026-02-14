@@ -13,6 +13,10 @@ from time import perf_counter
 from sfrd.parse.aggregate import aggregate_logs
 
 
+class MetricsInconsistentError(RuntimeError):
+    """Erreur levée quand les métriques de run sont incohérentes."""
+
+
 class _CampaignContextFilter(logging.Filter):
     """Injecte des champs de contexte par défaut pour le formatage des logs."""
 
@@ -194,6 +198,8 @@ def main() -> None:
     failed_runs = 0
     current_run = 0
 
+    epsilon = 1e-9
+
     for snir_mode in args.snir:
         snir_folder = f"SNIR_{snir_mode}"
         snir_cli_value = "snir_on" if snir_mode == "ON" else "snir_off"
@@ -261,7 +267,29 @@ def main() -> None:
                         metrics = result.get("summary", {}).get("metrics", {})
                         tx = int(metrics.get("tx_attempted", 0))
                         success = int(metrics.get("rx_delivered", 0))
-                        pdr = float(metrics.get("pdr", 0.0))
+                        pdr = (success / tx) if tx > 0 else 0.0
+                        summary_pdr = float(metrics.get("pdr", 0.0))
+
+                        if tx > 0 and abs(summary_pdr - (success / tx)) >= epsilon:
+                            run_status = {
+                                "status": "metrics_inconsistent",
+                                "duration_s": duration_s,
+                                "summary_path": str(result["summary_path"]),
+                                "tx": tx,
+                                "success": success,
+                                "pdr": summary_pdr,
+                                "expected_pdr": success / tx,
+                                "epsilon": epsilon,
+                            }
+                            (run_dir / "run_status.json").write_text(
+                                json.dumps(run_status, indent=2, ensure_ascii=False, sort_keys=True),
+                                encoding="utf-8",
+                            )
+                            raise MetricsInconsistentError(
+                                "Métriques incohérentes: "
+                                f"pdr={summary_pdr:.12f}, success/tx={(success / tx):.12f}, "
+                                f"epsilon={epsilon}"
+                            )
 
                         run_status = {
                             "status": "completed",
@@ -295,6 +323,12 @@ def main() -> None:
                                 f"raw_energy.csv={run_dir / 'raw_energy.csv'}"
                             ),
                             extra={**run_context, "statut": "artifacts"},
+                        )
+                    except MetricsInconsistentError as exc:
+                        failed_runs += 1
+                        logger.error(
+                            f"Run échoué: {exc}",
+                            extra={**run_context, "statut": "metrics_inconsistent"},
                         )
                     except Exception as exc:  # pragma: no cover - robustesse CLI
                         duration_s = perf_counter() - t0

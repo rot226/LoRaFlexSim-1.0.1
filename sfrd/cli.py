@@ -132,6 +132,10 @@ def run_campaign(
     if ucb_history:
         export_ucb_history_csv(ucb_history, output_path / "ucb_history.csv")
 
+    tx_attempted = int(metrics.get("tx_attempted", 0))
+    rx_delivered = int(metrics.get("rx_delivered", 0))
+    computed_pdr = (rx_delivered / tx_attempted) if tx_attempted > 0 else 0.0
+
     summary = {
         "contract": {
             "network_size": int(network_size),
@@ -149,11 +153,11 @@ def run_campaign(
             "internal_entrypoint": "loraflexsim.launcher.Simulator.run",
         },
         "metrics": {
-            "pdr": float(metrics.get("PDR", 0.0)),
+            "pdr": float(computed_pdr),
             "throughput_bps": float(metrics.get("throughput_bps", 0.0)),
             "collisions": int(metrics.get("collisions", 0)),
-            "tx_attempted": int(metrics.get("tx_attempted", 0)),
-            "rx_delivered": int(metrics.get("rx_delivered", 0)),
+            "tx_attempted": tx_attempted,
+            "rx_delivered": rx_delivered,
             "qos_refresh_benchmark": metrics.get("qos_refresh_benchmark", {}),
             "runtime_profile_s": metrics.get("runtime_profile_s", {}),
             "ucb_learning_curve": learning_curve,
