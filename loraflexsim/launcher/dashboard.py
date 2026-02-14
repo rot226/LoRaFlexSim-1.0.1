@@ -1216,7 +1216,7 @@ def on_stop(event):
 
 # --- Export CSV local : Méthode universelle ---
 def exporter_csv(event=None):
-    """Export simulation results as CSV files in the current directory."""
+    """Export simulation results as normalized CSV files in the current directory."""
     dest_dir = os.getcwd()
     global runs_events, runs_metrics
 
@@ -1230,17 +1230,60 @@ def exporter_csv(event=None):
             export_message.object = "⚠️ Aucune donnée à exporter !"
             return
 
-        timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-        chemin = os.path.join(dest_dir, f"resultats_simulation_{timestamp}.csv")
-        df.to_csv(chemin, index=False, encoding="utf-8")
+        payload_bytes = int(getattr(sim, "payload_size_bytes", 0) or 0)
+        packets_df = pd.DataFrame(
+            {
+                "time": pd.to_numeric(df.get("start_time"), errors="coerce"),
+                "node_id": pd.to_numeric(df.get("node_id"), errors="coerce"),
+                "sf": pd.to_numeric(df.get("sf"), errors="coerce"),
+                "tx_ok": 1,
+                "rx_ok": (
+                    pd.Series(df.get("result", ""), index=df.index)
+                    .eq("Success")
+                    .astype(int)
+                ),
+                "payload_bytes": payload_bytes,
+                "run": pd.to_numeric(df.get("run"), errors="coerce"),
+            }
+        )
+        packets_df = packets_df.dropna(subset=["time", "node_id", "sf", "run"])
+        packets_df = packets_df[packets_df["sf"].between(7, 12)]
+        packets_df[["node_id", "sf", "tx_ok", "rx_ok", "payload_bytes", "run"]] = (
+            packets_df[["node_id", "sf", "tx_ok", "rx_ok", "payload_bytes", "run"]]
+            .astype("int64")
+        )
 
-        metrics_path = os.path.join(dest_dir, f"metrics_{timestamp}.csv")
+        packets_path = os.path.join(dest_dir, "raw_packets.csv")
+        packets_df.to_csv(packets_path, index=False, encoding="utf-8")
+
+        duration_by_run = (
+            packets_df.groupby("run", as_index=False)["time"].max().rename(
+                columns={"time": "sim_duration_s"}
+            )
+        )
         if runs_metrics:
             metrics_df = pd.json_normalize(runs_metrics)
-            metrics_df.to_csv(metrics_path, index=False, encoding="utf-8")
+            energy_by_run = pd.DataFrame(
+                {
+                    "run": list(range(1, len(metrics_df) + 1)),
+                    "total_energy_joule": pd.to_numeric(
+                        metrics_df.get("energy_J"), errors="coerce"
+                    ),
+                }
+            )
+        else:
+            energy_by_run = pd.DataFrame(
+                {"run": duration_by_run["run"], "total_energy_joule": float("nan")}
+            )
+
+        raw_energy_df = duration_by_run.merge(energy_by_run, on="run", how="left")
+        raw_energy_df = raw_energy_df[["total_energy_joule", "sim_duration_s"]]
+        raw_energy_df = raw_energy_df.fillna(0.0)
+        metrics_path = os.path.join(dest_dir, "raw_energy.csv")
+        raw_energy_df.to_csv(metrics_path, index=False, encoding="utf-8")
 
         export_message.object = (
-            f"✅ Résultats exportés : <b>{chemin}</b><br>"
+            f"✅ Résultats exportés : <b>{packets_path}</b><br>"
             f"Métriques : <b>{metrics_path}</b><br>(Ouvre-les avec Excel ou pandas)"
         )
 
