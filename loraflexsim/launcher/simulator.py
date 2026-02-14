@@ -539,6 +539,7 @@ class Simulator:
         ucb_episode_time_window_s: float = 60.0,
         progress_every_s: float | None = None,
         progress_every_steps: int | None = None,
+        qos_periodic_refresh_interval_s: float | None = None,
     ):
         """
         Initialise la simulation LoRaFlexSim avec les entités et paramètres donnés.
@@ -617,6 +618,9 @@ class Simulator:
             (s).
         :param ping_slot_offset: Décalage initial entre le beacon et le premier
             ping slot (s).
+        :param qos_periodic_refresh_interval_s: Intervalle explicite (s) pour
+            plafonner la fréquence des rafraîchissements QoS périodiques
+            (``None`` pour conserver la configuration du gestionnaire QoS).
         :param channel_config: Fichier INI optionnel contenant une section
             ``[channel]`` pour surcharger les paramètres radio (fading SNIR,
             bruit, capture…). Aucun effet si absent.
@@ -1273,9 +1277,11 @@ class Simulator:
         self.qos_manager = None
         self.qos_algorithm = None
         self._next_qos_reconfig_time: float | None = None
+        self.qos_periodic_refresh_interval_s = qos_periodic_refresh_interval_s
         self.runtime_profile_s: dict[str, float] = {}
         self._qos_refresh_count = 0
         self._qos_refresh_total_cost_s = 0.0
+        self._qos_refresh_max_cost_s = 0.0
 
         # Statistiques cumulatives
         self.packets_sent = 0
@@ -1496,6 +1502,9 @@ class Simulator:
 
     def _on_qos_applied(self, manager) -> None:
         self.qos_manager = manager
+        explicit_interval = getattr(self, "qos_periodic_refresh_interval_s", None)
+        if explicit_interval is not None:
+            manager.qos_periodic_refresh_interval_s = float(explicit_interval)
         interval_getter = getattr(manager, "periodic_refresh_interval_s", None)
         interval = (
             interval_getter()
@@ -1565,6 +1574,8 @@ class Simulator:
             logger.exception("Échec de l'évaluation du rafraîchissement QoS (%s).", reason)
             self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
             return
+        if not needs_refresh and reason == "metrics" and self._qos_refresh_count == 0:
+            needs_refresh = True
         if not needs_refresh:
             self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
             return
@@ -1580,7 +1591,9 @@ class Simulator:
             self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
             return
         self._qos_refresh_count += 1
-        self._qos_refresh_total_cost_s += float(duration_s)
+        refresh_duration = float(duration_s)
+        self._qos_refresh_total_cost_s += refresh_duration
+        self._qos_refresh_max_cost_s = max(self._qos_refresh_max_cost_s, refresh_duration)
         sim_time = refresh_context.get("sim_time", getattr(self, "current_time", None))
         try:
             sim_time_value = float(sim_time)
@@ -2945,6 +2958,8 @@ class Simulator:
             "qos_refresh_benchmark": {
                 "duration_s": sim_time,
                 "refresh_count": self._qos_refresh_count,
+                "total_refresh_cost_s": self._qos_refresh_total_cost_s,
+                "max_refresh_cost_s": self._qos_refresh_max_cost_s,
                 "avg_refresh_cost_s": qos_refresh_avg_cost_s,
             },
             "runtime_profile_s": dict(self.runtime_profile_s),
