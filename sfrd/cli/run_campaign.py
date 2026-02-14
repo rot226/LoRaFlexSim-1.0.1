@@ -35,6 +35,65 @@ class _CampaignContextFilter(logging.Filter):
         return True
 
 
+def _run_key(
+    *,
+    snir_mode: str,
+    network_size: int,
+    algorithm: str,
+    seed: int,
+) -> str:
+    """Construit une clé stable pour indexer l'état d'un run."""
+
+    return f"SNIR_{snir_mode}|ns_{network_size}|algo_{algorithm}|seed_{seed}"
+
+
+def _is_run_completed(run_dir: Path) -> bool:
+    """Vérifie si un run est déjà finalisé via ses artefacts essentiels."""
+
+    required_files = [
+        run_dir / "campaign_summary.json",
+        run_dir / "raw_packets.csv",
+        run_dir / "raw_energy.csv",
+    ]
+    return all(path.is_file() for path in required_files)
+
+
+def _load_campaign_state(state_path: Path) -> dict[str, str]:
+    """Charge l'index de progression des runs."""
+
+    if not state_path.exists():
+        return {}
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, ValueError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    runs = payload.get("runs")
+    if not isinstance(runs, dict):
+        return {}
+    valid_status = {"pending", "done", "failed"}
+    state: dict[str, str] = {}
+    for run_id, status in runs.items():
+        if isinstance(run_id, str) and isinstance(status, str) and status in valid_status:
+            state[run_id] = status
+    return state
+
+
+def _write_campaign_state(state_path: Path, runs_state: dict[str, str]) -> None:
+    """Persist l'index de progression des runs."""
+
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "runs": dict(sorted(runs_state.items())),
+    }
+    state_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
 def _configure_logging() -> tuple[logging.Logger, Path]:
     """Configure le logger campagne: console INFO + fichier DEBUG."""
 
@@ -165,6 +224,18 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Désactive l'agrégation automatique en fin de campagne.",
     )
+    parser.add_argument(
+        "--resume",
+        dest="resume",
+        action="store_true",
+        default=True,
+        help="Reprend une campagne en sautant les runs déjà terminés (par défaut).",
+    )
+    parser.add_argument(
+        "--force-rerun",
+        action="store_true",
+        help="Relance tous les runs même si les artefacts existent.",
+    )
     args = parser.parse_args()
 
     if args.replications <= 0:
@@ -182,6 +253,8 @@ def main() -> None:
     run_single_campaign = _load_run_single_campaign()
     logs_root: Path = args.logs_root
     logs_root.mkdir(parents=True, exist_ok=True)
+    state_path = logs_root / "campaign_state.json"
+    runs_state = _load_campaign_state(state_path)
 
     logger.info(
         "Démarrage de campagne.",
@@ -196,6 +269,7 @@ def main() -> None:
     total_runs = len(args.network_sizes) * len(args.algos) * len(args.snir) * args.replications
     completed_runs = 0
     failed_runs = 0
+    skipped_runs = 0
     current_run = 0
 
     epsilon = 1e-9
@@ -239,6 +313,38 @@ def main() -> None:
                         "network_size": network_size,
                         "seed": seed,
                     }
+                    run_key = _run_key(
+                        snir_mode=snir_mode,
+                        network_size=int(network_size),
+                        algorithm=str(algorithm),
+                        seed=int(seed),
+                    )
+
+                    if run_key not in runs_state:
+                        runs_state[run_key] = "pending"
+                        _write_campaign_state(state_path, runs_state)
+
+                    if args.force_rerun:
+                        logger.info(
+                            "Run marqué pour relance forcée (--force-rerun).",
+                            extra={**run_context, "statut": "rerun"},
+                        )
+                    elif args.resume and _is_run_completed(run_dir):
+                        runs_state[run_key] = "done"
+                        _write_campaign_state(state_path, runs_state)
+                        skipped_runs += 1
+                        run_index.append(
+                            {
+                                **run_input,
+                                "run_dir": str(run_dir),
+                                "summary_path": str(run_dir / "campaign_summary.json"),
+                            }
+                        )
+                        logger.info(
+                            "Run déjà terminé: SKIPPED.",
+                            extra={**run_context, "statut": "skipped"},
+                        )
+                        continue
 
                     logger.info(
                         "Run démarré.",
@@ -309,6 +415,8 @@ def main() -> None:
                             }
                         )
                         completed_runs += 1
+                        runs_state[run_key] = "done"
+                        _write_campaign_state(state_path, runs_state)
                         logger.info(
                             (
                                 f"Run terminé: duration={duration_s:.1f}s | tx={tx} | "
@@ -326,6 +434,8 @@ def main() -> None:
                         )
                     except MetricsInconsistentError as exc:
                         failed_runs += 1
+                        runs_state[run_key] = "failed"
+                        _write_campaign_state(state_path, runs_state)
                         logger.error(
                             f"Run échoué: {exc}",
                             extra={**run_context, "statut": "metrics_inconsistent"},
@@ -342,6 +452,8 @@ def main() -> None:
                             encoding="utf-8",
                         )
                         failed_runs += 1
+                        runs_state[run_key] = "failed"
+                        _write_campaign_state(state_path, runs_state)
                         logger.error(
                             (
                                 "Run échoué: "
@@ -389,7 +501,11 @@ def main() -> None:
         )
 
     logger.info(
-        f"Bilan campagne: completed={completed_runs}, failed={failed_runs}, total={total_runs}",
+        (
+            "Bilan campagne: "
+            f"completed={completed_runs}, skipped={skipped_runs}, "
+            f"failed={failed_runs}, total={total_runs}"
+        ),
         extra={"statut": "done"},
     )
 
