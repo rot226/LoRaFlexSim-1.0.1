@@ -8,6 +8,7 @@ import csv
 import math
 from pathlib import Path
 from random import Random
+from numbers import Real
 from typing import Iterable
 import warnings
 
@@ -113,10 +114,20 @@ def _as_float(value: str | None) -> float | None:
         return None
 
 
-def _as_bool(value: str | None) -> bool:
-    if value is None or value == "":
+def _as_bool(value: object | None) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
         return False
-    return value.strip().lower() in {"1", "true", "yes", "vrai"}
+    if isinstance(value, Real):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"", "0", "false", "no", "non", "faux", "off"}:
+            return False
+        if normalized in {"1", "true", "yes", "oui", "vrai", "on"}:
+            return True
+    return False
 
 
 def _available_network_sizes(rows: Iterable[dict[str, object]]) -> list[int]:
