@@ -10,7 +10,7 @@ def reset_inputs():
     dashboard.num_nodes_input.value = 1
     dashboard.area_input.value = 100.0
     dashboard.packets_input.value = 1
-    dashboard.real_time_duration_input.value = 0.0
+    dashboard.real_time_duration_input.value = 60.0
     dashboard.export_message.object = ""
 
 
@@ -33,6 +33,30 @@ def test_invalid_nodes_prevents_start():
 def test_invalid_area_prevents_start():
     reset_inputs()
     dashboard.area_input.value = -1
+    dashboard.on_start(None)
+    assert dashboard.sim is None
+    assert "⚠️" in dashboard.export_message.object
+
+
+def test_zero_gateway_prevents_start():
+    reset_inputs()
+    dashboard.num_gateways_input.value = 0
+    dashboard.on_start(None)
+    assert dashboard.sim is None
+    assert "⚠️" in dashboard.export_message.object
+
+
+def test_zero_packets_prevents_start():
+    reset_inputs()
+    dashboard.packets_input.value = 0
+    dashboard.on_start(None)
+    assert dashboard.sim is None
+    assert "⚠️" in dashboard.export_message.object
+
+
+def test_zero_duration_prevents_start():
+    reset_inputs()
+    dashboard.real_time_duration_input.value = 0.0
     dashboard.on_start(None)
     assert dashboard.sim is None
     assert "⚠️" in dashboard.export_message.object
