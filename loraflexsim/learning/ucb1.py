@@ -29,7 +29,12 @@ class UCB1Bandit:
     """
 
     def __init__(
-        self, n_arms: int = 6, window_size: int = 20, *, traffic_weighted_mean: bool = False
+        self,
+        n_arms: int = 6,
+        window_size: int = 20,
+        *,
+        traffic_weighted_mean: bool = False,
+        exploration_coefficient: float = 2.0,
     ) -> None:
         self.n_arms = n_arms
         self.counts: List[int] = [0 for _ in range(self.n_arms)]
@@ -38,6 +43,7 @@ class UCB1Bandit:
         self.total_rounds = 0
         self.window_size = max(1, window_size)
         self.traffic_weighted_mean = traffic_weighted_mean
+        self.exploration_coefficient = max(float(exploration_coefficient), 0.0)
         self._reward_windows: List[Deque[Tuple[float, float]]] = [
             deque(maxlen=self.window_size) for _ in range(self.n_arms)
         ]
@@ -56,7 +62,7 @@ class UCB1Bandit:
         ucb_values = []
         for arm in range(self.n_arms):
             mean_reward = self.values[arm]
-            confidence = math.sqrt(2 * math.log(self.total_rounds) / self.counts[arm])
+            confidence = math.sqrt(self.exploration_coefficient * math.log(self.total_rounds) / self.counts[arm])
             ucb_values.append(mean_reward + confidence)
 
         return int(max(range(self.n_arms), key=lambda arm: ucb_values[arm]))
@@ -137,10 +143,14 @@ class LoRaSFSelectorUCB1:
         reward_window: int = 20,
         traffic_weighted_mean: bool = False,
         reward_mode: str = "snir_binary",
+        exploration_coefficient: float = 2.0,
     ) -> None:
         self.reward_window = max(1, reward_window)
         self.bandit = UCB1Bandit(
-            n_arms=6, window_size=self.reward_window, traffic_weighted_mean=traffic_weighted_mean
+            n_arms=6,
+            window_size=self.reward_window,
+            traffic_weighted_mean=traffic_weighted_mean,
+            exploration_coefficient=exploration_coefficient,
         )
         self.success_weight = success_weight
         self.snir_margin_weight = snir_margin_weight

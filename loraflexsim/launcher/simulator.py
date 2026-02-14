@@ -533,6 +533,10 @@ class Simulator:
         validation_mode: str | None = None,
         skip_downlink_validation: bool = False,
         tick_ns: int | None = None,
+        ucb_selector_kwargs: dict | None = None,
+        ucb_episode_mode: str = "packets",
+        ucb_episode_packet_window: int = 1,
+        ucb_episode_time_window_s: float = 60.0,
         progress_every_s: float | None = None,
         progress_every_steps: int | None = None,
     ):
@@ -1303,6 +1307,13 @@ class Simulator:
         self._events_log_map: dict[int, dict] = {}
         self.ucb_history: list[dict[str, float | int | str]] = []
         self._ucb_episode_counter = 0
+        self.ucb_selector_kwargs = dict(ucb_selector_kwargs or {})
+        mode = str(ucb_episode_mode or "packets").strip().lower()
+        self.ucb_episode_mode = mode if mode in {"packets", "time"} else "packets"
+        self.ucb_episode_packet_window = max(1, int(ucb_episode_packet_window))
+        self.ucb_episode_time_window_s = max(0.001, float(ucb_episode_time_window_s))
+        self._ucb_episode_packet_counter = 0
+        self._ucb_episode_time_anchor = 0.0
         # Nœuds de classe C actuellement maintenus en écoute périodique
         self._class_c_polling_nodes: set[int] = set()
         self.out_of_service_queue: deque[tuple[int, str, float]] = deque()
@@ -1771,7 +1782,7 @@ class Simulator:
 
             if not node.adr and getattr(node, "learning_method", None) == "ucb1":
                 if getattr(node, "sf_selector", None) is None:
-                    node.sf_selector = LoRaSFSelectorUCB1()
+                    node.sf_selector = LoRaSFSelectorUCB1(**self.ucb_selector_kwargs)
                 selected_sf = node.sf_selector.select_sf()
                 if isinstance(selected_sf, str) and selected_sf.upper().startswith("SF"):
                     try:
@@ -2173,10 +2184,18 @@ class Simulator:
                 reward_raw = float(selector_info.get("reward_raw", reward_normalized))
                 success_rate = selector_info.get("success_rate", node.pdr)
                 energy_norm = float(selector_info.get("energy_norm", 0.0))
-                self._ucb_episode_counter += 1
+                if self.ucb_episode_mode == "time":
+                    episode = int(self.current_time / self.ucb_episode_time_window_s) + 1
+                else:
+                    self._ucb_episode_packet_counter += 1
+                    episode = (
+                        (self._ucb_episode_packet_counter - 1)
+                        // self.ucb_episode_packet_window
+                    ) + 1
+                self._ucb_episode_counter = max(self._ucb_episode_counter, episode)
                 self.ucb_history.append(
                     {
-                        "episode": self._ucb_episode_counter,
+                        "episode": episode,
                         "reward_raw": reward_raw,
                         "reward_normalized": float(reward_normalized),
                         "chosen_sf": int(node.sf),

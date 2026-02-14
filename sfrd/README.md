@@ -73,3 +73,34 @@ Stratégie d'alignement des épisodes en cas de multi-runs UCB:
 1. chaque run produit sa courbe locale avec des épisodes démarrant à 1;
 2. l'agrégateur aligne les runs par numéro d'épisode;
 3. la valeur `reward` finale est la **moyenne simple** des `reward_normalized` disponibles pour cet épisode (sans interpolation des épisodes absents).
+
+
+## Configuration UCB externalisée
+
+Le fichier `sfrd/config/ucb_config.json` contient désormais:
+
+- `lambda_E` (poids énergie, injecté directement dans `energy_penalty_weight` du sélecteur UCB);
+- `exploration_coefficient` (bonus UCB: `sqrt(c * log(t) / n)`);
+- `reward_window` (fenêtre glissante interne);
+- `episode` (`mode=packets|time`, `packet_window`, `time_window_s`).
+
+Aucun recalcul a posteriori de reward n'est effectué: la courbe d'apprentissage
+`learning_curve_ucb.csv` est dérivée directement de `reward_normalized` journalisé par épisode.
+
+## Mini-campagne de calibration UCB
+
+Exemple (sous-ensemble tailles/seeds):
+
+```bash
+python -m sfrd.cli.calibrate_ucb --network-sizes 40 80 --replications 2 --seeds-base 101 --warmup-s 0.0
+```
+
+Cette commande exécute plusieurs configs candidates, compare et archive:
+
+- `pdr_results.csv`
+- `throughput_results.csv`
+- `learning_curve_ucb.csv`
+
+par candidate sous `sfrd/output/ucb_calibration/<candidate>/...`, puis choisit une
+config finale selon un critère documenté (`maximize(pdr_mean - 0.2 * energy_mean)`) et
+la fige dans `sfrd/config/ucb_config.json` pour les campagnes “preuves”.
