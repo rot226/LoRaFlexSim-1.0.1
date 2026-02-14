@@ -7,6 +7,7 @@ import importlib.util
 import json
 import logging
 import math
+import os
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
@@ -46,7 +47,29 @@ def _run_key(
 ) -> str:
     """Construit une clé stable pour indexer l'état d'un run."""
 
-    return f"SNIR_{snir_mode}|ns_{network_size}|algo_{algorithm}|seed_{seed}"
+    return json.dumps([snir_mode, int(network_size), str(algorithm), int(seed)], ensure_ascii=False)
+
+
+def _find_existing_run_entry(
+    runs_state: dict[str, dict[str, object]],
+    *,
+    snir_mode: str,
+    network_size: int,
+    algorithm: str,
+    seed: int,
+) -> tuple[str, dict[str, object]] | None:
+    """Retrouve une entrée existante y compris en cas d'ancien format de clé."""
+
+    expected = (snir_mode, int(network_size), str(algorithm), int(seed))
+    for key, entry in runs_state.items():
+        if (
+            entry.get("snir"),
+            entry.get("network_size"),
+            entry.get("algo"),
+            entry.get("seed"),
+        ) == expected:
+            return key, entry
+    return None
 
 
 def _is_run_completed(run_dir: Path) -> bool:
@@ -136,10 +159,11 @@ def _write_campaign_state(state_path: Path, runs_state: dict[str, dict[str, obje
         "updated_at": datetime.now().isoformat(timespec="seconds"),
         "runs": dict(sorted(runs_state.items())),
     }
-    state_path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True),
-        encoding="utf-8",
-    )
+    serialized = json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True)
+    with state_path.open("w", encoding="utf-8") as handle:
+        handle.write(serialized)
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
 def _new_run_entry(
@@ -369,7 +393,7 @@ def main() -> None:
     run_single_campaign = _load_run_single_campaign()
     logs_root: Path = args.logs_root
     logs_root.mkdir(parents=True, exist_ok=True)
-    state_path = logs_root / "campaign_state.json"
+    state_path = Path("sfrd/logs/campaign_state.json")
     runs_state = _load_campaign_state(state_path)
 
     logger.info(
@@ -443,6 +467,22 @@ def main() -> None:
                     )
 
                     run_entry = runs_state.get(run_key)
+                    migrated_entry = False
+                    if run_entry is None:
+                        existing = _find_existing_run_entry(
+                            runs_state,
+                            snir_mode=snir_mode,
+                            network_size=int(network_size),
+                            algorithm=str(algorithm),
+                            seed=int(seed),
+                        )
+                        if existing is not None:
+                            previous_key, run_entry = existing
+                            if previous_key != run_key:
+                                runs_state.pop(previous_key, None)
+                                runs_state[run_key] = run_entry
+                                migrated_entry = True
+
                     if run_entry is None:
                         run_entry = _new_run_entry(
                             snir_mode=snir_mode,
@@ -474,6 +514,8 @@ def main() -> None:
                             }
                         )
                         run_entry["paths"] = run_paths
+                        if migrated_entry:
+                            _write_campaign_state(state_path, runs_state)
 
                     if args.force_rerun:
                         run_entry["status"] = "pending"
@@ -505,7 +547,9 @@ def main() -> None:
                                 "Run marqué done mais artefacts invalides: relance.",
                                 extra={**run_context, "statut": "resume_invalid_artifacts"},
                             )
-                        if run_status in {"failed", "incomplete", "pending", "running", "done"}:
+                        if run_status in {"failed", "incomplete", "pending", "running"} or (
+                            run_status == "done" and not has_valid_artifacts
+                        ):
                             run_entry["status"] = "pending"
                             run_entry["duration_s"] = None
                             _write_campaign_state(state_path, runs_state)
@@ -706,6 +750,8 @@ def main() -> None:
                             f"Erreur run: {exc}",
                             extra={**run_context, "statut": "failed"},
                         )
+                    finally:
+                        _write_campaign_state(state_path, runs_state)
                 if stop_campaign:
                     break
             if stop_campaign:
