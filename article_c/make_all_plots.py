@@ -1774,10 +1774,22 @@ def _run_post_module(
         kwargs["close_figures"] = close_figures
     if "source" in parameters or supports_kwargs:
         kwargs["source"] = source
+    elif "argv" not in parameters and not supports_kwargs:
+        raise TypeError(
+            f"Module {module_path} ignore la source contractuelle: "
+            "ajoutez le paramètre `source` à main() ou supportez argv avec --source."
+        )
     if kwargs:
         module.main(**kwargs)
     else:
         module.main()
+    resolved_source = getattr(module, "LAST_EFFECTIVE_SOURCE", source)
+    if str(resolved_source) != source:
+        raise RuntimeError(
+            f"Module {module_path} a résolu une source non contractuelle "
+            f"({resolved_source!r} au lieu de {source!r})."
+        )
+    log_info(f"[{module_path}] source effective={resolved_source}")
     return module
 
 
@@ -2412,11 +2424,21 @@ def main(argv: list[str] | None = None) -> None:
                     log_info(
                         f"[post][OK] {module_path}: source effective={effective_source}"
                     )
-                else:
-                    log_info(
-                        f"[post][WARN] {module_path}: source effective={effective_source} "
-                        f"(demandée={args.source})"
-                    )
+                    continue
+                log_info(
+                    f"[post][FAIL] {module_path}: source effective={effective_source} "
+                    f"(demandée={args.source})"
+                )
+                _register_status(
+                    status_map,
+                    step="post",
+                    module_path=module_path,
+                    status="FAIL",
+                    message=(
+                        "source effective divergente "
+                        f"(effective={effective_source}, demandée={args.source})"
+                    ),
+                )
     else:
         skip_reason = "comparaisons ignorées (Step1/Step2 indisponibles)"
         for module_path in POST_PLOT_MODULES:

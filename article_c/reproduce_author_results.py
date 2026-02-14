@@ -53,6 +53,7 @@ from article_c.common.plotting_style import apply_output_fonttype, label_for
 
 LOGGER = logging.getLogger(__name__)
 LAST_EFFECTIVE_SOURCE = "aggregates"
+SUPPORTED_SOURCES = {"aggregates", "by_size"}
 
 EXPORT_FIELDS = (
     "figure",
@@ -843,6 +844,20 @@ def plot_fig8(
     return fig
 
 
+def _resolve_source(source: str) -> str:
+    normalized_source = str(source).strip().lower()
+    if normalized_source == "none":
+        raise ValueError(
+            "source='none' est interdit pour reproduce_author_results. "
+            "Utilisez --source aggregates ou --source by_size."
+        )
+    if normalized_source not in SUPPORTED_SOURCES:
+        raise ValueError(
+            "Source CSV non supportée. Utilisez --source aggregates ou --source by_size."
+        )
+    return normalized_source
+
+
 def _load_results(
     path: Path,
     step: int,
@@ -850,20 +865,21 @@ def _load_results(
     source: str,
 ) -> tuple[list[dict[str, object]], str]:
     loader = load_step1_aggregated if step == 1 else load_step2_aggregated
-    normalized_source = str(source).strip().lower()
-    if normalized_source not in {"aggregates", "by_size"}:
-        raise ValueError("Source CSV non supportée. Utilisez --source aggregates ou --source by_size.")
+    normalized_source = _resolve_source(source)
 
     if normalized_source == "aggregates":
         try:
             rows = loader(path, allow_sample=False)
         except Exception as exc:  # noqa: BLE001
-            LOGGER.warning("Impossible de charger %s: %s", path, exc)
-            return [], "none"
+            raise RuntimeError(
+                f"Source contractuelle '{normalized_source}' indisponible pour step{step}: {path} ({exc})."
+            ) from exc
         if rows:
             LOGGER.info("source utilisée: aggregates")
             return rows, "aggregates"
-        return [], "none"
+        raise RuntimeError(
+            f"Source contractuelle '{normalized_source}' vide pour step{step}: {path}."
+        )
 
     results_dir = path.parent.parent if path.parent.name == "aggregates" else path.parent
     by_size_paths = sorted(results_dir.glob("by_size/size_*/rep_*/aggregated_results.csv"))
@@ -878,7 +894,10 @@ def _load_results(
     if rows:
         LOGGER.info("source utilisée: by_size")
         return rows, "by_size"
-    return [], "none"
+    raise RuntimeError(
+        f"Source contractuelle '{normalized_source}' vide pour step{step}: "
+        f"aucun fichier by_size exploitable dans {results_dir}."
+    )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -985,7 +1004,8 @@ def main(
     global LAST_EFFECTIVE_SOURCE
     args = build_arg_parser().parse_args(argv)
     if source is not None:
-        args.source = str(source).strip().lower()
+        args.source = source
+    args.source = _resolve_source(args.source)
 
     profiles = _select_profiles(args.profiles.split(","))
     figures = {int(fig.strip()) for fig in args.figures.split(",") if fig.strip()}
@@ -1005,13 +1025,16 @@ def main(
         step=2,
         source=args.source,
     )
-    effective_sources = {src for src in (step1_source, step2_source) if src != "none"}
-    if not effective_sources:
-        LAST_EFFECTIVE_SOURCE = "none"
-    elif len(effective_sources) == 1:
-        LAST_EFFECTIVE_SOURCE = next(iter(effective_sources))
+    effective_sources = {step1_source, step2_source}
+    if len(effective_sources) == 1:
+        LAST_EFFECTIVE_SOURCE = step1_source
     else:
         LAST_EFFECTIVE_SOURCE = "mixed"
+    if LAST_EFFECTIVE_SOURCE not in SUPPORTED_SOURCES:
+        raise RuntimeError(
+            "Source effective non contractuelle pour reproduce_author_results: "
+            f"{LAST_EFFECTIVE_SOURCE!r} (demandée={args.source!r})."
+        )
     LOGGER.info("source effective reproduce_author_results: %s", LAST_EFFECTIVE_SOURCE)
     if step1_rows:
         step1_rows = filter_mixra_opt_fallback(step1_rows)

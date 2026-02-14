@@ -44,6 +44,20 @@ from article_c.common.plotting_style import label_for
 LOGGER = logging.getLogger(__name__)
 LAST_EFFECTIVE_SOURCE = "aggregates"
 
+SUPPORTED_SOURCES = {"aggregates", "by_size"}
+
+
+def _resolve_source(source: str) -> str:
+    normalized_source = str(source).strip().lower()
+    if normalized_source == "none":
+        raise ValueError(
+            "source='none' est interdit pour plot_cluster_der. "
+            "Utilisez --source aggregates ou --source by_size."
+        )
+    if normalized_source not in SUPPORTED_SOURCES:
+        raise ValueError("Source CSV non supportée. Utilisez aggregates ou by_size.")
+    return normalized_source
+
 PREFERRED_ALGOS = (
     "apra",
     "aimi",
@@ -76,9 +90,7 @@ def _load_rows_from_paths(
 
 
 def _load_aggregated_rows(base_dir: Path, *, source: str) -> tuple[list[dict[str, object]], str]:
-    normalized_source = str(source).strip().lower()
-    if normalized_source not in {"aggregates", "by_size"}:
-        raise ValueError("Source CSV non supportée. Utilisez aggregates ou by_size.")
+    normalized_source = _resolve_source(source)
 
     rows: list[dict[str, object]] = []
     used_sources: set[str] = set()
@@ -93,27 +105,41 @@ def _load_aggregated_rows(base_dir: Path, *, source: str) -> tuple[list[dict[str
         step_label = f"Step{step}"
         current: list[dict[str, object]] = []
 
-        if normalized_source == "aggregates" and aggregate_path.exists():
+        if normalized_source == "aggregates":
+            if not aggregate_path.exists():
+                raise RuntimeError(
+                    f"Source contractuelle '{normalized_source}' indisponible pour {step_label}: {aggregate_path}."
+                )
             current = _load_rows_from_paths([aggregate_path], loader=loader, step_label=step_label)
-            if current:
-                used_sources.add("aggregates")
+            if not current:
+                raise RuntimeError(
+                    f"Source contractuelle '{normalized_source}' vide pour {step_label}: {aggregate_path}."
+                )
+            used_sources.add("aggregates")
 
-        if not current:
+        if normalized_source == "by_size":
             rep_paths = sorted(results_dir.glob("by_size/size_*/rep_*/aggregated_results.csv"))
-            if normalized_source == "by_size" and not rep_paths:
+            if not rep_paths:
                 rep_paths = sorted(results_dir.glob("by_size/size_*/aggregated_results.csv"))
             current = _load_rows_from_paths(rep_paths, loader=loader, step_label=step_label)
-            if current:
-                used_sources.add("by_size")
+            if not current:
+                raise RuntimeError(
+                    f"Source contractuelle '{normalized_source}' vide pour {step_label}: "
+                    f"aucun fichier by_size exploitable dans {results_dir}."
+                )
+            used_sources.add("by_size")
 
         if current:
             rows.extend(current)
 
-    effective_source = normalized_source if normalized_source in used_sources else "mixed"
-    if "by_size" in used_sources and "aggregates" in used_sources:
-        effective_source = "mixed"
-    elif len(used_sources) == 1:
+    effective_source = "mixed"
+    if len(used_sources) == 1:
         effective_source = next(iter(used_sources))
+    if effective_source not in SUPPORTED_SOURCES:
+        raise RuntimeError(
+            "Source effective non contractuelle pour plot_cluster_der: "
+            f"{effective_source!r} (demandée={normalized_source!r})."
+        )
     LOGGER.info("source utilisée: %s", effective_source)
     return rows, effective_source
 
@@ -290,7 +316,8 @@ def main(
     args = parser.parse_args(argv)
 
     if source is not None:
-        args.source = str(source).strip().lower()
+        args.source = source
+    args.source = _resolve_source(args.source)
 
     apply_plot_style()
     export_formats = parse_export_formats(args.formats)
