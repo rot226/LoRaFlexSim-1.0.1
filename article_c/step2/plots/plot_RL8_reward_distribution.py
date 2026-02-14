@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+LAST_EFFECTIVE_SOURCE = "aggregates"
 import argparse
 import math
 from pathlib import Path
@@ -383,9 +384,10 @@ def _log_min_max_by_size(
 
 def main(
     network_sizes: list[int] | None = None,
-    argv: list[str] | None = None,
-    allow_sample: bool = True,
-) -> None:
+            argv: list[str] | None = None,
+    allow_sample: bool = True, source: str = "aggregates") -> None:
+    global LAST_EFFECTIVE_SOURCE
+    LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(

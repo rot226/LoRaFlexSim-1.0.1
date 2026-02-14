@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+LAST_EFFECTIVE_SOURCE = "aggregates"
 import argparse
 import math
 from pathlib import Path
@@ -32,6 +33,7 @@ from article_c.common.plot_helpers import (
     save_figure,
     warn_metric_checks_by_group,
 )
+from article_c.common.plot_data_source import load_aggregated_rows_for_source
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
 
@@ -123,9 +125,10 @@ def _plot_metric(
 
 def main(
     network_sizes: list[int] | None = None,
-    argv: list[str] | None = None,
-    allow_sample: bool = True,
-) -> None:
+            argv: list[str] | None = None,
+    allow_sample: bool = True, source: str = "aggregates") -> None:
+    global LAST_EFFECTIVE_SOURCE
+    LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -140,8 +143,13 @@ def main(
     if network_sizes is not None and _has_invalid_network_sizes(network_sizes):
         return
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
-    rows = load_step2_aggregated(results_path, allow_sample=allow_sample)
+    rows = load_aggregated_rows_for_source(
+        step_dir=step_dir,
+        source=LAST_EFFECTIVE_SOURCE,
+        step_label="Step2",
+        loader=load_step2_aggregated,
+        allow_sample=allow_sample,
+    )
     if not rows:
         warnings.warn("CSV Step2 manquant ou vide, figure ignorée.", stacklevel=2)
         return

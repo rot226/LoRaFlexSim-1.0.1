@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+LAST_EFFECTIVE_SOURCE = "aggregates"
 import argparse
 import csv
 import math
@@ -36,6 +37,7 @@ from article_c.common.plot_helpers import (
     warn_metric_checks,
     warn_if_insufficient_network_sizes,
 )
+from article_c.common.plot_data_source import load_aggregated_rows_for_source
 from article_c.common.utils import ensure_dir
 from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import resolve_ieee_figsize
@@ -611,9 +613,10 @@ def _resolve_step1_intermediate_path(base_path: Path) -> Path | None:
 
 def main(
     argv: list[str] | None = None,
-    allow_sample: bool = True,
-    enable_suptitle: bool = False,
-) -> None:
+            allow_sample: bool = True,
+    enable_suptitle: bool = False, source: str = "aggregates") -> None:
+    global LAST_EFFECTIVE_SOURCE
+    LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -651,10 +654,13 @@ def main(
         values_by_size = _extract_raw_pdr_groups(raw_rows)
 
     if not values_by_size:
-        aggregated_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
-        intermediate_path = _resolve_step1_intermediate_path(aggregated_path)
-        aggregated_source = intermediate_path or aggregated_path
-        aggregated_rows = load_step1_aggregated(aggregated_source, allow_sample=allow_sample)
+        aggregated_rows = load_aggregated_rows_for_source(
+            step_dir=step_dir,
+            source=LAST_EFFECTIVE_SOURCE,
+            step_label="Step1",
+            loader=load_step1_aggregated,
+            allow_sample=allow_sample,
+        )
         if not aggregated_rows and not allow_sample:
             warnings.warn(
                 "CSV Step1 manquant ou vide, figure ignorée.",

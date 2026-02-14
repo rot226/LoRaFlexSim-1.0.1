@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+LAST_EFFECTIVE_SOURCE = "aggregates"
 import argparse
 from pathlib import Path
 from typing import Iterable
@@ -307,7 +308,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main(enable_suptitle: bool = False) -> None:
+def main(enable_suptitle: bool = False, source: str = "aggregates") -> None:
+    global LAST_EFFECTIVE_SOURCE
+    LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     args = parse_args()
     enable_suptitle = enable_suptitle and not args.no_suptitle

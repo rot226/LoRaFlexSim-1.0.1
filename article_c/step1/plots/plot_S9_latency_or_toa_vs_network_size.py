@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+LAST_EFFECTIVE_SOURCE = "aggregates"
 import argparse
 from pathlib import Path
 import warnings
@@ -91,9 +92,10 @@ def _plot_metric(
 
 def main(
     argv: list[str] | None = None,
-    allow_sample: bool = True,
-    enable_suptitle: bool = False,
-) -> None:
+            allow_sample: bool = True,
+    enable_suptitle: bool = False, source: str = "aggregates") -> None:
+    global LAST_EFFECTIVE_SOURCE
+    LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
