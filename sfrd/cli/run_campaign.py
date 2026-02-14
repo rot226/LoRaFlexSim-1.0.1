@@ -174,6 +174,22 @@ def _parse_snir_modes(raw_values: str) -> list[str]:
     return modes
 
 
+def _parse_algorithms(raw_values: list[str]) -> list[str]:
+    """Parse les algorithmes en préservant strictement l'ordre fourni en CLI."""
+
+    algorithms: list[str] = []
+    for value in raw_values:
+        # Autorise une saisie mixte espace/CSV sans modifier la séquence.
+        for token in value.split(","):
+            algo = token.strip()
+            if algo:
+                algorithms.append(algo)
+
+    if not algorithms:
+        raise argparse.ArgumentTypeError("--algos ne contient aucune valeur valide")
+    return algorithms
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Lance une matrice de runs SFRD (SNIR x taille x algo x réplication)."
@@ -207,7 +223,10 @@ def _parse_args() -> argparse.Namespace:
         "--algos",
         nargs="+",
         required=True,
-        help="Algorithmes, ex: --algos UCB ADR MixRA-H MixRA-Opt",
+        help=(
+            "Algorithmes (ordre strict conservé), ex: "
+            "--algos ADR MixRA-H MixRA-Opt UCB"
+        ),
     )
     parser.add_argument(
         "--warmup-s",
@@ -250,6 +269,12 @@ def _parse_args() -> argparse.Namespace:
         parser.error("--replications doit être >= 1")
     if any(size <= 0 for size in args.network_sizes):
         parser.error("Toutes les valeurs de --network-sizes doivent être > 0")
+
+    try:
+        args.algos = _parse_algorithms(args.algos)
+    except argparse.ArgumentTypeError as exc:
+        parser.error(str(exc))
+
     return args
 
 
@@ -271,6 +296,10 @@ def main() -> None:
     logger.info(
         f"Journal campagne: {campaign_log_path.resolve()}",
         extra={"statut": "log_path"},
+    )
+    logger.info(
+        f"Séquence algorithmes retenue (ordre d'exécution): {args.algos}",
+        extra={"statut": "algo_sequence"},
     )
 
     run_index: list[dict[str, object]] = []
