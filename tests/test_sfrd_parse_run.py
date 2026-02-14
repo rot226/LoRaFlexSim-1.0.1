@@ -48,3 +48,19 @@ def test_parse_run_no_extrapolation_when_tx_or_duration_or_success_missing_jsonl
     assert metrics["throughput_packets_per_s"] == 0.0
     assert metrics["energy_joule_per_packet"] is None
     assert metrics["sf_distribution"] == {7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0}
+
+
+def test_parse_run_supports_raw_packets_rx_ok_column(tmp_path):
+    raw = tmp_path / "raw_packets.csv"
+    raw.write_text(
+        "time,node_id,sf,tx_ok,rx_ok,payload_bytes,run\n"
+        "10,0,7,1,1,20,1\n"
+        "20,1,8,1,0,20,1\n",
+        encoding="utf-8",
+    )
+
+    metrics = parse_run(raw, warmup_s=0.0, sim_duration_s=30.0, total_energy_joule=4.0)
+
+    assert metrics["tx_count"] == 2
+    assert metrics["success_count"] == 1
+    assert metrics["pdr"] == 0.5

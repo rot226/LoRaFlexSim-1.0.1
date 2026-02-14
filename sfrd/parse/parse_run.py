@@ -132,7 +132,7 @@ def _is_tx_event(event: dict[str, Any]) -> bool:
 def _is_success_event(event: dict[str, Any]) -> bool:
     """Détermine si la transmission est reçue avec succès."""
 
-    for key in ("success", "is_success", "delivered"):
+    for key in ("success", "is_success", "delivered", "rx_ok"):
         parsed = _to_bool(event.get(key))
         if parsed is not None:
             return parsed
