@@ -16,7 +16,12 @@ from typing import Any
 from loraflexsim.launcher import Channel, Simulator
 from loraflexsim.launcher.qos import QoSManager
 from loraflexsim.learning import LoRaSFSelectorUCB1
-from sfrd.parse.reward_ucb import collect_ucb_history, export_ucb_history_csv, learning_curve_from_history
+from sfrd.parse.reward_ucb import (
+    collect_ucb_history,
+    export_ucb_history_csv,
+    learning_curve_from_history,
+    load_ucb_config,
+)
 
 _ALGORITHM_ALIASES = {
     "adr": "ADR-Pure",
@@ -62,6 +67,7 @@ def run_campaign(
     seed: int,
     warmup_s: float,
     output_dir: str | Path,
+    ucb_config_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Exécute une campagne uplink non-interactive avec 1 gateway.
 
@@ -78,6 +84,8 @@ def run_campaign(
     use_snir = _normalize_snir_mode(snir_mode)
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    ucb_config = load_ucb_config(ucb_config_path)
 
     packet_interval_s = 120.0
     warmup_intervals = int(math.ceil(warmup_s / packet_interval_s))
@@ -98,6 +106,17 @@ def run_campaign(
         seed=int(seed),
         payload_size_bytes=20,
         phy_model="omnet_full",
+        ucb_selector_kwargs={
+            "success_weight": 1.0,
+            "snir_margin_weight": 0.0,
+            "energy_penalty_weight": ucb_config.lambda_e,
+            "reward_mode": "qos",
+            "reward_window": ucb_config.reward_window,
+            "exploration_coefficient": ucb_config.exploration_coefficient,
+        },
+        ucb_episode_mode=ucb_config.episode.mode,
+        ucb_episode_packet_window=ucb_config.episode.packet_window,
+        ucb_episode_time_window_s=ucb_config.episode.time_window_s,
     )
 
     manager = QoSManager()
@@ -113,12 +132,7 @@ def run_campaign(
             node.adr = False
             node.learning_method = "ucb1"
             if getattr(node, "sf_selector", None) is None:
-                node.sf_selector = LoRaSFSelectorUCB1(
-                    success_weight=1.0,
-                    snir_margin_weight=0.0,
-                    energy_penalty_weight=0.5,
-                    reward_mode="qos",
-                )
+                node.sf_selector = LoRaSFSelectorUCB1(**simulator.ucb_selector_kwargs)
     else:
         manager.apply(simulator, resolved_algorithm, use_snir=use_snir)
 
@@ -161,6 +175,15 @@ def run_campaign(
             "qos_refresh_benchmark": metrics.get("qos_refresh_benchmark", {}),
             "runtime_profile_s": metrics.get("runtime_profile_s", {}),
             "ucb_learning_curve": learning_curve,
+        },
+        "ucb_config": {
+            "source": str(ucb_config_path) if ucb_config_path is not None else "default",
+            "lambda_E": ucb_config.lambda_e,
+            "exploration_coefficient": ucb_config.exploration_coefficient,
+            "reward_window": ucb_config.reward_window,
+            "episode_mode": ucb_config.episode.mode,
+            "episode_packet_window": ucb_config.episode.packet_window,
+            "episode_time_window_s": ucb_config.episode.time_window_s,
         },
     }
 

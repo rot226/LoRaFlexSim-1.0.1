@@ -1,0 +1,28 @@
+{
+  "criterion": "maximize(pdr_mean - 0.2 * energy_mean)",
+  "chosen_candidate": "ucb_candidate_a",
+  "chosen_config": "sfrd/config/calibration/ucb_candidate_a.json",
+  "frozen_config_path": "sfrd/config/ucb_config.json",
+  "results": [
+    {
+      "candidate": "ucb_candidate_a",
+      "config_path": "sfrd/config/calibration/ucb_candidate_a.json",
+      "pdr_mean": 0.0,
+      "throughput_mean": 30.765870494643018,
+      "energy_mean": 0.0,
+      "learning_reward_last": 0.40213197795555555,
+      "compromise_score": 0.0,
+      "output_dir": "sfrd/output/ucb_calibration/ucb_candidate_a"
+    },
+    {
+      "candidate": "ucb_candidate_b",
+      "config_path": "sfrd/config/calibration/ucb_candidate_b.json",
+      "pdr_mean": 0.0,
+      "throughput_mean": 30.765870494643018,
+      "energy_mean": 0.0,
+      "learning_reward_last": 0.3090331322920635,
+      "compromise_score": 0.0,
+      "output_dir": "sfrd/output/ucb_calibration/ucb_candidate_b"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "lambda_E": 0.3,
+  "exploration_coefficient": 1.5,
+  "reward_window": 15,
+  "episode": {
+    "mode": "packets",
+    "packet_window": 2,
+    "time_window_s": 60.0
+  }
+}

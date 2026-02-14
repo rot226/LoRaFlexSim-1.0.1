@@ -1,0 +1,3 @@
+network_size,algorithm,snir,throughput_packets_per_s
+40,UCB1,ON,21.600235596717315
+80,UCB1,ON,39.931505392568724

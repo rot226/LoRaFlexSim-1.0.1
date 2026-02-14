@@ -3,12 +3,56 @@
 from __future__ import annotations
 
 import csv
+import json
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-# Pondération énergétique de la reward normalisée UCB.
-LAMBDA_E = 0.5
+
+@dataclass(frozen=True)
+class UCBEpisodeConfig:
+    mode: str = "packets"
+    packet_window: int = 1
+    time_window_s: float = 60.0
+
+
+@dataclass(frozen=True)
+class UCBConfig:
+    lambda_e: float = 0.5
+    exploration_coefficient: float = 2.0
+    reward_window: int = 20
+    episode: UCBEpisodeConfig = UCBEpisodeConfig()
+
+
+DEFAULT_UCB_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "ucb_config.json"
+
+
+def load_ucb_config(path: str | Path | None = None) -> UCBConfig:
+    """Charge la configuration UCB externe avec fallback sur des valeurs sûres."""
+
+    cfg_path = Path(path) if path is not None else DEFAULT_UCB_CONFIG_PATH
+    if not cfg_path.is_file():
+        return UCBConfig()
+    payload = json.loads(cfg_path.read_text(encoding="utf-8"))
+    episode_payload = payload.get("episode", {}) if isinstance(payload, dict) else {}
+    if not isinstance(episode_payload, dict):
+        episode_payload = {}
+
+    mode = str(episode_payload.get("mode", "packets")).strip().lower()
+    if mode not in {"packets", "time"}:
+        mode = "packets"
+
+    return UCBConfig(
+        lambda_e=float(payload.get("lambda_E", 0.5)),
+        exploration_coefficient=float(payload.get("exploration_coefficient", 2.0)),
+        reward_window=max(1, int(payload.get("reward_window", 20))),
+        episode=UCBEpisodeConfig(
+            mode=mode,
+            packet_window=max(1, int(episode_payload.get("packet_window", 1))),
+            time_window_s=max(0.001, float(episode_payload.get("time_window_s", 60.0))),
+        ),
+    )
 
 UCB_HISTORY_HEADERS = [
     "episode",

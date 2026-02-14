@@ -214,6 +214,12 @@ def _parse_args() -> argparse.Namespace:
         help="Durée warmup en secondes",
     )
     parser.add_argument(
+        "--ucb-config",
+        type=Path,
+        default=Path("sfrd/config/ucb_config.json"),
+        help="Fichier JSON de configuration UCB (lambda_E, exploration, épisode).",
+    )
+    parser.add_argument(
         "--logs-root",
         type=Path,
         default=Path("sfrd/logs"),
@@ -368,6 +374,7 @@ def main() -> None:
                             seed=int(seed),
                             warmup_s=float(args.warmup_s),
                             output_dir=run_dir,
+                            ucb_config_path=args.ucb_config,
                         )
                         duration_s = perf_counter() - t0
                         metrics = result.get("summary", {}).get("metrics", {})
