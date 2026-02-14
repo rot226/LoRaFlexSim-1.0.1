@@ -52,6 +52,7 @@ from article_c.common.plot_helpers import (
 from article_c.common.plotting_style import apply_output_fonttype, label_for
 
 LOGGER = logging.getLogger(__name__)
+LAST_EFFECTIVE_SOURCE = "aggregates"
 
 EXPORT_FIELDS = (
     "figure",
@@ -842,46 +843,42 @@ def plot_fig8(
     return fig
 
 
-def _load_results(path: Path, step: int) -> list[dict[str, object]]:
+def _load_results(
+    path: Path,
+    step: int,
+    *,
+    source: str,
+) -> tuple[list[dict[str, object]], str]:
     loader = load_step1_aggregated if step == 1 else load_step2_aggregated
-    source = "aggregates"
-    try:
-        rows = loader(path, allow_sample=False)
+    normalized_source = str(source).strip().lower()
+    if normalized_source not in {"aggregates", "by_size"}:
+        raise ValueError("Source CSV non supportée. Utilisez --source aggregates ou --source by_size.")
+
+    if normalized_source == "aggregates":
+        try:
+            rows = loader(path, allow_sample=False)
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("Impossible de charger %s: %s", path, exc)
+            return [], "none"
         if rows:
-            LOGGER.info("source utilisée: %s", source)
-            return rows
-    except Exception as exc:  # noqa: BLE001 - utile pour rapporter l'absence de CSV
-        LOGGER.warning("Impossible de charger %s: %s", path, exc)
+            LOGGER.info("source utilisée: aggregates")
+            return rows, "aggregates"
+        return [], "none"
 
-    by_size_paths = sorted(path.parent.parent.glob("by_size/size_*/aggregated_results.csv"))
+    results_dir = path.parent.parent if path.parent.name == "aggregates" else path.parent
+    by_size_paths = sorted(results_dir.glob("by_size/size_*/rep_*/aggregated_results.csv"))
     if not by_size_paths:
-        return []
-
-    try:
-        with path.open("w", encoding="utf-8", newline="") as handle:
-            writer: csv.DictWriter[str] | None = None
-            for by_size_path in by_size_paths:
-                with by_size_path.open("r", encoding="utf-8", newline="") as src:
-                    reader = csv.DictReader(src)
-                    if not reader.fieldnames:
-                        continue
-                    if writer is None:
-                        writer = csv.DictWriter(handle, fieldnames=reader.fieldnames)
-                        writer.writeheader()
-                    for row in reader:
-                        writer.writerow(row)
-    except OSError as exc:
-        LOGGER.warning("Agrégation by_size impossible vers %s: %s", path, exc)
-        return []
-
-    try:
-        rows = loader(path, allow_sample=False)
-    except Exception as exc:  # noqa: BLE001 - utile pour rapporter l'absence de CSV
-        LOGGER.warning("Impossible de charger %s après agrégation by_size: %s", path, exc)
-        return []
+        by_size_paths = sorted(results_dir.glob("by_size/size_*/aggregated_results.csv"))
+    rows: list[dict[str, object]] = []
+    for by_size_path in by_size_paths:
+        try:
+            rows.extend(loader(by_size_path, allow_sample=False))
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning("Impossible de charger %s: %s", by_size_path, exc)
     if rows:
         LOGGER.info("source utilisée: by_size")
-    return rows
+        return rows, "by_size"
+    return [], "none"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -899,6 +896,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("article_c/step2/results/aggregates/aggregated_results.csv"),
         help="Chemin vers aggregated_results.csv (step2).",
+    )
+    parser.add_argument(
+        "--source",
+        choices=("aggregates", "by_size"),
+        default="aggregates",
+        help="Source CSV à utiliser pour step1/step2.",
     )
     parser.add_argument(
         "--snir-threshold-db",
@@ -972,9 +975,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
+def main(
+    argv: list[str] | None = None,
+    *,
+    close_figures: bool = True,
+    source: str | None = None,
+) -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    global LAST_EFFECTIVE_SOURCE
     args = build_arg_parser().parse_args(argv)
+    if source is not None:
+        args.source = str(source).strip().lower()
 
     profiles = _select_profiles(args.profiles.split(","))
     figures = {int(fig.strip()) for fig in args.figures.split(",") if fig.strip()}
@@ -984,8 +995,24 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
     apply_output_fonttype()
     apply_plot_style()
 
-    step1_rows = _load_results(args.step1_results, step=1)
-    step2_rows = _load_results(args.step2_results, step=2)
+    step1_rows, step1_source = _load_results(
+        args.step1_results,
+        step=1,
+        source=args.source,
+    )
+    step2_rows, step2_source = _load_results(
+        args.step2_results,
+        step=2,
+        source=args.source,
+    )
+    effective_sources = {src for src in (step1_source, step2_source) if src != "none"}
+    if not effective_sources:
+        LAST_EFFECTIVE_SOURCE = "none"
+    elif len(effective_sources) == 1:
+        LAST_EFFECTIVE_SOURCE = next(iter(effective_sources))
+    else:
+        LAST_EFFECTIVE_SOURCE = "mixed"
+    LOGGER.info("source effective reproduce_author_results: %s", LAST_EFFECTIVE_SOURCE)
     if step1_rows:
         step1_rows = filter_mixra_opt_fallback(step1_rows)
         step1_rows = _filter_by_snir_threshold(
