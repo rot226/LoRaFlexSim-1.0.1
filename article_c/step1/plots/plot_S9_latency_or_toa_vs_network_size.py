@@ -112,7 +112,11 @@ def main(
     args = parser.parse_args(argv)
     enable_suptitle = enable_suptitle and not args.no_suptitle
     step_dir = Path(__file__).resolve().parents[1]
-    rows = load_step1_rows_with_fallback(step_dir, allow_sample=allow_sample)
+    rows = load_step1_rows_with_fallback(
+        step_dir,
+        allow_sample=allow_sample,
+        source=LAST_EFFECTIVE_SOURCE,
+    )
     if not rows:
         warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)
         return

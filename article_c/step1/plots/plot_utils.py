@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable
 from pathlib import Path
+import warnings
 
 import matplotlib.pyplot as plt
 
@@ -29,19 +30,64 @@ _STEP1_MISSING_HINT = (
 )
 
 
+def _load_step1_rows_from_by_size(
+    step_dir: Path,
+    *,
+    allow_sample: bool,
+) -> list[dict[str, object]]:
+    by_size_paths = sorted(
+        (step_dir / "results").glob(f"by_size/size_*/{_STEP1_AGGREGATED_NAME}")
+    )
+    if not by_size_paths:
+        expected_pattern = (
+            step_dir / "results" / "by_size" / "size_*" / _STEP1_AGGREGATED_NAME
+        )
+        raise FileNotFoundError(
+            f"CSV introuvable via by_size: motif attendu {expected_pattern}."
+        )
+    merged_rows: list[dict[str, object]] = []
+    for csv_path in by_size_paths:
+        merged_rows.extend(load_step1_aggregated(csv_path, allow_sample=allow_sample))
+    return merged_rows
+
+
 def load_step1_rows_with_fallback(
     step_dir: Path,
     *,
     allow_sample: bool = False,
+    source: str = "aggregates",
+    allow_by_size_fallback: bool = True,
 ) -> list[dict[str, object]]:
-    """Charge uniquement l'agrégat Step1 matérialisé."""
+    """Charge les lignes agrégées Step1 depuis la source demandée."""
+    normalized_source = str(source).strip().lower()
+    if normalized_source not in {"aggregates", "by_size"}:
+        raise ValueError(
+            "Source CSV non supportée. Utilisez source='aggregates' ou source='by_size'."
+        )
+
+    if normalized_source == "by_size":
+        return _load_step1_rows_from_by_size(step_dir, allow_sample=allow_sample)
+
     primary_path = (
         step_dir / "results" / "aggregates" / _STEP1_AGGREGATED_NAME
     )
     if primary_path.is_file():
         return load_step1_aggregated(primary_path, allow_sample=allow_sample)
 
-    raise FileNotFoundError(f"CSV introuvable: {primary_path}. {_STEP1_MISSING_HINT}")
+    missing_aggregate_message = (
+        f"CSV introuvable: {primary_path}. {_STEP1_MISSING_HINT}"
+    )
+    if allow_by_size_fallback:
+        warnings.warn(
+            (
+                f"{missing_aggregate_message} "
+                "Tentative de repli sur results/by_size/size_*/aggregated_results.csv."
+            ),
+            stacklevel=2,
+        )
+        return _load_step1_rows_from_by_size(step_dir, allow_sample=allow_sample)
+
+    raise FileNotFoundError(missing_aggregate_message)
 
 
 def _flatten_axes(axes: object) -> list[plt.Axes]:

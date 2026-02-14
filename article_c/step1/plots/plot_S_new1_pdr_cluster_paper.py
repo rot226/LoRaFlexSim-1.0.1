@@ -111,7 +111,11 @@ def main(source: str = "aggregates") -> None:
     LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
-    rows = load_step1_rows_with_fallback(step_dir, allow_sample=True)
+    rows = load_step1_rows_with_fallback(
+        step_dir,
+        allow_sample=True,
+        source=LAST_EFFECTIVE_SOURCE,
+    )
     if not rows:
         warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)
         return

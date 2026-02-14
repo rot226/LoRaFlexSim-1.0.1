@@ -170,7 +170,11 @@ def main(argv: list[str] | None = None, allow_sample: bool = True, source: str =
     )
     args = parser.parse_args(argv)
     step_dir = Path(__file__).resolve().parents[1]
-    rows = load_step1_rows_with_fallback(step_dir, allow_sample=allow_sample)
+    rows = load_step1_rows_with_fallback(
+        step_dir,
+        allow_sample=allow_sample,
+        source=LAST_EFFECTIVE_SOURCE,
+    )
     if not rows:
         warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)
         return
