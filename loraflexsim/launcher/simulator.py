@@ -419,6 +419,18 @@ class Simulator:
     REQUIRED_SNR = {7: -7.5, 8: -10.0, 9: -12.5, 10: -15.0, 11: -17.5, 12: -20.0}
     MARGIN_DB = 15.0  # marge d'installation en dB (typiquement 15 dB)
 
+    @staticmethod
+    def _bitrate_norm_for_sf(sf_value: int) -> float:
+        """Normalise le débit LoRa associé à ``sf_value`` dans [0, 1]."""
+
+        bitrate = sf_value / (2**sf_value)
+        min_bitrate = 12 / (2**12)
+        max_bitrate = 7 / (2**7)
+        if max_bitrate <= min_bitrate:
+            return 0.0
+        normalized = (bitrate - min_bitrate) / (max_bitrate - min_bitrate)
+        return max(0.0, min(1.0, normalized))
+
     def channel_index(self, channel) -> int:
         """Return the simulator-wide index associated with ``channel``."""
 
@@ -1285,6 +1297,8 @@ class Simulator:
         self.events_log: list[dict] = []
         # Accès direct aux événements par identifiant
         self._events_log_map: dict[int, dict] = {}
+        self.ucb_history: list[dict[str, float | int | str]] = []
+        self._ucb_episode_counter = 0
         # Nœuds de classe C actuellement maintenus en écoute périodique
         self._class_c_polling_nodes: set[int] = set()
         self.out_of_service_queue: deque[tuple[int, str, float]] = deque()
@@ -2093,7 +2107,7 @@ class Simulator:
                 if self.packets_to_send:
                     traffic_volume = min(node.tx_attempted / self.packets_to_send, 1.0)
 
-                node.sf_selector.update(
+                reward_normalized = node.sf_selector.update(
                     f"SF{node.sf}",
                     success=delivered,
                     snir_db=snir_for_node,
@@ -2105,6 +2119,22 @@ class Simulator:
                     expected_der=expected_der,
                     local_der=node.pdr,
                     traffic_volume=traffic_volume,
+                )
+                selector_info = getattr(node.sf_selector, "last_reward_info", {}) or {}
+                reward_raw = float(selector_info.get("reward_raw", reward_normalized))
+                success_rate = selector_info.get("success_rate", node.pdr)
+                energy_norm = float(selector_info.get("energy_norm", 0.0))
+                self._ucb_episode_counter += 1
+                self.ucb_history.append(
+                    {
+                        "episode": self._ucb_episode_counter,
+                        "reward_raw": reward_raw,
+                        "reward_normalized": float(reward_normalized),
+                        "chosen_sf": int(node.sf),
+                        "success_rate": float(success_rate) if success_rate is not None else 0.0,
+                        "bitrate_norm": self._bitrate_norm_for_sf(int(node.sf)),
+                        "energy_norm": energy_norm,
+                    }
                 )
 
             if self.debug_rx:

@@ -15,6 +15,8 @@ from typing import Any
 
 from loraflexsim.launcher import Channel, Simulator
 from loraflexsim.launcher.qos import QoSManager
+from loraflexsim.learning import LoRaSFSelectorUCB1
+from sfrd.parse.reward_ucb import collect_ucb_history, export_ucb_history_csv, learning_curve_from_history
 
 _ALGORITHM_ALIASES = {
     "adr": "ADR-Pure",
@@ -26,6 +28,8 @@ _ALGORITHM_ALIASES = {
     "mixra-opt": "MixRA-Opt",
     "mixra_h": "MixRA-H",
     "mixra-h": "MixRA-H",
+    "ucb": "UCB1",
+    "ucb1": "UCB1",
 }
 
 _SNIR_ALIASES = {
@@ -103,12 +107,30 @@ def run_campaign(
         arrival_rates=[1.0 / packet_interval_s],
         pdr_targets=[0.9],
     )
-    manager.apply(simulator, resolved_algorithm, use_snir=use_snir)
+    if resolved_algorithm == "UCB1":
+        manager.apply(simulator, "ADR-Pure", use_snir=use_snir)
+        for node in simulator.nodes:
+            node.adr = False
+            node.learning_method = "ucb1"
+            if getattr(node, "sf_selector", None) is None:
+                node.sf_selector = LoRaSFSelectorUCB1(
+                    success_weight=1.0,
+                    snir_margin_weight=0.0,
+                    energy_penalty_weight=0.5,
+                    reward_mode="qos",
+                )
+    else:
+        manager.apply(simulator, resolved_algorithm, use_snir=use_snir)
 
     # Fonction interne LoRaFlexSim réellement appelée pour exécuter la
     # simulation événementielle.
     simulator.run()
     metrics = simulator.get_metrics()
+
+    ucb_history = collect_ucb_history(simulator)
+    learning_curve = learning_curve_from_history(ucb_history)
+    if ucb_history:
+        export_ucb_history_csv(ucb_history, output_path / "ucb_history.csv")
 
     summary = {
         "contract": {
@@ -132,6 +154,7 @@ def run_campaign(
             "collisions": int(metrics.get("collisions", 0)),
             "tx_attempted": int(metrics.get("tx_attempted", 0)),
             "rx_delivered": int(metrics.get("rx_delivered", 0)),
+            "ucb_learning_curve": learning_curve,
         },
     }
 
@@ -145,4 +168,3 @@ def run_campaign(
         "summary_path": summary_path,
         "summary": summary,
     }
-
