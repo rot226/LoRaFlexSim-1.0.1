@@ -106,3 +106,34 @@ def test_run_plot_module_fails_if_effective_source_differs(monkeypatch) -> None:
         assert "source non contractuelle" in str(exc)
     else:
         raise AssertionError("Une source effective divergente doit échouer.")
+
+
+def test_main_source_by_size_without_step1_aggregate(monkeypatch, tmp_path) -> None:
+    step1_results = tmp_path / "step1" / "results"
+    step1_csv = step1_results / "by_size" / "size_100" / "aggregated_results.csv"
+    step1_csv.parent.mkdir(parents=True, exist_ok=True)
+    step1_csv.write_text(
+        "network_size,algo,snir_mode,cluster,pdr_mean\n100,adr,snir_on,all,0.9\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(make_all_plots, "STEP1_RESULTS_DIR", step1_results)
+    monkeypatch.setattr(make_all_plots, "STEP1_PLOTS_OUTPUT_DIR", tmp_path / "step1" / "plots" / "output")
+    monkeypatch.setattr(make_all_plots, "MANIFEST_OUTPUT_PATH", tmp_path / "figures_manifest.csv")
+    monkeypatch.setattr(make_all_plots, "PLOT_DATA_FILTER_REPORT_OUTPUT_PATH", tmp_path / "plot_data_filter_report.csv")
+    monkeypatch.setattr(make_all_plots, "LEGEND_CHECK_REPORT_OUTPUT_PATH", tmp_path / "legend_check_report.csv")
+    monkeypatch.setattr(make_all_plots, "PLOT_MODULES", {"step1": ["fake.module"], "step2": []})
+    monkeypatch.setattr(make_all_plots, "POST_PLOT_MODULES", [])
+    monkeypatch.setattr(make_all_plots, "_preflight_validate_plot_modules", lambda: {})
+    monkeypatch.setattr(make_all_plots, "_validate_step2_plot_module_registry", lambda: None)
+
+    class FakeModule:
+        LAST_EFFECTIVE_SOURCE = "by_size"
+
+        @staticmethod
+        def main(source: str, **_kwargs: object) -> None:
+            assert source == "by_size"
+
+    monkeypatch.setattr(make_all_plots.importlib, "import_module", lambda _: FakeModule)
+
+    make_all_plots.main(["--steps", "step1", "--source", "by_size", "--skip-scientific-qa"])

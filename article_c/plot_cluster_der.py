@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import math
 import logging
 from pathlib import Path
+from collections.abc import Callable
 import sys
 import warnings
 from importlib.util import find_spec
@@ -42,6 +42,7 @@ from plot_defaults import resolve_ieee_figsize
 from article_c.common.plotting_style import label_for
 
 LOGGER = logging.getLogger(__name__)
+LAST_EFFECTIVE_SOURCE = "aggregates"
 
 PREFERRED_ALGOS = (
     "apra",
@@ -59,53 +60,62 @@ def _normalize_algo(value: object) -> str:
     return ALGO_ALIASES.get(normalized, normalized)
 
 
-def _load_aggregated_rows(base_dir: Path) -> list[dict[str, object]]:
+def _load_rows_from_paths(
+    paths: list[Path],
+    *,
+    loader: Callable[[Path], list[dict[str, object]]],
+    step_label: str,
+) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    candidates = (
-        base_dir / "step1" / "results" / "aggregates" / "aggregated_results.csv",
-        base_dir / "step2" / "results" / "aggregates" / "aggregated_results.csv",
-    )
-    for path in candidates:
-        source = "aggregates"
-        step = 2 if path.parts[-3] == "step2" else 1
+    for path in paths:
         try:
-            current = (
-                load_step2_aggregated(path)
-                if step == 2
-                else load_step1_aggregated(path)
-            )
-            if current:
-                LOGGER.info("source utilisée: %s", source)
-                rows.extend(current)
-                continue
-        except ValueError as exc:
-            warnings.warn(str(exc), stacklevel=2)
-        by_size_paths = sorted(
-            path.parent.parent.glob("by_size/size_*/aggregated_results.csv")
-        )
-        if not by_size_paths:
-            continue
-        try:
-            with path.open("w", encoding="utf-8", newline="") as handle:
-                writer: csv.DictWriter[str] | None = None
-                for by_size_path in by_size_paths:
-                    with by_size_path.open("r", encoding="utf-8", newline="") as src:
-                        reader = csv.DictReader(src)
-                        if not reader.fieldnames:
-                            continue
-                        if writer is None:
-                            writer = csv.DictWriter(handle, fieldnames=reader.fieldnames)
-                            writer.writeheader()
-                        for row in reader:
-                            writer.writerow(row)
-        except OSError as exc:
-            warnings.warn(f"Agrégation by_size impossible pour {path}: {exc}", stacklevel=2)
-            continue
-        current = load_step2_aggregated(path) if step == 2 else load_step1_aggregated(path)
-        if current:
-            LOGGER.info("source utilisée: by_size")
-            rows.extend(current)
+            rows.extend(loader(path))
+        except (OSError, ValueError) as exc:
+            warnings.warn(f"CSV {step_label} ignoré ({path}): {exc}", stacklevel=2)
     return rows
+
+
+def _load_aggregated_rows(base_dir: Path, *, source: str) -> tuple[list[dict[str, object]], str]:
+    normalized_source = str(source).strip().lower()
+    if normalized_source not in {"aggregates", "by_size"}:
+        raise ValueError("Source CSV non supportée. Utilisez aggregates ou by_size.")
+
+    rows: list[dict[str, object]] = []
+    used_sources: set[str] = set()
+    candidates = (
+        (1, load_step1_aggregated),
+        (2, load_step2_aggregated),
+    )
+
+    for step, loader in candidates:
+        results_dir = base_dir / f"step{step}" / "results"
+        aggregate_path = results_dir / "aggregates" / "aggregated_results.csv"
+        step_label = f"Step{step}"
+        current: list[dict[str, object]] = []
+
+        if normalized_source == "aggregates" and aggregate_path.exists():
+            current = _load_rows_from_paths([aggregate_path], loader=loader, step_label=step_label)
+            if current:
+                used_sources.add("aggregates")
+
+        if not current:
+            rep_paths = sorted(results_dir.glob("by_size/size_*/rep_*/aggregated_results.csv"))
+            if normalized_source == "by_size" and not rep_paths:
+                rep_paths = sorted(results_dir.glob("by_size/size_*/aggregated_results.csv"))
+            current = _load_rows_from_paths(rep_paths, loader=loader, step_label=step_label)
+            if current:
+                used_sources.add("by_size")
+
+        if current:
+            rows.extend(current)
+
+    effective_source = normalized_source if normalized_source in used_sources else "mixed"
+    if "by_size" in used_sources and "aggregates" in used_sources:
+        effective_source = "mixed"
+    elif len(used_sources) == 1:
+        effective_source = next(iter(used_sources))
+    LOGGER.info("source utilisée: %s", effective_source)
+    return rows, effective_source
 
 
 def _resolve_der_source(rows: list[dict[str, object]]) -> tuple[str, str]:
@@ -242,7 +252,13 @@ def _plot_der_by_cluster(df: pd.DataFrame, clusters: list[str]) -> plt.Figure:
     return fig
 
 
-def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
+def main(
+    argv: list[str] | None = None,
+    *,
+    close_figures: bool = True,
+    source: str | None = None,
+) -> None:
+    global LAST_EFFECTIVE_SOURCE
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -265,14 +281,24 @@ def main(argv: list[str] | None = None, *, close_figures: bool = True) -> None:
         nargs="+",
         help="Filtrer les tailles de réseau (ex: --network-sizes 100 200 300).",
     )
+    parser.add_argument(
+        "--source",
+        choices=("aggregates", "by_size"),
+        default="aggregates",
+        help="Source CSV à utiliser: agrégat global ou lecture by_size.",
+    )
     args = parser.parse_args(argv)
+
+    if source is not None:
+        args.source = str(source).strip().lower()
 
     apply_plot_style()
     export_formats = parse_export_formats(args.formats)
     set_default_export_formats(export_formats)
 
     base_dir = Path(__file__).resolve().parent
-    rows = _load_aggregated_rows(base_dir)
+    rows, effective_source = _load_aggregated_rows(base_dir, source=args.source)
+    LAST_EFFECTIVE_SOURCE = effective_source
     if not rows:
         warnings.warn("Aucun CSV agrégé trouvé.", stacklevel=2)
         return

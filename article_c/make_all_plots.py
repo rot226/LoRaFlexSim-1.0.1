@@ -2322,6 +2322,8 @@ def main(argv: list[str] | None = None) -> None:
             "article_c.plot_cluster_der": [
                 "--formats",
                 post_formats,
+                "--source",
+                args.source,
             ],
         }
         if not enable_suptitle:
