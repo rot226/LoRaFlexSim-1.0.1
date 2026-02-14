@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+LAST_EFFECTIVE_SOURCE = "aggregates"
 import argparse
 import math
 from math import log2
@@ -26,6 +27,7 @@ from article_c.common.plot_helpers import (
     save_figure,
     warn_metric_checks,
 )
+from article_c.common.plot_data_source import load_aggregated_rows_for_source
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
 
@@ -113,9 +115,10 @@ def _plot_entropy(
 
 def main(
     network_sizes: list[int] | None = None,
-    argv: list[str] | None = None,
-    allow_sample: bool = True,
-) -> None:
+            argv: list[str] | None = None,
+    allow_sample: bool = True, source: str = "aggregates") -> None:
+    global LAST_EFFECTIVE_SOURCE
+    LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -135,9 +138,11 @@ def main(
         warnings.warn("CSV Step2 manquant ou vide, figure ignorée.", stacklevel=2)
         return
     rows = load_step2_selection_probs(results_path)
-    aggregated_results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
-    size_rows = load_step2_aggregated(
-        aggregated_results_path,
+    size_rows = load_aggregated_rows_for_source(
+        step_dir=step_dir,
+        source=LAST_EFFECTIVE_SOURCE,
+        step_label="Step2",
+        loader=load_step2_aggregated,
         allow_sample=allow_sample,
     )
     if not size_rows:

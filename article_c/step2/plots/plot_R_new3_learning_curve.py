@@ -6,6 +6,7 @@ Il met en avant au minimum les tailles 80 et 1280 nœuds si elles sont présente
 
 from __future__ import annotations
 
+LAST_EFFECTIVE_SOURCE = "aggregates"
 import math
 from pathlib import Path
 import warnings
@@ -177,7 +178,9 @@ def _plot(agg: pd.DataFrame, sizes: list[int]) -> plt.Figure:
     return fig
 
 
-def main() -> None:
+def main(source: str = "aggregates") -> None:
+    global LAST_EFFECTIVE_SOURCE
+    LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     results_path = step_dir / "results" / "learning_curve.csv"

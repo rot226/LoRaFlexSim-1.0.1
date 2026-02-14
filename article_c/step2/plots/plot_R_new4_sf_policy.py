@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+LAST_EFFECTIVE_SOURCE = "aggregates"
 from math import log2
 from pathlib import Path
 import warnings
@@ -172,7 +173,9 @@ def _plot(df: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def main() -> None:
+def main(source: str = "aggregates") -> None:
+    global LAST_EFFECTIVE_SOURCE
+    LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     data_path = step_dir / "results" / "rl5_selection_prob.csv"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+LAST_EFFECTIVE_SOURCE = "aggregates"
 from pathlib import Path
 import warnings
 
@@ -185,7 +186,9 @@ def _plot(df: pd.DataFrame, metric_key: str) -> plt.Figure:
     return fig
 
 
-def main() -> None:
+def main(source: str = "aggregates") -> None:
+    global LAST_EFFECTIVE_SOURCE
+    LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     rows = load_step1_rows_with_fallback(step_dir, allow_sample=True)

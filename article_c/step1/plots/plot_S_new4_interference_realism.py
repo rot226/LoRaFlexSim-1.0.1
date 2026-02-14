@@ -7,6 +7,7 @@ Métriques tracées (robustes, dérivées des données disponibles):
 
 from __future__ import annotations
 
+LAST_EFFECTIVE_SOURCE = "aggregates"
 import csv
 from collections import defaultdict
 from dataclasses import dataclass
@@ -233,7 +234,9 @@ def _plot_metrics(metrics: list[GroupMetrics]) -> plt.Figure:
     return fig
 
 
-def main() -> None:
+def main(source: str = "aggregates") -> None:
+    global LAST_EFFECTIVE_SOURCE
+    LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
     raw_results_path = step_dir / "results" / "raw_packets.csv"

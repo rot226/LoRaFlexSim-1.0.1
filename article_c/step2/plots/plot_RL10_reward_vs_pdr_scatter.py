@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+LAST_EFFECTIVE_SOURCE = "aggregates"
 import argparse
 import csv
 import math
@@ -30,6 +31,7 @@ from article_c.common.plot_helpers import (
     save_figure,
     warn_metric_checks,
 )
+from article_c.common.plot_data_source import load_aggregated_rows_for_source
 from plot_defaults import RL_FIGURE_SCALE, resolve_ieee_figsize
 
 ALGO_ALIASES = {
@@ -154,13 +156,20 @@ def _sample_learning_curve() -> list[dict[str, object]]:
 
 
 def _aggregate_pdr_from_step1(
-    path: Path,
+    step_dir: Path,
+    source: str,
     network_sizes: list[int] | None,
     *,
     allow_sample: bool = True,
 ) -> dict[str, float]:
     rows = filter_cluster(
-        load_step1_aggregated(path, allow_sample=allow_sample),
+        load_aggregated_rows_for_source(
+            step_dir=step_dir,
+            source=source,
+            step_label="Step1",
+            loader=load_step1_aggregated,
+            allow_sample=allow_sample,
+        ),
         "all",
     )
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
@@ -185,13 +194,20 @@ def _aggregate_pdr_from_step1(
 
 
 def _aggregate_pdr_from_step2(
-    path: Path,
+    step_dir: Path,
+    source: str,
     network_sizes: list[int] | None,
     *,
     allow_sample: bool = True,
 ) -> dict[str, float]:
     rows = filter_cluster(
-        load_step2_aggregated(path, allow_sample=allow_sample),
+        load_aggregated_rows_for_source(
+            step_dir=step_dir,
+            source=source,
+            step_label="Step2",
+            loader=load_step2_aggregated,
+            allow_sample=allow_sample,
+        ),
         "all",
     )
     rows = [row for row in rows if row.get("snir_mode") == "snir_on"]
@@ -217,8 +233,9 @@ def _aggregate_pdr_from_step2(
 
 def _collect_points(
     learning_curve_path: Path,
-    step1_results_path: Path,
-    step2_results_path: Path,
+    step1_dir: Path,
+    step2_dir: Path,
+    source: str,
     network_sizes: list[int] | None,
     *,
     allow_sample: bool = True,
@@ -228,14 +245,16 @@ def _collect_points(
         allow_sample=allow_sample,
     )
     pdr_means = _aggregate_pdr_from_step1(
-        step1_results_path,
+        step1_dir,
+        source,
         network_sizes,
         allow_sample=allow_sample,
     )
     missing = [algo for algo in reward_means if algo not in pdr_means]
     if missing:
         step2_pdr = _aggregate_pdr_from_step2(
-            step2_results_path,
+            step2_dir,
+            source,
             network_sizes,
             allow_sample=allow_sample,
         )
@@ -339,9 +358,10 @@ def _plot_scatter(points: list[dict[str, float | str]]) -> plt.Figure:
 
 def main(
     network_sizes: list[int] | None = None,
-    argv: list[str] | None = None,
-    allow_sample: bool = True,
-) -> None:
+            argv: list[str] | None = None,
+    allow_sample: bool = True, source: str = "aggregates") -> None:
+    global LAST_EFFECTIVE_SOURCE
+    LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -357,25 +377,23 @@ def main(
         return
     step_dir = Path(__file__).resolve().parents[1]
     learning_curve_path = step_dir / "results" / "learning_curve.csv"
-    step1_results_path = BASE_DIR / "step1" / "results" / "aggregates" / "aggregated_results.csv"
-    step2_results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
-    if not step1_results_path.exists():
-        step1_results_dir = BASE_DIR / "step1" / "results"
-        print("INFO: CSV Step1 manquant, plot RL10 ignoré.")
-        print(f"INFO: chemin attendu: {step1_results_path}")
-        print(f"INFO: chemin réel possible: {step1_results_dir}")
-        print("INFO: suggestion: python -m article_c.run_all --skip-step2 ...")
-        return
-    step1_rows = load_step1_aggregated(
-        step1_results_path,
+    step1_dir = BASE_DIR / "step1"
+    step1_rows = load_aggregated_rows_for_source(
+        step_dir=step1_dir,
+        source=LAST_EFFECTIVE_SOURCE,
+        step_label="Step1",
+        loader=load_step1_aggregated,
         allow_sample=allow_sample,
     )
-    step2_rows = load_step2_aggregated(
-        step2_results_path,
+    step2_rows = load_aggregated_rows_for_source(
+        step_dir=step_dir,
+        source=LAST_EFFECTIVE_SOURCE,
+        step_label="Step2",
+        loader=load_step2_aggregated,
         allow_sample=allow_sample,
     )
     if not step1_rows or not step2_rows:
-        print("INFO: CSV Step1/Step2 manquant ou vide, plot RL10 ignoré.")
+        print("INFO: CSV Step1/Step2 manquant ou vide pour la source demandée, plot RL10 ignoré.")
         return
     normalize_network_size_rows(step1_rows)
     normalize_network_size_rows(step2_rows)
@@ -405,8 +423,9 @@ def main(
         return
     points = _collect_points(
         learning_curve_path,
-        step1_results_path,
-        step2_results_path,
+        step1_dir,
+        step_dir,
+        LAST_EFFECTIVE_SOURCE,
         network_sizes,
         allow_sample=allow_sample,
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+LAST_EFFECTIVE_SOURCE = "aggregates"
 from pathlib import Path
 import warnings
 
@@ -18,6 +19,7 @@ from article_c.common.plot_helpers import (
     load_step2_aggregated,
     save_figure,
 )
+from article_c.common.plot_data_source import load_aggregated_rows_for_source
 from plot_defaults import resolve_ieee_figsize
 
 PDR_CANDIDATES = (
@@ -98,12 +100,18 @@ def _plot(df: pd.DataFrame, metric_key: str) -> plt.Figure:
     return fig
 
 
-def main() -> None:
+def main(source: str = "aggregates") -> None:
+    global LAST_EFFECTIVE_SOURCE
+    LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
-
-    rows = load_step2_aggregated(results_path, allow_sample=True)
+    rows = load_aggregated_rows_for_source(
+        step_dir=step_dir,
+        source=LAST_EFFECTIVE_SOURCE,
+        step_label="Step2",
+        loader=load_step2_aggregated,
+        allow_sample=True,
+    )
     if not rows:
         warnings.warn("CSV Step2 manquant ou vide, figure ignorée.", stacklevel=2)
         return

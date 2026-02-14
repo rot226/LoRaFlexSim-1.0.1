@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+LAST_EFFECTIVE_SOURCE = "aggregates"
 import argparse
 from pathlib import Path
 from statistics import mean
@@ -32,6 +33,7 @@ from article_c.common.plot_helpers import (
     warn_if_insufficient_network_sizes,
     auto_figsize_for_traces,
 )
+from article_c.common.plot_data_source import load_aggregated_rows_for_source
 from article_c.step1.plots.plot_utils import configure_figure
 from plot_defaults import (
     WIDE_SERIES_WSPACE,
@@ -134,9 +136,10 @@ def _plot_metric(
 
 def main(
     argv: list[str] | None = None,
-    allow_sample: bool = True,
-    enable_suptitle: bool = False,
-) -> None:
+            allow_sample: bool = True,
+    enable_suptitle: bool = False, source: str = "aggregates") -> None:
+    global LAST_EFFECTIVE_SOURCE
+    LAST_EFFECTIVE_SOURCE = str(source).strip().lower()
     apply_plot_style()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -153,8 +156,13 @@ def main(
     args = parser.parse_args(argv)
     enable_suptitle = enable_suptitle and not args.no_suptitle
     step_dir = Path(__file__).resolve().parents[1]
-    results_path = step_dir / "results" / "aggregates" / "aggregated_results.csv"
-    rows = load_step1_aggregated(results_path, allow_sample=allow_sample)
+    rows = load_aggregated_rows_for_source(
+        step_dir=step_dir,
+        source=LAST_EFFECTIVE_SOURCE,
+        step_label="Step1",
+        loader=load_step1_aggregated,
+        allow_sample=allow_sample,
+    )
     if not rows:
         warnings.warn("CSV Step1 manquant ou vide, figure ignorée.", stacklevel=2)
         return
