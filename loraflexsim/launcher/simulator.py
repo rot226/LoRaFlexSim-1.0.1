@@ -6,6 +6,7 @@ import logging
 import math
 import numbers
 import random
+import time
 import numpy as np
 from collections import deque
 
@@ -1268,6 +1269,9 @@ class Simulator:
         self.qos_manager = None
         self.qos_algorithm = None
         self._next_qos_reconfig_time: float | None = None
+        self.runtime_profile_s: dict[str, float] = {}
+        self._qos_refresh_count = 0
+        self._qos_refresh_total_cost_s = 0.0
 
         # Statistiques cumulatives
         self.packets_sent = 0
@@ -1434,6 +1438,11 @@ class Simulator:
     # ------------------------------------------------------------------
     # Gestion du rafraîchissement QoS
     # ------------------------------------------------------------------
+    def _record_profile_time(self, key: str, duration_s: float) -> None:
+        self.runtime_profile_s[key] = self.runtime_profile_s.get(key, 0.0) + max(
+            0.0, float(duration_s)
+        )
+
     def _cancel_qos_reconfigure_event(self) -> None:
         if not self.event_queue:
             return
@@ -1452,22 +1461,36 @@ class Simulator:
         self._next_qos_reconfig_time = when
 
     def _handle_qos_reconfigure_event(self) -> None:
+        t0 = time.perf_counter()
         manager = getattr(self, "qos_manager", None)
         if manager is None:
             self._cancel_qos_reconfigure_event()
+            self._record_profile_time("sim_handle_qos_reconfigure", time.perf_counter() - t0)
             return
         if not getattr(self, "qos_active", False):
             self._cancel_qos_reconfigure_event()
+            self._record_profile_time("sim_handle_qos_reconfigure", time.perf_counter() - t0)
             return
         algorithm = getattr(self, "qos_algorithm", None)
         if not algorithm:
             self._cancel_qos_reconfigure_event()
+            self._record_profile_time("sim_handle_qos_reconfigure", time.perf_counter() - t0)
+            return
+        if not bool(getattr(manager, "qos_periodic_refresh_enabled", True)):
+            self._cancel_qos_reconfigure_event()
+            self._record_profile_time("sim_handle_qos_reconfigure", time.perf_counter() - t0)
             return
         self.request_qos_refresh(reason="periodic")
+        self._record_profile_time("sim_handle_qos_reconfigure", time.perf_counter() - t0)
 
     def _on_qos_applied(self, manager) -> None:
         self.qos_manager = manager
-        interval = getattr(manager, "reconfig_interval_s", None)
+        interval_getter = getattr(manager, "periodic_refresh_interval_s", None)
+        interval = (
+            interval_getter()
+            if callable(interval_getter)
+            else getattr(manager, "reconfig_interval_s", None)
+        )
         if interval is None or interval <= 0.0:
             self._cancel_qos_reconfigure_event()
             return
@@ -1475,18 +1498,37 @@ class Simulator:
         self._schedule_qos_reconfigure_event(base_time + float(interval))
 
     def request_qos_refresh(self, *, reason: str = "unspecified") -> None:
+        t0 = time.perf_counter()
         manager = getattr(self, "qos_manager", None)
         if manager is None or not getattr(self, "qos_active", False):
+            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
             return
         algorithm = getattr(self, "qos_algorithm", None)
         if not algorithm:
+            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
             return
         if not manager.clusters:
+            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
+            return
+        if reason == "periodic" and not bool(
+            getattr(manager, "qos_periodic_refresh_enabled", True)
+        ):
+            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
             return
         if reason == "metrics":
+            if not bool(getattr(manager, "qos_metrics_refresh_enabled", True)):
+                self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
+                return
             cooldown_s = getattr(manager, "qos_metrics_cooldown_s", None)
             if cooldown_s is None:
                 cooldown_s = getattr(manager, "reconfig_interval_s", None)
+            min_interval_s = getattr(manager, "qos_metrics_min_interval_s", None)
+            if min_interval_s is not None and min_interval_s > 0.0:
+                cooldown_s = (
+                    min_interval_s
+                    if cooldown_s is None or cooldown_s <= 0.0
+                    else max(cooldown_s, min_interval_s)
+                )
             if cooldown_s is not None and cooldown_s > 0.0:
                 current_time = getattr(self, "current_time", None)
                 try:
@@ -1504,13 +1546,16 @@ class Simulator:
                     and last_value is not None
                     and time_value - last_value < cooldown_s
                 ):
+                    self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
                     return
         try:
             needs_refresh = manager._should_refresh_context(self)
         except Exception:  # pragma: no cover - robust logging
             logger.exception("Échec de l'évaluation du rafraîchissement QoS (%s).", reason)
+            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
             return
         if not needs_refresh:
+            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
             return
         node_count = len(getattr(self, "nodes", []) or [])
         refresh_context = {
@@ -1521,7 +1566,10 @@ class Simulator:
         manager.apply(self, algorithm, refresh_context=refresh_context)
         duration_s = refresh_context.get("duration_s")
         if duration_s is None:
+            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
             return
+        self._qos_refresh_count += 1
+        self._qos_refresh_total_cost_s += float(duration_s)
         sim_time = refresh_context.get("sim_time", getattr(self, "current_time", None))
         try:
             sim_time_value = float(sim_time)
@@ -1536,6 +1584,7 @@ class Simulator:
             node_count,
             duration_s,
         )
+        self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
 
     def _notify_qos_metrics_update(self, node: Node) -> None:
         if getattr(self, "qos_manager", None) is None:
@@ -2157,11 +2206,12 @@ class Simulator:
                 snr_value = node.last_snr
             if delivered and node.last_rssi is not None:
                 rssi_value = node.last_rssi
-            node.history.append(
-                {"snr": snr_value, "rssi": rssi_value, "delivered": delivered}
+            node.recent_pdr_window = 20
+            node.record_history_entry(
+                snr=snr_value,
+                rssi=rssi_value,
+                delivered=delivered,
             )
-            if len(node.history) > 20:
-                node.history.pop(0)
             self._notify_qos_metrics_update(node)
 
             # Gestion Adaptive Data Rate (ADR)
@@ -2767,6 +2817,11 @@ class Simulator:
             self.total_delay / self.delivered_count if self.delivered_count > 0 else 0.0
         )
         sim_time = self.current_time
+        qos_refresh_avg_cost_s = (
+            self._qos_refresh_total_cost_s / self._qos_refresh_count
+            if self._qos_refresh_count > 0
+            else 0.0
+        )
         throughput_bps = (
             self.packets_delivered * self.payload_size_bytes * 8 / sim_time
             if sim_time > 0
@@ -2867,6 +2922,13 @@ class Simulator:
             "energy_breakdown_by_gateway": energy_breakdown_by_gateway,
             **{f"energy_class_{ct}_J": energy_by_class[ct] for ct in energy_by_class},
             "retransmissions": self.retransmissions,
+            "simulation_duration_s": sim_time,
+            "qos_refresh_benchmark": {
+                "duration_s": sim_time,
+                "refresh_count": self._qos_refresh_count,
+                "avg_refresh_cost_s": qos_refresh_avg_cost_s,
+            },
+            "runtime_profile_s": dict(self.runtime_profile_s),
         }
 
         qos_clusters_config = getattr(self, "qos_clusters_config", {}) or {}

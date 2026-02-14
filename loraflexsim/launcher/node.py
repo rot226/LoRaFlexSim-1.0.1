@@ -1,5 +1,6 @@
 # node.py
 import math
+import time
 import numpy as np
 
 from .energy_profiles import EnergyProfile, FLORA_PROFILE, EnergyAccumulator
@@ -251,6 +252,9 @@ class Node:
 
         # Additional state used by the simulator
         self.history: list[dict] = []
+        self.recent_pdr_window: int | None = None
+        self._recent_history_total: int = 0
+        self._recent_history_success: int = 0
         self.rssi_history: list[float] = []
         # Historique des derniers SNIR utilisés pour l'ADR.
         # ``snr_history`` conserve les 20 derniers couples (passerelle, SNIR)
@@ -437,11 +441,42 @@ class Node:
     @property
     def recent_pdr(self) -> float:
         """PDR calculé sur l'historique glissant."""
+        t0 = time.perf_counter()
         total = len(self.history)
+        if total != self._recent_history_total:
+            success = sum(1 for e in self.history if e.get("delivered"))
+            self._recent_history_total = total
+            self._recent_history_success = success
         if total == 0:
-            return 0.0
-        success = sum(1 for e in self.history if e.get("delivered"))
-        return success / total
+            value = 0.0
+        else:
+            value = self._recent_history_success / total
+        self._record_profile_time("node_recent_pdr", time.perf_counter() - t0)
+        return value
+
+    def record_history_entry(self, *, snr: float | None, rssi: float | None, delivered: bool) -> None:
+        """Ajoute une observation radio et met à jour les compteurs PDR récents."""
+
+        self.history.append({"snr": snr, "rssi": rssi, "delivered": bool(delivered)})
+        self._recent_history_total += 1
+        if delivered:
+            self._recent_history_success += 1
+        if self.recent_pdr_window is not None and self.recent_pdr_window > 0:
+            while len(self.history) > self.recent_pdr_window:
+                removed = self.history.pop(0)
+                self._recent_history_total -= 1
+                if removed.get("delivered"):
+                    self._recent_history_success -= 1
+
+    def _record_profile_time(self, key: str, duration_s: float) -> None:
+        simulator = getattr(self, "simulator", None)
+        if simulator is None:
+            return
+        profiler = getattr(simulator, "runtime_profile_s", None)
+        if profiler is None:
+            profiler = {}
+            setattr(simulator, "runtime_profile_s", profiler)
+        profiler[key] = profiler.get(key, 0.0) + max(0.0, float(duration_s))
 
     def _record_ack(self, success: bool) -> None:
         """Store ACK result in history (max 32 values)."""

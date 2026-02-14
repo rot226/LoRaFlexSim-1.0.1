@@ -149,6 +149,10 @@ class QoSManager:
         self.cluster_sf_channel_capacity: dict[int, dict[int, dict[int, float]]] = {}
         self.capacity_margin: float = 0.1
         self.reconfig_interval_s: float = 60.0
+        self.qos_periodic_refresh_enabled: bool = True
+        self.qos_metrics_refresh_enabled: bool = True
+        self.qos_periodic_min_interval_s: float | None = None
+        self.qos_metrics_min_interval_s: float | None = None
         self.qos_metrics_cooldown_s: float | None = None
         self.pdr_drift_threshold: float = 0.1
         self.traffic_drift_threshold: float = 0.25
@@ -160,6 +164,20 @@ class QoSManager:
         self._last_arrival_rates: dict[int, float] = {}
         self._last_assignments: dict[int, tuple[int, int]] = {}
         self.out_of_service_queue: deque[tuple[int, str]] = deque()
+        self.runtime_profile_s: dict[str, float] = defaultdict(float)
+
+    def _profile(self, key: str, duration_s: float) -> None:
+        self.runtime_profile_s[key] += max(0.0, float(duration_s))
+
+    def periodic_refresh_interval_s(self) -> float | None:
+        interval = self.reconfig_interval_s
+        minimum = self.qos_periodic_min_interval_s
+        if minimum is not None and minimum > 0.0:
+            if interval is None or interval <= 0.0:
+                interval = minimum
+            else:
+                interval = max(interval, minimum)
+        return interval
 
     # --- Interface publique -------------------------------------------------
     def apply(
@@ -292,14 +310,17 @@ class QoSManager:
             self.max_clusters_per_min_sf = None
 
     # --- Utilitaires internes ----------------------------------------------
-    @staticmethod
-    def _nearest_gateway_distance(node, gateways: Iterable) -> float:
+    def _nearest_gateway_distance(self, node, gateways: Iterable) -> float:
+        t0 = time.perf_counter()
         if not gateways:
-            return 0.0
-        return min(
+            distance = 0.0
+        else:
+            distance = min(
             math.hypot(node.x - gw.x, node.y - gw.y)
             for gw in gateways
         )
+        self._profile("qos_nearest_gateway_distance", time.perf_counter() - t0)
+        return distance
 
     def _sorted_distances(self, simulator) -> list[_NodeDistance]:
         return sorted(
@@ -418,13 +439,16 @@ class QoSManager:
 
     # --- Calculs QoS -------------------------------------------------------
     def _update_qos_context(self, simulator) -> None:
+        t0 = time.perf_counter()
         if not self.clusters:
             self._clear_qos_state(simulator)
+            self._profile("qos_update_context", time.perf_counter() - t0)
             return
 
         channel = self._reference_channel(simulator)
         if channel is None:
             self._clear_qos_state(simulator)
+            self._profile("qos_update_context", time.perf_counter() - t0)
             return
 
         channel_map: dict[int, object | None] = {}
@@ -446,11 +470,13 @@ class QoSManager:
         noise_power_w = self._noise_power_w(channel)
         if noise_power_w <= 0.0:
             self._clear_qos_state(simulator)
+            self._profile("qos_update_context", time.perf_counter() - t0)
             return
 
         snr_requirements = self._snr_table(simulator)
         if not snr_requirements:
             self._clear_qos_state(simulator)
+            self._profile("qos_update_context", time.perf_counter() - t0)
             return
 
         alpha = getattr(channel, "path_loss_exp", 2.0)
@@ -616,6 +642,7 @@ class QoSManager:
             time_value = None
         if time_value is not None and math.isfinite(time_value):
             self._last_reconfig_time = time_value
+        self._profile("qos_update_context", time.perf_counter() - t0)
 
     def _clear_qos_state(self, simulator) -> None:
         self.sf_limits = {}
@@ -685,7 +712,7 @@ class QoSManager:
                     return True
                 if abs(current_rate - previous_rate) / previous_rate >= traffic_threshold:
                     return True
-        interval = self.reconfig_interval_s
+        interval = self.periodic_refresh_interval_s()
         if interval is None or interval <= 0.0:
             return False
         current_time = getattr(simulator, "current_time", None)
