@@ -121,6 +121,10 @@ def main() -> None:
     logs_root.mkdir(parents=True, exist_ok=True)
 
     run_index: list[dict[str, object]] = []
+    total_runs = len(args.network_sizes) * len(args.algos) * len(args.snir) * args.replications
+    completed_runs = 0
+    failed_runs = 0
+    current_run = 0
 
     for snir_mode in args.snir:
         snir_folder = f"SNIR_{snir_mode}"
@@ -129,6 +133,7 @@ def main() -> None:
         for network_size in args.network_sizes:
             for algorithm in args.algos:
                 for replication_index in range(1, args.replications + 1):
+                    current_run += 1
                     seed = args.seeds_base + replication_index - 1
                     run_dir = (
                         logs_root
@@ -153,34 +158,67 @@ def main() -> None:
                         encoding="utf-8",
                     )
 
+                    print(
+                        f"[{current_run}/{total_runs}] "
+                        f"SNIR={snir_mode} | N={network_size} | algo={algorithm} | "
+                        f"seed={seed} | start"
+                    )
+
                     t0 = perf_counter()
-                    result = run_single_campaign(
-                        network_size=int(network_size),
-                        algorithm=str(algorithm),
-                        snir_mode=snir_cli_value,
-                        seed=int(seed),
-                        warmup_s=float(args.warmup_s),
-                        output_dir=run_dir,
-                    )
-                    duration_s = perf_counter() - t0
+                    try:
+                        result = run_single_campaign(
+                            network_size=int(network_size),
+                            algorithm=str(algorithm),
+                            snir_mode=snir_cli_value,
+                            seed=int(seed),
+                            warmup_s=float(args.warmup_s),
+                            output_dir=run_dir,
+                        )
+                        duration_s = perf_counter() - t0
+                        metrics = result.get("summary", {}).get("metrics", {})
+                        tx = int(metrics.get("tx_attempted", 0))
+                        success = int(metrics.get("rx_delivered", 0))
+                        pdr = float(metrics.get("pdr", 0.0))
 
-                    run_status = {
-                        "status": "completed",
-                        "duration_s": duration_s,
-                        "summary_path": str(result["summary_path"]),
-                    }
-                    (run_dir / "run_status.json").write_text(
-                        json.dumps(run_status, indent=2, ensure_ascii=False, sort_keys=True),
-                        encoding="utf-8",
-                    )
-
-                    run_index.append(
-                        {
-                            **run_input,
-                            "run_dir": str(run_dir),
+                        run_status = {
+                            "status": "completed",
+                            "duration_s": duration_s,
                             "summary_path": str(result["summary_path"]),
                         }
-                    )
+                        (run_dir / "run_status.json").write_text(
+                            json.dumps(run_status, indent=2, ensure_ascii=False, sort_keys=True),
+                            encoding="utf-8",
+                        )
+
+                        run_index.append(
+                            {
+                                **run_input,
+                                "run_dir": str(run_dir),
+                                "summary_path": str(result["summary_path"]),
+                            }
+                        )
+                        completed_runs += 1
+                        print(
+                            f"[{current_run}/{total_runs}] done | duration={duration_s:.1f}s | "
+                            f"tx={tx} | success={success} | pdr={pdr:.4f}"
+                        )
+                    except Exception as exc:  # pragma: no cover - robustesse CLI
+                        duration_s = perf_counter() - t0
+                        run_status = {
+                            "status": "failed",
+                            "duration_s": duration_s,
+                            "error": str(exc),
+                        }
+                        (run_dir / "run_status.json").write_text(
+                            json.dumps(run_status, indent=2, ensure_ascii=False, sort_keys=True),
+                            encoding="utf-8",
+                        )
+                        failed_runs += 1
+                        print(
+                            f"[{current_run}/{total_runs}] done | duration={duration_s:.1f}s | "
+                            "tx=NA | success=NA | pdr=NA"
+                        )
+                        print(f"[{current_run}/{total_runs}] error: {exc}")
 
     (logs_root / "campaign_runs.json").write_text(
         json.dumps(run_index, indent=2, ensure_ascii=False, sort_keys=True),
@@ -192,6 +230,8 @@ def main() -> None:
         print(f"Agrégation terminée: {aggregate_path}")
     else:
         print("Agrégation automatique ignorée (--skip-aggregate).")
+
+    print(f"completed={completed_runs}, failed={failed_runs}, total={total_runs}")
 
 
 if __name__ == "__main__":
