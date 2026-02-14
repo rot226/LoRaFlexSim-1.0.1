@@ -79,6 +79,24 @@ METRIC_ALIASES = {
     "tp": "throughput",
 }
 
+SUPPORTED_SOURCES = {"aggregates", "by_size"}
+PDR_CANDIDATE_COLUMNS = (
+    "pdr_mean",
+    "pdr_p50",
+    "pdr",
+    "pdr_global_mean",
+    "success_rate_mean",
+    "success_rate",
+    "success_mean",
+)
+THROUGHPUT_CANDIDATE_COLUMNS = (
+    "throughput_success_mean",
+    "throughput_success_p50",
+    "throughput_success",
+    "throughput_mean",
+    "throughput",
+)
+
 
 @dataclass(frozen=True)
 class AuthorCurve:
@@ -150,8 +168,11 @@ def _load_results_with_fallback(
     loader = load_step1_aggregated if step == 1 else load_step2_aggregated
     step_label = f"step{step}"
     normalized_source = str(source).strip().lower()
-    if normalized_source not in {"aggregates", "by_size"}:
-        raise ValueError("Source CSV non supportée. Utilisez --source aggregates ou --source by_size.")
+    if normalized_source not in SUPPORTED_SOURCES:
+        raise ValueError(
+            "source invalide pour ce module (compare_with_snir). "
+            "Utilisez --source aggregates ou --source by_size."
+        )
 
     results_dir = path.parent.parent if path.parent.name == "aggregates" else path.parent
     if normalized_source == "aggregates":
@@ -281,6 +302,59 @@ def _resolve_metric_key(
             return candidate
     raise ValueError(
         f"Aucune colonne {label} trouvée. Colonnes candidates: {', '.join(candidates)}"
+    )
+
+
+def _validate_source_for_module(source: str) -> str:
+    normalized_source = str(source).strip().lower()
+    if normalized_source not in SUPPORTED_SOURCES:
+        supported = ", ".join(sorted(SUPPORTED_SOURCES))
+        raise ValueError(
+            "source invalide pour ce module (compare_with_snir): "
+            f"{source!r}. Sources valides: {supported}."
+        )
+    return normalized_source
+
+
+def _trace_available_columns(rows: list[dict[str, object]], *, step_label: str) -> None:
+    if not rows:
+        LOGGER.info("Aucune ligne chargée pour %s.", step_label)
+        return
+    columns = sorted({key for row in rows for key in row})
+    LOGGER.info("Colonnes détectées (%s): %s", step_label, ", ".join(columns))
+
+
+def _trace_by_size_columns(rows: list[dict[str, object]], *, step_label: str) -> None:
+    if not rows:
+        return
+
+    def _size_sort_key(value: str) -> float:
+        try:
+            return float(value)
+        except ValueError:
+            return float("inf")
+
+    columns_by_size: dict[str, set[str]] = {}
+    for row in rows:
+        size = row.get("network_size", row.get("density", "unknown"))
+        size_key = str(size)
+        columns_by_size.setdefault(size_key, set()).update(row.keys())
+    for size_key in sorted(columns_by_size, key=_size_sort_key):
+        cols = ", ".join(sorted(columns_by_size[size_key]))
+        LOGGER.info("Colonnes %s par taille=%s: %s", step_label, size_key, cols)
+
+
+def _trace_metric_variants(
+    rows: list[dict[str, object]],
+    *,
+    label: str,
+    candidates: Iterable[str],
+) -> None:
+    present = [candidate for candidate in candidates if any(candidate in row for row in rows)]
+    LOGGER.info(
+        "Variantes %s détectées: %s",
+        label,
+        ", ".join(present) if present else "aucune",
     )
 
 
@@ -486,7 +560,8 @@ def main(
     global LAST_EFFECTIVE_SOURCE
     args = build_parser().parse_args(argv)
     if source is not None:
-        args.source = str(source).strip().lower()
+        args.source = source
+    args.source = _validate_source_for_module(args.source)
 
     export_formats = parse_export_formats(args.formats)
     set_default_export_formats(export_formats)
@@ -511,6 +586,11 @@ def main(
     else:
         LAST_EFFECTIVE_SOURCE = "mixed"
     LOGGER.info("source effective compare_with_snir: %s", LAST_EFFECTIVE_SOURCE)
+    _trace_available_columns(step1_rows, step_label="step1")
+    _trace_available_columns(step2_rows, step_label="step2")
+    if args.source == "by_size":
+        _trace_by_size_columns(step1_rows, step_label="step1")
+        _trace_by_size_columns(step2_rows, step_label="step2")
 
     snir_modes = args.snir_modes
     step1_rows = _filter_rows(
@@ -532,20 +612,18 @@ def main(
 
     author_curves = _load_author_curves(args.author_curves)
 
-    pdr_key = _resolve_metric_key(
-        step1_rows,
-        ("pdr_mean", "pdr_p50", "pdr"),
-        "PDR",
+    _trace_metric_variants(step1_rows, label="PDR", candidates=PDR_CANDIDATE_COLUMNS)
+    _trace_metric_variants(
+        step2_rows,
+        label="throughput",
+        candidates=THROUGHPUT_CANDIDATE_COLUMNS,
     )
+
+    pdr_key = _resolve_metric_key(step1_rows, PDR_CANDIDATE_COLUMNS, "PDR")
     der_key = _add_derived_der(step1_rows, pdr_key)
     throughput_key = _resolve_metric_key(
         step2_rows,
-        (
-            "throughput_success_mean",
-            "throughput_success_p50",
-            "throughput_mean",
-            "throughput",
-        ),
+        THROUGHPUT_CANDIDATE_COLUMNS,
         "throughput",
     )
 
