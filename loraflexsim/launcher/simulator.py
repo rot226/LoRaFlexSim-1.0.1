@@ -1282,6 +1282,7 @@ class Simulator:
         self._qos_refresh_count = 0
         self._qos_refresh_total_cost_s = 0.0
         self._qos_refresh_max_cost_s = 0.0
+        self.last_qos_refresh_sim_time: float | None = None
 
         # Statistiques cumulatives
         self.packets_sent = 0
@@ -1595,6 +1596,10 @@ class Simulator:
         self._qos_refresh_total_cost_s += refresh_duration
         self._qos_refresh_max_cost_s = max(self._qos_refresh_max_cost_s, refresh_duration)
         sim_time = refresh_context.get("sim_time", getattr(self, "current_time", None))
+        try:
+            self.last_qos_refresh_sim_time = float(sim_time)
+        except (TypeError, ValueError):
+            self.last_qos_refresh_sim_time = None
         try:
             sim_time_value = float(sim_time)
         except (TypeError, ValueError):

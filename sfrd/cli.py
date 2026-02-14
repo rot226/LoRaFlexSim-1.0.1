@@ -11,8 +11,10 @@ from __future__ import annotations
 import csv
 import json
 import math
+import threading
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from loraflexsim.launcher import Channel, Simulator
 from loraflexsim.launcher.qos import QoSManager
@@ -125,6 +127,8 @@ def run_campaign(
     warmup_s: float,
     output_dir: str | Path,
     ucb_config_path: str | Path | None = None,
+    heartbeat_callback: Callable[[dict[str, Any]], None] | None = None,
+    heartbeat_interval_s: float = 45.0,
 ) -> dict[str, Any]:
     """Exécute une campagne uplink non-interactive avec 1 gateway.
 
@@ -195,7 +199,42 @@ def run_campaign(
 
     # Fonction interne LoRaFlexSim réellement appelée pour exécuter la
     # simulation événementielle.
-    simulator.run()
+    run_error: Exception | None = None
+
+    def _run_simulator() -> None:
+        nonlocal run_error
+        try:
+            simulator.run()
+        except Exception as exc:  # pragma: no cover - surface l'exception au thread principal
+            run_error = exc
+
+    runner = threading.Thread(target=_run_simulator, name="sfrd-sim-runner", daemon=True)
+    runner.start()
+
+    try:
+        interval_s = float(heartbeat_interval_s)
+    except (TypeError, ValueError):
+        interval_s = 45.0
+    if not math.isfinite(interval_s) or interval_s <= 0.0:
+        interval_s = 45.0
+
+    while runner.is_alive():
+        runner.join(timeout=interval_s)
+        if heartbeat_callback is None or not runner.is_alive():
+            continue
+        heartbeat_callback(
+            {
+                "sim_time_s": float(getattr(simulator, "current_time", 0.0) or 0.0),
+                "events_processed": int(getattr(simulator, "events_processed", 0) or 0),
+                "last_qos_refresh_sim_time": getattr(simulator, "last_qos_refresh_sim_time", None),
+                "qos_refresh_count": int(getattr(simulator, "_qos_refresh_count", 0) or 0),
+                "timestamp": time.time(),
+            }
+        )
+
+    if run_error is not None:
+        raise run_error
+
     metrics = simulator.get_metrics()
     _export_raw_artifacts(simulator, output_path)
 
