@@ -9,12 +9,17 @@ import json
 import logging
 import math
 import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
 
 from sfrd.parse.aggregate import aggregate_logs
 from sfrd.parse.parse_run import parse_run
+
+_PRECHECK_NETWORK_SIZES: tuple[int, ...] = (80, 160)
+_PRECHECK_SNIR_MODES: tuple[str, ...] = ("OFF", "ON")
+_PRECHECK_SEED = 1
 
 
 class MetricsInconsistentError(RuntimeError):
@@ -309,6 +314,133 @@ def _build_expected_runs(args: argparse.Namespace) -> set[tuple[str, int, str, i
     return expected
 
 
+def _validate_precheck_csv(csv_path: Path, expected_columns: tuple[str, ...]) -> None:
+    if not csv_path.exists():
+        raise ValueError(f"CSV attendu absent: {csv_path}")
+    if csv_path.stat().st_size == 0:
+        raise ValueError(f"CSV attendu vide: {csv_path}")
+
+    with csv_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        columns = tuple(reader.fieldnames or ())
+        if columns != expected_columns:
+            raise ValueError(
+                f"Colonnes invalides pour {csv_path}: attendu={list(expected_columns)} obtenu={list(columns)}"
+            )
+        rows = list(reader)
+
+    if not rows:
+        raise ValueError(f"CSV sans données: {csv_path}")
+
+    for row_number, row in enumerate(rows, start=2):
+        for field_name, raw_value in row.items():
+            text = (raw_value or "").strip()
+            if not text:
+                continue
+            try:
+                parsed = float(text)
+            except ValueError:
+                continue
+            if math.isnan(parsed):
+                raise ValueError(f"NaN détecté dans {csv_path} ligne {row_number} colonne {field_name}")
+
+        if "pdr" in row:
+            pdr = float(row["pdr"])
+            if not (0.0 <= pdr <= 1.0):
+                raise ValueError(f"pdr hors bornes [0,1] dans {csv_path} ligne {row_number}: {pdr}")
+        if "throughput_packets_per_s" in row:
+            throughput = float(row["throughput_packets_per_s"])
+            if throughput < 0.0:
+                raise ValueError(
+                    f"throughput_packets_per_s négatif dans {csv_path} ligne {row_number}: {throughput}"
+                )
+        if "energy_joule_per_packet" in row:
+            energy = float(row["energy_joule_per_packet"])
+            if energy < 0.0:
+                raise ValueError(
+                    f"energy_joule_per_packet négatif dans {csv_path} ligne {row_number}: {energy}"
+                )
+
+
+def _run_precheck(*, args: argparse.Namespace, logger: logging.Logger, run_single_campaign) -> None:
+    precheck_root = args.logs_root / "precheck"
+    if precheck_root.exists():
+        shutil.rmtree(precheck_root)
+    precheck_root.mkdir(parents=True, exist_ok=True)
+
+    logger.info(
+        (
+            "Précheck démarré: mini matrice "
+            f"tailles={list(_PRECHECK_NETWORK_SIZES)}, snir={list(_PRECHECK_SNIR_MODES)}, "
+            f"seed={_PRECHECK_SEED}, algos={args.algos}"
+        ),
+        extra={"statut": "precheck_start"},
+    )
+
+    run_count = 0
+    for snir_mode in _PRECHECK_SNIR_MODES:
+        snir_folder = f"SNIR_{snir_mode}"
+        snir_cli_value = "snir_on" if snir_mode == "ON" else "snir_off"
+        for network_size in _PRECHECK_NETWORK_SIZES:
+            for algorithm in args.algos:
+                run_count += 1
+                run_dir = (
+                    precheck_root
+                    / snir_folder
+                    / f"ns_{network_size}"
+                    / f"algo_{algorithm}"
+                    / f"seed_{_PRECHECK_SEED}"
+                )
+                run_dir.mkdir(parents=True, exist_ok=True)
+                run_single_campaign(
+                    network_size=network_size,
+                    algorithm=str(algorithm),
+                    snir_mode=snir_cli_value,
+                    seed=_PRECHECK_SEED,
+                    warmup_s=float(args.warmup_s),
+                    output_dir=run_dir,
+                    ucb_config_path=args.ucb_config,
+                )
+                parse_run(run_dir / "raw_packets.csv", warmup_s=0.0)
+
+    aggregate_root = Path(aggregate_logs(precheck_root, allow_partial=False))
+    expected_csvs: list[tuple[Path, tuple[str, ...]]] = [
+        (aggregate_root / "SNIR_OFF" / "pdr_results.csv", ("network_size", "algorithm", "snir", "pdr")),
+        (
+            aggregate_root / "SNIR_OFF" / "throughput_results.csv",
+            ("network_size", "algorithm", "snir", "throughput_packets_per_s"),
+        ),
+        (
+            aggregate_root / "SNIR_OFF" / "energy_results.csv",
+            ("network_size", "algorithm", "snir", "energy_joule_per_packet"),
+        ),
+        (aggregate_root / "SNIR_OFF" / "sf_distribution.csv", ("network_size", "algorithm", "snir", "sf", "count")),
+        (aggregate_root / "SNIR_ON" / "pdr_results.csv", ("network_size", "algorithm", "snir", "pdr")),
+        (
+            aggregate_root / "SNIR_ON" / "throughput_results.csv",
+            ("network_size", "algorithm", "snir", "throughput_packets_per_s"),
+        ),
+        (
+            aggregate_root / "SNIR_ON" / "energy_results.csv",
+            ("network_size", "algorithm", "snir", "energy_joule_per_packet"),
+        ),
+        (aggregate_root / "SNIR_ON" / "sf_distribution.csv", ("network_size", "algorithm", "snir", "sf", "count")),
+    ]
+    if any(str(algo).upper() == "UCB" for algo in args.algos):
+        expected_csvs.append((aggregate_root / "learning_curve_ucb.csv", ("episode", "reward")))
+
+    for csv_path, expected_columns in expected_csvs:
+        _validate_precheck_csv(csv_path, expected_columns)
+
+    logger.info(
+        (
+            f"Précheck GO ✅ | runs={run_count} | csv_validés={len(expected_csvs)} | "
+            f"aggregate_root={aggregate_root.resolve()}"
+        ),
+        extra={"statut": "precheck_go"},
+    )
+
+
 def _collect_completed_runs(logs_root: Path) -> set[tuple[str, int, str, int]]:
     completed: set[tuple[str, int, str, int]] = set()
     for summary_path in logs_root.glob("SNIR_*/ns_*/algo_*/seed_*/campaign_summary.json"):
@@ -426,6 +558,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Relance tous les runs même si les artefacts existent.",
     )
+    parser.add_argument(
+        "--skip-precheck",
+        action="store_true",
+        help="Désactive le précheck GO/NO-GO avant la campagne complète.",
+    )
     args = parser.parse_args()
 
     if args.replications <= 0:
@@ -464,6 +601,21 @@ def main() -> None:
         f"Séquence algorithmes retenue (ordre d'exécution): {args.algos}",
         extra={"statut": "algo_sequence"},
     )
+
+    if args.skip_precheck:
+        logger.warning(
+            "Précheck désactivé (--skip-precheck).",
+            extra={"statut": "precheck_skipped"},
+        )
+    else:
+        try:
+            _run_precheck(args=args, logger=logger, run_single_campaign=run_single_campaign)
+        except Exception as exc:
+            logger.error(
+                f"Précheck NO-GO ❌ | cause={exc}",
+                extra={"statut": "precheck_nogo"},
+            )
+            raise RuntimeError("Campagne bloquée: précheck NO-GO.") from exc
 
     run_index: list[dict[str, object]] = []
     total_runs = len(args.network_sizes) * len(args.algos) * len(args.snir) * args.replications
