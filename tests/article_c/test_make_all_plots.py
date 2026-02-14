@@ -137,3 +137,69 @@ def test_main_source_by_size_without_step1_aggregate(monkeypatch, tmp_path) -> N
     monkeypatch.setattr(make_all_plots.importlib, "import_module", lambda _: FakeModule)
 
     make_all_plots.main(["--steps", "step1", "--source", "by_size", "--skip-scientific-qa"])
+
+
+def test_make_all_plots_post_modules_source_by_size(monkeypatch, tmp_path) -> None:
+    for step in ("step1", "step2"):
+        csv_path = (
+            tmp_path
+            / step
+            / "results"
+            / "by_size"
+            / "size_100"
+            / "aggregated_results.csv"
+        )
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        csv_path.write_text(
+            "network_size,algo,snir_mode,cluster,pdr_mean,throughput_success_mean\n"
+            "100,adr,snir_on,all,0.9,1.0\n",
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(make_all_plots, "STEP1_RESULTS_DIR", tmp_path / "step1" / "results")
+    monkeypatch.setattr(make_all_plots, "STEP2_RESULTS_DIR", tmp_path / "step2" / "results")
+    monkeypatch.setattr(make_all_plots, "STEP1_PLOTS_OUTPUT_DIR", tmp_path / "step1" / "plots" / "output")
+    monkeypatch.setattr(make_all_plots, "STEP2_PLOTS_OUTPUT_DIR", tmp_path / "step2" / "plots" / "output")
+    monkeypatch.setattr(make_all_plots, "MANIFEST_OUTPUT_PATH", tmp_path / "figures_manifest.csv")
+    monkeypatch.setattr(make_all_plots, "PLOT_DATA_FILTER_REPORT_OUTPUT_PATH", tmp_path / "plot_data_filter_report.csv")
+    monkeypatch.setattr(make_all_plots, "LEGEND_CHECK_REPORT_OUTPUT_PATH", tmp_path / "legend_check_report.csv")
+    monkeypatch.setattr(make_all_plots, "PLOT_MODULES", {"step1": [], "step2": []})
+    monkeypatch.setattr(
+        make_all_plots,
+        "POST_PLOT_MODULES",
+        [
+            "article_c.reproduce_author_results",
+            "article_c.compare_with_snir",
+            "article_c.plot_cluster_der",
+        ],
+    )
+    monkeypatch.setattr(make_all_plots, "_preflight_validate_plot_modules", lambda: {})
+    monkeypatch.setattr(make_all_plots, "_validate_step2_plot_module_registry", lambda: None)
+    monkeypatch.setattr(make_all_plots, "_check_legends_for_module", lambda **_: [])
+
+    seen_sources: dict[str, str] = {}
+
+
+    def fake_import(module_path: str):
+        module = type(module_path.split(".")[-1], (), {})
+        module.LAST_EFFECTIVE_SOURCE = ""
+
+        def _main(argv: list[str], source: str, **_kwargs: object) -> None:
+            assert "--source" in argv
+            assert argv[argv.index("--source") + 1] == "by_size"
+            assert source == "by_size"
+            module.LAST_EFFECTIVE_SOURCE = source
+            seen_sources[module_path] = source
+
+        module.main = staticmethod(_main)
+        return module
+
+    monkeypatch.setattr(make_all_plots.importlib, "import_module", fake_import)
+
+    make_all_plots.main(["--source", "by_size", "--skip-scientific-qa"])
+
+    assert seen_sources == {
+        "article_c.reproduce_author_results": "by_size",
+        "article_c.compare_with_snir": "by_size",
+        "article_c.plot_cluster_der": "by_size",
+    }

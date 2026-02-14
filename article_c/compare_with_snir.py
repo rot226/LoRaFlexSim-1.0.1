@@ -168,6 +168,11 @@ def _load_results_with_fallback(
     loader = load_step1_aggregated if step == 1 else load_step2_aggregated
     step_label = f"step{step}"
     normalized_source = str(source).strip().lower()
+    if normalized_source == "none":
+        raise ValueError(
+            "source='none' est interdit pour compare_with_snir. "
+            "Utilisez --source aggregates ou --source by_size."
+        )
     if normalized_source not in SUPPORTED_SOURCES:
         raise ValueError(
             "source invalide pour ce module (compare_with_snir). "
@@ -179,12 +184,15 @@ def _load_results_with_fallback(
         try:
             rows = loader(path)
         except Exception as exc:  # noqa: BLE001
-            LOGGER.warning("Impossible de charger %s: %s", path, exc)
-            return [], "none"
+            raise RuntimeError(
+                f"Source contractuelle '{normalized_source}' indisponible pour {step_label}: {path} ({exc})."
+            ) from exc
         if rows:
             LOGGER.info("source utilisée (%s): %s", step_label, path)
             return rows, "aggregates"
-        return [], "none"
+        raise RuntimeError(
+            f"Source contractuelle '{normalized_source}' vide pour {step_label}: {path}."
+        )
 
     by_size_paths = sorted(results_dir.glob("by_size/size_*/rep_*/aggregated_results.csv"))
     if not by_size_paths:
@@ -202,7 +210,10 @@ def _load_results_with_fallback(
             results_dir,
         )
         return rows, "by_size"
-    return [], "none"
+    raise RuntimeError(
+        f"Source contractuelle '{normalized_source}' vide pour {step_label}: "
+        f"aucun fichier by_size exploitable dans {results_dir}."
+    )
 
 
 def _float_or_none(value: object) -> float | None:
@@ -307,6 +318,11 @@ def _resolve_metric_key(
 
 def _validate_source_for_module(source: str) -> str:
     normalized_source = str(source).strip().lower()
+    if normalized_source == "none":
+        raise ValueError(
+            "source='none' est interdit pour compare_with_snir. "
+            "Utilisez --source aggregates ou --source by_size."
+        )
     if normalized_source not in SUPPORTED_SOURCES:
         supported = ", ".join(sorted(SUPPORTED_SOURCES))
         raise ValueError(
@@ -578,13 +594,16 @@ def main(
         step=2,
         source=args.source,
     )
-    effective_sources = {src for src in (step1_source, step2_source) if src != "none"}
-    if not effective_sources:
-        LAST_EFFECTIVE_SOURCE = "none"
-    elif len(effective_sources) == 1:
-        LAST_EFFECTIVE_SOURCE = next(iter(effective_sources))
+    effective_sources = {step1_source, step2_source}
+    if len(effective_sources) == 1:
+        LAST_EFFECTIVE_SOURCE = step1_source
     else:
         LAST_EFFECTIVE_SOURCE = "mixed"
+    if LAST_EFFECTIVE_SOURCE not in SUPPORTED_SOURCES:
+        raise RuntimeError(
+            "Source effective non contractuelle pour compare_with_snir: "
+            f"{LAST_EFFECTIVE_SOURCE!r} (demandée={args.source!r})."
+        )
     LOGGER.info("source effective compare_with_snir: %s", LAST_EFFECTIVE_SOURCE)
     _trace_available_columns(step1_rows, step_label="step1")
     _trace_available_columns(step2_rows, step_label="step2")
