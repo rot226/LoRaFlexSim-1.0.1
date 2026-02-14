@@ -151,6 +151,7 @@ class QoSManager:
         self.reconfig_interval_s: float = 60.0
         self.qos_periodic_refresh_enabled: bool = True
         self.qos_metrics_refresh_enabled: bool = True
+        self.qos_periodic_refresh_interval_s: float | None = None
         self.qos_periodic_min_interval_s: float | None = None
         self.qos_metrics_min_interval_s: float | None = None
         self.qos_metrics_cooldown_s: float | None = None
@@ -162,7 +163,11 @@ class QoSManager:
         self._last_node_ids: set[int] = set()
         self._last_recent_pdr: dict[int, float] = {}
         self._last_arrival_rates: dict[int, float] = {}
+        self._last_tx_attempts: dict[int, int] = {}
         self._last_assignments: dict[int, tuple[int, int]] = {}
+        self._topology_snapshot: tuple | None = None
+        self._topology_cache: dict[str, object] = {}
+        self._last_dynamic_signature: tuple | None = None
         self.out_of_service_queue: deque[tuple[int, str]] = deque()
         self.runtime_profile_s: dict[str, float] = defaultdict(float)
 
@@ -170,7 +175,9 @@ class QoSManager:
         self.runtime_profile_s[key] += max(0.0, float(duration_s))
 
     def periodic_refresh_interval_s(self) -> float | None:
-        interval = self.reconfig_interval_s
+        interval = self.qos_periodic_refresh_interval_s
+        if interval is None:
+            interval = self.reconfig_interval_s
         minimum = self.qos_periodic_min_interval_s
         if minimum is not None and minimum > 0.0:
             if interval is None or interval <= 0.0:
@@ -489,6 +496,16 @@ class QoSManager:
         factor = wavelength / (4.0 * math.pi)
 
         nodes = list(getattr(simulator, "nodes", []))
+        self._ensure_topology_cache(simulator, nodes)
+        dynamic_signature = self._dynamic_context_signature(nodes)
+        if (
+            self.sf_limits
+            and self._last_dynamic_signature is not None
+            and dynamic_signature == self._last_dynamic_signature
+        ):
+            self._update_last_reconfig_time(simulator)
+            self._profile("qos_update_context", time.perf_counter() - t0)
+            return
         reference_tx_dbm = self._reference_tx_power_dbm(simulator, nodes)
         reference_tx_w = self._dbm_to_w(reference_tx_dbm)
 
@@ -518,7 +535,9 @@ class QoSManager:
             setattr(node, "qos_cluster_id", cluster.cluster_id)
             base = base_logs.get(cluster.cluster_id, 0.0)
             node_tx_w = self._dbm_to_w(getattr(node, "tx_power", reference_tx_dbm))
-            distance = self._nearest_gateway_distance(node, getattr(simulator, "gateways", []))
+            node_id = getattr(node, "id", id(node))
+            distance_map = self._topology_cache.get("node_distance", {})
+            distance = float(distance_map.get(node_id, 0.0))
             accessible: list[int] = []
             if base > 0.0 and node_tx_w > 0.0:
                 for sf in sfs:
@@ -534,7 +553,7 @@ class QoSManager:
                         continue
                     if distance <= limit:
                         accessible.append(sf)
-            node_sf_access[getattr(node, "id", id(node))] = accessible
+            node_sf_access[node_id] = accessible
             setattr(node, "qos_accessible_sf", accessible)
             if accessible:
                 setattr(node, "qos_min_sf", accessible[0])
@@ -630,11 +649,18 @@ class QoSManager:
             for node in nodes
         }
         self._last_arrival_rates = {}
+        self._last_tx_attempts = {}
         for node in nodes:
             node_id = getattr(node, "id", id(node))
             rate = self._node_arrival_rate(node)
             if rate is not None:
                 self._last_arrival_rates[node_id] = rate
+            self._last_tx_attempts[node_id] = int(getattr(node, "tx_attempted", 0) or 0)
+        self._last_dynamic_signature = dynamic_signature
+        self._update_last_reconfig_time(simulator)
+        self._profile("qos_update_context", time.perf_counter() - t0)
+
+    def _update_last_reconfig_time(self, simulator) -> None:
         current_time = getattr(simulator, "current_time", None)
         try:
             time_value = float(current_time)
@@ -642,7 +668,59 @@ class QoSManager:
             time_value = None
         if time_value is not None and math.isfinite(time_value):
             self._last_reconfig_time = time_value
-        self._profile("qos_update_context", time.perf_counter() - t0)
+
+    def _topology_signature(self, simulator, nodes: Sequence[object]) -> tuple:
+        gateways = tuple(
+            sorted(
+                (
+                    getattr(gw, "id", id(gw)),
+                    round(float(getattr(gw, "x", 0.0)), 6),
+                    round(float(getattr(gw, "y", 0.0)), 6),
+                )
+                for gw in (getattr(simulator, "gateways", []) or [])
+            )
+        )
+        node_positions = tuple(
+            sorted(
+                (
+                    getattr(node, "id", id(node)),
+                    round(float(getattr(node, "x", 0.0)), 6),
+                    round(float(getattr(node, "y", 0.0)), 6),
+                )
+                for node in nodes
+            )
+        )
+        return gateways, node_positions
+
+    def _ensure_topology_cache(self, simulator, nodes: Sequence[object]) -> None:
+        snapshot = self._topology_signature(simulator, nodes)
+        if snapshot == self._topology_snapshot:
+            return
+        gateways = getattr(simulator, "gateways", []) or []
+        node_distance: dict[int, float] = {}
+        node_map: dict[int, object] = {}
+        for node in nodes:
+            node_id = getattr(node, "id", id(node))
+            node_map[node_id] = node
+            node_distance[node_id] = self._nearest_gateway_distance(node, gateways)
+        self._topology_cache = {
+            "node_map": node_map,
+            "node_distance": node_distance,
+        }
+        self._topology_snapshot = snapshot
+
+    def _dynamic_context_signature(self, nodes: Sequence[object]) -> tuple:
+        return tuple(
+            sorted(
+                (
+                    getattr(node, "id", id(node)),
+                    round(float(getattr(node, "tx_power", 0.0) or 0.0), 6),
+                    int(getattr(getattr(node, "channel", None), "channel_index", 0) or 0),
+                    round(float(self._node_arrival_rate(node) or 0.0), 9),
+                )
+                for node in nodes
+            )
+        )
 
     def _clear_qos_state(self, simulator) -> None:
         self.sf_limits = {}
@@ -669,7 +747,11 @@ class QoSManager:
         self._last_node_ids = set()
         self._last_recent_pdr = {}
         self._last_arrival_rates = {}
+        self._last_tx_attempts = {}
         self._last_reconfig_time = None
+        self._topology_snapshot = None
+        self._topology_cache = {}
+        self._last_dynamic_signature = None
 
     def _should_refresh_context(self, simulator) -> bool:
         if not self.clusters:
@@ -691,8 +773,12 @@ class QoSManager:
                 try:
                     current = float(getattr(node, "recent_pdr", None))
                 except (TypeError, ValueError):
-                    continue
-                if not math.isfinite(current):
+                    current = None
+                if current is None or not math.isfinite(current):
+                    previous_tx = self._last_tx_attempts.get(node_id, 0)
+                    current_tx = int(getattr(node, "tx_attempted", 0) or 0)
+                    if current_tx > previous_tx:
+                        return True
                     continue
                 if abs(current - previous) >= self.pdr_drift_threshold:
                     return True
@@ -840,8 +926,13 @@ class QoSManager:
         sf_candidates = sorted(required_snr_db) if use_radio_metric else []
 
         def _radio_metric(node) -> tuple[int, float, float, int]:
-            distance = self._nearest_gateway_distance(node, gateways)
-            path_loss = channel.path_loss(distance) if channel is not None else distance
+            node_id = getattr(node, "id", id(node))
+            distance_map = self._topology_cache.get("node_distance", {})
+            distance = float(distance_map.get(node_id, self._nearest_gateway_distance(node, gateways)))
+            if channel is not None and hasattr(channel, "path_loss"):
+                path_loss = channel.path_loss(distance)
+            else:
+                path_loss = distance
             min_sf = None
             existing_access = getattr(node, "qos_accessible_sf", None) or []
             if existing_access:
