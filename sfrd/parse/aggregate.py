@@ -9,6 +9,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
+from .reward_ucb import aggregate_learning_curves
+
 
 def _to_int(value: Any) -> int:
     if isinstance(value, bool):
@@ -131,7 +133,7 @@ def aggregate_logs(logs_root: str | Path) -> Path:
     sf_sums: dict[tuple[int, str, str, int], dict[str, float]] = defaultdict(
         lambda: {"count_sum": 0.0, "replications": 0.0}
     )
-    rewards_by_episode: dict[int, list[float]] = defaultdict(list)
+    run_learning_curves: list[list[dict[str, float | int]]] = []
 
     for summary_path in summaries:
         data = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -164,8 +166,14 @@ def aggregate_logs(logs_root: str | Path) -> Path:
             sf_sums[sf_key]["count_sum"] += value
             sf_sums[sf_key]["replications"] += 1.0
 
+        algorithm_key = algorithm.strip().upper().replace("-", "")
+        if algorithm_key not in {"UCB", "UCB1"}:
+            continue
+        run_curve: list[dict[str, float | int]] = []
         for episode, reward in _extract_rewards(data):
-            rewards_by_episode[episode].append(reward)
+            run_curve.append({"episode": max(1, episode), "reward": reward})
+        if run_curve:
+            run_learning_curves.append(run_curve)
 
     pdr_rows: list[dict[str, Any]] = []
     throughput_rows: list[dict[str, Any]] = []
@@ -213,17 +221,7 @@ def aggregate_logs(logs_root: str | Path) -> Path:
             }
         )
 
-    learning_rows: list[dict[str, Any]] = []
-    for episode in sorted(rewards_by_episode):
-        rewards = rewards_by_episode[episode]
-        if not rewards:
-            continue
-        learning_rows.append(
-            {
-                "episode": episode,
-                "reward": sum(rewards) / len(rewards),
-            }
-        )
+    learning_rows: list[dict[str, Any]] = aggregate_learning_curves(run_learning_curves)
 
     off_root = root.parent / "output" / "SNIR_OFF"
     on_root = root.parent / "output" / "SNIR_ON"

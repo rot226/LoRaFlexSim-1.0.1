@@ -16,6 +16,12 @@ class RewardSample:
     fairness: float | None
 
 
+@dataclass(frozen=True)
+class RewardComputation:
+    raw: float
+    normalized: float
+
+
 class UCB1Bandit:
     """Implémentation simple de l'algorithme UCB1.
 
@@ -148,6 +154,7 @@ class LoRaSFSelectorUCB1:
         self._qos_windows: List[Deque[RewardSample]] = [
             deque(maxlen=self.reward_window) for _ in range(self.bandit.n_arms)
         ]
+        self.last_reward_info: dict[str, float | str | int | None] = {}
 
     def _binary_snir_reward(
         self,
@@ -235,7 +242,12 @@ class LoRaSFSelectorUCB1:
             fairness=fairness,
         )
 
-    def _combine_components(self, components: RewardSample, *, expected_der: float | None = None) -> float:
+    def _combine_components(
+        self,
+        components: RewardSample,
+        *,
+        expected_der: float | None = None,
+    ) -> RewardComputation:
         """Combine les composantes en moyenne pondérée normalisée (MAB/UCB1).
 
         La récompense est une moyenne pondérée normalisée des composantes
@@ -260,10 +272,11 @@ class LoRaSFSelectorUCB1:
 
         total_weight = sum(abs(weight) for _, weight in weighted_components if weight != 0.0)
         if total_weight == 0.0:
-            return 0.0
+            return RewardComputation(raw=0.0, normalized=0.0)
 
-        reward = sum(value * weight for value, weight in weighted_components) / total_weight
-        return reward
+        reward_raw = sum(value * weight for value, weight in weighted_components)
+        reward = reward_raw / total_weight
+        return RewardComputation(raw=reward_raw, normalized=reward)
 
     def select_sf(self) -> str:
         """Retourne le facteur d'étalement à utiliser."""
@@ -305,7 +318,7 @@ class LoRaSFSelectorUCB1:
             fairness_index=fairness_index,
             energy_normalization=energy_normalization,
         )
-        return self._combine_components(components, expected_der=expected_der)
+        return self._combine_components(components, expected_der=expected_der).normalized
 
     def update(
         self,
@@ -332,6 +345,12 @@ class LoRaSFSelectorUCB1:
             reward = self._binary_snir_reward(snir_db, threshold)
             weight = max(traffic_volume, 0.0) if traffic_volume is not None else 1.0
             self.bandit.update(arm, reward, weight=weight)
+            self.last_reward_info = {
+                "reward_raw": reward,
+                "reward_normalized": reward,
+                "success_rate": 1.0 if success else 0.0,
+                "energy_norm": 0.0,
+            }
             return reward
         sample = self._compute_components(
             success,
@@ -348,10 +367,17 @@ class LoRaSFSelectorUCB1:
         window = self._qos_windows[arm]
         window.append(sample)
         window_components = self._mean_components(window)
-        window_reward = self._combine_components(window_components, expected_der=expected_der)
+        reward_calc = self._combine_components(window_components, expected_der=expected_der)
+        window_reward = reward_calc.normalized
 
         weight = max(traffic_volume, 0.0) if traffic_volume is not None else 1.0
         self.bandit.update(arm, window_reward, weight=weight)
+        self.last_reward_info = {
+            "reward_raw": reward_calc.raw,
+            "reward_normalized": reward_calc.normalized,
+            "success_rate": local_der if local_der is not None else (1.0 if success else 0.0),
+            "energy_norm": window_components.energy,
+        }
         return window_reward
 
     def reset(self) -> None:
