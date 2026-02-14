@@ -8,6 +8,7 @@ logique de simulation.
 
 from __future__ import annotations
 
+import csv
 import json
 import math
 from pathlib import Path
@@ -57,6 +58,62 @@ def _normalize_snir_mode(value: str) -> bool:
     if key not in _SNIR_ALIASES:
         raise ValueError(f"snir_mode invalide: {value!r}")
     return _SNIR_ALIASES[key]
+
+
+def _export_raw_artifacts(simulator: Simulator, output_path: Path) -> None:
+    """Exporte les artefacts bruts attendus (`raw_packets.csv`, `raw_energy.csv`)."""
+
+    payload_bytes = int(getattr(simulator, "payload_size_bytes", 0) or 0)
+    packet_rows: list[dict[str, int | float]] = []
+    max_time = 0.0
+
+    for event in getattr(simulator, "events_log", []):
+        start_time = event.get("start_time")
+        node_id = event.get("node_id")
+        sf = event.get("sf")
+        if start_time is None or node_id is None or sf is None:
+            continue
+        try:
+            time_value = float(start_time)
+            node_value = int(node_id)
+            sf_value = int(sf)
+        except (TypeError, ValueError):
+            continue
+        if sf_value < 7 or sf_value > 12:
+            continue
+        if time_value > max_time:
+            max_time = time_value
+
+        packet_rows.append(
+            {
+                "time": time_value,
+                "node_id": node_value,
+                "sf": sf_value,
+                "tx_ok": 1,
+                "rx_ok": 1 if str(event.get("result", "")).strip() == "Success" else 0,
+                "payload_bytes": payload_bytes,
+                "run": 1,
+            }
+        )
+
+    with (output_path / "raw_packets.csv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["time", "node_id", "sf", "tx_ok", "rx_ok", "payload_bytes", "run"],
+        )
+        writer.writeheader()
+        writer.writerows(packet_rows)
+
+    total_energy_joule = float(sum(getattr(node, "energy_consumed", 0.0) for node in simulator.nodes))
+    with (output_path / "raw_energy.csv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["total_energy_joule", "sim_duration_s"])
+        writer.writeheader()
+        writer.writerow(
+            {
+                "total_energy_joule": total_energy_joule,
+                "sim_duration_s": max_time,
+            }
+        )
 
 
 def run_campaign(
@@ -140,6 +197,7 @@ def run_campaign(
     # simulation événementielle.
     simulator.run()
     metrics = simulator.get_metrics()
+    _export_raw_artifacts(simulator, output_path)
 
     ucb_history = collect_ucb_history(simulator)
     learning_curve = learning_curve_from_history(ucb_history)
@@ -147,8 +205,8 @@ def run_campaign(
         export_ucb_history_csv(ucb_history, output_path / "ucb_history.csv")
 
     tx_attempted = int(metrics.get("tx_attempted", 0))
-    rx_delivered = int(metrics.get("rx_delivered", 0))
-    computed_pdr = (rx_delivered / tx_attempted) if tx_attempted > 0 else 0.0
+    delivered = int(metrics.get("rx_delivered", metrics.get("delivered", 0)))
+    computed_pdr = (delivered / tx_attempted) if tx_attempted > 0 else 0.0
 
     summary = {
         "contract": {
@@ -171,7 +229,7 @@ def run_campaign(
             "throughput_bps": float(metrics.get("throughput_bps", 0.0)),
             "collisions": int(metrics.get("collisions", 0)),
             "tx_attempted": tx_attempted,
-            "rx_delivered": rx_delivered,
+            "rx_delivered": delivered,
             "qos_refresh_benchmark": metrics.get("qos_refresh_benchmark", {}),
             "runtime_profile_s": metrics.get("runtime_profile_s", {}),
             "ucb_learning_curve": learning_curve,

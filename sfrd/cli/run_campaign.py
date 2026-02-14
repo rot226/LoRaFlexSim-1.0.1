@@ -6,11 +6,13 @@ import argparse
 import importlib.util
 import json
 import logging
+import math
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
 
 from sfrd.parse.aggregate import aggregate_logs
+from sfrd.parse.parse_run import parse_run
 
 
 class MetricsInconsistentError(RuntimeError):
@@ -280,6 +282,8 @@ def main() -> None:
 
     epsilon = 1e-9
 
+    stop_campaign = False
+
     for snir_mode in args.snir:
         snir_folder = f"SNIR_{snir_mode}"
         snir_cli_value = "snir_on" if snir_mode == "ON" else "snir_off"
@@ -379,9 +383,48 @@ def main() -> None:
                         duration_s = perf_counter() - t0
                         metrics = result.get("summary", {}).get("metrics", {})
                         tx = int(metrics.get("tx_attempted", 0))
-                        success = int(metrics.get("rx_delivered", 0))
+                        success = int(metrics.get("rx_delivered", metrics.get("delivered", 0)))
                         pdr = (success / tx) if tx > 0 else 0.0
                         summary_pdr = float(metrics.get("pdr", 0.0))
+
+                        raw_packets_path = run_dir / "raw_packets.csv"
+                        raw_energy_path = run_dir / "raw_energy.csv"
+                        parsed_metrics = parse_run(raw_packets_path, warmup_s=0.0)
+                        raw_tx = int(parsed_metrics.get("tx_count") or 0)
+                        raw_success = int(parsed_metrics.get("success_count") or 0)
+
+                        if raw_tx > 0 and raw_success == 0:
+                            logger.warning(
+                                (
+                                    "Aucune trame marquée succès dans le log brut "
+                                    f"(tx_count={raw_tx}, raw={raw_packets_path.resolve()})."
+                                ),
+                                extra={**run_context, "statut": "raw_warning"},
+                            )
+
+                        raw_pdr = (raw_success / raw_tx) if raw_tx > 0 else 0.0
+                        if raw_tx > 0 and not math.isclose(summary_pdr, raw_pdr, rel_tol=0.0, abs_tol=epsilon):
+                            run_status = {
+                                "status": "metrics_inconsistent",
+                                "duration_s": duration_s,
+                                "summary_path": str(result["summary_path"]),
+                                "raw_packets_path": str(raw_packets_path),
+                                "raw_energy_path": str(raw_energy_path),
+                                "summary_pdr": summary_pdr,
+                                "raw_tx": raw_tx,
+                                "raw_success": raw_success,
+                                "raw_pdr": raw_pdr,
+                                "epsilon": epsilon,
+                            }
+                            (run_dir / "run_status.json").write_text(
+                                json.dumps(run_status, indent=2, ensure_ascii=False, sort_keys=True),
+                                encoding="utf-8",
+                            )
+                            raise MetricsInconsistentError(
+                                "Métriques incohérentes entre résumé et log brut: "
+                                f"pdr_summary={summary_pdr:.12f}, pdr_raw={raw_pdr:.12f}, "
+                                f"raw={raw_packets_path}"
+                            )
 
                         if tx > 0 and abs(summary_pdr - (success / tx)) >= epsilon:
                             run_status = {
@@ -447,6 +490,8 @@ def main() -> None:
                             f"Run échoué: {exc}",
                             extra={**run_context, "statut": "metrics_inconsistent"},
                         )
+                        stop_campaign = True
+                        break
                     except Exception as exc:  # pragma: no cover - robustesse CLI
                         duration_s = perf_counter() - t0
                         run_status = {
@@ -472,6 +517,21 @@ def main() -> None:
                             f"Erreur run: {exc}",
                             extra={**run_context, "statut": "failed"},
                         )
+                if stop_campaign:
+                    break
+            if stop_campaign:
+                break
+        if stop_campaign:
+            break
+
+    if stop_campaign:
+        logger.error(
+            "Campagne interrompue prématurément suite à une incohérence de diagnostic.",
+            extra={"statut": "aborted"},
+        )
+        raise MetricsInconsistentError(
+            "Campagne interrompue: incohérence détectée entre métriques agrégées et logs bruts."
+        )
 
     (logs_root / "campaign_runs.json").write_text(
         json.dumps(run_index, indent=2, ensure_ascii=False, sort_keys=True),
