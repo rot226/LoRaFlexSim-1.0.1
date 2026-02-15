@@ -37,4 +37,14 @@ def test_run_campaign_is_seed_deterministic(tmp_path):
     metrics_b.pop("runtime_profile_s", None)
     metrics_a.pop("qos_refresh_benchmark", None)
     metrics_b.pop("qos_refresh_benchmark", None)
+    metrics_a.pop("qos_refresh_total_cost_s", None)
+    metrics_b.pop("qos_refresh_total_cost_s", None)
+    metrics_a.pop("qos_refresh_avg_cost_s", None)
+    metrics_b.pop("qos_refresh_avg_cost_s", None)
+    metrics_a.pop("qos_refresh_max_cost_s", None)
+    metrics_b.pop("qos_refresh_max_cost_s", None)
     assert metrics_a == metrics_b
+    assert payload_a["metrics"]["qos_refresh_count"] >= 0
+    assert payload_a["metrics"]["qos_refresh_total_cost_s"] >= 0.0
+    assert payload_a["metrics"]["qos_refresh_avg_cost_s"] >= 0.0
+    assert payload_a["metrics"]["qos_refresh_max_cost_s"] >= 0.0

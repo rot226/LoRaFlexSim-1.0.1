@@ -269,6 +269,7 @@ def run_campaign(
     delivered = int(metrics.get("rx_delivered", metrics.get("delivered", 0)))
     computed_pdr = (delivered / tx_attempted) if tx_attempted > 0 else 0.0
 
+    qos_refresh_benchmark = metrics.get("qos_refresh_benchmark", {}) or {}
     summary = {
         "contract": {
             "network_size": int(network_size),
@@ -291,7 +292,11 @@ def run_campaign(
             "collisions": int(metrics.get("collisions", 0)),
             "tx_attempted": tx_attempted,
             "rx_delivered": delivered,
-            "qos_refresh_benchmark": metrics.get("qos_refresh_benchmark", {}),
+            "qos_refresh_benchmark": qos_refresh_benchmark,
+            "qos_refresh_count": int(qos_refresh_benchmark.get("refresh_count", 0) or 0),
+            "qos_refresh_total_cost_s": float(qos_refresh_benchmark.get("total_refresh_cost_s", 0.0) or 0.0),
+            "qos_refresh_avg_cost_s": float(qos_refresh_benchmark.get("avg_refresh_cost_s", 0.0) or 0.0),
+            "qos_refresh_max_cost_s": float(qos_refresh_benchmark.get("max_refresh_cost_s", 0.0) or 0.0),
             "runtime_profile_s": metrics.get("runtime_profile_s", {}),
             "ucb_learning_curve": learning_curve,
         },

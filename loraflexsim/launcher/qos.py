@@ -155,6 +155,8 @@ class QoSManager:
         self.qos_periodic_min_interval_s: float | None = None
         self.qos_metrics_min_interval_s: float | None = None
         self.qos_metrics_cooldown_s: float | None = None
+        self.mixra_h_refresh_interval_s: float | None = None
+        self.mixra_h_incremental_enabled: bool = True
         self.pdr_drift_threshold: float = 0.1
         self.traffic_drift_threshold: float = 0.25
         self.max_clusters_per_channel: int | None = None
@@ -167,7 +169,10 @@ class QoSManager:
         self._last_assignments: dict[int, tuple[int, int]] = {}
         self._topology_snapshot: tuple | None = None
         self._topology_cache: dict[str, object] = {}
+        self._static_context_signature: tuple | None = None
+        self._static_context_cache: dict[str, object] = {}
         self._last_dynamic_signature: tuple | None = None
+        self._last_dynamic_node_state: dict[int, tuple[float, int, float]] = {}
         self.out_of_service_queue: deque[tuple[int, str]] = deque()
         self.runtime_profile_s: dict[str, float] = defaultdict(float)
 
@@ -176,6 +181,12 @@ class QoSManager:
 
     def periodic_refresh_interval_s(self) -> float | None:
         interval = self.qos_periodic_refresh_interval_s
+        if (
+            self.active_algorithm == "MixRA-H"
+            and self.mixra_h_refresh_interval_s is not None
+            and self.mixra_h_refresh_interval_s > 0.0
+        ):
+            interval = self.mixra_h_refresh_interval_s
         if interval is None:
             interval = self.reconfig_interval_s
         minimum = self.qos_periodic_min_interval_s
@@ -218,7 +229,12 @@ class QoSManager:
             if shared_queue is not None:
                 self.out_of_service_queue = shared_queue
             if self.clusters and self._should_refresh_context(simulator):
+                update_t0 = time.perf_counter()
                 self._update_qos_context(simulator)
+                if refresh_context is not None:
+                    refresh_context["qos_context_update_duration_s"] = (
+                        time.perf_counter() - update_t0
+                    )
             self._configure_radio_model(
                 simulator,
                 use_snir=use_snir,
@@ -293,6 +309,17 @@ class QoSManager:
         self._last_recent_pdr = {}
         self._last_assignments = {}
         return list(self.clusters)
+
+    def set_mixra_h_refresh_cadence(self, interval_s: float | None) -> None:
+        """Définit la cadence dédiée des rafraîchissements périodiques MixRA-H."""
+
+        if interval_s is None:
+            self.mixra_h_refresh_interval_s = None
+            return
+        value = float(interval_s)
+        if value <= 0.0:
+            raise ValueError("La cadence MixRA-H doit être strictement positive.")
+        self.mixra_h_refresh_interval_s = value
 
     def set_mixra_cluster_limits(
         self,
@@ -474,6 +501,8 @@ class QoSManager:
         if not channel_indices:
             channel_indices = [0]
 
+        context_static_t0 = time.perf_counter()
+
         noise_power_w = self._noise_power_w(channel)
         if noise_power_w <= 0.0:
             self._clear_qos_state(simulator)
@@ -494,10 +523,28 @@ class QoSManager:
             frequency = 868e6
         wavelength = self.SPEED_OF_LIGHT / frequency
         factor = wavelength / (4.0 * math.pi)
+        static_signature = (
+            tuple(channel_indices),
+            tuple(sorted((int(sf), float(q)) for sf, q in snr_requirements.items())),
+            tuple(
+                (cluster.cluster_id, cluster.pdr_target, cluster.device_share, cluster.arrival_rate)
+                for cluster in self.clusters
+            ),
+            round(float(noise_power_w), 18),
+            round(float(alpha), 12),
+            round(float(frequency), 6),
+        )
+
+        static_cache = self._static_context_cache if static_signature == self._static_context_signature else {}
+        cached_base_logs = static_cache.get("base_logs")
+        cached_sfs = static_cache.get("sfs")
+        cached_sf_limits = static_cache.get("sf_limits")
+        cached_airtimes = static_cache.get("airtimes")
 
         nodes = list(getattr(simulator, "nodes", []))
         self._ensure_topology_cache(simulator, nodes)
-        dynamic_signature = self._dynamic_context_signature(nodes)
+        dynamic_state = self._dynamic_context_state(nodes)
+        dynamic_signature = tuple((node_id, *values) for node_id, values in sorted(dynamic_state.items()))
         if (
             self.sf_limits
             and self._last_dynamic_signature is not None
@@ -509,33 +556,100 @@ class QoSManager:
         reference_tx_dbm = self._reference_tx_power_dbm(simulator, nodes)
         reference_tx_w = self._dbm_to_w(reference_tx_dbm)
 
-        cluster_limits: dict[int, dict[int, float]] = {}
-        base_logs = {}
-        for cluster in self.clusters:
-            base = self._pdr_log_term(cluster.pdr_target)
-            base_logs[cluster.cluster_id] = base
-            cluster_limits[cluster.cluster_id] = {
-                sf: self._compute_limit(base, reference_tx_w, noise_power_w, q, alpha, factor)
-                for sf, q in snr_requirements.items()
+        if isinstance(cached_base_logs, dict):
+            base_logs = dict(cached_base_logs)
+        else:
+            base_logs = {
+                cluster.cluster_id: self._pdr_log_term(cluster.pdr_target)
+                for cluster in self.clusters
             }
 
-        self.sf_limits = cluster_limits
+        if isinstance(cached_sf_limits, dict):
+            cluster_limits = {
+                int(cluster_id): {int(sf): float(limit) for sf, limit in sf_map.items()}
+                for cluster_id, sf_map in cached_sf_limits.items()
+            }
+        else:
+            cluster_limits = {}
+            for cluster in self.clusters:
+                base = base_logs[cluster.cluster_id]
+                cluster_limits[cluster.cluster_id] = {
+                    sf: self._compute_limit(base, reference_tx_w, noise_power_w, q, alpha, factor)
+                    for sf, q in snr_requirements.items()
+                }
 
-        assignments = self._assign_nodes_to_clusters(
-            simulator,
-            nodes,
-            noise_power_w=noise_power_w,
-            reference_tx_dbm=reference_tx_dbm,
+        self.sf_limits = cluster_limits
+        self._profile("qos_update_context_static", time.perf_counter() - context_static_t0)
+
+        incremental_mixra_h = (
+            self.active_algorithm == "MixRA-H"
+            and self.mixra_h_incremental_enabled
+            and bool(self.node_clusters)
+            and len(dynamic_state) == len(self._last_dynamic_node_state)
         )
+        changed_node_ids: set[int] = set()
+        assignments: dict[object, Cluster]
+
+        if incremental_mixra_h:
+            changed_node_ids = {
+                node_id
+                for node_id, state in dynamic_state.items()
+                if self._last_dynamic_node_state.get(node_id) != state
+            }
+            incremental_mixra_h = bool(changed_node_ids) and len(changed_node_ids) < len(dynamic_state)
+
+        context_assign_t0 = time.perf_counter()
+        if incremental_mixra_h:
+            cluster_by_id = {cluster.cluster_id: cluster for cluster in self.clusters}
+            previous_assignments: dict[object, Cluster] = {}
+            for node in nodes:
+                node_id = getattr(node, "id", id(node))
+                cluster_id = self.node_clusters.get(node_id)
+                cluster = cluster_by_id.get(cluster_id)
+                if cluster is None:
+                    previous_assignments = {}
+                    incremental_mixra_h = False
+                    break
+                previous_assignments[node] = cluster
+            assignments = previous_assignments
+        else:
+            assignments = self._assign_nodes_to_clusters(
+                simulator,
+                nodes,
+                noise_power_w=noise_power_w,
+                reference_tx_dbm=reference_tx_dbm,
+            )
+        self._profile("qos_update_context_assign", time.perf_counter() - context_assign_t0)
+
+        if not assignments:
+            assignments = self._assign_nodes_to_clusters(
+                simulator,
+                nodes,
+                noise_power_w=noise_power_w,
+                reference_tx_dbm=reference_tx_dbm,
+            )
+            incremental_mixra_h = False
+
+        context_access_t0 = time.perf_counter()
         node_sf_access: dict[int, list[int]] = {}
         node_cluster_ids: dict[int, int] = {}
-        sfs = sorted(snr_requirements)
+        if isinstance(cached_sfs, list) and cached_sfs:
+            sfs = [int(sf) for sf in cached_sfs]
+        else:
+            sfs = sorted(snr_requirements)
+        previous_access = self.node_sf_access if incremental_mixra_h else {}
         for node, cluster in assignments.items():
             node_cluster_ids[getattr(node, "id", id(node))] = cluster.cluster_id
             setattr(node, "qos_cluster_id", cluster.cluster_id)
             base = base_logs.get(cluster.cluster_id, 0.0)
             node_tx_w = self._dbm_to_w(getattr(node, "tx_power", reference_tx_dbm))
             node_id = getattr(node, "id", id(node))
+            if incremental_mixra_h and node_id not in changed_node_ids:
+                accessible = list(previous_access.get(node_id, []))
+                node_sf_access[node_id] = accessible
+                setattr(node, "qos_accessible_sf", accessible)
+                setattr(node, "qos_min_sf", accessible[0] if accessible else None)
+                continue
             distance_map = self._topology_cache.get("node_distance", {})
             distance = float(distance_map.get(node_id, 0.0))
             accessible: list[int] = []
@@ -559,12 +673,17 @@ class QoSManager:
                 setattr(node, "qos_min_sf", accessible[0])
             else:
                 setattr(node, "qos_min_sf", None)
+        self._profile("qos_update_context_access", time.perf_counter() - context_access_t0)
 
         self.node_sf_access = node_sf_access
         self.node_clusters = node_cluster_ids
         d_matrix = self._build_d_matrix(assignments, node_sf_access, sfs)
         self.cluster_d_matrix = d_matrix
-        airtimes = self._compute_sf_airtimes(simulator, sfs)
+        if isinstance(cached_airtimes, dict):
+            airtimes = {int(sf): float(value) for sf, value in cached_airtimes.items()}
+        else:
+            airtimes = self._compute_sf_airtimes(simulator, sfs)
+        context_capacity_t0 = time.perf_counter()
         offered = self._compute_offered_traffic(assignments, node_sf_access, airtimes)
         totals = {
             cluster_id: sum(sum(ch.values()) for ch in sf_map.values())
@@ -622,6 +741,7 @@ class QoSManager:
         self.cluster_interference = interference
         self.cluster_capacity_limits = capacities
         self.cluster_sf_channel_capacity = sf_channel_capacity
+        self._profile("qos_update_context_capacity", time.perf_counter() - context_capacity_t0)
         cluster_config = {
             cluster.cluster_id: {
                 "arrival_rate": float(cluster.arrival_rate),
@@ -657,6 +777,18 @@ class QoSManager:
                 self._last_arrival_rates[node_id] = rate
             self._last_tx_attempts[node_id] = int(getattr(node, "tx_attempted", 0) or 0)
         self._last_dynamic_signature = dynamic_signature
+        self._last_dynamic_node_state = dynamic_state
+        if static_signature != self._static_context_signature:
+            self._static_context_signature = static_signature
+            self._static_context_cache = {
+                "base_logs": dict(base_logs),
+                "sfs": list(sfs),
+                "sf_limits": {
+                    int(cluster_id): {int(sf): float(limit) for sf, limit in sf_map.items()}
+                    for cluster_id, sf_map in cluster_limits.items()
+                },
+                "airtimes": {int(sf): float(value) for sf, value in airtimes.items()},
+            }
         self._update_last_reconfig_time(simulator)
         self._profile("qos_update_context", time.perf_counter() - t0)
 
@@ -710,17 +842,18 @@ class QoSManager:
         self._topology_snapshot = snapshot
 
     def _dynamic_context_signature(self, nodes: Sequence[object]) -> tuple:
-        return tuple(
-            sorted(
-                (
-                    getattr(node, "id", id(node)),
-                    round(float(getattr(node, "tx_power", 0.0) or 0.0), 6),
-                    int(getattr(getattr(node, "channel", None), "channel_index", 0) or 0),
-                    round(float(self._node_arrival_rate(node) or 0.0), 9),
-                )
-                for node in nodes
+        dynamic_state = self._dynamic_context_state(nodes)
+        return tuple((node_id, *values) for node_id, values in sorted(dynamic_state.items()))
+
+    def _dynamic_context_state(self, nodes: Sequence[object]) -> dict[int, tuple[float, int, float]]:
+        return {
+            getattr(node, "id", id(node)): (
+                round(float(getattr(node, "tx_power", 0.0) or 0.0), 6),
+                int(getattr(getattr(node, "channel", None), "channel_index", 0) or 0),
+                round(float(self._node_arrival_rate(node) or 0.0), 9),
             )
-        )
+            for node in nodes
+        }
 
     def _clear_qos_state(self, simulator) -> None:
         self.sf_limits = {}
@@ -751,7 +884,10 @@ class QoSManager:
         self._last_reconfig_time = None
         self._topology_snapshot = None
         self._topology_cache = {}
+        self._static_context_signature = None
+        self._static_context_cache = {}
         self._last_dynamic_signature = None
+        self._last_dynamic_node_state = {}
 
     def _should_refresh_context(self, simulator) -> bool:
         if not self.clusters:
