@@ -54,6 +54,8 @@ _ALLOWED_SF = {7, 8, 9, 10, 11, 12}
 _EXPECTED_NETWORK_SIZES = {80, 160, 320, 640, 1280}
 _EXPECTED_ALGORITHMS = {"UCB", "ADR", "MixRA-H", "MixRA-Opt"}
 _EXPECTED_SNIR = {"OFF", "ON"}
+_REQUIRED_SNIR_FOLDERS = ("SNIR_OFF", "SNIR_ON")
+_MIN_REQUIRED_CSV_PER_SNIR_FOLDER = 4
 
 
 @dataclass(frozen=True)
@@ -198,7 +200,7 @@ def _validate_business_rules(rows: Iterable[dict[str, str]], csv_path: Path) -> 
                 )
 
 
-def _validate_csv(csv_path: Path, expected_columns: tuple[str, ...]) -> None:
+def _validate_csv(csv_path: Path, expected_columns: tuple[str, ...]) -> list[dict[str, str]]:
     if not csv_path.exists():
         raise FileNotFoundError(f"Fichier CSV requis manquant: {csv_path}")
     if csv_path.stat().st_size == 0:
@@ -212,6 +214,96 @@ def _validate_csv(csv_path: Path, expected_columns: tuple[str, ...]) -> None:
         _validate_snir_folder(rows, csv_path, expected_snir)
 
     _validate_business_rules(rows, csv_path)
+    return rows
+
+
+def _validate_required_layout(output_root: Path) -> list[ValidationAnomaly]:
+    anomalies: list[ValidationAnomaly] = []
+
+    for folder_name in _REQUIRED_SNIR_FOLDERS:
+        folder_path = output_root / folder_name
+        if not folder_path.exists() or not folder_path.is_dir():
+            anomalies.append(
+                ValidationAnomaly(
+                    severity="critical",
+                    category="required_layout",
+                    message=f"Dossier requis manquant: {folder_path}",
+                )
+            )
+            continue
+
+        csv_files = sorted(folder_path.glob("*.csv"))
+        if len(csv_files) < _MIN_REQUIRED_CSV_PER_SNIR_FOLDER:
+            anomalies.append(
+                ValidationAnomaly(
+                    severity="critical",
+                    category="required_layout",
+                    message=(
+                        f"Dossier incomplet: {folder_path} doit contenir au moins "
+                        f"{_MIN_REQUIRED_CSV_PER_SNIR_FOLDER} CSV (trouvé: {len(csv_files)})."
+                    ),
+                )
+            )
+
+    learning_curve_path = output_root / "learning_curve_ucb.csv"
+    if not learning_curve_path.exists():
+        anomalies.append(
+            ValidationAnomaly(
+                severity="critical",
+                category="required_layout",
+                message=f"Fichier requis manquant: {learning_curve_path}",
+            )
+        )
+
+    return anomalies
+
+
+def _validate_minimum_cardinality(runs: set[tuple[int, str, str]]) -> list[ValidationAnomaly]:
+    anomalies: list[ValidationAnomaly] = []
+    present_sizes = {size for size, _, _ in runs}
+    present_algorithms = {algorithm for _, algorithm, _ in runs}
+    present_snir = {snir for _, _, snir in runs}
+
+    missing_sizes = sorted(_EXPECTED_NETWORK_SIZES - present_sizes)
+    if missing_sizes:
+        anomalies.append(
+            ValidationAnomaly(
+                severity="critical",
+                category="minimum_cardinality",
+                message=(
+                    "Cardinalité minimale non respectée: tailles réseau manquantes "
+                    f"{missing_sizes}."
+                ),
+            )
+        )
+
+    missing_algorithms = sorted(_EXPECTED_ALGORITHMS - present_algorithms)
+    if missing_algorithms:
+        anomalies.append(
+            ValidationAnomaly(
+                severity="critical",
+                category="minimum_cardinality",
+                message=(
+                    "Cardinalité minimale non respectée: algorithmes manquants "
+                    f"{missing_algorithms}."
+                ),
+            )
+        )
+
+    missing_snir = sorted(_EXPECTED_SNIR - present_snir)
+    if missing_snir:
+        anomalies.append(
+            ValidationAnomaly(
+                severity="critical",
+                category="minimum_cardinality",
+                message=(
+                    "Cardinalité minimale non respectée: valeur(s) SNIR manquante(s) "
+                    f"{missing_snir}."
+                ),
+            )
+        )
+
+    return anomalies
 
 
 def _collect_unique_runs(output_root: Path) -> set[tuple[int, str, str]]:
@@ -372,6 +464,8 @@ def main() -> None:
 
     anomalies: list[ValidationAnomaly] = []
     validated_files: list[Path] = []
+    anomalies.extend(_validate_required_layout(output_root))
+
     for relative_path, expected_columns in _REQUIRED_CSVS:
         csv_path = output_root / relative_path
         try:
@@ -394,7 +488,9 @@ def main() -> None:
 
     anomalies.extend(_validate_internal_coherence(output_root))
     anomalies.extend(_validate_matrix_completeness(output_root, mode=mode))
-    realized_runs = len(_collect_unique_runs(output_root))
+    realized_run_set = _collect_unique_runs(output_root)
+    anomalies.extend(_validate_minimum_cardinality(realized_run_set))
+    realized_runs = len(realized_run_set)
     report_path = _write_release_report(
         output_root,
         validated_files=validated_files,
