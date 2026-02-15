@@ -64,3 +64,21 @@ def test_parse_run_supports_raw_packets_rx_ok_column(tmp_path):
     assert metrics["tx_count"] == 2
     assert metrics["success_count"] == 1
     assert metrics["pdr"] == 0.5
+
+
+def test_parse_run_accepts_mixed_sf_types_from_raw_packets_csv(tmp_path):
+    raw = tmp_path / "raw_packets.csv"
+    raw.write_text(
+        "time,event_type,result,sf\n"
+        "1,tx,success,7\n"
+        "2,tx,collision,7.0\n"
+        '3,tx,success,"8"\n'
+        "4,tx,success,8.4\n"
+        "5,tx,success,13\n",
+        encoding="utf-8",
+    )
+
+    metrics = parse_run(raw, warmup_s=0.0, sim_duration_s=10.0, total_energy_joule=6.0)
+
+    assert metrics["tx_count"] == 5
+    assert metrics["sf_distribution"] == {7: 2, 8: 1, 9: 0, 10: 0, 11: 0, 12: 0}
