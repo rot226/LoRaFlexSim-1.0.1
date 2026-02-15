@@ -157,6 +157,8 @@ class QoSManager:
         self.qos_metrics_cooldown_s: float | None = None
         self.mixra_h_refresh_interval_s: float | None = None
         self.mixra_h_incremental_enabled: bool = True
+        self.mixra_h_large_network_size_threshold: int = 512
+        self.mixra_h_large_network_refresh_interval_s: float = 180.0
         self.pdr_drift_threshold: float = 0.1
         self.traffic_drift_threshold: float = 0.25
         self.max_clusters_per_channel: int | None = None
@@ -179,7 +181,7 @@ class QoSManager:
     def _profile(self, key: str, duration_s: float) -> None:
         self.runtime_profile_s[key] += max(0.0, float(duration_s))
 
-    def periodic_refresh_interval_s(self) -> float | None:
+    def periodic_refresh_interval_s(self, simulator=None) -> float | None:
         interval = self.qos_periodic_refresh_interval_s
         if (
             self.active_algorithm == "MixRA-H"
@@ -187,6 +189,15 @@ class QoSManager:
             and self.mixra_h_refresh_interval_s > 0.0
         ):
             interval = self.mixra_h_refresh_interval_s
+        if self.active_algorithm == "MixRA-H" and (
+            self.mixra_h_refresh_interval_s is None
+            or self.mixra_h_refresh_interval_s <= 0.0
+        ):
+            threshold = max(1, int(self.mixra_h_large_network_size_threshold))
+            large_interval = max(1e-9, float(self.mixra_h_large_network_refresh_interval_s))
+            node_count = len(getattr(simulator, "nodes", []) or []) if simulator is not None else 0
+            if node_count >= threshold:
+                interval = max(interval or 0.0, large_interval)
         if interval is None:
             interval = self.reconfig_interval_s
         minimum = self.qos_periodic_min_interval_s
@@ -217,6 +228,7 @@ class QoSManager:
         """
 
         start_time = time.perf_counter() if refresh_context is not None else None
+        phase_durations: dict[str, float] = {}
         error: Exception | None = None
         try:
             if algorithm not in QOS_ALGORITHMS:
@@ -231,16 +243,23 @@ class QoSManager:
             if self.clusters and self._should_refresh_context(simulator):
                 update_t0 = time.perf_counter()
                 self._update_qos_context(simulator)
+                phase_durations["context_update"] = phase_durations.get(
+                    "context_update", 0.0
+                ) + (time.perf_counter() - update_t0)
                 if refresh_context is not None:
                     refresh_context["qos_context_update_duration_s"] = (
-                        time.perf_counter() - update_t0
+                        phase_durations["context_update"]
                     )
+            configure_t0 = time.perf_counter()
             self._configure_radio_model(
                 simulator,
                 use_snir=use_snir,
                 inter_sf_coupling=inter_sf_coupling,
                 capture_thresholds=capture_thresholds,
             )
+            phase_durations["configure_radio"] = phase_durations.get(
+                "configure_radio", 0.0
+            ) + (time.perf_counter() - configure_t0)
             setattr(simulator, "qos_manager", self)
             if not getattr(simulator, "nodes", None):
                 # Rien à faire si aucun nœud n'est présent.
@@ -253,7 +272,11 @@ class QoSManager:
                     hook(self)
                 return
             self.active_algorithm = algorithm
+            algorithm_t0 = time.perf_counter()
             method(simulator)
+            phase_durations["algorithm_apply"] = phase_durations.get(
+                "algorithm_apply", 0.0
+            ) + (time.perf_counter() - algorithm_t0)
             setattr(simulator, "qos_algorithm", algorithm)
             setattr(simulator, "qos_active", True)
             self._broadcast_control_updates(simulator)
@@ -267,6 +290,7 @@ class QoSManager:
             if refresh_context is not None and start_time is not None and error is None:
                 duration_s = time.perf_counter() - start_time
                 refresh_context["duration_s"] = duration_s
+                refresh_context["phase_durations_s"] = dict(phase_durations)
                 reason = refresh_context.get("reason", "unspecified")
                 sim_time = refresh_context.get(
                     "sim_time", getattr(simulator, "current_time", None)
@@ -357,13 +381,25 @@ class QoSManager:
         return distance
 
     def _sorted_distances(self, simulator) -> list[_NodeDistance]:
+        nodes = list(getattr(simulator, "nodes", []) or [])
+        self._ensure_topology_cache(simulator, nodes)
+        topology_cache = self._topology_cache or {}
+        node_map = topology_cache.get("node_map") or {}
+        node_distance = topology_cache.get("node_distance") or {}
+        sorted_node_ids = topology_cache.get("sorted_node_ids")
+        if isinstance(sorted_node_ids, list) and node_map and node_distance:
+            return [
+                _NodeDistance(node=node_map[node_id], distance=node_distance[node_id])
+                for node_id in sorted_node_ids
+                if node_id in node_map and node_id in node_distance
+            ]
         return sorted(
             (
                 _NodeDistance(
                     node=node,
                     distance=self._nearest_gateway_distance(node, simulator.gateways),
                 )
-                for node in simulator.nodes
+                for node in nodes
             ),
             key=lambda entry: entry.distance,
         )
@@ -835,9 +871,13 @@ class QoSManager:
             node_id = getattr(node, "id", id(node))
             node_map[node_id] = node
             node_distance[node_id] = self._nearest_gateway_distance(node, gateways)
+        sorted_node_ids = [
+            node_id for node_id, _ in sorted(node_distance.items(), key=lambda item: item[1])
+        ]
         self._topology_cache = {
             "node_map": node_map,
             "node_distance": node_distance,
+            "sorted_node_ids": sorted_node_ids,
         }
         self._topology_snapshot = snapshot
 
@@ -934,7 +974,7 @@ class QoSManager:
                     return True
                 if abs(current_rate - previous_rate) / previous_rate >= traffic_threshold:
                     return True
-        interval = self.periodic_refresh_interval_s()
+        interval = self.periodic_refresh_interval_s(simulator)
         if interval is None or interval <= 0.0:
             return False
         current_time = getattr(simulator, "current_time", None)

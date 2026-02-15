@@ -1293,6 +1293,7 @@ class Simulator:
             "handle_reconfigure": 0.0,
             "context_update": 0.0,
         }
+        self._qos_refresh_phase_totals_s: dict[str, float] = {}
 
         # Statistiques cumulatives
         self.packets_sent = 0
@@ -1529,11 +1530,14 @@ class Simulator:
         if mixra_h_interval is not None:
             manager.mixra_h_refresh_interval_s = float(mixra_h_interval)
         interval_getter = getattr(manager, "periodic_refresh_interval_s", None)
-        interval = (
-            interval_getter()
-            if callable(interval_getter)
-            else getattr(manager, "reconfig_interval_s", None)
-        )
+        interval = None
+        if callable(interval_getter):
+            try:
+                interval = interval_getter(self)
+            except TypeError:
+                interval = interval_getter()
+        if interval is None:
+            interval = getattr(manager, "reconfig_interval_s", None)
         if interval is None or interval <= 0.0:
             self._cancel_qos_reconfigure_event()
             return
@@ -1573,6 +1577,13 @@ class Simulator:
                 self._record_profile_time("sim_request_qos_refresh", duration_s)
                 return
             cooldown_s = getattr(manager, "qos_metrics_cooldown_s", None)
+            if cooldown_s is None:
+                periodic_getter = getattr(manager, "periodic_refresh_interval_s", None)
+                if callable(periodic_getter):
+                    try:
+                        cooldown_s = periodic_getter(self)
+                    except TypeError:
+                        cooldown_s = periodic_getter()
             if cooldown_s is None:
                 cooldown_s = getattr(manager, "reconfig_interval_s", None)
             min_interval_s = getattr(manager, "qos_metrics_min_interval_s", None)
@@ -1628,6 +1639,18 @@ class Simulator:
         context_update_duration = refresh_context.get("qos_context_update_duration_s")
         if context_update_duration is not None:
             self._qos_refresh_durations_s["context_update"] += float(context_update_duration)
+        phase_durations = refresh_context.get("phase_durations_s")
+        if isinstance(phase_durations, dict):
+            for phase, value in phase_durations.items():
+                try:
+                    duration_value = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(duration_value) or duration_value < 0.0:
+                    continue
+                self._qos_refresh_phase_totals_s[phase] = (
+                    self._qos_refresh_phase_totals_s.get(phase, 0.0) + duration_value
+                )
         duration_s = refresh_context.get("duration_s")
         if duration_s is None:
             request_duration = time.perf_counter() - t0
@@ -3013,6 +3036,7 @@ class Simulator:
                 "request_total_duration_s": self._qos_refresh_durations_s.get("request", 0.0),
                 "handle_reconfigure_total_duration_s": self._qos_refresh_durations_s.get("handle_reconfigure", 0.0),
                 "context_update_total_duration_s": self._qos_refresh_durations_s.get("context_update", 0.0),
+                "phase_totals_s": dict(sorted(self._qos_refresh_phase_totals_s.items())),
             },
             "runtime_profile_s": dict(self.runtime_profile_s),
         }
