@@ -540,6 +540,7 @@ class Simulator:
         progress_every_s: float | None = None,
         progress_every_steps: int | None = None,
         qos_periodic_refresh_interval_s: float | None = None,
+        mixra_h_refresh_interval_s: float | None = None,
     ):
         """
         Initialise la simulation LoRaFlexSim avec les entités et paramètres donnés.
@@ -621,6 +622,9 @@ class Simulator:
         :param qos_periodic_refresh_interval_s: Intervalle explicite (s) pour
             plafonner la fréquence des rafraîchissements QoS périodiques
             (``None`` pour conserver la configuration du gestionnaire QoS).
+        :param mixra_h_refresh_interval_s: Cadence dédiée (s) des
+            rafraîchissements périodiques pour l'algorithme ``MixRA-H``.
+            ``None`` conserve la cadence générale QoS.
         :param channel_config: Fichier INI optionnel contenant une section
             ``[channel]`` pour surcharger les paramètres radio (fading SNIR,
             bruit, capture…). Aucun effet si absent.
@@ -1278,11 +1282,17 @@ class Simulator:
         self.qos_algorithm = None
         self._next_qos_reconfig_time: float | None = None
         self.qos_periodic_refresh_interval_s = qos_periodic_refresh_interval_s
+        self.mixra_h_refresh_interval_s = mixra_h_refresh_interval_s
         self.runtime_profile_s: dict[str, float] = {}
         self._qos_refresh_count = 0
         self._qos_refresh_total_cost_s = 0.0
         self._qos_refresh_max_cost_s = 0.0
         self.last_qos_refresh_sim_time: float | None = None
+        self._qos_refresh_durations_s: dict[str, float] = {
+            "request": 0.0,
+            "handle_reconfigure": 0.0,
+            "context_update": 0.0,
+        }
 
         # Statistiques cumulatives
         self.packets_sent = 0
@@ -1483,29 +1493,41 @@ class Simulator:
         manager = getattr(self, "qos_manager", None)
         if manager is None:
             self._cancel_qos_reconfigure_event()
-            self._record_profile_time("sim_handle_qos_reconfigure", time.perf_counter() - t0)
+            duration_s = time.perf_counter() - t0
+            self._qos_refresh_durations_s["handle_reconfigure"] += duration_s
+            self._record_profile_time("sim_handle_qos_reconfigure", duration_s)
             return
         if not getattr(self, "qos_active", False):
             self._cancel_qos_reconfigure_event()
-            self._record_profile_time("sim_handle_qos_reconfigure", time.perf_counter() - t0)
+            duration_s = time.perf_counter() - t0
+            self._qos_refresh_durations_s["handle_reconfigure"] += duration_s
+            self._record_profile_time("sim_handle_qos_reconfigure", duration_s)
             return
         algorithm = getattr(self, "qos_algorithm", None)
         if not algorithm:
             self._cancel_qos_reconfigure_event()
-            self._record_profile_time("sim_handle_qos_reconfigure", time.perf_counter() - t0)
+            duration_s = time.perf_counter() - t0
+            self._qos_refresh_durations_s["handle_reconfigure"] += duration_s
+            self._record_profile_time("sim_handle_qos_reconfigure", duration_s)
             return
         if not bool(getattr(manager, "qos_periodic_refresh_enabled", True)):
             self._cancel_qos_reconfigure_event()
-            self._record_profile_time("sim_handle_qos_reconfigure", time.perf_counter() - t0)
+            duration_s = time.perf_counter() - t0
+            self._qos_refresh_durations_s["handle_reconfigure"] += duration_s
+            self._record_profile_time("sim_handle_qos_reconfigure", duration_s)
             return
         self.request_qos_refresh(reason="periodic")
-        self._record_profile_time("sim_handle_qos_reconfigure", time.perf_counter() - t0)
-
+        duration_s = time.perf_counter() - t0
+        self._qos_refresh_durations_s["handle_reconfigure"] += duration_s
+        self._record_profile_time("sim_handle_qos_reconfigure", duration_s)
     def _on_qos_applied(self, manager) -> None:
         self.qos_manager = manager
         explicit_interval = getattr(self, "qos_periodic_refresh_interval_s", None)
         if explicit_interval is not None:
             manager.qos_periodic_refresh_interval_s = float(explicit_interval)
+        mixra_h_interval = getattr(self, "mixra_h_refresh_interval_s", None)
+        if mixra_h_interval is not None:
+            manager.mixra_h_refresh_interval_s = float(mixra_h_interval)
         interval_getter = getattr(manager, "periodic_refresh_interval_s", None)
         interval = (
             interval_getter()
@@ -1522,23 +1544,33 @@ class Simulator:
         t0 = time.perf_counter()
         manager = getattr(self, "qos_manager", None)
         if manager is None or not getattr(self, "qos_active", False):
-            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
+            duration_s = time.perf_counter() - t0
+            self._qos_refresh_durations_s["request"] += duration_s
+            self._record_profile_time("sim_request_qos_refresh", duration_s)
             return
         algorithm = getattr(self, "qos_algorithm", None)
         if not algorithm:
-            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
+            duration_s = time.perf_counter() - t0
+            self._qos_refresh_durations_s["request"] += duration_s
+            self._record_profile_time("sim_request_qos_refresh", duration_s)
             return
         if not manager.clusters:
-            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
+            duration_s = time.perf_counter() - t0
+            self._qos_refresh_durations_s["request"] += duration_s
+            self._record_profile_time("sim_request_qos_refresh", duration_s)
             return
         if reason == "periodic" and not bool(
             getattr(manager, "qos_periodic_refresh_enabled", True)
         ):
-            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
+            duration_s = time.perf_counter() - t0
+            self._qos_refresh_durations_s["request"] += duration_s
+            self._record_profile_time("sim_request_qos_refresh", duration_s)
             return
         if reason == "metrics":
             if not bool(getattr(manager, "qos_metrics_refresh_enabled", True)):
-                self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
+                duration_s = time.perf_counter() - t0
+                self._qos_refresh_durations_s["request"] += duration_s
+                self._record_profile_time("sim_request_qos_refresh", duration_s)
                 return
             cooldown_s = getattr(manager, "qos_metrics_cooldown_s", None)
             if cooldown_s is None:
@@ -1567,18 +1599,24 @@ class Simulator:
                     and last_value is not None
                     and time_value - last_value < cooldown_s
                 ):
-                    self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
+                    duration_s = time.perf_counter() - t0
+                    self._qos_refresh_durations_s["request"] += duration_s
+                    self._record_profile_time("sim_request_qos_refresh", duration_s)
                     return
         try:
             needs_refresh = manager._should_refresh_context(self)
         except Exception:  # pragma: no cover - robust logging
             logger.exception("Échec de l'évaluation du rafraîchissement QoS (%s).", reason)
-            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
+            duration_s = time.perf_counter() - t0
+            self._qos_refresh_durations_s["request"] += duration_s
+            self._record_profile_time("sim_request_qos_refresh", duration_s)
             return
         if not needs_refresh and reason == "metrics" and self._qos_refresh_count == 0:
             needs_refresh = True
         if not needs_refresh:
-            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
+            duration_s = time.perf_counter() - t0
+            self._qos_refresh_durations_s["request"] += duration_s
+            self._record_profile_time("sim_request_qos_refresh", duration_s)
             return
         node_count = len(getattr(self, "nodes", []) or [])
         refresh_context = {
@@ -1587,9 +1625,14 @@ class Simulator:
             "node_count": node_count,
         }
         manager.apply(self, algorithm, refresh_context=refresh_context)
+        context_update_duration = refresh_context.get("qos_context_update_duration_s")
+        if context_update_duration is not None:
+            self._qos_refresh_durations_s["context_update"] += float(context_update_duration)
         duration_s = refresh_context.get("duration_s")
         if duration_s is None:
-            self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
+            request_duration = time.perf_counter() - t0
+            self._qos_refresh_durations_s["request"] += request_duration
+            self._record_profile_time("sim_request_qos_refresh", request_duration)
             return
         self._qos_refresh_count += 1
         refresh_duration = float(duration_s)
@@ -1613,8 +1656,9 @@ class Simulator:
             node_count,
             duration_s,
         )
-        self._record_profile_time("sim_request_qos_refresh", time.perf_counter() - t0)
-
+        request_duration = time.perf_counter() - t0
+        self._qos_refresh_durations_s["request"] += request_duration
+        self._record_profile_time("sim_request_qos_refresh", request_duration)
     def _notify_qos_metrics_update(self, node: Node) -> None:
         if getattr(self, "qos_manager", None) is None:
             return
@@ -2966,6 +3010,9 @@ class Simulator:
                 "total_refresh_cost_s": self._qos_refresh_total_cost_s,
                 "max_refresh_cost_s": self._qos_refresh_max_cost_s,
                 "avg_refresh_cost_s": qos_refresh_avg_cost_s,
+                "request_total_duration_s": self._qos_refresh_durations_s.get("request", 0.0),
+                "handle_reconfigure_total_duration_s": self._qos_refresh_durations_s.get("handle_reconfigure", 0.0),
+                "context_update_total_duration_s": self._qos_refresh_durations_s.get("context_update", 0.0),
             },
             "runtime_profile_s": dict(self.runtime_profile_s),
         }
