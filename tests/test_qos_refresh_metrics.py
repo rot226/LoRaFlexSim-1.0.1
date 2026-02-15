@@ -31,3 +31,18 @@ def test_qos_refresh_benchmark_includes_precise_method_durations():
     assert benchmark["request_total_duration_s"] == pytest.approx(1.25)
     assert benchmark["handle_reconfigure_total_duration_s"] == pytest.approx(0.75)
     assert benchmark["context_update_total_duration_s"] == pytest.approx(0.5)
+
+
+def test_qos_refresh_benchmark_includes_phase_totals():
+    simulator = Simulator(num_nodes=0, num_gateways=1, mobility=False, seed=1)
+    simulator._qos_refresh_phase_totals_s = {
+        "algorithm_apply": 2.0,
+        "configure_radio": 0.4,
+        "context_update": 1.1,
+    }
+
+    benchmark = simulator.get_metrics()["qos_refresh_benchmark"]
+
+    assert benchmark["phase_totals_s"]["algorithm_apply"] == pytest.approx(2.0)
+    assert benchmark["phase_totals_s"]["configure_radio"] == pytest.approx(0.4)
+    assert benchmark["phase_totals_s"]["context_update"] == pytest.approx(1.1)
