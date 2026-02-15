@@ -136,33 +136,48 @@ def _write_csv(path: Path, headers: list[str], rows: list[dict[str, Any]]) -> No
 
 
 def _load_expected_runs(logs_root: Path) -> set[tuple[str, int, str, int]]:
-    state_path = logs_root / "campaign_state.json"
-    if not state_path.exists():
-        return set()
-
-    try:
-        payload = json.loads(state_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError, ValueError):
-        return set()
-
-    runs = payload.get("runs") if isinstance(payload, dict) else None
-    if not isinstance(runs, dict):
-        return set()
-
     expected: set[tuple[str, int, str, int]] = set()
-    for run_payload in runs.values():
-        if not isinstance(run_payload, dict):
-            continue
+
+    state_path = logs_root / "campaign_state.json"
+    if state_path.exists():
         try:
-            snir = _normalize_snir(run_payload.get("snir", ""))
-            network_size = _to_int(run_payload.get("network_size", 0))
-            algorithm = str(run_payload.get("algo", "")).strip()
-            seed = _to_int(run_payload.get("seed", -1))
-        except (ValueError, TypeError):
-            continue
-        if snir not in {"ON", "OFF"} or network_size <= 0 or not algorithm or seed < 0:
-            continue
-        expected.add((snir, network_size, algorithm, seed))
+            payload = json.loads(state_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, ValueError):
+            payload = None
+
+        runs = payload.get("runs") if isinstance(payload, dict) else None
+        if isinstance(runs, dict):
+            for run_payload in runs.values():
+                if not isinstance(run_payload, dict):
+                    continue
+                try:
+                    snir = _normalize_snir(run_payload.get("snir", ""))
+                    network_size = _to_int(run_payload.get("network_size", 0))
+                    algorithm = str(run_payload.get("algo", "")).strip()
+                    seed = _to_int(run_payload.get("seed", -1))
+                except (ValueError, TypeError):
+                    continue
+                if snir not in {"ON", "OFF"} or network_size <= 0 or not algorithm or seed < 0:
+                    continue
+                expected.add((snir, network_size, algorithm, seed))
+
+    missing_report_path = logs_root / "campaign_missing_combinations.csv"
+    if missing_report_path.exists():
+        try:
+            with missing_report_path.open("r", encoding="utf-8", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    try:
+                        snir = _normalize_snir(row.get("snir", ""))
+                        network_size = _to_int(row.get("network_size", 0))
+                        algorithm = str(row.get("algorithm", "")).strip()
+                        seed = _to_int(row.get("seed", -1))
+                    except (ValueError, TypeError):
+                        continue
+                    if snir in {"ON", "OFF"} and network_size > 0 and algorithm and seed >= 0:
+                        expected.add((snir, network_size, algorithm, seed))
+        except OSError:
+            pass
+
     return expected
 
 
@@ -192,6 +207,29 @@ def _compute_completeness_rows(
                 "available_runs": len(available_seeds),
                 "is_complete": "yes" if not missing else "no",
                 "missing_seeds": ",".join(str(seed) for seed in missing),
+            }
+        )
+    return rows
+
+
+def _compute_missing_combinations_rows(
+    expected_runs: set[tuple[str, int, str, int]],
+    available_runs: set[tuple[str, int, str, int]],
+) -> list[dict[str, Any]]:
+    missing_by_combo: dict[tuple[str, int, str], set[int]] = defaultdict(set)
+    for snir, network_size, algorithm, seed in expected_runs - available_runs:
+        missing_by_combo[(snir, network_size, algorithm)].add(seed)
+
+    rows: list[dict[str, Any]] = []
+    for snir, network_size, algorithm in sorted(missing_by_combo):
+        missing_seeds = sorted(missing_by_combo[(snir, network_size, algorithm)])
+        rows.append(
+            {
+                "snir": snir,
+                "network_size": network_size,
+                "algorithm": algorithm,
+                "missing_runs": len(missing_seeds),
+                "missing_seeds": ",".join(str(seed) for seed in missing_seeds),
             }
         )
     return rows
@@ -376,6 +414,13 @@ def aggregate_logs(logs_root: str | Path, *, allow_partial: bool = False) -> Pat
         completeness_rows,
     )
 
+    missing_combinations_rows = _compute_missing_combinations_rows(expected_runs, available_runs)
+    _write_csv(
+        output_root / "campaign_missing_combinations.csv",
+        ["snir", "network_size", "algorithm", "missing_runs", "missing_seeds"],
+        missing_combinations_rows,
+    )
+
     if expected_runs and not allow_partial:
         missing = sorted(expected_runs - available_runs)
         if missing:
@@ -387,7 +432,8 @@ def aggregate_logs(logs_root: str | Path, *, allow_partial: bool = False) -> Pat
             raise RuntimeError(
                 "Agrégation incomplète: "
                 f"{len(missing)} run(s) manquant(s). Exemples: {preview}{suffix}. "
-                "Relancer avec --allow-partial pour agréger uniquement le disponible."
+                "Relancer avec --allow-partial pour agréger uniquement le disponible. "
+                f"Détail: {(output_root / 'campaign_missing_combinations.csv').resolve()}"
             )
 
     return output_root
