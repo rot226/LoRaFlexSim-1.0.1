@@ -101,6 +101,7 @@ def _normalize_run_entry(run_id: str, payload: object) -> dict[str, object] | No
             "seed": None,
             "paths": {},
             "duration_s": None,
+            "failure_reason": None,
         }
 
     if not isinstance(payload, dict):
@@ -126,6 +127,7 @@ def _normalize_run_entry(run_id: str, payload: object) -> dict[str, object] | No
         "seed": payload.get("seed"),
         "paths": dict(paths),
         "duration_s": float(duration_s) if duration_s is not None else None,
+        "failure_reason": payload.get("failure_reason"),
     }
 
 
@@ -143,7 +145,7 @@ def _load_campaign_state(state_path: Path) -> dict[str, dict[str, object]]:
     runs = payload.get("runs")
     if not isinstance(runs, dict):
         return {}
-    valid_status = {"pending", "running", "done", "failed", "incomplete"}
+    valid_status = {"pending", "running", "done", "failed", "failed_timeout", "incomplete"}
     state: dict[str, dict[str, object]] = {}
     for run_id, run_payload in runs.items():
         if not isinstance(run_id, str):
@@ -193,6 +195,7 @@ def _new_run_entry(
             "raw_energy": str(run_dir / "raw_energy.csv"),
         },
         "duration_s": None,
+        "failure_reason": None,
     }
 
 
@@ -725,12 +728,23 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Conserve les artefacts du précheck même en cas de succès.",
     )
+    parser.add_argument(
+        "--max-run-seconds",
+        type=float,
+        default=None,
+        help=(
+            "Durée murale maximale d'un run (secondes). "
+            "Au-delà, le run est arrêté et marqué failed_timeout."
+        ),
+    )
     args = parser.parse_args()
 
     if args.replications <= 0:
         parser.error("--replications doit être >= 1")
     if any(size <= 0 for size in args.network_sizes):
         parser.error("Toutes les valeurs de --network-sizes doivent être > 0")
+    if args.max_run_seconds is not None and args.max_run_seconds <= 0:
+        parser.error("--max-run-seconds doit être > 0")
 
     try:
         args.algos = _parse_algorithms(args.algos)
@@ -744,6 +758,8 @@ def main() -> None:
     """Exécution principale."""
 
     args = _parse_args()
+    if not hasattr(args, "max_run_seconds"):
+        args.max_run_seconds = None
     logger, campaign_log_path = _configure_logging()
     run_single_campaign = _load_run_single_campaign()
     logs_root: Path = args.logs_root
@@ -892,6 +908,7 @@ def main() -> None:
                     if args.force_rerun:
                         run_entry["status"] = "pending"
                         run_entry["duration_s"] = None
+                        run_entry["failure_reason"] = None
                         _write_campaign_state(state_path, runs_state)
                         logger.info(
                             "Run marqué pour relance forcée (--force-rerun).",
@@ -924,6 +941,7 @@ def main() -> None:
                         ):
                             run_entry["status"] = "pending"
                             run_entry["duration_s"] = None
+                            run_entry["failure_reason"] = None
                             _write_campaign_state(state_path, runs_state)
 
                     logger.info(
@@ -942,6 +960,7 @@ def main() -> None:
                     t0 = perf_counter()
                     run_entry["status"] = "running"
                     run_entry["duration_s"] = None
+                    run_entry["failure_reason"] = None
                     _write_campaign_state(state_path, runs_state)
                     try:
                         heartbeat_interval_s = 45.0
@@ -971,6 +990,7 @@ def main() -> None:
                             ucb_config_path=args.ucb_config,
                             heartbeat_callback=_heartbeat,
                             heartbeat_interval_s=heartbeat_interval_s,
+                            max_run_seconds=args.max_run_seconds,
                         )
                         duration_s = perf_counter() - t0
                         metrics = result.get("summary", {}).get("metrics", {})
@@ -1059,6 +1079,7 @@ def main() -> None:
                         completed_runs += 1
                         run_entry["status"] = "done"
                         run_entry["duration_s"] = duration_s
+                        run_entry["failure_reason"] = None
                         _write_campaign_state(state_path, runs_state)
                         logger.info(
                             (
@@ -1079,6 +1100,7 @@ def main() -> None:
                         failed_runs += 1
                         run_entry["status"] = "failed"
                         run_entry["duration_s"] = None
+                        run_entry["failure_reason"] = str(exc)
                         _write_campaign_state(state_path, runs_state)
                         logger.error(
                             f"Run échoué: {exc}",
@@ -1097,6 +1119,31 @@ def main() -> None:
                         )
                         interrupted_by_user = True
                         break
+                    except TimeoutError as exc:
+                        duration_s = perf_counter() - t0
+                        run_status = {
+                            "status": "failed_timeout",
+                            "duration_s": duration_s,
+                            "error": str(exc),
+                            "max_run_seconds": args.max_run_seconds,
+                        }
+                        (run_dir / "run_status.json").write_text(
+                            json.dumps(run_status, indent=2, ensure_ascii=False, sort_keys=True),
+                            encoding="utf-8",
+                        )
+                        failed_runs += 1
+                        run_entry["status"] = "failed_timeout"
+                        run_entry["duration_s"] = duration_s
+                        run_entry["failure_reason"] = str(exc)
+                        _write_campaign_state(state_path, runs_state)
+                        logger.error(
+                            (
+                                "Run timeout: "
+                                f"duration={duration_s:.1f}s | max={args.max_run_seconds}s | "
+                                f"cause={exc}"
+                            ),
+                            extra={**run_context, "statut": "failed_timeout"},
+                        )
                     except Exception as exc:  # pragma: no cover - robustesse CLI
                         duration_s = perf_counter() - t0
                         run_status = {
@@ -1111,6 +1158,7 @@ def main() -> None:
                         failed_runs += 1
                         run_entry["status"] = "failed"
                         run_entry["duration_s"] = duration_s
+                        run_entry["failure_reason"] = str(exc)
                         _write_campaign_state(state_path, runs_state)
                         logger.error(
                             (

@@ -129,6 +129,7 @@ def run_campaign(
     ucb_config_path: str | Path | None = None,
     heartbeat_callback: Callable[[dict[str, Any]], None] | None = None,
     heartbeat_interval_s: float = 45.0,
+    max_run_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Exécute une campagne uplink non-interactive avec 1 gateway.
 
@@ -140,6 +141,12 @@ def run_campaign(
         raise ValueError("network_size doit être strictement positif")
     if warmup_s < 0 or not math.isfinite(warmup_s):
         raise ValueError("warmup_s doit être un flottant fini >= 0")
+    if max_run_seconds is not None:
+        if not isinstance(max_run_seconds, (float, int)):
+            raise ValueError("max_run_seconds doit être un nombre réel > 0")
+        max_run_seconds = float(max_run_seconds)
+        if not math.isfinite(max_run_seconds) or max_run_seconds <= 0.0:
+            raise ValueError("max_run_seconds doit être un flottant fini > 0")
 
     resolved_algorithm = _normalize_algorithm(algorithm)
     use_snir = _normalize_snir_mode(snir_mode)
@@ -218,8 +225,16 @@ def run_campaign(
     if not math.isfinite(interval_s) or interval_s <= 0.0:
         interval_s = 45.0
 
+    wall_clock_start = time.perf_counter()
+    timed_out = False
     while runner.is_alive():
         runner.join(timeout=interval_s)
+        elapsed_s = time.perf_counter() - wall_clock_start
+        if max_run_seconds is not None and elapsed_s >= max_run_seconds:
+            simulator.stop()
+            runner.join(timeout=min(interval_s, 1.0))
+            timed_out = True
+            break
         if heartbeat_callback is None or not runner.is_alive():
             continue
         heartbeat_callback(
@@ -234,6 +249,13 @@ def run_campaign(
 
     if run_error is not None:
         raise run_error
+    if timed_out:
+        raise TimeoutError(
+            (
+                "Durée limite run dépassée "
+                f"({elapsed_s:.1f}s >= {max_run_seconds:.1f}s)."
+            )
+        )
 
     metrics = simulator.get_metrics()
     _export_raw_artifacts(simulator, output_path)
