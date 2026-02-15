@@ -300,6 +300,18 @@ def _parse_algorithms(raw_values: list[str]) -> list[str]:
         raise argparse.ArgumentTypeError("--algos ne contient aucune valeur valide")
     return algorithms
 
+
+def _filter_skipped_algorithms(algorithms: list[str], skipped: list[str]) -> list[str]:
+    """Retire les algorithmes demandés dans ``skipped`` (comparaison tolérante)."""
+
+    def _normalize(value: str) -> str:
+        return "".join(ch for ch in value.lower() if ch.isalnum())
+
+    skipped_keys = {_normalize(algo) for algo in skipped if algo.strip()}
+    if not skipped_keys:
+        return algorithms
+    return [algo for algo in algorithms if _normalize(algo) not in skipped_keys]
+
 def _format_seconds(value: float | None) -> str:
     """Formate une durée en secondes pour les logs de heartbeat."""
 
@@ -692,6 +704,15 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--skip-algos",
+        nargs="+",
+        default=[],
+        help=(
+            "Algorithmes à exclure de --algos (utile pour debug rapide), ex: "
+            "--skip-algos MixRA-H"
+        ),
+    )
+    parser.add_argument(
         "--warmup-s",
         type=float,
         required=True,
@@ -756,8 +777,13 @@ def _parse_args() -> argparse.Namespace:
 
     try:
         args.algos = _parse_algorithms(args.algos)
+        args.skip_algos = _parse_algorithms(args.skip_algos) if args.skip_algos else []
     except argparse.ArgumentTypeError as exc:
         parser.error(str(exc))
+
+    args.algos = _filter_skipped_algorithms(args.algos, args.skip_algos)
+    if not args.algos:
+        parser.error("Tous les algorithmes ont été retirés via --skip-algos")
 
     return args
 

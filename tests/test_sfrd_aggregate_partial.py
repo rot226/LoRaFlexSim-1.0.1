@@ -88,3 +88,37 @@ def test_aggregate_sf_distribution_keeps_all_sf_rows(tmp_path: Path) -> None:
     assert "80,UCB,OFF,10,0.0" in sf_lines
     assert "80,UCB,OFF,11,0.0" in sf_lines
     assert "80,UCB,OFF,12,0.0" in sf_lines
+
+
+def test_aggregate_writes_missing_combinations_report(tmp_path: Path) -> None:
+    logs_root = tmp_path / "logs"
+    state_payload = {
+        "runs": {
+            "a": {"snir": "OFF", "network_size": 80, "algo": "UCB", "seed": 1, "status": "done"},
+            "b": {"snir": "OFF", "network_size": 80, "algo": "MixRA-H", "seed": 1, "status": "pending"},
+        }
+    }
+    (logs_root / "campaign_state.json").parent.mkdir(parents=True, exist_ok=True)
+    (logs_root / "campaign_state.json").write_text(json.dumps(state_payload), encoding="utf-8")
+    _write_summary(logs_root / "SNIR_OFF" / "ns_80" / "algo_UCB" / "seed_1", snir="OFF", size=80, algo="UCB", seed=1)
+
+    output_root = aggregate_logs(logs_root, allow_partial=True)
+
+    missing = (output_root / "campaign_missing_combinations.csv").read_text(encoding="utf-8")
+    assert "OFF,80,MixRA-H,1,1" in missing
+
+
+def test_aggregate_loads_expected_runs_from_missing_report(tmp_path: Path) -> None:
+    logs_root = tmp_path / "logs"
+    report_path = logs_root / "campaign_missing_combinations.csv"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        "snir,network_size,algorithm,seed,status\nOFF,80,MixRA-H,4,missing\n",
+        encoding="utf-8",
+    )
+    _write_summary(logs_root / "SNIR_OFF" / "ns_80" / "algo_UCB" / "seed_1", snir="OFF", size=80, algo="UCB", seed=1)
+
+    output_root = aggregate_logs(logs_root, allow_partial=True)
+
+    completeness = (output_root / "campaign_completeness.csv").read_text(encoding="utf-8")
+    assert "OFF,80,MixRA-H,1,0,no,4" in completeness
