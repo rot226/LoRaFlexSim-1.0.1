@@ -215,6 +215,7 @@ def _compute_completeness_rows(
 def _compute_missing_combinations_rows(
     expected_runs: set[tuple[str, int, str, int]],
     available_runs: set[tuple[str, int, str, int]],
+    run_statuses: dict[tuple[str, int, str, int], str] | None = None,
 ) -> list[dict[str, Any]]:
     missing_by_combo: dict[tuple[str, int, str], set[int]] = defaultdict(set)
     for snir, network_size, algorithm, seed in expected_runs - available_runs:
@@ -230,9 +231,49 @@ def _compute_missing_combinations_rows(
                 "algorithm": algorithm,
                 "missing_runs": len(missing_seeds),
                 "missing_seeds": ",".join(str(seed) for seed in missing_seeds),
+                "statuses": ",".join(
+                    (
+                        run_statuses or {}
+                    ).get((snir, network_size, algorithm, seed), "missing")
+                    for seed in missing_seeds
+                ),
             }
         )
     return rows
+
+
+def _load_run_statuses(logs_root: Path) -> dict[tuple[str, int, str, int], str]:
+    statuses: dict[tuple[str, int, str, int], str] = {}
+    state_path = logs_root / "campaign_state.json"
+    if not state_path.exists():
+        return statuses
+
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, ValueError):
+        return statuses
+
+    runs = payload.get("runs") if isinstance(payload, dict) else None
+    if not isinstance(runs, dict):
+        return statuses
+
+    for run_payload in runs.values():
+        if not isinstance(run_payload, dict):
+            continue
+        try:
+            snir = _normalize_snir(run_payload.get("snir", ""))
+            network_size = _to_int(run_payload.get("network_size", 0))
+            algorithm = str(run_payload.get("algo", "")).strip()
+            seed = _to_int(run_payload.get("seed", -1))
+        except (ValueError, TypeError):
+            continue
+        if snir not in {"ON", "OFF"} or network_size <= 0 or not algorithm or seed < 0:
+            continue
+        statuses[(snir, network_size, algorithm, seed)] = (
+            str(run_payload.get("status", "")).strip().lower() or "missing"
+        )
+
+    return statuses
 
 
 def aggregate_logs(logs_root: str | Path, *, allow_partial: bool = False) -> Path:
@@ -241,6 +282,7 @@ def aggregate_logs(logs_root: str | Path, *, allow_partial: bool = False) -> Pat
     root = Path(logs_root)
     summaries = sorted(root.glob("SNIR_*/ns_*/algo_*/seed_*/campaign_summary.json"))
     expected_runs = _load_expected_runs(root)
+    run_statuses = _load_run_statuses(root)
     available_runs: set[tuple[str, int, str, int]] = set()
 
     metric_sums: dict[tuple[int, str, str], dict[str, float]] = defaultdict(
@@ -414,10 +456,14 @@ def aggregate_logs(logs_root: str | Path, *, allow_partial: bool = False) -> Pat
         completeness_rows,
     )
 
-    missing_combinations_rows = _compute_missing_combinations_rows(expected_runs, available_runs)
+    missing_combinations_rows = _compute_missing_combinations_rows(
+        expected_runs,
+        available_runs,
+        run_statuses,
+    )
     _write_csv(
         output_root / "campaign_missing_combinations.csv",
-        ["snir", "network_size", "algorithm", "missing_runs", "missing_seeds"],
+        ["snir", "network_size", "algorithm", "missing_runs", "missing_seeds", "statuses"],
         missing_combinations_rows,
     )
 

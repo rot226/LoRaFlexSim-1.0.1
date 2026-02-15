@@ -642,7 +642,24 @@ def _write_missing_combinations_report(
     logs_root: Path,
     expected_runs: set[tuple[str, int, str, int]],
     completed_runs: set[tuple[str, int, str, int]],
+    runs_state: dict[str, dict[str, object]] | None = None,
 ) -> Path:
+    status_by_run: dict[tuple[str, int, str, int], str] = {}
+    if isinstance(runs_state, dict):
+        for run_payload in runs_state.values():
+            if not isinstance(run_payload, dict):
+                continue
+            try:
+                snir = str(run_payload.get("snir", "")).strip().upper()
+                network_size = int(run_payload.get("network_size", 0))
+                algorithm = str(run_payload.get("algo", "")).strip()
+                seed = int(run_payload.get("seed", -1))
+            except (TypeError, ValueError):
+                continue
+            if snir in {"ON", "OFF"} and network_size > 0 and algorithm and seed >= 0:
+                status = str(run_payload.get("status", "")).strip().lower() or "missing"
+                status_by_run[(snir, network_size, algorithm, seed)] = status
+
     report_path = logs_root / "campaign_missing_combinations.csv"
     missing = sorted(expected_runs - completed_runs)
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -659,10 +676,51 @@ def _write_missing_combinations_report(
                     "network_size": network_size,
                     "algorithm": algorithm,
                     "seed": seed,
-                    "status": "missing",
+                    "status": status_by_run.get(
+                        (snir_mode, network_size, algorithm, seed),
+                        "missing",
+                    ),
                 }
             )
     return report_path
+
+
+def _write_timeout_campaign_summary(
+    *,
+    run_dir: Path,
+    network_size: int,
+    algorithm: str,
+    snir_cli_value: str,
+    seed: int,
+    warmup_s: float,
+    duration_s: float,
+    max_run_seconds: float,
+    cause: str,
+) -> Path:
+    """Écrit un ``campaign_summary.json`` explicite pour un run interrompu par timeout."""
+
+    summary_payload = {
+        "contract": {
+            "network_size": int(network_size),
+            "algorithm": str(algorithm),
+            "snir_mode": str(snir_cli_value),
+            "seed": int(seed),
+            "warmup_s": float(warmup_s),
+            "output_dir": str(run_dir),
+        },
+        "metrics": {},
+        "status": "failed_timeout",
+        "failure_reason": str(cause),
+        "max_run_seconds": float(max_run_seconds),
+        "duration_s": float(duration_s),
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    summary_path = run_dir / "campaign_summary.json"
+    summary_path.write_text(
+        json.dumps(summary_payload, indent=2, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+    return summary_path
 
 
 def _parse_args() -> argparse.Namespace:
@@ -760,7 +818,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-run-seconds",
         type=float,
-        default=None,
+        default=900.0,
         help=(
             "Durée murale maximale d'un run (secondes). "
             "Au-delà, le run est arrêté et marqué failed_timeout."
@@ -792,8 +850,6 @@ def main() -> None:
     """Exécution principale."""
 
     args = _parse_args()
-    if not hasattr(args, "max_run_seconds"):
-        args.max_run_seconds = None
     logger, campaign_log_path = _configure_logging()
     run_single_campaign = _load_run_single_campaign()
     logs_root: Path = args.logs_root
@@ -1232,11 +1288,23 @@ def main() -> None:
                         break
                     except TimeoutError as exc:
                         duration_s = perf_counter() - t0
+                        summary_path = _write_timeout_campaign_summary(
+                            run_dir=run_dir,
+                            network_size=int(network_size),
+                            algorithm=str(algorithm),
+                            snir_cli_value=snir_cli_value,
+                            seed=int(seed),
+                            warmup_s=float(args.warmup_s),
+                            duration_s=duration_s,
+                            max_run_seconds=float(args.max_run_seconds),
+                            cause=str(exc),
+                        )
                         run_status = {
                             "status": "failed_timeout",
                             "duration_s": duration_s,
                             "error": str(exc),
                             "max_run_seconds": args.max_run_seconds,
+                            "summary_path": str(summary_path),
                         }
                         (run_dir / "run_status.json").write_text(
                             json.dumps(run_status, indent=2, ensure_ascii=False, sort_keys=True),
@@ -1313,7 +1381,12 @@ def main() -> None:
 
     if interrupted_by_user:
         completed_set = _collect_completed_runs(logs_root)
-        missing_report = _write_missing_combinations_report(logs_root, expected_runs, completed_set)
+        missing_report = _write_missing_combinations_report(
+            logs_root,
+            expected_runs,
+            completed_set,
+            runs_state,
+        )
         logger.warning(
             (
                 "Ctrl+C détecté: agrégation partielle proposée automatiquement. "
