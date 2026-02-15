@@ -20,6 +20,10 @@ from sfrd.parse.parse_run import parse_run
 _PRECHECK_NETWORK_SIZES: tuple[int, ...] = (80, 160)
 _PRECHECK_SNIR_MODES: tuple[str, ...] = ("OFF", "ON")
 _PRECHECK_SEED = 1
+_TIME_DRIFT_ALERT_RATIO = 10_000.0
+_TIME_DRIFT_ALERT_HEARTBEATS = 3
+_TIME_DRIFT_CRITICAL_RATIO = 100_000.0
+_TIME_DRIFT_CRITICAL_HEARTBEATS = 3
 
 
 class MetricsInconsistentError(RuntimeError):
@@ -128,6 +132,8 @@ def _normalize_run_entry(run_id: str, payload: object) -> dict[str, object] | No
         "paths": dict(paths),
         "duration_s": float(duration_s) if duration_s is not None else None,
         "failure_reason": payload.get("failure_reason"),
+        "suspect": bool(payload.get("suspect", False)),
+        "time_drift": payload.get("time_drift"),
     }
 
 
@@ -196,6 +202,8 @@ def _new_run_entry(
         },
         "duration_s": None,
         "failure_reason": None,
+        "suspect": False,
+        "time_drift": None,
     }
 
 
@@ -961,12 +969,76 @@ def main() -> None:
                     run_entry["status"] = "running"
                     run_entry["duration_s"] = None
                     run_entry["failure_reason"] = None
+                    run_entry["suspect"] = False
+                    run_entry["time_drift"] = None
                     _write_campaign_state(state_path, runs_state)
                     try:
                         heartbeat_interval_s = 45.0
+                        drift_state = {
+                            "max_ratio": 0.0,
+                            "consecutive_alert": 0,
+                            "consecutive_critical": 0,
+                            "suspect": False,
+                        }
 
                         def _heartbeat(status: dict[str, object]) -> None:
                             elapsed_s = perf_counter() - t0
+                            safe_elapsed_s = max(elapsed_s, 1e-9)
+                            raw_sim_time = status.get("sim_time_s")
+                            try:
+                                sim_time_s = float(raw_sim_time)
+                            except (TypeError, ValueError):
+                                sim_time_s = 0.0
+                            if not math.isfinite(sim_time_s) or sim_time_s < 0.0:
+                                sim_time_s = 0.0
+                            drift_ratio = sim_time_s / safe_elapsed_s
+                            drift_state["max_ratio"] = max(float(drift_state["max_ratio"]), drift_ratio)
+                            if drift_ratio > _TIME_DRIFT_ALERT_RATIO:
+                                drift_state["consecutive_alert"] = int(drift_state["consecutive_alert"]) + 1
+                            else:
+                                drift_state["consecutive_alert"] = 0
+
+                            if drift_ratio > _TIME_DRIFT_CRITICAL_RATIO:
+                                drift_state["consecutive_critical"] = int(drift_state["consecutive_critical"]) + 1
+                            else:
+                                drift_state["consecutive_critical"] = 0
+
+                            if (
+                                int(drift_state["consecutive_alert"]) >= _TIME_DRIFT_ALERT_HEARTBEATS
+                                and not bool(drift_state["suspect"])
+                            ):
+                                drift_state["suspect"] = True
+                                run_entry["suspect"] = True
+                                run_entry["time_drift"] = {
+                                    "max_ratio": float(drift_state["max_ratio"]),
+                                    "alert_ratio": _TIME_DRIFT_ALERT_RATIO,
+                                    "alert_heartbeats": _TIME_DRIFT_ALERT_HEARTBEATS,
+                                }
+                                _write_campaign_state(state_path, runs_state)
+                                logger.warning(
+                                    (
+                                        "anomalous_time_drift détecté: run marqué suspect | "
+                                        f"ratio={drift_ratio:.2f} | "
+                                        f"consecutive_alert={drift_state['consecutive_alert']}"
+                                    ),
+                                    extra={**run_context, "statut": "anomalous_time_drift"},
+                                )
+
+                            if int(drift_state["consecutive_critical"]) >= _TIME_DRIFT_CRITICAL_HEARTBEATS:
+                                logger.error(
+                                    (
+                                        "Dérive temporelle critique persistante: arrêt du run | "
+                                        f"ratio={drift_ratio:.2f} | "
+                                        f"consecutive_critical={drift_state['consecutive_critical']}"
+                                    ),
+                                    extra={**run_context, "statut": "anomalous_time_drift"},
+                                )
+                                raise RuntimeError(
+                                    "anomalous_time_drift: seuil critique dépassé "
+                                    f"({_TIME_DRIFT_CRITICAL_RATIO:.0f}) pendant "
+                                    f"{_TIME_DRIFT_CRITICAL_HEARTBEATS} heartbeats"
+                                )
+
                             sim_time = _format_seconds(status.get("sim_time_s"))
                             events_processed = int(status.get("events_processed") or 0)
                             last_qos_refresh = _format_seconds(status.get("last_qos_refresh_sim_time"))
@@ -974,6 +1046,7 @@ def main() -> None:
                                 (
                                     f"still running | run_id={run_context['run_id']} | "
                                     f"elapsed={elapsed_s:.1f}s | sim_time={sim_time} | "
+                                    f"time_drift_ratio={drift_ratio:.2f} | "
                                     f"events_processed={events_processed} | "
                                     f"last_qos_refresh={last_qos_refresh}"
                                 ),
@@ -1063,6 +1136,12 @@ def main() -> None:
                             "status": "completed",
                             "duration_s": duration_s,
                             "summary_path": str(result["summary_path"]),
+                            "suspect": bool(drift_state["suspect"]),
+                            "time_drift": {
+                                "max_ratio": float(drift_state["max_ratio"]),
+                                "alert_ratio": _TIME_DRIFT_ALERT_RATIO,
+                                "critical_ratio": _TIME_DRIFT_CRITICAL_RATIO,
+                            },
                         }
                         (run_dir / "run_status.json").write_text(
                             json.dumps(run_status, indent=2, ensure_ascii=False, sort_keys=True),
@@ -1080,6 +1159,12 @@ def main() -> None:
                         run_entry["status"] = "done"
                         run_entry["duration_s"] = duration_s
                         run_entry["failure_reason"] = None
+                        run_entry["suspect"] = bool(drift_state["suspect"])
+                        run_entry["time_drift"] = {
+                            "max_ratio": float(drift_state["max_ratio"]),
+                            "alert_ratio": _TIME_DRIFT_ALERT_RATIO,
+                            "critical_ratio": _TIME_DRIFT_CRITICAL_RATIO,
+                        }
                         _write_campaign_state(state_path, runs_state)
                         logger.info(
                             (
