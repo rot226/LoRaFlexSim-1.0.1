@@ -621,20 +621,143 @@ def _run_precheck(*, args: argparse.Namespace, logger: logging.Logger, run_singl
         )
 
 
-def _collect_completed_runs(logs_root: Path) -> set[tuple[str, int, str, int]]:
+def _collect_completed_runs(
+    logs_root: Path,
+    *,
+    runs_state: dict[str, dict[str, object]] | None = None,
+    logger: logging.Logger | None = None,
+    progress_every: int = 500,
+) -> set[tuple[str, int, str, int]]:
+    """Collecte les runs complétés en priorisant ``campaign_state.json``.
+
+    Le scan disque des ``campaign_summary.json`` n'est utilisé qu'en fallback.
+    """
+
     completed: set[tuple[str, int, str, int]] = set()
-    for summary_path in logs_root.glob("SNIR_*/ns_*/algo_*/seed_*/campaign_summary.json"):
-        try:
-            payload = json.loads(summary_path.read_text(encoding="utf-8"))
-            contract = payload.get("contract", {})
-            snir_mode = str(contract.get("snir_mode", "")).strip().upper()
-            network_size = int(contract.get("network_size", 0))
-            algorithm = str(contract.get("algorithm", "")).strip()
-            seed = int(contract.get("seed", -1))
-        except (json.JSONDecodeError, OSError, ValueError, TypeError):
-            continue
-        if snir_mode in {"ON", "OFF"} and network_size > 0 and algorithm and seed >= 0:
-            completed.add((snir_mode, network_size, algorithm, seed))
+
+    state_path = logs_root / "campaign_state.json"
+    use_state_as_source = False
+    if isinstance(runs_state, dict):
+        state_payload = runs_state
+        use_state_as_source = True
+    else:
+        state_payload = _load_campaign_state(state_path)
+        if state_path.exists():
+            try:
+                raw_payload = json.loads(state_path.read_text(encoding="utf-8"))
+                use_state_as_source = isinstance(raw_payload, dict) and isinstance(raw_payload.get("runs"), dict)
+            except (json.JSONDecodeError, OSError, ValueError, TypeError):
+                use_state_as_source = False
+
+    if use_state_as_source:
+        for run_payload in state_payload.values():
+            if not isinstance(run_payload, dict):
+                continue
+            try:
+                status = str(run_payload.get("status", "")).strip().lower()
+                snir = str(run_payload.get("snir", "")).strip().upper()
+                network_size = int(run_payload.get("network_size", 0))
+                algorithm = str(run_payload.get("algo", "")).strip()
+                seed = int(run_payload.get("seed", -1))
+            except (TypeError, ValueError):
+                continue
+
+            if status != "done":
+                continue
+            if snir in {"ON", "OFF"} and network_size > 0 and algorithm and seed >= 0:
+                completed.add((snir, network_size, algorithm, seed))
+
+        if logger is not None:
+            logger.info(
+                (
+                    "Collecte des runs complétés via campaign_state.json: "
+                    f"{len(completed)} entrées done identifiées."
+                ),
+                extra={"statut": "completed_from_state"},
+            )
+        return completed
+
+    if logger is not None:
+        logger.warning(
+            "campaign_state.json absent/invalide/vide: fallback sur scan disque des campaign_summary.json.",
+            extra={"statut": "completed_scan_fallback"},
+        )
+
+    scanned = 0
+    corrupted = 0
+    try:
+        for summary_path in logs_root.glob("SNIR_*/ns_*/algo_*/seed_*/campaign_summary.json"):
+            scanned += 1
+            if progress_every > 0 and scanned % progress_every == 0 and logger is not None:
+                logger.info(
+                    (
+                        "Scan fallback campaign_summary.json en cours: "
+                        f"fichiers_scannés={scanned}, runs_validés={len(completed)}, corrompus={corrupted}"
+                    ),
+                    extra={"statut": "completed_scan_progress"},
+                )
+            try:
+                payload = json.loads(summary_path.read_text(encoding="utf-8"))
+                contract = payload.get("contract", {})
+                snir_mode = str(contract.get("snir_mode", "")).strip().upper()
+                network_size = int(contract.get("network_size", 0))
+                algorithm = str(contract.get("algorithm", "")).strip()
+                seed = int(contract.get("seed", -1))
+            except (json.JSONDecodeError, OSError, ValueError, TypeError):
+                corrupted += 1
+                continue
+
+            if snir_mode in {"ON", "OFF"} and network_size > 0 and algorithm and seed >= 0:
+                completed.add((snir_mode, network_size, algorithm, seed))
+    except KeyboardInterrupt:
+        if logger is not None:
+            logger.warning(
+                (
+                    "Interruption pendant le scan fallback: sauvegarde de l'état partiel. "
+                    f"fichiers_scannés={scanned}, runs_validés={len(completed)}"
+                ),
+                extra={"statut": "completed_scan_interrupted"},
+            )
+
+    if logger is not None:
+        logger.info(
+            (
+                "Scan fallback terminé: "
+                f"fichiers_scannés={scanned}, runs_validés={len(completed)}, corrompus={corrupted}"
+            ),
+            extra={"statut": "completed_scan_done"},
+        )
+
+    if completed:
+        fallback_state = _load_campaign_state(state_path)
+        for snir_mode, network_size, algorithm, seed in completed:
+            run_key = _run_key(
+                snir_mode=snir_mode,
+                network_size=network_size,
+                algorithm=algorithm,
+                seed=seed,
+            )
+            entry = fallback_state.get(run_key)
+            if not isinstance(entry, dict):
+                run_dir = (
+                    logs_root
+                    / f"SNIR_{snir_mode}"
+                    / f"ns_{network_size}"
+                    / f"algo_{algorithm}"
+                    / f"seed_{seed}"
+                )
+                entry = _new_run_entry(
+                    snir_mode=snir_mode,
+                    network_size=network_size,
+                    algorithm=algorithm,
+                    seed=seed,
+                    run_dir=run_dir,
+                )
+                fallback_state[run_key] = entry
+            entry["status"] = "done"
+
+        _write_campaign_state(state_path, fallback_state)
+
     return completed
 
 
@@ -1380,7 +1503,11 @@ def main() -> None:
     )
 
     if interrupted_by_user:
-        completed_set = _collect_completed_runs(logs_root)
+        completed_set = _collect_completed_runs(
+            logs_root,
+            runs_state=runs_state,
+            logger=logger,
+        )
         missing_report = _write_missing_combinations_report(
             logs_root,
             expected_runs,
