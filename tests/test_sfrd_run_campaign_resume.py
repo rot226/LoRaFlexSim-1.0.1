@@ -243,6 +243,59 @@ def test_run_campaign_aborts_on_raw_vs_summary_pdr_divergence(tmp_path, monkeypa
         run_campaign.main()
 
 
+def test_heartbeat_time_drift_marks_run_suspect(tmp_path, monkeypatch):
+    logs_root = tmp_path / "logs"
+
+    def _fake_runner(**kwargs):
+        callback = kwargs["heartbeat_callback"]
+        for _ in range(3):
+            callback(
+                {
+                    "sim_time_s": 1.0e9,
+                    "events_processed": 1,
+                    "last_qos_refresh_sim_time": 1.0,
+                }
+            )
+        output_dir = Path(kwargs["output_dir"])
+        (output_dir / "campaign_summary.json").write_text("{}", encoding="utf-8")
+        (output_dir / "raw_packets.csv").write_text(
+            "time,node_id,sf,tx_ok,rx_ok,payload_bytes,run\n1,0,7,1,1,20,1\n",
+            encoding="utf-8",
+        )
+        (output_dir / "raw_energy.csv").write_text(
+            "total_energy_joule,sim_duration_s\n1.0,1.0\n",
+            encoding="utf-8",
+        )
+        return {
+            "summary": {"metrics": {"tx_attempted": 1, "rx_delivered": 1, "pdr": 1.0}},
+            "summary_path": str(output_dir / "campaign_summary.json"),
+        }
+
+    monkeypatch.setattr(run_campaign, "_parse_args", lambda: _build_args(logs_root, replications=1))
+    monkeypatch.setattr(run_campaign, "_load_run_single_campaign", lambda: _fake_runner)
+    monkeypatch.setattr(run_campaign, "_TIME_DRIFT_CRITICAL_RATIO", 1.0e15)
+
+    run_campaign.main()
+
+    state = json.loads((logs_root / "campaign_state.json").read_text(encoding="utf-8"))
+    entry = _find_entry(state, 100)
+    assert entry["status"] == "done"
+    assert entry["suspect"] is True
+    assert entry["time_drift"]["max_ratio"] > run_campaign._TIME_DRIFT_ALERT_RATIO
+
+    run_status = json.loads(
+        (
+            logs_root
+            / "SNIR_OFF"
+            / "ns_10"
+            / "algo_UCB"
+            / "seed_100"
+            / "run_status.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert run_status["suspect"] is True
+
+
 def test_precheck_blocks_campaign_on_invalid_aggregate_csv(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     logs_root = tmp_path / "logs"
