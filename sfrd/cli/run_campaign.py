@@ -315,6 +315,7 @@ def _build_expected_runs(args: argparse.Namespace) -> set[tuple[str, int, str, i
 
 
 def _validate_precheck_csv(csv_path: Path, expected_columns: tuple[str, ...]) -> None:
+    csv_path = csv_path.resolve()
     if not csv_path.exists():
         raise ValueError(f"CSV attendu absent: {csv_path}")
     if csv_path.stat().st_size == 0:
@@ -363,10 +364,16 @@ def _validate_precheck_csv(csv_path: Path, expected_columns: tuple[str, ...]) ->
 
 
 def _run_precheck(*, args: argparse.Namespace, logger: logging.Logger, run_single_campaign) -> None:
-    precheck_root = args.logs_root / "precheck"
-    if precheck_root.exists():
-        shutil.rmtree(precheck_root)
-    precheck_root.mkdir(parents=True, exist_ok=True)
+    precheck_logs_root = args.logs_root / "precheck"
+    precheck_aggregate_input = Path("sfrd") / "output_precheck" / "precheck_runs"
+
+    if precheck_logs_root.exists():
+        shutil.rmtree(precheck_logs_root)
+    precheck_logs_root.mkdir(parents=True, exist_ok=True)
+
+    if precheck_aggregate_input.exists():
+        shutil.rmtree(precheck_aggregate_input)
+    precheck_aggregate_input.mkdir(parents=True, exist_ok=True)
 
     logger.info(
         (
@@ -385,7 +392,7 @@ def _run_precheck(*, args: argparse.Namespace, logger: logging.Logger, run_singl
             for algorithm in args.algos:
                 run_count += 1
                 run_dir = (
-                    precheck_root
+                    precheck_logs_root
                     / snir_folder
                     / f"ns_{network_size}"
                     / f"algo_{algorithm}"
@@ -403,7 +410,8 @@ def _run_precheck(*, args: argparse.Namespace, logger: logging.Logger, run_singl
                 )
                 parse_run(run_dir / "raw_packets.csv", warmup_s=0.0)
 
-    aggregate_root = Path(aggregate_logs(precheck_root, allow_partial=False))
+    shutil.copytree(precheck_logs_root, precheck_aggregate_input, dirs_exist_ok=True)
+    aggregate_root = Path(aggregate_logs(precheck_aggregate_input, allow_partial=False)).resolve()
     expected_csvs: list[tuple[Path, tuple[str, ...]]] = [
         (aggregate_root / "SNIR_OFF" / "pdr_results.csv", ("network_size", "algorithm", "snir", "pdr")),
         (
@@ -430,12 +438,17 @@ def _run_precheck(*, args: argparse.Namespace, logger: logging.Logger, run_singl
         expected_csvs.append((aggregate_root / "learning_curve_ucb.csv", ("episode", "reward")))
 
     for csv_path, expected_columns in expected_csvs:
-        _validate_precheck_csv(csv_path, expected_columns)
+        resolved_csv_path = csv_path.resolve()
+        logger.info(
+            f"Précheck CSV attendu: {resolved_csv_path}",
+            extra={"statut": "precheck_csv_path"},
+        )
+        _validate_precheck_csv(resolved_csv_path, expected_columns)
 
     logger.info(
         (
             f"Précheck GO ✅ | runs={run_count} | csv_validés={len(expected_csvs)} | "
-            f"aggregate_root={aggregate_root.resolve()}"
+            f"logs_root={precheck_logs_root.resolve()} | aggregate_root={aggregate_root}"
         ),
         extra={"statut": "precheck_go"},
     )
