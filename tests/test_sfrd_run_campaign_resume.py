@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import logging
 from argparse import Namespace
 from pathlib import Path
 
@@ -29,6 +30,7 @@ def _build_args(logs_root: Path, *, force_rerun: bool = False, replications: int
         logs_root=logs_root,
         skip_aggregate=True,
         skip_precheck=True,
+        keep_precheck_artifacts=False,
         resume=True,
         force_rerun=force_rerun,
     )
@@ -242,6 +244,7 @@ def test_run_campaign_aborts_on_raw_vs_summary_pdr_divergence(tmp_path, monkeypa
 
 
 def test_precheck_blocks_campaign_on_invalid_aggregate_csv(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     logs_root = tmp_path / "logs"
     calls: list[int] = []
 
@@ -265,7 +268,7 @@ def test_precheck_blocks_campaign_on_invalid_aggregate_csv(tmp_path, monkeypatch
 
     def _fake_aggregate(_root: Path, allow_partial: bool):
         assert allow_partial is False
-        out = logs_root / "precheck" / "aggregated"
+        out = Path(_root).parent / "output"
         (out / "SNIR_OFF").mkdir(parents=True, exist_ok=True)
         (out / "SNIR_ON").mkdir(parents=True, exist_ok=True)
         expected = {
@@ -290,6 +293,10 @@ def test_precheck_blocks_campaign_on_invalid_aggregate_csv(tmp_path, monkeypatch
         run_campaign.main()
 
     assert len(calls) == 4
+    precheck_workspaces = list((tmp_path / "sfrd" / ".precheck").glob("*"))
+    assert len(precheck_workspaces) == 1
+    assert (precheck_workspaces[0] / "logs").is_dir()
+    assert (precheck_workspaces[0] / "output").is_dir()
 
 
 def test_validate_precheck_sf_distribution_empty_reports_missing_raw_packets(tmp_path):
@@ -353,3 +360,101 @@ def test_validate_precheck_sf_distribution_empty_reports_invalid_sf_column(tmp_p
                 "final_csv_rows_written": 0,
             },
         )
+
+
+def test_precheck_cleans_workspace_on_success_by_default(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    args = _build_args(tmp_path / "logs", replications=1)
+    args.skip_precheck = False
+
+    def _fake_runner(**kwargs):
+        output_dir = Path(kwargs["output_dir"])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "raw_packets.csv").write_text(
+            "time,node_id,sf,tx_ok,rx_ok,payload_bytes,run\n1,0,7,1,1,20,1\n",
+            encoding="utf-8",
+        )
+        (output_dir / "raw_energy.csv").write_text(
+            "total_energy_joule,sim_duration_s\n1.0,1.0\n",
+            encoding="utf-8",
+        )
+        (output_dir / "campaign_summary.json").write_text("{}", encoding="utf-8")
+        return {
+            "summary": {"metrics": {"tx_attempted": 1, "rx_delivered": 1, "pdr": 1.0}},
+            "summary_path": str(output_dir / "campaign_summary.json"),
+        }
+
+    def _fake_aggregate(_root: Path, allow_partial: bool):
+        assert allow_partial is False
+        out = Path(_root).parent / "output"
+        (out / "SNIR_OFF").mkdir(parents=True, exist_ok=True)
+        (out / "SNIR_ON").mkdir(parents=True, exist_ok=True)
+        expected = {
+            "pdr_results.csv": "network_size,algorithm,snir,pdr\n80,UCB,OFF,1.0\n",
+            "throughput_results.csv": "network_size,algorithm,snir,throughput_packets_per_s\n80,UCB,OFF,0.1\n",
+            "energy_results.csv": "network_size,algorithm,snir,energy_joule_per_packet\n80,UCB,OFF,1.0\n",
+            "sf_distribution.csv": "network_size,algorithm,snir,sf,count\n80,UCB,OFF,7,1\n",
+        }
+        for rel, body in expected.items():
+            (out / "SNIR_OFF" / rel).write_text(body, encoding="utf-8")
+            (out / "SNIR_ON" / rel).write_text(body.replace(",OFF,", ",ON,"), encoding="utf-8")
+        (out / "learning_curve_ucb.csv").write_text("episode,reward\n1,0.1\n", encoding="utf-8")
+        return out
+
+    monkeypatch.setattr(run_campaign, "aggregate_logs", _fake_aggregate)
+
+    run_campaign._run_precheck(args=args, logger=logging.getLogger("test-precheck"), run_single_campaign=_fake_runner)
+
+    precheck_dir = tmp_path / "sfrd" / ".precheck"
+    assert precheck_dir.is_dir()
+    assert list(precheck_dir.glob("*")) == []
+
+
+def test_precheck_keeps_workspace_on_success_when_requested(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    args = _build_args(tmp_path / "logs", replications=1)
+    args.skip_precheck = False
+    args.keep_precheck_artifacts = True
+
+    def _fake_runner(**kwargs):
+        output_dir = Path(kwargs["output_dir"])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "raw_packets.csv").write_text(
+            "time,node_id,sf,tx_ok,rx_ok,payload_bytes,run\n1,0,7,1,1,20,1\n",
+            encoding="utf-8",
+        )
+        (output_dir / "raw_energy.csv").write_text(
+            "total_energy_joule,sim_duration_s\n1.0,1.0\n",
+            encoding="utf-8",
+        )
+        (output_dir / "campaign_summary.json").write_text("{}", encoding="utf-8")
+        return {
+            "summary": {"metrics": {"tx_attempted": 1, "rx_delivered": 1, "pdr": 1.0}},
+            "summary_path": str(output_dir / "campaign_summary.json"),
+        }
+
+    def _fake_aggregate(_root: Path, allow_partial: bool):
+        assert allow_partial is False
+        out = Path(_root).parent / "output"
+        (out / "SNIR_OFF").mkdir(parents=True, exist_ok=True)
+        (out / "SNIR_ON").mkdir(parents=True, exist_ok=True)
+        expected = {
+            "pdr_results.csv": "network_size,algorithm,snir,pdr\n80,UCB,OFF,1.0\n",
+            "throughput_results.csv": "network_size,algorithm,snir,throughput_packets_per_s\n80,UCB,OFF,0.1\n",
+            "energy_results.csv": "network_size,algorithm,snir,energy_joule_per_packet\n80,UCB,OFF,1.0\n",
+            "sf_distribution.csv": "network_size,algorithm,snir,sf,count\n80,UCB,OFF,7,1\n",
+        }
+        for rel, body in expected.items():
+            (out / "SNIR_OFF" / rel).write_text(body, encoding="utf-8")
+            (out / "SNIR_ON" / rel).write_text(body.replace(",OFF,", ",ON,"), encoding="utf-8")
+        (out / "learning_curve_ucb.csv").write_text("episode,reward\n1,0.1\n", encoding="utf-8")
+        return out
+
+    monkeypatch.setattr(run_campaign, "aggregate_logs", _fake_aggregate)
+
+    run_campaign._run_precheck(args=args, logger=logging.getLogger("test-precheck"), run_single_campaign=_fake_runner)
+
+    precheck_workspaces = list((tmp_path / "sfrd" / ".precheck").glob("*"))
+    assert len(precheck_workspaces) == 1
+    assert (precheck_workspaces[0] / "logs").is_dir()
+    assert (precheck_workspaces[0] / "output").is_dir()

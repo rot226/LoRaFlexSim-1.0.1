@@ -453,130 +453,149 @@ def _validate_precheck_csv(
 
 
 def _run_precheck(*, args: argparse.Namespace, logger: logging.Logger, run_single_campaign) -> None:
-    precheck_logs_root = args.logs_root / "precheck"
-    precheck_aggregate_input = Path("sfrd") / "output_precheck" / "precheck_runs"
-
-    if precheck_logs_root.exists():
-        shutil.rmtree(precheck_logs_root)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    precheck_root = Path("sfrd") / ".precheck" / timestamp
+    suffix = 1
+    while precheck_root.exists():
+        precheck_root = Path("sfrd") / ".precheck" / f"{timestamp}-{suffix:02d}"
+        suffix += 1
+    precheck_logs_root = precheck_root / "logs"
     precheck_logs_root.mkdir(parents=True, exist_ok=True)
-
-    if precheck_aggregate_input.exists():
-        shutil.rmtree(precheck_aggregate_input)
-    precheck_aggregate_input.mkdir(parents=True, exist_ok=True)
 
     logger.info(
         (
             "Précheck démarré: mini matrice "
             f"tailles={list(_PRECHECK_NETWORK_SIZES)}, snir={list(_PRECHECK_SNIR_MODES)}, "
-            f"seed={_PRECHECK_SEED}, algos={args.algos}"
+            f"seed={_PRECHECK_SEED}, algos={args.algos}, workspace={precheck_root.resolve()}"
         ),
         extra={"statut": "precheck_start"},
     )
 
-    precheck_stats: dict[str, int] = {
-        "runs_executed": 0,
-        "runs_success": 0,
-        "runs_failed": 0,
-        "raw_packets_files_found": 0,
-        "raw_packets_source_rows": 0,
-        "raw_packets_retained_rows": 0,
-        "raw_packets_sf_column_missing_or_invalid": 0,
-        "final_csv_rows_written": 0,
-    }
-    for snir_mode in _PRECHECK_SNIR_MODES:
-        snir_folder = f"SNIR_{snir_mode}"
-        snir_cli_value = "snir_on" if snir_mode == "ON" else "snir_off"
-        for network_size in _PRECHECK_NETWORK_SIZES:
-            for algorithm in args.algos:
-                precheck_stats["runs_executed"] += 1
-                run_dir = (
-                    precheck_logs_root
-                    / snir_folder
-                    / f"ns_{network_size}"
-                    / f"algo_{algorithm}"
-                    / f"seed_{_PRECHECK_SEED}"
-                )
-                run_dir.mkdir(parents=True, exist_ok=True)
-                try:
-                    run_single_campaign(
-                        network_size=network_size,
-                        algorithm=str(algorithm),
-                        snir_mode=snir_cli_value,
-                        seed=_PRECHECK_SEED,
-                        warmup_s=float(args.warmup_s),
-                        output_dir=run_dir,
-                        ucb_config_path=args.ucb_config,
+    try:
+        precheck_stats: dict[str, int] = {
+            "runs_executed": 0,
+            "runs_success": 0,
+            "runs_failed": 0,
+            "raw_packets_files_found": 0,
+            "raw_packets_source_rows": 0,
+            "raw_packets_retained_rows": 0,
+            "raw_packets_sf_column_missing_or_invalid": 0,
+            "final_csv_rows_written": 0,
+        }
+        for snir_mode in _PRECHECK_SNIR_MODES:
+            snir_folder = f"SNIR_{snir_mode}"
+            snir_cli_value = "snir_on" if snir_mode == "ON" else "snir_off"
+            for network_size in _PRECHECK_NETWORK_SIZES:
+                for algorithm in args.algos:
+                    precheck_stats["runs_executed"] += 1
+                    run_dir = (
+                        precheck_logs_root
+                        / snir_folder
+                        / f"ns_{network_size}"
+                        / f"algo_{algorithm}"
+                        / f"seed_{_PRECHECK_SEED}"
                     )
-                    parse_run(run_dir / "raw_packets.csv", warmup_s=0.0)
+                    run_dir.mkdir(parents=True, exist_ok=True)
+                    try:
+                        run_single_campaign(
+                            network_size=network_size,
+                            algorithm=str(algorithm),
+                            snir_mode=snir_cli_value,
+                            seed=_PRECHECK_SEED,
+                            warmup_s=float(args.warmup_s),
+                            output_dir=run_dir,
+                            ucb_config_path=args.ucb_config,
+                        )
+                        parse_run(run_dir / "raw_packets.csv", warmup_s=0.0)
 
-                    raw_packets_stats = _count_raw_packets_rows(
-                        run_dir / "raw_packets.csv",
-                        warmup_s=float(args.warmup_s),
-                    )
-                    if (run_dir / "raw_packets.csv").exists():
-                        precheck_stats["raw_packets_files_found"] += 1
-                    precheck_stats["raw_packets_source_rows"] += int(raw_packets_stats["source_rows"])
-                    precheck_stats["raw_packets_retained_rows"] += int(raw_packets_stats["retained_rows"])
-                    if (
-                        not bool(raw_packets_stats["sf_column_present"])
-                        or int(raw_packets_stats["sf_valid_rows"]) == 0
-                    ):
-                        precheck_stats["raw_packets_sf_column_missing_or_invalid"] += 1
+                        raw_packets_stats = _count_raw_packets_rows(
+                            run_dir / "raw_packets.csv",
+                            warmup_s=float(args.warmup_s),
+                        )
+                        if (run_dir / "raw_packets.csv").exists():
+                            precheck_stats["raw_packets_files_found"] += 1
+                        precheck_stats["raw_packets_source_rows"] += int(raw_packets_stats["source_rows"])
+                        precheck_stats["raw_packets_retained_rows"] += int(raw_packets_stats["retained_rows"])
+                        if (
+                            not bool(raw_packets_stats["sf_column_present"])
+                            or int(raw_packets_stats["sf_valid_rows"]) == 0
+                        ):
+                            precheck_stats["raw_packets_sf_column_missing_or_invalid"] += 1
 
-                    precheck_stats["runs_success"] += 1
-                except Exception:
-                    precheck_stats["runs_failed"] += 1
-                    raise RuntimeError(
-                        f"Précheck NO-GO pendant exécution run | {_format_precheck_stats(precheck_stats)}"
-                    )
+                        precheck_stats["runs_success"] += 1
+                    except Exception:
+                        precheck_stats["runs_failed"] += 1
+                        raise RuntimeError(
+                            f"Précheck NO-GO pendant exécution run | {_format_precheck_stats(precheck_stats)}"
+                        )
 
-    shutil.copytree(precheck_logs_root, precheck_aggregate_input, dirs_exist_ok=True)
-    aggregate_root = Path(aggregate_logs(precheck_aggregate_input, allow_partial=False)).resolve()
-    expected_csvs: list[tuple[Path, tuple[str, ...]]] = [
-        (aggregate_root / "SNIR_OFF" / "pdr_results.csv", ("network_size", "algorithm", "snir", "pdr")),
-        (
-            aggregate_root / "SNIR_OFF" / "throughput_results.csv",
-            ("network_size", "algorithm", "snir", "throughput_packets_per_s"),
-        ),
-        (
-            aggregate_root / "SNIR_OFF" / "energy_results.csv",
-            ("network_size", "algorithm", "snir", "energy_joule_per_packet"),
-        ),
-        (aggregate_root / "SNIR_OFF" / "sf_distribution.csv", ("network_size", "algorithm", "snir", "sf", "count")),
-        (aggregate_root / "SNIR_ON" / "pdr_results.csv", ("network_size", "algorithm", "snir", "pdr")),
-        (
-            aggregate_root / "SNIR_ON" / "throughput_results.csv",
-            ("network_size", "algorithm", "snir", "throughput_packets_per_s"),
-        ),
-        (
-            aggregate_root / "SNIR_ON" / "energy_results.csv",
-            ("network_size", "algorithm", "snir", "energy_joule_per_packet"),
-        ),
-        (aggregate_root / "SNIR_ON" / "sf_distribution.csv", ("network_size", "algorithm", "snir", "sf", "count")),
-    ]
-    if any(str(algo).upper() == "UCB" for algo in args.algos):
-        expected_csvs.append((aggregate_root / "learning_curve_ucb.csv", ("episode", "reward")))
+        aggregate_root = Path(aggregate_logs(precheck_logs_root, allow_partial=False)).resolve()
+        expected_csvs: list[tuple[Path, tuple[str, ...]]] = [
+            (aggregate_root / "SNIR_OFF" / "pdr_results.csv", ("network_size", "algorithm", "snir", "pdr")),
+            (
+                aggregate_root / "SNIR_OFF" / "throughput_results.csv",
+                ("network_size", "algorithm", "snir", "throughput_packets_per_s"),
+            ),
+            (
+                aggregate_root / "SNIR_OFF" / "energy_results.csv",
+                ("network_size", "algorithm", "snir", "energy_joule_per_packet"),
+            ),
+            (aggregate_root / "SNIR_OFF" / "sf_distribution.csv", ("network_size", "algorithm", "snir", "sf", "count")),
+            (aggregate_root / "SNIR_ON" / "pdr_results.csv", ("network_size", "algorithm", "snir", "pdr")),
+            (
+                aggregate_root / "SNIR_ON" / "throughput_results.csv",
+                ("network_size", "algorithm", "snir", "throughput_packets_per_s"),
+            ),
+            (
+                aggregate_root / "SNIR_ON" / "energy_results.csv",
+                ("network_size", "algorithm", "snir", "energy_joule_per_packet"),
+            ),
+            (aggregate_root / "SNIR_ON" / "sf_distribution.csv", ("network_size", "algorithm", "snir", "sf", "count")),
+        ]
+        if any(str(algo).upper() == "UCB" for algo in args.algos):
+            expected_csvs.append((aggregate_root / "learning_curve_ucb.csv", ("episode", "reward")))
 
-    for csv_path, expected_columns in expected_csvs:
-        resolved_csv_path = csv_path.resolve()
+        for csv_path, expected_columns in expected_csvs:
+            resolved_csv_path = csv_path.resolve()
+            logger.info(
+                f"Précheck CSV attendu: {resolved_csv_path}",
+                extra={"statut": "precheck_csv_path"},
+            )
+            csv_rows = _validate_precheck_csv(
+                resolved_csv_path,
+                expected_columns,
+                precheck_stats=precheck_stats,
+            )
+            precheck_stats["final_csv_rows_written"] += csv_rows
+
         logger.info(
-            f"Précheck CSV attendu: {resolved_csv_path}",
-            extra={"statut": "precheck_csv_path"},
+            (
+                f"Précheck GO ✅ | {_format_precheck_stats(precheck_stats)} | csv_validés={len(expected_csvs)} | "
+                f"logs_root={precheck_logs_root.resolve()} | aggregate_root={aggregate_root}"
+            ),
+            extra={"statut": "precheck_go"},
         )
-        csv_rows = _validate_precheck_csv(
-            resolved_csv_path,
-            expected_columns,
-            precheck_stats=precheck_stats,
+    except Exception:
+        logger.error(
+            (
+                "Précheck NO-GO ❌ | artefacts conservés pour debug: "
+                f"{precheck_root.resolve()}"
+            ),
+            extra={"statut": "precheck_artifacts_kept"},
         )
-        precheck_stats["final_csv_rows_written"] += csv_rows
+        raise
 
-    logger.info(
-        (
-            f"Précheck GO ✅ | {_format_precheck_stats(precheck_stats)} | csv_validés={len(expected_csvs)} | "
-            f"logs_root={precheck_logs_root.resolve()} | aggregate_root={aggregate_root}"
-        ),
-        extra={"statut": "precheck_go"},
-    )
+    if args.keep_precheck_artifacts:
+        logger.info(
+            f"Précheck terminé: conservation explicite des artefacts ({precheck_root.resolve()}).",
+            extra={"statut": "precheck_artifacts_kept"},
+        )
+    else:
+        shutil.rmtree(precheck_root)
+        logger.info(
+            "Précheck terminé: artefacts nettoyés automatiquement (succès).",
+            extra={"statut": "precheck_artifacts_cleaned"},
+        )
 
 
 def _collect_completed_runs(logs_root: Path) -> set[tuple[str, int, str, int]]:
@@ -700,6 +719,11 @@ def _parse_args() -> argparse.Namespace:
         "--skip-precheck",
         action="store_true",
         help="Désactive le précheck GO/NO-GO avant la campagne complète.",
+    )
+    parser.add_argument(
+        "--keep-precheck-artifacts",
+        action="store_true",
+        help="Conserve les artefacts du précheck même en cas de succès.",
     )
     args = parser.parse_args()
 
