@@ -135,8 +135,28 @@ def _write_csv(path: Path, headers: list[str], rows: list[dict[str, Any]]) -> No
         writer.writerows(rows)
 
 
-def _load_expected_runs(logs_root: Path) -> set[tuple[str, int, str, int]]:
+def _load_expected_runs(
+    logs_root: Path,
+    *,
+    manifest: dict[str, Any] | None = None,
+) -> set[tuple[str, int, str, int]]:
     expected: set[tuple[str, int, str, int]] = set()
+
+    manifest_runs = manifest.get("expected_runs") if isinstance(manifest, dict) else None
+    if isinstance(manifest_runs, list):
+        for row in manifest_runs:
+            if not isinstance(row, dict):
+                continue
+            try:
+                snir = _normalize_snir(row.get("snir", ""))
+                network_size = _to_int(row.get("network_size", 0))
+                algorithm = str(row.get("algorithm", "")).strip()
+                seed = _to_int(row.get("seed", -1))
+            except (ValueError, TypeError):
+                continue
+            if snir in {"ON", "OFF"} and network_size > 0 and algorithm and seed >= 0:
+                expected.add((snir, network_size, algorithm, seed))
+        return expected
 
     state_path = logs_root / "campaign_state.json"
     if state_path.exists():
@@ -276,12 +296,72 @@ def _load_run_statuses(logs_root: Path) -> dict[tuple[str, int, str, int], str]:
     return statuses
 
 
-def aggregate_logs(logs_root: str | Path, *, allow_partial: bool = False) -> Path:
+
+
+def _load_campaign_manifest(manifest_path: Path) -> dict[str, Any]:
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Manifest de campagne invalide: {manifest_path}")
+    return payload
+
+
+def _resolve_campaign_scope(
+    logs_root: str | Path,
+    *,
+    campaign_id: str | None = None,
+    manifest_path: str | Path | None = None,
+) -> tuple[Path, dict[str, Any] | None]:
+    root = Path(logs_root)
+
+    explicit_manifest = Path(manifest_path) if manifest_path is not None else None
+    if explicit_manifest is not None:
+        manifest = _load_campaign_manifest(explicit_manifest)
+        manifest_logs_root = manifest.get("logs_root")
+        scoped_root = Path(manifest_logs_root) if isinstance(manifest_logs_root, str) and manifest_logs_root else explicit_manifest.parent
+        return scoped_root, manifest
+
+    if campaign_id:
+        candidates = [
+            root / "campaign_manifests" / f"{campaign_id}.json",
+            root / campaign_id / "campaign_manifest.json",
+        ]
+        for candidate in candidates:
+            if not candidate.exists():
+                continue
+            manifest = _load_campaign_manifest(candidate)
+            manifest_logs_root = manifest.get("logs_root")
+            scoped_root = Path(manifest_logs_root) if isinstance(manifest_logs_root, str) and manifest_logs_root else candidate.parent
+            return scoped_root, manifest
+        raise FileNotFoundError(
+            f"Impossible de trouver un manifest pour campaign_id={campaign_id!r} sous {root.resolve()}"
+        )
+
+    default_manifest = root / "campaign_manifest.json"
+    if default_manifest.exists():
+        manifest = _load_campaign_manifest(default_manifest)
+        manifest_logs_root = manifest.get("logs_root")
+        scoped_root = Path(manifest_logs_root) if isinstance(manifest_logs_root, str) and manifest_logs_root else root
+        return scoped_root, manifest
+
+    return root, None
+
+
+def aggregate_logs(
+    logs_root: str | Path,
+    *,
+    allow_partial: bool = False,
+    campaign_id: str | None = None,
+    manifest_path: str | Path | None = None,
+) -> Path:
     """Agrège les fichiers ``campaign_summary.json`` en sorties CSV dédiées."""
 
-    root = Path(logs_root)
+    root, manifest = _resolve_campaign_scope(
+        logs_root,
+        campaign_id=campaign_id,
+        manifest_path=manifest_path,
+    )
     summaries = sorted(root.glob("SNIR_*/ns_*/algo_*/seed_*/campaign_summary.json"))
-    expected_runs = _load_expected_runs(root)
+    expected_runs = _load_expected_runs(root, manifest=manifest)
     run_statuses = _load_run_statuses(root)
     available_runs: set[tuple[str, int, str, int]] = set()
 
@@ -389,9 +469,9 @@ def aggregate_logs(logs_root: str | Path, *, allow_partial: bool = False) -> Pat
 
     learning_rows: list[dict[str, Any]] = aggregate_learning_curves(run_learning_curves)
 
-    off_root = root.parent / "output" / "SNIR_OFF"
-    on_root = root.parent / "output" / "SNIR_ON"
-    output_root = root.parent / "output"
+    output_root = root / "output"
+    off_root = output_root / "SNIR_OFF"
+    on_root = output_root / "SNIR_ON"
 
     _write_csv(
         off_root / "pdr_results.csv",
@@ -498,6 +578,18 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Agrège uniquement les runs disponibles même si la campagne est incomplète.",
     )
+    parser.add_argument(
+        "--campaign-id",
+        type=str,
+        default=None,
+        help="Identifiant de campagne à agréger (résolu via logs_root/campaign_manifests).",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help="Chemin explicite vers un campaign_manifest.json.",
+    )
     return parser.parse_args()
 
 
@@ -505,7 +597,12 @@ def main() -> None:
     """Exécution principale."""
 
     args = _parse_args()
-    path = aggregate_logs(args.logs_root, allow_partial=args.allow_partial)
+    path = aggregate_logs(
+        args.logs_root,
+        allow_partial=args.allow_partial,
+        campaign_id=args.campaign_id,
+        manifest_path=args.manifest,
+    )
     print(f"Agrégation écrite: {path}")
 
 
