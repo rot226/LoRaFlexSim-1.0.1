@@ -290,3 +290,66 @@ def test_precheck_blocks_campaign_on_invalid_aggregate_csv(tmp_path, monkeypatch
         run_campaign.main()
 
     assert len(calls) == 4
+
+
+def test_validate_precheck_sf_distribution_empty_reports_missing_raw_packets(tmp_path):
+    sf_distribution = tmp_path / "sf_distribution.csv"
+    sf_distribution.write_text("network_size,algorithm,snir,sf,count\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"raison=aucun raw_packets\.csv trouvé"):
+        run_campaign._validate_precheck_csv(
+            sf_distribution,
+            ("network_size", "algorithm", "snir", "sf", "count"),
+            precheck_stats={
+                "runs_executed": 4,
+                "runs_success": 4,
+                "runs_failed": 0,
+                "raw_packets_files_found": 0,
+                "raw_packets_source_rows": 0,
+                "raw_packets_retained_rows": 0,
+                "raw_packets_sf_column_missing_or_invalid": 0,
+                "final_csv_rows_written": 0,
+            },
+        )
+
+
+def test_validate_precheck_sf_distribution_empty_reports_fully_filtered_rows(tmp_path):
+    sf_distribution = tmp_path / "sf_distribution.csv"
+    sf_distribution.write_text("network_size,algorithm,snir,sf,count\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="raison=toutes les lignes ont été filtrées"):
+        run_campaign._validate_precheck_csv(
+            sf_distribution,
+            ("network_size", "algorithm", "snir", "sf", "count"),
+            precheck_stats={
+                "runs_executed": 4,
+                "runs_success": 4,
+                "runs_failed": 0,
+                "raw_packets_files_found": 4,
+                "raw_packets_source_rows": 12,
+                "raw_packets_retained_rows": 0,
+                "raw_packets_sf_column_missing_or_invalid": 0,
+                "final_csv_rows_written": 0,
+            },
+        )
+
+
+def test_validate_precheck_sf_distribution_empty_reports_invalid_sf_column(tmp_path):
+    sf_distribution = tmp_path / "sf_distribution.csv"
+    sf_distribution.write_text("network_size,algorithm,snir,sf,count\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="raison=colonne sf absente/invalide"):
+        run_campaign._validate_precheck_csv(
+            sf_distribution,
+            ("network_size", "algorithm", "snir", "sf", "count"),
+            precheck_stats={
+                "runs_executed": 4,
+                "runs_success": 4,
+                "runs_failed": 0,
+                "raw_packets_files_found": 4,
+                "raw_packets_source_rows": 12,
+                "raw_packets_retained_rows": 6,
+                "raw_packets_sf_column_missing_or_invalid": 2,
+                "final_csv_rows_written": 0,
+            },
+        )

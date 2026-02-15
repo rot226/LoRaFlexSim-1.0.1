@@ -314,24 +314,101 @@ def _build_expected_runs(args: argparse.Namespace) -> set[tuple[str, int, str, i
     return expected
 
 
-def _validate_precheck_csv(csv_path: Path, expected_columns: tuple[str, ...]) -> None:
+def _count_raw_packets_rows(raw_packets_path: Path, *, warmup_s: float) -> dict[str, int | bool]:
+    """Retourne des statistiques de lignes lues/retenues pour un raw_packets.csv."""
+
+    stats: dict[str, int | bool] = {
+        "source_rows": 0,
+        "retained_rows": 0,
+        "sf_column_present": False,
+        "sf_valid_rows": 0,
+    }
+    if not raw_packets_path.exists():
+        return stats
+
+    with raw_packets_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = tuple(reader.fieldnames or ())
+        stats["sf_column_present"] = "sf" in fieldnames
+
+        for row in reader:
+            stats["source_rows"] += 1
+
+            timestamp: float | None = None
+            raw_time = (row.get("time") or "").strip()
+            if raw_time:
+                try:
+                    timestamp = float(raw_time)
+                except ValueError:
+                    timestamp = None
+            if timestamp is not None and timestamp < warmup_s:
+                continue
+
+            stats["retained_rows"] += 1
+            if stats["sf_column_present"]:
+                raw_sf = (row.get("sf") or "").strip()
+                if not raw_sf:
+                    continue
+                try:
+                    float(raw_sf)
+                except ValueError:
+                    continue
+                stats["sf_valid_rows"] += 1
+
+    return stats
+
+
+def _format_precheck_stats(precheck_stats: dict[str, int]) -> str:
+    return (
+        f"runs_exécutés={precheck_stats['runs_executed']} | "
+        f"runs_réussis={precheck_stats['runs_success']} | "
+        f"runs_échoués={precheck_stats['runs_failed']} | "
+        f"raw_packets_lignes_lues={precheck_stats['raw_packets_source_rows']} | "
+        f"raw_packets_lignes_après_warmup={precheck_stats['raw_packets_retained_rows']} | "
+        f"csv_finaux_lignes_écrites={precheck_stats['final_csv_rows_written']}"
+    )
+
+
+def _describe_empty_sf_distribution(precheck_stats: dict[str, int]) -> str:
+    if precheck_stats["raw_packets_files_found"] == 0:
+        return "aucun raw_packets.csv trouvé"
+    if precheck_stats["raw_packets_retained_rows"] == 0:
+        return "toutes les lignes ont été filtrées"
+    if precheck_stats["raw_packets_sf_column_missing_or_invalid"] > 0:
+        return "colonne sf absente/invalide"
+    return "cause indéterminée"
+
+
+def _validate_precheck_csv(
+    csv_path: Path,
+    expected_columns: tuple[str, ...],
+    *,
+    precheck_stats: dict[str, int],
+) -> int:
     csv_path = csv_path.resolve()
+    stats_context = _format_precheck_stats(precheck_stats)
     if not csv_path.exists():
-        raise ValueError(f"CSV attendu absent: {csv_path}")
+        raise ValueError(f"CSV attendu absent: {csv_path} | {stats_context}")
     if csv_path.stat().st_size == 0:
-        raise ValueError(f"CSV attendu vide: {csv_path}")
+        raise ValueError(f"CSV attendu vide: {csv_path} | {stats_context}")
 
     with csv_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         columns = tuple(reader.fieldnames or ())
         if columns != expected_columns:
             raise ValueError(
-                f"Colonnes invalides pour {csv_path}: attendu={list(expected_columns)} obtenu={list(columns)}"
+                (
+                    f"Colonnes invalides pour {csv_path}: attendu={list(expected_columns)} "
+                    f"obtenu={list(columns)} | {stats_context}"
+                )
             )
         rows = list(reader)
 
     if not rows:
-        raise ValueError(f"CSV sans données: {csv_path}")
+        if csv_path.name == "sf_distribution.csv":
+            reason = _describe_empty_sf_distribution(precheck_stats)
+            raise ValueError(f"CSV sans données: {csv_path} | raison={reason} | {stats_context}")
+        raise ValueError(f"CSV sans données: {csv_path} | {stats_context}")
 
     for row_number, row in enumerate(rows, start=2):
         for field_name, raw_value in row.items():
@@ -343,24 +420,36 @@ def _validate_precheck_csv(csv_path: Path, expected_columns: tuple[str, ...]) ->
             except ValueError:
                 continue
             if math.isnan(parsed):
-                raise ValueError(f"NaN détecté dans {csv_path} ligne {row_number} colonne {field_name}")
+                raise ValueError(
+                    f"NaN détecté dans {csv_path} ligne {row_number} colonne {field_name} | {stats_context}"
+                )
 
         if "pdr" in row:
             pdr = float(row["pdr"])
             if not (0.0 <= pdr <= 1.0):
-                raise ValueError(f"pdr hors bornes [0,1] dans {csv_path} ligne {row_number}: {pdr}")
+                raise ValueError(
+                    f"pdr hors bornes [0,1] dans {csv_path} ligne {row_number}: {pdr} | {stats_context}"
+                )
         if "throughput_packets_per_s" in row:
             throughput = float(row["throughput_packets_per_s"])
             if throughput < 0.0:
                 raise ValueError(
-                    f"throughput_packets_per_s négatif dans {csv_path} ligne {row_number}: {throughput}"
+                    (
+                        f"throughput_packets_per_s négatif dans {csv_path} ligne {row_number}: {throughput} "
+                        f"| {stats_context}"
+                    )
                 )
         if "energy_joule_per_packet" in row:
             energy = float(row["energy_joule_per_packet"])
             if energy < 0.0:
                 raise ValueError(
-                    f"energy_joule_per_packet négatif dans {csv_path} ligne {row_number}: {energy}"
+                    (
+                        f"energy_joule_per_packet négatif dans {csv_path} ligne {row_number}: {energy} "
+                        f"| {stats_context}"
+                    )
                 )
+
+    return len(rows)
 
 
 def _run_precheck(*, args: argparse.Namespace, logger: logging.Logger, run_single_campaign) -> None:
@@ -384,13 +473,22 @@ def _run_precheck(*, args: argparse.Namespace, logger: logging.Logger, run_singl
         extra={"statut": "precheck_start"},
     )
 
-    run_count = 0
+    precheck_stats: dict[str, int] = {
+        "runs_executed": 0,
+        "runs_success": 0,
+        "runs_failed": 0,
+        "raw_packets_files_found": 0,
+        "raw_packets_source_rows": 0,
+        "raw_packets_retained_rows": 0,
+        "raw_packets_sf_column_missing_or_invalid": 0,
+        "final_csv_rows_written": 0,
+    }
     for snir_mode in _PRECHECK_SNIR_MODES:
         snir_folder = f"SNIR_{snir_mode}"
         snir_cli_value = "snir_on" if snir_mode == "ON" else "snir_off"
         for network_size in _PRECHECK_NETWORK_SIZES:
             for algorithm in args.algos:
-                run_count += 1
+                precheck_stats["runs_executed"] += 1
                 run_dir = (
                     precheck_logs_root
                     / snir_folder
@@ -399,16 +497,38 @@ def _run_precheck(*, args: argparse.Namespace, logger: logging.Logger, run_singl
                     / f"seed_{_PRECHECK_SEED}"
                 )
                 run_dir.mkdir(parents=True, exist_ok=True)
-                run_single_campaign(
-                    network_size=network_size,
-                    algorithm=str(algorithm),
-                    snir_mode=snir_cli_value,
-                    seed=_PRECHECK_SEED,
-                    warmup_s=float(args.warmup_s),
-                    output_dir=run_dir,
-                    ucb_config_path=args.ucb_config,
-                )
-                parse_run(run_dir / "raw_packets.csv", warmup_s=0.0)
+                try:
+                    run_single_campaign(
+                        network_size=network_size,
+                        algorithm=str(algorithm),
+                        snir_mode=snir_cli_value,
+                        seed=_PRECHECK_SEED,
+                        warmup_s=float(args.warmup_s),
+                        output_dir=run_dir,
+                        ucb_config_path=args.ucb_config,
+                    )
+                    parse_run(run_dir / "raw_packets.csv", warmup_s=0.0)
+
+                    raw_packets_stats = _count_raw_packets_rows(
+                        run_dir / "raw_packets.csv",
+                        warmup_s=float(args.warmup_s),
+                    )
+                    if (run_dir / "raw_packets.csv").exists():
+                        precheck_stats["raw_packets_files_found"] += 1
+                    precheck_stats["raw_packets_source_rows"] += int(raw_packets_stats["source_rows"])
+                    precheck_stats["raw_packets_retained_rows"] += int(raw_packets_stats["retained_rows"])
+                    if (
+                        not bool(raw_packets_stats["sf_column_present"])
+                        or int(raw_packets_stats["sf_valid_rows"]) == 0
+                    ):
+                        precheck_stats["raw_packets_sf_column_missing_or_invalid"] += 1
+
+                    precheck_stats["runs_success"] += 1
+                except Exception:
+                    precheck_stats["runs_failed"] += 1
+                    raise RuntimeError(
+                        f"Précheck NO-GO pendant exécution run | {_format_precheck_stats(precheck_stats)}"
+                    )
 
     shutil.copytree(precheck_logs_root, precheck_aggregate_input, dirs_exist_ok=True)
     aggregate_root = Path(aggregate_logs(precheck_aggregate_input, allow_partial=False)).resolve()
@@ -443,11 +563,16 @@ def _run_precheck(*, args: argparse.Namespace, logger: logging.Logger, run_singl
             f"Précheck CSV attendu: {resolved_csv_path}",
             extra={"statut": "precheck_csv_path"},
         )
-        _validate_precheck_csv(resolved_csv_path, expected_columns)
+        csv_rows = _validate_precheck_csv(
+            resolved_csv_path,
+            expected_columns,
+            precheck_stats=precheck_stats,
+        )
+        precheck_stats["final_csv_rows_written"] += csv_rows
 
     logger.info(
         (
-            f"Précheck GO ✅ | runs={run_count} | csv_validés={len(expected_csvs)} | "
+            f"Précheck GO ✅ | {_format_precheck_stats(precheck_stats)} | csv_validés={len(expected_csvs)} | "
             f"logs_root={precheck_logs_root.resolve()} | aggregate_root={aggregate_root}"
         ),
         extra={"statut": "precheck_go"},
