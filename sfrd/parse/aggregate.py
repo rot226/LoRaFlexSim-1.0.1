@@ -60,12 +60,26 @@ def _extract_sf_counts(metrics: dict[str, Any], network_size: int) -> dict[int, 
     if not isinstance(raw, dict):
         return {}
 
+    def _parse_sf(value: Any) -> int | None:
+        try:
+            numeric = _to_float(value)
+        except (ValueError, TypeError):
+            return None
+        sf = int(numeric)
+        if sf not in {7, 8, 9, 10, 11, 12}:
+            return None
+        if abs(numeric - float(sf)) > 1e-9:
+            return None
+        return sf
+
     parsed: dict[int, float] = {}
     for sf_key, raw_value in raw.items():
         try:
-            sf = _to_int(sf_key)
             value = _to_float(raw_value)
         except (ValueError, TypeError):
+            continue
+        sf = _parse_sf(sf_key)
+        if sf is None:
             continue
         parsed[sf] = value
 
@@ -229,9 +243,9 @@ def aggregate_logs(logs_root: str | Path, *, allow_partial: bool = False) -> Pat
         metric_sums[key]["count"] += 1.0
 
         sf_counts = _extract_sf_counts(metrics, network_size)
-        for sf, value in sf_counts.items():
+        for sf in range(7, 13):
             sf_key = (network_size, algorithm, snir, sf)
-            sf_sums[sf_key]["count_sum"] += value
+            sf_sums[sf_key]["count_sum"] += sf_counts.get(sf, 0.0)
             sf_sums[sf_key]["replications"] += 1.0
 
         algorithm_key = algorithm.strip().upper().replace("-", "")
@@ -276,18 +290,22 @@ def aggregate_logs(logs_root: str | Path, *, allow_partial: bool = False) -> Pat
         )
 
     sf_rows: list[dict[str, Any]] = []
-    for network_size, algorithm, snir, sf in sorted(sf_sums):
-        values = sf_sums[(network_size, algorithm, snir, sf)]
-        replications = values["replications"] or 1.0
-        sf_rows.append(
-            {
-                "network_size": network_size,
-                "algorithm": algorithm,
-                "snir": snir,
-                "sf": sf,
-                "count": values["count_sum"] / replications,
-            }
-        )
+    for network_size, algorithm, snir in sorted(metric_sums):
+        for sf in range(7, 13):
+            values = sf_sums.get((network_size, algorithm, snir, sf))
+            count = 0.0
+            if values is not None:
+                replications = values["replications"] or 1.0
+                count = values["count_sum"] / replications
+            sf_rows.append(
+                {
+                    "network_size": network_size,
+                    "algorithm": algorithm,
+                    "snir": snir,
+                    "sf": sf,
+                    "count": count,
+                }
+            )
 
     learning_rows: list[dict[str, Any]] = aggregate_learning_curves(run_learning_curves)
 

@@ -149,8 +149,19 @@ def _is_success_event(event: dict[str, Any]) -> bool:
 def _extract_sf(event: dict[str, Any]) -> int | None:
     """Extrait le spreading factor s'il est disponible."""
 
+    def _parse_sf(value: Any) -> int | None:
+        number = _to_float(value)
+        if number is None:
+            return None
+        sf = int(number)
+        if not math.isclose(number, float(sf), rel_tol=0.0, abs_tol=1e-9):
+            return None
+        if sf not in {7, 8, 9, 10, 11, 12}:
+            return None
+        return sf
+
     for key in ("sf", "spreading_factor", "final_sf", "tx_sf", "initial_sf"):
-        value = _to_int(event.get(key))
+        value = _parse_sf(event.get(key))
         if value is not None:
             return value
     return None

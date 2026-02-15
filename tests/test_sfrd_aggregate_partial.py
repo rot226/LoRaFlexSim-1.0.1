@@ -59,3 +59,32 @@ def test_aggregate_allow_partial_writes_completeness(tmp_path: Path) -> None:
 
     completeness = (output_root / "campaign_completeness.csv").read_text(encoding="utf-8")
     assert "OFF,80,UCB,2,1,no,2" in completeness
+
+
+def test_aggregate_sf_distribution_keeps_all_sf_rows(tmp_path: Path) -> None:
+    logs_root = tmp_path / "logs"
+    _write_summary(logs_root / "SNIR_OFF" / "ns_80" / "algo_UCB" / "seed_1", snir="OFF", size=80, algo="UCB", seed=1)
+    run2 = logs_root / "SNIR_OFF" / "ns_80" / "algo_UCB" / "seed_2"
+    run2.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "contract": {"snir_mode": "OFF", "network_size": 80, "algorithm": "UCB", "seed": 2},
+        "metrics": {
+            "pdr": 0.7,
+            "throughput_packets_per_s": 1.0,
+            "energy_joule_per_packet": 0.4,
+            "sf_distribution_counts": {"7.0": 4, "8": 6, "13": 2},
+        },
+    }
+    (run2 / "campaign_summary.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    output_root = aggregate_logs(logs_root, allow_partial=True)
+
+    sf_lines = (output_root / "SNIR_OFF" / "sf_distribution.csv").read_text(encoding="utf-8").splitlines()
+    assert sf_lines[0] == "network_size,algorithm,snir,sf,count"
+    assert len(sf_lines) == 7
+    assert "80,UCB,OFF,7,7.0" in sf_lines
+    assert "80,UCB,OFF,8,3.0" in sf_lines
+    assert "80,UCB,OFF,9,0.0" in sf_lines
+    assert "80,UCB,OFF,10,0.0" in sf_lines
+    assert "80,UCB,OFF,11,0.0" in sf_lines
+    assert "80,UCB,OFF,12,0.0" in sf_lines
