@@ -25,6 +25,7 @@ _TIME_DRIFT_ALERT_RATIO = 10_000.0
 _TIME_DRIFT_ALERT_HEARTBEATS = 3
 _TIME_DRIFT_CRITICAL_RATIO = 100_000.0
 _TIME_DRIFT_CRITICAL_HEARTBEATS = 3
+_AUTO_PRECHECK_MIN_TOTAL_RUNS = 24
 
 
 class MetricsInconsistentError(RuntimeError):
@@ -863,6 +864,23 @@ def _write_timeout_campaign_summary(
     return summary_path
 
 
+def _resolve_precheck_mode(args: argparse.Namespace) -> str:
+    """Résout le mode effectif de précheck, y compris la logique automatique."""
+
+    if args.precheck != "auto":
+        return str(args.precheck)
+
+    total_runs = len(args.network_sizes) * len(args.algos) * len(args.snir) * args.replications
+    is_large_full_campaign = (
+        len(args.network_sizes) >= 2
+        and len(args.algos) >= 2
+        and len(args.snir) >= 2
+        and args.replications >= 2
+        and total_runs >= _AUTO_PRECHECK_MIN_TOTAL_RUNS
+    )
+    return "on" if is_large_full_campaign else "off"
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Lance une matrice de runs SFRD (SNIR x taille x algo x réplication)."
@@ -954,14 +972,23 @@ def _parse_args() -> argparse.Namespace:
         help="Relance tous les runs même si les artefacts existent.",
     )
     parser.add_argument(
-        "--skip-precheck",
-        action="store_true",
-        help="Désactive le précheck GO/NO-GO avant la campagne complète.",
+        "--precheck",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help=(
+            "Mode de précheck GO/NO-GO avant la campagne complète. "
+            "auto=on pour campagne large complète, off pour runs ciblés/debug."
+        ),
     )
     parser.add_argument(
         "--keep-precheck-artifacts",
         action="store_true",
         help="Conserve les artefacts du précheck même en cas de succès.",
+    )
+    parser.add_argument(
+        "--skip-precheck",
+        action="store_true",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--max-run-seconds",
@@ -973,6 +1000,9 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     args = parser.parse_args()
+
+    if args.skip_precheck:
+        args.precheck = "off"
 
     if args.replications <= 0:
         parser.error("--replications doit être >= 1")
@@ -1058,9 +1088,20 @@ def main() -> None:
         extra={"statut": "algo_sequence"},
     )
 
-    if args.skip_precheck:
+    precheck_mode = _resolve_precheck_mode(args)
+    if args.precheck == "auto":
+        logger.info(
+            (
+                "Précheck auto résolu. "
+                f"mode_effectif={precheck_mode} | tailles={len(args.network_sizes)} | "
+                f"algos={len(args.algos)} | snir={len(args.snir)} | replications={args.replications}"
+            ),
+            extra={"statut": "precheck_auto_resolved"},
+        )
+
+    if precheck_mode == "off":
         logger.warning(
-            "Précheck désactivé (--skip-precheck).",
+            "Précheck désactivé (mode=off): validation stricte de fin de campagne conservée.",
             extra={"statut": "precheck_skipped"},
         )
     else:
