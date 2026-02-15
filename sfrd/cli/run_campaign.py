@@ -10,6 +10,7 @@ import logging
 import math
 import os
 import shutil
+import uuid
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
@@ -207,7 +208,7 @@ def _new_run_entry(
     }
 
 
-def _configure_logging() -> tuple[logging.Logger, Path]:
+def _configure_logging(logs_root: Path) -> tuple[logging.Logger, Path]:
     """Configure le logger campagne: console INFO + fichier DEBUG."""
 
     logger = logging.getLogger("sfrd.campaign")
@@ -215,7 +216,7 @@ def _configure_logging() -> tuple[logging.Logger, Path]:
     logger.handlers.clear()
     logger.propagate = False
 
-    logs_dir = Path("sfrd/logs")
+    logs_dir = logs_root
     logs_dir.mkdir(parents=True, exist_ok=True)
     log_path = logs_dir / f"campaign_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
@@ -243,6 +244,22 @@ def _configure_logging() -> tuple[logging.Logger, Path]:
     logger.addHandler(file_handler)
 
     return logger, log_path
+
+
+def _new_campaign_id() -> str:
+    """Génère un identifiant de campagne unique pour l'exécution courante."""
+
+    return f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
+
+
+def _jsonable(value: object) -> object:
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _jsonable(val) for key, val in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_jsonable(item) for item in value]
+    return value
 
 
 def _load_run_single_campaign():
@@ -909,7 +926,15 @@ def _parse_args() -> argparse.Namespace:
         "--logs-root",
         type=Path,
         default=Path("sfrd/logs"),
-        help="Dossier racine des logs de campagne",
+        help="Dossier racine contenant un sous-dossier dédié par campaign_id",
+    )
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help=(
+            "Autorise l'agrégation partielle d'une campagne incomplète. "
+            "Par défaut, l'agrégation exige la matrice complète attendue."
+        ),
     )
     parser.add_argument(
         "--skip-aggregate",
@@ -973,10 +998,46 @@ def main() -> None:
     """Exécution principale."""
 
     args = _parse_args()
-    logger, campaign_log_path = _configure_logging()
     run_single_campaign = _load_run_single_campaign()
-    logs_root: Path = args.logs_root
+
+    base_logs_root: Path = args.logs_root
+    base_logs_root.mkdir(parents=True, exist_ok=True)
+    campaign_id = _new_campaign_id()
+    logs_root = base_logs_root / campaign_id
     logs_root.mkdir(parents=True, exist_ok=True)
+
+    expected_runs = _build_expected_runs(args)
+    expected_runs_rows = [
+        {
+            "snir": snir,
+            "network_size": int(network_size),
+            "algorithm": algorithm,
+            "seed": int(seed),
+        }
+        for snir, network_size, algorithm, seed in sorted(expected_runs)
+    ]
+    campaign_manifest = {
+        "campaign_id": campaign_id,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "base_logs_root": str(base_logs_root.resolve()),
+        "logs_root": str(logs_root.resolve()),
+        "allow_partial": bool(args.allow_partial),
+        "args": _jsonable(vars(args)),
+        "expected_runs": expected_runs_rows,
+    }
+    manifest_path = logs_root / "campaign_manifest.json"
+    manifest_path.write_text(
+        json.dumps(campaign_manifest, indent=2, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+    manifests_root = base_logs_root / "campaign_manifests"
+    manifests_root.mkdir(parents=True, exist_ok=True)
+    (manifests_root / f"{campaign_id}.json").write_text(
+        json.dumps(campaign_manifest, indent=2, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    logger, campaign_log_path = _configure_logging(logs_root)
     state_path = logs_root / "campaign_state.json"
     runs_state = _load_campaign_state(state_path)
 
@@ -987,6 +1048,10 @@ def main() -> None:
     logger.info(
         f"Journal campagne: {campaign_log_path.resolve()}",
         extra={"statut": "log_path"},
+    )
+    logger.info(
+        f"campaign_id={campaign_id} | logs_root={logs_root.resolve()} | manifest={manifest_path.resolve()}",
+        extra={"statut": "campaign_context"},
     )
     logger.info(
         f"Séquence algorithmes retenue (ordre d'exécution): {args.algos}",
@@ -1516,21 +1581,35 @@ def main() -> None:
         )
         logger.warning(
             (
-                "Ctrl+C détecté: agrégation partielle proposée automatiquement. "
+                "Ctrl+C détecté: agrégation de fin de campagne. "
                 f"Combinaisons manquantes listées dans {missing_report.resolve()}"
             ),
             extra={"statut": "partial_suggested"},
         )
         if not args.skip_aggregate:
-            aggregate_path = aggregate_logs(logs_root, allow_partial=True)
-            logger.info(
-                f"Agrégation partielle terminée: {Path(aggregate_path).resolve()}",
-                extra={"statut": "partial_aggregated"},
-            )
+            if not args.allow_partial:
+                logger.warning(
+                    "Agrégation ignorée: campagne incomplète et --allow-partial absent.",
+                    extra={"statut": "partial_blocked"},
+                )
+            else:
+                aggregate_path = aggregate_logs(
+                    logs_root,
+                    allow_partial=True,
+                    manifest_path=manifest_path,
+                )
+                logger.info(
+                    f"Agrégation partielle terminée: {Path(aggregate_path).resolve()}",
+                    extra={"statut": "partial_aggregated"},
+                )
         return
 
     if not args.skip_aggregate:
-        aggregate_path = aggregate_logs(logs_root, allow_partial=False)
+        aggregate_path = aggregate_logs(
+            logs_root,
+            allow_partial=args.allow_partial,
+            manifest_path=manifest_path,
+        )
         aggregate_root = Path(aggregate_path)
         final_csv_paths = [
             aggregate_root / "SNIR_OFF" / "pdr_results.csv",
