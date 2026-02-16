@@ -881,6 +881,52 @@ def _write_missing_combinations_report(
     return report_path
 
 
+def _is_missing_runs_aggregation_error(exc: Exception) -> bool:
+    """Identifie une erreur d'agrégation stricte liée à des runs manquants."""
+
+    message = str(exc).lower()
+    return "agrégation incomplète" in message and "manquant" in message
+
+
+def _summarize_missing_report(report_path: Path) -> tuple[int, int, dict[str, int]]:
+    """Retourne le nombre de combinaisons/runs manquants et un histogramme de statuts."""
+
+    combinations = 0
+    missing_runs = 0
+    status_counts: dict[str, int] = {}
+    if not report_path.exists():
+        return combinations, missing_runs, status_counts
+
+    with report_path.open("r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            combinations += 1
+            try:
+                missing_runs += int(str(row.get("missing_runs", "0") or "0"))
+            except ValueError:
+                missing_runs += 0
+
+            raw_statuses = str(row.get("statuses", "") or "").strip()
+            if not raw_statuses:
+                continue
+            for status in raw_statuses.split(","):
+                normalized = status.strip().lower() or "missing"
+                status_counts[normalized] = status_counts.get(normalized, 0) + 1
+
+    return combinations, missing_runs, status_counts
+
+
+def _snapshot_partial_output(*, logs_root: Path, campaign_id: str) -> Path:
+    """Copie l'output partiel de campagne vers un dossier de secours stable."""
+
+    source_output = logs_root / "output"
+    target_output = Path("sfrd") / "output_partial" / campaign_id
+    target_output.parent.mkdir(parents=True, exist_ok=True)
+    if target_output.exists():
+        shutil.rmtree(target_output)
+    shutil.copytree(source_output, target_output)
+    return target_output
+
+
 def _write_timeout_campaign_summary(
     *,
     run_dir: Path,
@@ -1007,6 +1053,14 @@ def _parse_args() -> argparse.Namespace:
         help=(
             "Autorise l'agrégation partielle d'une campagne incomplète. "
             "Par défaut, l'agrégation exige la matrice complète attendue."
+        ),
+    )
+    parser.add_argument(
+        "--strict-finalize",
+        action="store_true",
+        help=(
+            "Conserve la finalisation bloquante historique: en cas de runs manquants, "
+            "la campagne échoue sans fallback d'agrégation partielle."
         ),
     )
     parser.add_argument(
@@ -1739,12 +1793,70 @@ def main() -> None:
             logs_root=logs_root,
             manifest_path=manifest_path,
         )
-        aggregate_path = aggregate_logs(
-            logs_root,
-            allow_partial=args.allow_partial,
-            manifest_path=manifest_path,
-        )
-        aggregate_root = Path(aggregate_path)
+
+        aggregate_root: Path
+        try:
+            aggregate_path = aggregate_logs(
+                logs_root,
+                allow_partial=False,
+                manifest_path=manifest_path,
+            )
+            aggregate_root = Path(aggregate_path)
+        except RuntimeError as exc:
+            if not _is_missing_runs_aggregation_error(exc):
+                raise
+            if args.strict_finalize:
+                logger.error(
+                    "Agrégation stricte bloquante (--strict-finalize): runs manquants détectés.",
+                    extra={"statut": "aggregate_strict_failed"},
+                )
+                raise
+
+            logger.warning(
+                (
+                    "Agrégation stricte échouée (runs manquants): bascule automatique "
+                    "vers l'agrégation partielle."
+                ),
+                extra={"statut": "aggregate_strict_fallback"},
+            )
+            aggregate_path = aggregate_logs(
+                logs_root,
+                allow_partial=True,
+                manifest_path=manifest_path,
+            )
+            aggregate_root = Path(aggregate_path)
+            partial_output = _snapshot_partial_output(logs_root=logs_root, campaign_id=campaign_id)
+            missing_report = aggregate_root / "campaign_missing_combinations.csv"
+            missing_combinations, missing_runs_count, status_counts = _summarize_missing_report(
+                missing_report
+            )
+            status_preview = (
+                ", ".join(f"{status}={count}" for status, count in sorted(status_counts.items()))
+                if status_counts
+                else "n/a"
+            )
+            logger.warning(
+                (
+                    "Résumé runs manquants: "
+                    f"combinaisons={missing_combinations}, runs={missing_runs_count}, "
+                    f"statuts={status_preview}, rapport={missing_report.resolve()}, "
+                    f"secours={partial_output.resolve()}"
+                ),
+                extra={"statut": "aggregate_partial_summary"},
+            )
+            print(
+                (
+                    "[run_campaign] Agrégation partielle automatique terminée | "
+                    f"combinaisons manquantes={missing_combinations} | "
+                    f"runs manquants={missing_runs_count} | "
+                    f"rapport={missing_report.resolve()} | "
+                    f"secours={partial_output.resolve()}"
+                )
+            )
+
+            campaign_missing_report = logs_root / "campaign_missing_combinations.csv"
+            shutil.copy2(missing_report, campaign_missing_report)
+
         final_csv_paths = [
             aggregate_root / "SNIR_OFF" / "pdr_results.csv",
             aggregate_root / "SNIR_OFF" / "throughput_results.csv",
