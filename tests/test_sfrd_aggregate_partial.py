@@ -122,3 +122,56 @@ def test_aggregate_loads_expected_runs_from_missing_report(tmp_path: Path) -> No
 
     completeness = (output_root / "campaign_completeness.csv").read_text(encoding="utf-8")
     assert "OFF,80,MixRA-H,1,0,no,4" in completeness
+
+
+def test_aggregate_avoids_false_missing_with_algorithm_aliases(tmp_path: Path) -> None:
+    logs_root = tmp_path / "logs"
+    manifest = {
+        "expected_runs": [
+            {"snir": "off", "network_size": 80, "algorithm": "UCB", "seed": 1},
+            {"snir": "ON", "network_size": 80, "algorithm": "mixra-h", "seed": 2},
+        ]
+    }
+    (logs_root / "campaign_manifest.json").parent.mkdir(parents=True, exist_ok=True)
+    (logs_root / "campaign_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    _write_summary(
+        logs_root / "SNIR_OFF" / "ns_80" / "algo_ucb" / "seed_1",
+        snir="snir_on",
+        size=80,
+        algo="UCB1",
+        seed=1,
+    )
+    _write_summary(
+        logs_root / "SNIR_ON" / "ns_80" / "algo_MixRA_H" / "seed_2",
+        snir="snir_on",
+        size=80,
+        algo="MixRA-H",
+        seed=2,
+    )
+
+    output_root = aggregate_logs(logs_root, allow_partial=True)
+
+    completeness = (output_root / "campaign_completeness.csv").read_text(encoding="utf-8")
+    assert "OFF,80,UCB,1,1,yes," in completeness
+    assert "ON,80,mixra-h,1,1,yes," in completeness
+
+
+def test_aggregate_debug_missing_logs_expected_paths(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    logs_root = tmp_path / "logs"
+    manifest = {
+        "expected_runs": [
+            {"snir": "OFF", "network_size": 80, "algorithm": "UCB", "seed": 1},
+        ]
+    }
+    (logs_root / "campaign_manifest.json").parent.mkdir(parents=True, exist_ok=True)
+    (logs_root / "campaign_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    caplog.set_level("DEBUG")
+    aggregate_logs(logs_root, allow_partial=True, debug_missing=True)
+
+    debug_messages = [rec.getMessage() for rec in caplog.records if "Missing run debug" in rec.getMessage()]
+    assert debug_messages
+    assert "campaign_summary=no" in debug_messages[0]
+    assert "raw_packets=no" in debug_messages[0]
+    assert "raw_energy=no" in debug_messages[0]

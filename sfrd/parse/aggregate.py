@@ -5,11 +5,29 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
 from .reward_ucb import aggregate_learning_curves
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+_ALGORITHM_ALIASES = {
+    "adr": "adrpure",
+    "adrpure": "adrpure",
+    "apra": "apralike",
+    "apralike": "apralike",
+    "aimi": "aimilike",
+    "aimilike": "aimilike",
+    "mixraopt": "mixraopt",
+    "mixrah": "mixrah",
+    "ucb": "ucb1",
+    "ucb1": "ucb1",
+}
 
 
 def _to_int(value: Any) -> int:
@@ -41,6 +59,103 @@ def _normalize_snir(value: Any) -> str:
     if normalized in {"off", "snir_off", "false", "0"}:
         return "OFF"
     return str(value or "").strip().upper()
+
+
+def _normalize_algorithm_key(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    compact = "".join(ch for ch in raw if ch.isalnum())
+    return _ALGORITHM_ALIASES.get(compact, compact)
+
+
+def _run_match_key(run: tuple[str, int, str, int]) -> tuple[str, int, str, int]:
+    snir, network_size, algorithm, seed = run
+    return (_normalize_snir(snir), int(network_size), _normalize_algorithm_key(algorithm), int(seed))
+
+
+def _extract_run_from_path(summary_path: Path) -> tuple[str, int, str, int] | None:
+    try:
+        seed_part = summary_path.parent.name
+        algo_part = summary_path.parent.parent.name
+        ns_part = summary_path.parent.parent.parent.name
+        snir_part = summary_path.parent.parent.parent.parent.name
+        if not seed_part.startswith("seed_"):
+            return None
+        if not algo_part.startswith("algo_"):
+            return None
+        if not ns_part.startswith("ns_"):
+            return None
+        if not snir_part.startswith("SNIR_"):
+            return None
+        snir = _normalize_snir(snir_part.replace("SNIR_", "", 1))
+        network_size = _to_int(ns_part.replace("ns_", "", 1))
+        algorithm = algo_part.replace("algo_", "", 1).strip()
+        seed = _to_int(seed_part.replace("seed_", "", 1))
+    except (ValueError, TypeError):
+        return None
+
+    if snir not in {"ON", "OFF"} or network_size <= 0 or not algorithm or seed < 0:
+        return None
+    return snir, network_size, algorithm, seed
+
+
+def _compute_missing_expected_runs(
+    expected_runs: set[tuple[str, int, str, int]],
+    available_runs: set[tuple[str, int, str, int]],
+) -> list[tuple[str, int, str, int]]:
+    available_keys = {_run_match_key(run) for run in available_runs}
+    return sorted(run for run in expected_runs if _run_match_key(run) not in available_keys)
+
+
+def _resolve_expected_run_dir(
+    logs_root: Path,
+    run: tuple[str, int, str, int],
+) -> tuple[Path, bool]:
+    snir, network_size, algorithm, seed = run
+    primary = logs_root / f"SNIR_{snir}" / f"ns_{network_size}" / f"algo_{algorithm}" / f"seed_{seed}"
+    if primary.exists():
+        return primary, True
+
+    base = logs_root / f"SNIR_{snir}" / f"ns_{network_size}"
+    if base.exists():
+        for candidate in base.glob("algo_*/seed_*"):
+            if not candidate.is_dir():
+                continue
+            extracted = _extract_run_from_path(candidate / "campaign_summary.json")
+            if extracted is None:
+                try:
+                    extracted = (
+                        _normalize_snir(snir),
+                        _to_int(network_size),
+                        candidate.parent.name.replace("algo_", "", 1),
+                        _to_int(candidate.name.replace("seed_", "", 1)),
+                    )
+                except (ValueError, TypeError):
+                    continue
+            if _run_match_key(extracted) == _run_match_key(run):
+                return candidate, False
+
+    return primary, False
+
+
+def _log_missing_runs_debug(
+    logs_root: Path,
+    missing_runs: list[tuple[str, int, str, int]],
+) -> None:
+    for run in missing_runs:
+        run_dir, is_exact = _resolve_expected_run_dir(logs_root, run)
+        summary = run_dir / "campaign_summary.json"
+        raw_packets = run_dir / "raw_packets.csv"
+        raw_energy = run_dir / "raw_energy.csv"
+        LOGGER.debug(
+            "Missing run debug | combo=%s | expected_path=%s | exact_match=%s | dir_exists=%s | campaign_summary=%s | raw_packets=%s | raw_energy=%s",
+            run,
+            run_dir,
+            "yes" if is_exact else "no",
+            "yes" if run_dir.exists() else "no",
+            "yes" if summary.is_file() else "no",
+            "yes" if raw_packets.is_file() else "no",
+            "yes" if raw_energy.is_file() else "no",
+        )
 
 
 def _extract_metric(metrics: dict[str, Any], *keys: str) -> float:
@@ -207,17 +322,23 @@ def _compute_completeness_rows(
 ) -> list[dict[str, Any]]:
     expected_by_combo: dict[tuple[str, int, str], set[int]] = defaultdict(set)
     available_by_combo: dict[tuple[str, int, str], set[int]] = defaultdict(set)
+    display_by_combo: dict[tuple[str, int, str], tuple[str, int, str]] = {}
 
     for snir, network_size, algorithm, seed in expected_runs:
-        expected_by_combo[(snir, network_size, algorithm)].add(seed)
+        combo_key = (_normalize_snir(snir), network_size, _normalize_algorithm_key(algorithm))
+        expected_by_combo[combo_key].add(seed)
+        display_by_combo.setdefault(combo_key, (_normalize_snir(snir), network_size, algorithm))
     for snir, network_size, algorithm, seed in available_runs:
-        available_by_combo[(snir, network_size, algorithm)].add(seed)
+        combo_key = (_normalize_snir(snir), network_size, _normalize_algorithm_key(algorithm))
+        available_by_combo[combo_key].add(seed)
+        display_by_combo.setdefault(combo_key, (_normalize_snir(snir), network_size, algorithm))
 
     rows: list[dict[str, Any]] = []
-    for snir, network_size, algorithm in sorted(expected_by_combo):
-        expected_seeds = expected_by_combo[(snir, network_size, algorithm)]
-        available_seeds = available_by_combo.get((snir, network_size, algorithm), set())
+    for combo_key in sorted(expected_by_combo):
+        expected_seeds = expected_by_combo[combo_key]
+        available_seeds = available_by_combo.get(combo_key, set())
         missing = sorted(expected_seeds - available_seeds)
+        snir, network_size, algorithm = display_by_combo[combo_key]
         rows.append(
             {
                 "snir": snir,
@@ -237,13 +358,26 @@ def _compute_missing_combinations_rows(
     available_runs: set[tuple[str, int, str, int]],
     run_statuses: dict[tuple[str, int, str, int], str] | None = None,
 ) -> list[dict[str, Any]]:
+    available_keys = {_run_match_key(run) for run in available_runs}
+    statuses_by_key = {
+        _run_match_key(run): status
+        for run, status in (run_statuses or {}).items()
+    }
+
     missing_by_combo: dict[tuple[str, int, str], set[int]] = defaultdict(set)
-    for snir, network_size, algorithm, seed in expected_runs - available_runs:
-        missing_by_combo[(snir, network_size, algorithm)].add(seed)
+    display_by_combo: dict[tuple[str, int, str], tuple[str, int, str]] = {}
+    for snir, network_size, algorithm, seed in expected_runs:
+        match_key = _run_match_key((snir, network_size, algorithm, seed))
+        if match_key in available_keys:
+            continue
+        combo_key = match_key[:3]
+        missing_by_combo[combo_key].add(seed)
+        display_by_combo.setdefault(combo_key, (_normalize_snir(snir), network_size, algorithm))
 
     rows: list[dict[str, Any]] = []
-    for snir, network_size, algorithm in sorted(missing_by_combo):
-        missing_seeds = sorted(missing_by_combo[(snir, network_size, algorithm)])
+    for combo_key in sorted(missing_by_combo):
+        missing_seeds = sorted(missing_by_combo[combo_key])
+        snir, network_size, algorithm = display_by_combo[combo_key]
         rows.append(
             {
                 "snir": snir,
@@ -252,9 +386,7 @@ def _compute_missing_combinations_rows(
                 "missing_runs": len(missing_seeds),
                 "missing_seeds": ",".join(str(seed) for seed in missing_seeds),
                 "statuses": ",".join(
-                    (
-                        run_statuses or {}
-                    ).get((snir, network_size, algorithm, seed), "missing")
+                    statuses_by_key.get((combo_key[0], combo_key[1], combo_key[2], seed), "missing")
                     for seed in missing_seeds
                 ),
             }
@@ -352,6 +484,7 @@ def aggregate_logs(
     allow_partial: bool = False,
     campaign_id: str | None = None,
     manifest_path: str | Path | None = None,
+    debug_missing: bool = False,
 ) -> Path:
     """Agrège les fichiers ``campaign_summary.json`` en sorties CSV dédiées."""
 
@@ -378,12 +511,16 @@ def aggregate_logs(
         contract = data.get("contract", {})
         metrics = data.get("metrics", {})
 
-        network_size = _to_int(contract.get("network_size", 0))
-        algorithm = str(contract.get("algorithm", "")).strip()
-        snir = _normalize_snir(contract.get("snir_mode", ""))
-        if not algorithm or snir not in {"ON", "OFF"}:
-            continue
-        seed = _to_int(contract.get("seed", summary_path.parent.name.replace("seed_", "")))
+        run_from_path = _extract_run_from_path(summary_path)
+        if run_from_path is not None:
+            snir, network_size, algorithm, seed = run_from_path
+        else:
+            network_size = _to_int(contract.get("network_size", 0))
+            algorithm = str(contract.get("algorithm", "")).strip()
+            snir = _normalize_snir(contract.get("snir_mode", ""))
+            if not algorithm or snir not in {"ON", "OFF"}:
+                continue
+            seed = _to_int(contract.get("seed", summary_path.parent.name.replace("seed_", "")))
         available_runs.add((snir, network_size, algorithm, seed))
 
         key = (network_size, algorithm, snir)
@@ -541,6 +678,9 @@ def aggregate_logs(
         available_runs,
         run_statuses,
     )
+    missing_expected_runs = _compute_missing_expected_runs(expected_runs, available_runs)
+    if debug_missing and missing_expected_runs:
+        _log_missing_runs_debug(root, missing_expected_runs)
     _write_csv(
         output_root / "campaign_missing_combinations.csv",
         ["snir", "network_size", "algorithm", "missing_runs", "missing_seeds", "statuses"],
@@ -548,7 +688,7 @@ def aggregate_logs(
     )
 
     if expected_runs and not allow_partial:
-        missing = sorted(expected_runs - available_runs)
+        missing = _compute_missing_expected_runs(expected_runs, available_runs)
         if missing:
             preview = ", ".join(
                 f"{snir}/ns_{size}/algo_{algo}/seed_{seed}"
@@ -590,6 +730,11 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Chemin explicite vers un campaign_manifest.json.",
     )
+    parser.add_argument(
+        "--debug-missing",
+        action="store_true",
+        help="Journalise le diagnostic détaillé pour chaque combinaison manquante.",
+    )
     return parser.parse_args()
 
 
@@ -602,6 +747,7 @@ def main() -> None:
         allow_partial=args.allow_partial,
         campaign_id=args.campaign_id,
         manifest_path=args.manifest,
+        debug_missing=args.debug_missing,
     )
     print(f"Agrégation écrite: {path}")
 
