@@ -32,6 +32,10 @@ class MetricsInconsistentError(RuntimeError):
     """Erreur levée quand les métriques de run sont incohérentes."""
 
 
+class ArtifactPathError(RuntimeError):
+    """Erreur levée quand les artefacts bruts ne sont pas écrits à l'emplacement attendu."""
+
+
 class _CampaignContextFilter(logging.Filter):
     """Injecte des champs de contexte par défaut pour le formatage des logs."""
 
@@ -93,6 +97,58 @@ def _is_run_completed(run_dir: Path) -> bool:
         run_dir / "raw_energy.csv",
     ]
     return all(path.is_file() for path in required_files)
+
+
+def _build_run_dir(
+    logs_root: Path,
+    *,
+    snir_mode: str,
+    network_size: int,
+    algorithm: str,
+    seed: int,
+) -> Path:
+    """Construit le chemin canonique d'un run sous ``logs_root``."""
+
+    return (
+        logs_root
+        / f"SNIR_{snir_mode}"
+        / f"ns_{int(network_size)}"
+        / f"algo_{algorithm}"
+        / f"seed_{int(seed)}"
+    )
+
+
+def _validate_raw_artifacts_in_run_dir(run_dir: Path) -> Path | None:
+    """Retourne le premier artefact brut manquant dans le dossier de run."""
+
+    for artifact_name in ("raw_packets.csv", "raw_energy.csv"):
+        artifact_path = run_dir / artifact_name
+        if not artifact_path.is_file():
+            return artifact_path
+    return None
+
+
+def _ensure_aggregate_scope_matches_campaign(
+    *,
+    logs_root: Path,
+    manifest_path: Path,
+) -> None:
+    """Garantit que l'agrégateur cible exactement le ``logs_root`` courant."""
+
+    manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_logs_root = manifest_payload.get("logs_root") if isinstance(manifest_payload, dict) else None
+    expected_logs_root = logs_root.resolve()
+    if not isinstance(manifest_logs_root, str) or not manifest_logs_root:
+        raise RuntimeError(
+            "Manifest de campagne invalide: champ logs_root absent/impossible à lire "
+            f"({manifest_path.resolve()})."
+        )
+    resolved_manifest_root = Path(manifest_logs_root).resolve()
+    if resolved_manifest_root != expected_logs_root:
+        raise RuntimeError(
+            "Manifest de campagne incohérent: agrégation potentiellement hors périmètre. "
+            f"manifest.logs_root={resolved_manifest_root} ; attendu={expected_logs_root}"
+        )
 
 
 def _normalize_run_entry(run_id: str, payload: object) -> dict[str, object] | None:
@@ -524,17 +580,16 @@ def _run_precheck(*, args: argparse.Namespace, logger: logging.Logger, run_singl
             "final_csv_rows_written": 0,
         }
         for snir_mode in _PRECHECK_SNIR_MODES:
-            snir_folder = f"SNIR_{snir_mode}"
             snir_cli_value = "snir_on" if snir_mode == "ON" else "snir_off"
             for network_size in _PRECHECK_NETWORK_SIZES:
                 for algorithm in args.algos:
                     precheck_stats["runs_executed"] += 1
-                    run_dir = (
-                        precheck_logs_root
-                        / snir_folder
-                        / f"ns_{network_size}"
-                        / f"algo_{algorithm}"
-                        / f"seed_{_PRECHECK_SEED}"
+                    run_dir = _build_run_dir(
+                        precheck_logs_root,
+                        snir_mode=snir_mode,
+                        network_size=int(network_size),
+                        algorithm=str(algorithm),
+                        seed=int(_PRECHECK_SEED),
                     )
                     run_dir.mkdir(parents=True, exist_ok=True)
                     try:
@@ -757,12 +812,12 @@ def _collect_completed_runs(
             )
             entry = fallback_state.get(run_key)
             if not isinstance(entry, dict):
-                run_dir = (
-                    logs_root
-                    / f"SNIR_{snir_mode}"
-                    / f"ns_{network_size}"
-                    / f"algo_{algorithm}"
-                    / f"seed_{seed}"
+                run_dir = _build_run_dir(
+                    logs_root,
+                    snir_mode=snir_mode,
+                    network_size=int(network_size),
+                    algorithm=str(algorithm),
+                    seed=int(seed),
                 )
                 entry = _new_run_entry(
                     snir_mode=snir_mode,
@@ -1128,7 +1183,6 @@ def main() -> None:
     expected_runs = _build_expected_runs(args)
 
     for snir_mode in args.snir:
-        snir_folder = f"SNIR_{snir_mode}"
         snir_cli_value = "snir_on" if snir_mode == "ON" else "snir_off"
 
         for network_size in args.network_sizes:
@@ -1136,12 +1190,12 @@ def main() -> None:
                 for replication_index in range(1, args.replications + 1):
                     current_run += 1
                     seed = args.seeds_base + replication_index - 1
-                    run_dir = (
-                        logs_root
-                        / snir_folder
-                        / f"ns_{network_size}"
-                        / f"algo_{algorithm}"
-                        / f"seed_{seed}"
+                    run_dir = _build_run_dir(
+                        logs_root,
+                        snir_mode=snir_mode,
+                        network_size=int(network_size),
+                        algorithm=str(algorithm),
+                        seed=int(seed),
                     )
                     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1377,6 +1431,25 @@ def main() -> None:
                             max_run_seconds=args.max_run_seconds,
                         )
                         duration_s = perf_counter() - t0
+
+                        missing_artifact_path = _validate_raw_artifacts_in_run_dir(run_dir)
+                        if missing_artifact_path is not None:
+                            run_status = {
+                                "status": "failed_artifact_path",
+                                "duration_s": duration_s,
+                                "summary_path": str(result.get("summary_path", "")),
+                                "failed_artifact_path": str(missing_artifact_path),
+                                "expected_run_dir": str(run_dir),
+                            }
+                            (run_dir / "run_status.json").write_text(
+                                json.dumps(run_status, indent=2, ensure_ascii=False, sort_keys=True),
+                                encoding="utf-8",
+                            )
+                            raise ArtifactPathError(
+                                "Artefact brut manquant après exécution du run: "
+                                f"{missing_artifact_path}"
+                            )
+
                         metrics = result.get("summary", {}).get("metrics", {})
                         tx = int(metrics.get("tx_attempted", 0))
                         success = int(metrics.get("rx_delivered", metrics.get("delivered", 0)))
@@ -1492,6 +1565,18 @@ def main() -> None:
                             ),
                             extra={**run_context, "statut": "artifacts"},
                         )
+                    except ArtifactPathError as exc:
+                        failed_runs += 1
+                        run_entry["status"] = "failed"
+                        run_entry["duration_s"] = None
+                        run_entry["failure_reason"] = str(exc)
+                        _write_campaign_state(state_path, runs_state)
+                        logger.error(
+                            f"Run échoué (artefact manquant): {exc}",
+                            extra={**run_context, "statut": "failed_artifact_path"},
+                        )
+                        stop_campaign = True
+                        break
                     except MetricsInconsistentError as exc:
                         failed_runs += 1
                         run_entry["status"] = "failed"
@@ -1634,6 +1719,10 @@ def main() -> None:
                     extra={"statut": "partial_blocked"},
                 )
             else:
+                _ensure_aggregate_scope_matches_campaign(
+                    logs_root=logs_root,
+                    manifest_path=manifest_path,
+                )
                 aggregate_path = aggregate_logs(
                     logs_root,
                     allow_partial=True,
@@ -1646,6 +1735,10 @@ def main() -> None:
         return
 
     if not args.skip_aggregate:
+        _ensure_aggregate_scope_matches_campaign(
+            logs_root=logs_root,
+            manifest_path=manifest_path,
+        )
         aggregate_path = aggregate_logs(
             logs_root,
             allow_partial=args.allow_partial,
