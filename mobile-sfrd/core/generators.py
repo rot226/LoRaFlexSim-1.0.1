@@ -136,3 +136,62 @@ def generate_fig3_sf_hist(config: Mapping[str, Any], rng: np.random.Generator) -
                 )
 
     return pd.DataFrame(rows)
+
+
+def generate_fig5_changepoint(config: Mapping[str, Any], rng: np.random.Generator) -> pd.DataFrame:
+    """Génère une série temporelle PDR avec changement de régime pour la figure 5.
+
+    Parameters
+    ----------
+    config:
+        Mapping de configuration. Les clés suivantes sont optionnelles :
+        - ``fig5_points`` / ``n_points`` / ``points`` (int)
+        - ``fig5_changepoint_t`` / ``changepoint_t`` (int)
+        - ``fig5_initial_pdr`` / ``initial_pdr`` (float)
+        - ``fig5_drop_magnitude`` / ``drop_magnitude`` (float)
+        - ``fig5_final_gap`` / ``final_gap`` (float)
+        - ``fig5_noise_std`` / ``noise_std`` (float)
+    rng:
+        Générateur pseudo-aléatoire NumPy pour une reproductibilité totale.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Colonnes: ``t``, ``pdr``, ``changepoint_t``.
+    """
+
+    n_points = _get_int(config, "fig5_points", "n_points", "points", default=220)
+    changepoint_t = _get_int(config, "fig5_changepoint_t", "changepoint_t", default=90)
+    initial_pdr = _get_float(config, "fig5_initial_pdr", "initial_pdr", default=0.92)
+    drop_magnitude = _get_float(config, "fig5_drop_magnitude", "drop_magnitude", default=0.26)
+    final_gap = _get_float(config, "fig5_final_gap", "final_gap", default=0.08)
+    noise_std = _get_float(config, "fig5_noise_std", "noise_std", default=0.01)
+
+    if n_points < 3:
+        raise ValueError("Le nombre de points doit être au moins égal à 3.")
+    if not (1 <= changepoint_t < n_points):
+        raise ValueError("changepoint_t doit être dans l'intervalle [1, n_points-1].")
+
+    t = np.arange(n_points, dtype=int)
+
+    # Pré-changement : plateau quasi stable avec une légère oscillation.
+    pre_trend = initial_pdr + 0.004 * np.sin(2.0 * np.pi * t / max(20.0, n_points / 6.0))
+
+    # Changement brutal puis récupération incomplète vers un nouveau plateau plus bas.
+    dropped_level = initial_pdr - abs(drop_magnitude)
+    final_level = initial_pdr - abs(final_gap)
+    if final_level > initial_pdr - 0.015:
+        final_level = initial_pdr - 0.015
+    if final_level <= dropped_level:
+        final_level = dropped_level + 0.03
+
+    recovery_tau = max(8.0, (n_points - changepoint_t) / 4.0)
+    after_cp = final_level - (final_level - dropped_level) * np.exp(-(t - changepoint_t) / recovery_tau)
+
+    pdr = np.where(t < changepoint_t, pre_trend, after_cp)
+
+    # Bruit faible pour conserver la lisibilité du point de rupture.
+    noise = rng.normal(loc=0.0, scale=noise_std, size=n_points)
+    pdr = np.clip(pdr + noise, 0.0, 1.0)
+
+    return pd.DataFrame({"t": t, "pdr": pdr, "changepoint_t": changepoint_t})
