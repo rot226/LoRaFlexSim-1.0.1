@@ -1,0 +1,7 @@
+seed: 202405
+fig5_points: 220
+fig5_changepoint_t: 90
+fig5_initial_pdr: 0.92
+fig5_drop_magnitude: 0.26
+fig5_final_gap: 0.08
+fig5_noise_std: 0.01
