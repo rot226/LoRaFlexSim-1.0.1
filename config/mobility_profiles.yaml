@@ -1,0 +1,35 @@
+# Profils de mobilité utilisés pour modéliser l'impact du mouvement
+# sur la fiabilité et la variabilité du réseau.
+
+mobility_profiles:
+  # Profil SM (Synthetic Mobility / modèle de référence plus stable).
+  SM:
+    # Pénalité de fiabilité en fonction de la vitesse.
+    # Forme recommandée : reliability_penalty = base + slope_per_speed * speed
+    # (valeur finale à borner ensuite dans votre code si nécessaire).
+    reliability_penalty:
+      # Pénalité minimale (offset) appliquée même à faible vitesse.
+      base: 0.01
+      # Coefficient de pénalisation par unité de vitesse.
+      slope_per_speed: 0.004
+
+    # Intensité de variabilité des métriques radio/QoS due à la mobilité.
+    # Plus la valeur est élevée, plus les fluctuations temporelles sont fortes.
+    variability_intensity: 0.20
+
+  # Profil RWP (Random Waypoint), généralement plus instable que SM.
+  RWP:
+    # Pénalité de fiabilité en fonction de la vitesse.
+    # Même structure que SM pour faciliter la comparaison directe.
+    reliability_penalty:
+      # Offset de base plus élevé que SM.
+      base: 0.015
+      # Sensibilité à la vitesse plus forte que SM.
+      slope_per_speed: 0.006
+
+    # Intensité de variabilité intrinsèque du modèle RWP.
+    variability_intensity: 0.30
+
+    # Facteur de dégradation global appliqué à RWP par rapport à SM.
+    # Une valeur > 1 indique explicitement que RWP dégrade davantage les performances.
+    degradation_factor_vs_sm: 1.25
