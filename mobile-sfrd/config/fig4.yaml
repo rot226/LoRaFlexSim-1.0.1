@@ -1,0 +1,7 @@
+seed: 202404
+speeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+der0_sm: 0.88
+der0_gap: 0.04
+der_slope_sm: 0.22
+der_slope_gap: 0.08
+der_noise_sigma: 0.012

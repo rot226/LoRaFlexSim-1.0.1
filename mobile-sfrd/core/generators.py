@@ -44,7 +44,7 @@ def generate_fig2_learning_curve(config: Mapping[str, Any], rng: np.random.Gener
         Colonnes: ``episode``, ``reward_v1``, ``reward_v5``, ``reward_v10``.
     """
 
-    episodes = _get_int(config, "fig2_episodes", "n_episodes", "episodes", default=250)
+    episodes = _get_int(config, "fig2_episodes", "n_episodes", "episodes", default=300)
     noise_std = _get_float(config, "fig2_noise_std", "noise_std", default=0.004)
     start_reward = _get_float(config, "fig2_start_reward", "start_reward", default=0.38)
 
@@ -161,7 +161,7 @@ def generate_fig5_changepoint(config: Mapping[str, Any], rng: np.random.Generato
     """
 
     n_points = _get_int(config, "fig5_points", "n_points", "points", default=220)
-    changepoint_t = _get_int(config, "fig5_changepoint_t", "changepoint_t", default=90)
+    changepoint_t = _get_int(config, "fig5_changepoint_t", "changepoint_t", default=150)
     initial_pdr = _get_float(config, "fig5_initial_pdr", "initial_pdr", default=0.92)
     drop_magnitude = _get_float(config, "fig5_drop_magnitude", "drop_magnitude", default=0.26)
     final_gap = _get_float(config, "fig5_final_gap", "final_gap", default=0.08)

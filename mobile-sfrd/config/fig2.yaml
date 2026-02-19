@@ -1,4 +1,4 @@
 seed: 202402
-fig2_episodes: 250
+fig2_episodes: 300
 fig2_noise_std: 0.004
 fig2_start_reward: 0.38

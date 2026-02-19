@@ -16,14 +16,23 @@ def run(base_dir: str) -> str:
     df = pd.read_csv(csv_path)
     cp = int(df["changepoint_t"].iloc[0])
 
-    fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(df["t"], df["pdr"], color="tab:blue", linewidth=1.5)
-    ax.axvline(cp, color="tab:red", linestyle="--", linewidth=1.2, label=f"Changepoint t={cp}")
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.plot(df["t"], df["pdr"], color="tab:blue", linewidth=1.6, label="PDR")
+    ax.axvline(cp, color="tab:red", linestyle="--", linewidth=1.2, label=f"Change-point (t={cp})")
+    ax.annotate(
+        f"Change-point\nt={cp}",
+        xy=(cp, df.loc[df["t"] == cp, "pdr"].iloc[0]),
+        xytext=(cp + 12, min(0.98, df["pdr"].max() + 0.04)),
+        arrowprops={"arrowstyle": "->", "color": "tab:red", "lw": 1.0},
+        fontsize=9,
+        color="tab:red",
+    )
     ax.set_xlabel("Temps")
     ax.set_ylabel("PDR")
     ax.set_title("Détection de changement")
+    ax.set_xlim(left=0)
     ax.set_ylim(0, 1)
-    ax.grid(alpha=0.25)
+    ax.grid(True, alpha=0.25)
     ax.legend()
 
     fig.tight_layout()
