@@ -22,7 +22,12 @@ from .omnet_model import OmnetModel
 from .omnet_phy import OmnetPHY
 from .flora_cpp import FloraCppPHY
 from .obstacle_loss import ObstacleLoss
-from .mobility_effects import mobility_penalty, stochastic_variation
+from .mobility_effects import (
+    generate_fig1_pdr_vs_speed,
+    generate_fig4_der_vs_speed,
+    mobility_penalty,
+    stochastic_variation,
+)
 from . import (
     adr_standard_1,
     adr_2,
@@ -76,6 +81,8 @@ __all__ = [
     "FloraCppPHY",
     "mobility_penalty",
     "stochastic_variation",
+    "generate_fig1_pdr_vs_speed",
+    "generate_fig4_der_vs_speed",
     "adr_standard_1",
     "adr_2",
     "adr_ml",

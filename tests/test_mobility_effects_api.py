@@ -3,7 +3,12 @@ import random
 import numpy as np
 import pytest
 
-from loraflexsim.launcher.mobility_effects import mobility_penalty, stochastic_variation
+from loraflexsim.launcher.mobility_effects import (
+    generate_fig1_pdr_vs_speed,
+    generate_fig4_der_vs_speed,
+    mobility_penalty,
+    stochastic_variation,
+)
 
 
 @pytest.mark.parametrize("model", ["sm", "smooth", "rwp", "random_waypoint"])
@@ -31,6 +36,32 @@ def test_stochastic_variation_supports_python_random() -> None:
     rng = random.Random(7)
     value = stochastic_variation("sm", rng, 0.5)
     assert isinstance(value, float)
+
+
+def test_generate_fig1_pdr_vs_speed_respects_constraints() -> None:
+    rng = np.random.default_rng(11)
+    df = generate_fig1_pdr_vs_speed({"speeds": [0, 2, 4, 8, 12]}, rng)
+
+    assert list(df.columns) == ["speed", "pdr_sm", "pdr_rwp"]
+    assert np.all(np.diff(df["speed"]) > 0)
+    assert np.all(np.diff(df["pdr_sm"]) <= 1e-12)
+    assert np.all(np.diff(df["pdr_rwp"]) <= 1e-12)
+    assert np.all(df["pdr_rwp"] < df["pdr_sm"])
+    assert np.all((df[["pdr_sm", "pdr_rwp"]] >= 0.0).to_numpy())
+    assert np.all((df[["pdr_sm", "pdr_rwp"]] <= 1.0).to_numpy())
+
+
+def test_generate_fig4_der_vs_speed_respects_constraints() -> None:
+    rng = random.Random(22)
+    df = generate_fig4_der_vs_speed({"min_speed": 0, "max_speed": 10, "num_points": 6}, rng)
+
+    assert list(df.columns) == ["speed", "der_sm", "der_rwp"]
+    assert np.all(np.diff(df["speed"]) > 0)
+    assert np.all(np.diff(df["der_sm"]) <= 1e-12)
+    assert np.all(np.diff(df["der_rwp"]) <= 1e-12)
+    assert np.all(df["der_rwp"] < df["der_sm"])
+    assert np.all((df[["der_sm", "der_rwp"]] >= 0.0).to_numpy())
+    assert np.all((df[["der_sm", "der_rwp"]] <= 1.0).to_numpy())
 
 
 @pytest.mark.parametrize(
