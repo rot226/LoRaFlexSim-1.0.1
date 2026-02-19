@@ -48,3 +48,18 @@ Les paramètres peuvent être ajustés via les fichiers YAML de `config/` (`fig1
 
 - Le pipeline est **déterministe** lorsque les seeds sont fixées.
 - Le projet fonctionne sans dépendance OMNeT++/FLoRa.
+
+## Validation checklist (automatique)
+
+Après `python run_all.py`, vous pouvez valider les contraintes du cahier des charges avec :
+
+```bash
+python validate_checklist.py
+```
+
+Ce script vérifie notamment :
+- colonnes exactes des CSV attendus ;
+- monotonie PDR/DER selon la vitesse et contrainte `RWP < SM` ;
+- ordre d'apprentissage `v=1 > v=5 > v=10` (convergence + plateau) ;
+- somme des barres Figure 3 = 200 par panneau/fenêtre ;
+- rupture nette à `t=150` puis récupération partielle pour la Figure 5.
