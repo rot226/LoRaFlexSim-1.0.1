@@ -16,23 +16,23 @@ def run(base_dir: str) -> str:
     df = pd.read_csv(csv_path)
 
     panels = [("SM", 1), ("SM", 10), ("RWP", 1), ("RWP", 10)]
-    fig, axes = plt.subplots(2, 2, figsize=(9, 6), sharey=True)
+    fig, axes = plt.subplots(2, 2, figsize=(7.6, 5), sharey=True)
 
     for ax, (mobility, speed) in zip(axes.flatten(), panels):
         sub = df[(df["mobility"] == mobility) & (df["speed"] == speed)]
         pivot = sub.pivot(index="sf", columns="window", values="nodes_count").fillna(0)
         x = pivot.index.to_numpy()
-        ax.bar(x - 0.2, pivot.get("initial", 0), width=0.4, label="initial")
-        ax.bar(x + 0.2, pivot.get("final", 0), width=0.4, label="final")
+        ax.bar(x - 0.2, pivot.get("initial", 0), width=0.4, label="Initial")
+        ax.bar(x + 0.2, pivot.get("final", 0), width=0.4, label="Final")
         ax.set_title(f"{mobility} - {speed} m/s")
-        ax.set_xlabel("SF")
         ax.grid(axis="y", alpha=0.25)
 
-    axes[0, 0].set_ylabel("Nombre de nœuds")
-    axes[1, 0].set_ylabel("Nombre de nœuds")
-    axes[0, 0].legend(loc="upper right")
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.02))
+    fig.supylabel("Nombre de nœuds")
+    fig.supxlabel("SF")
     fig.suptitle("Distribution des SF")
-    fig.tight_layout()
+    fig.tight_layout(rect=(0.04, 0.04, 1, 0.93))
 
     dirs = ensure_output_dirs(base_dir)
     out_path = path_join(dirs["figures"], "figure3.png")
