@@ -1,0 +1,45 @@
+# Paramètres par défaut des expériences de simulation.
+# Ce fichier centralise les valeurs communes pour éviter de dupliquer
+# la configuration dans plusieurs scripts.
+
+# Graine globale utilisée pour initialiser la reproductibilité générale.
+seed_global: 42
+
+# Graines dédiées à des runs/expériences spécifiques (exp1..exp5).
+# Ajuster ces valeurs permet de comparer des runs indépendants tout en restant reproductibles.
+seed_exp1: 101
+seed_exp2: 102
+seed_exp3: 103
+seed_exp4: 104
+seed_exp5: 105
+
+# Vitesses de mobilité (unités du simulateur, typiquement m/s selon votre pipeline).
+# Ces valeurs servent d'axe de comparaison entre scénarios statiques et fortement mobiles.
+speeds: [1, 3, 5, 10]
+
+# Nombre d'épisodes d'entraînement/évaluation par expérience.
+episodes: 300
+
+# Nombre de pas de temps (timesteps) par épisode.
+timesteps: 300
+
+# Instant de changement de régime (changepoint) dans un épisode.
+# Par exemple : changement de profil de trafic, de mobilité ou de conditions radio.
+changepoint_t: 150
+
+# Nombre total de nœuds simulés dans le scénario.
+nodes_total: 200
+
+# Options de style de plotting pour harmoniser les figures.
+plot_style:
+  # Taille de figure (largeur, hauteur) pour une figure unique.
+  figsize_single: [8, 5]
+
+  # Taille de figure (largeur, hauteur) pour une figure multi-panneaux.
+  figsize_multi: [14, 8]
+
+  # Résolution d'export des figures (points par pouce).
+  dpi: 150
+
+  # Transparence de la grille (0 = invisible, 1 = opaque).
+  grid_alpha: 0.3
