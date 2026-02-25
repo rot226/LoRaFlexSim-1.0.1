@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .scenarios import generate_jobs, parse_grid_spec
+from .plotting.plots import ScenarioFilters, generate_minimal_figures
 from .simulator.io import aggregate_runs
 
 
@@ -139,22 +140,21 @@ def cmd_plots(args: argparse.Namespace) -> int:
     out_dir: Path = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    aggregate_payloads = []
-    for aggregate_path in args.aggregates:
-        with aggregate_path.open("r", encoding="utf-8") as handle:
-            data = json.load(handle)
-            if not isinstance(data, dict):
-                raise SystemExit(f"Fichier d'agrégats invalide (objet JSON attendu): {aggregate_path}")
-            aggregate_payloads.append(data)
-
-    total_jobs = sum(int(payload.get("total_jobs", 0)) for payload in aggregate_payloads)
+    generated = generate_minimal_figures(
+        aggregates_dir=args.aggregates_dir,
+        out_dir=out_dir,
+        filters=ScenarioFilters.from_tokens(args.scenario_filter),
+        include_bonus=not args.no_bonus,
+    )
     report = {
-        "num_aggregates": len(aggregate_payloads),
-        "total_jobs": total_jobs,
-        "note": "Sortie placeholder: brancher ici les fonctions de tracé réelles.",
+        "aggregates_dir": str(args.aggregates_dir),
+        "out_dir": str(out_dir),
+        "num_figures": len(generated),
+        "figures": [str(path) for path in generated],
     }
     output_file = out_dir / "plots_summary.json"
     _dump_json(output_file, report)
+    print(f"{len(generated)} figure(s) écrite(s) dans {out_dir}")
     print(f"Résumé de plots écrit dans {output_file}")
     return 0
 
@@ -212,16 +212,22 @@ def build_parser() -> argparse.ArgumentParser:
     aggregate_parser.set_defaults(func=cmd_aggregate)
 
     plots_parser = subparsers.add_parser(
-        "plots", help="Prépare les artefacts de visualisation à partir des agrégats."
+        "plots", help="Génère les figures fig01..fig10 (et bonus fig11..fig12) depuis aggregates/*.csv."
     )
     plots_parser.add_argument(
-        "--aggregates",
+        "--aggregates-dir",
         required=True,
-        nargs="+",
-        type=_existing_file,
-        help="Un ou plusieurs fichiers aggregate.json.",
+        type=_existing_path,
+        help="Répertoire contenant les CSV d'agrégats (metric_by_factor.csv, sinr_cdf.csv, ...).",
     )
-    plots_parser.add_argument("--out", required=True, type=Path, help="Répertoire où écrire le résumé de plots.")
+    plots_parser.add_argument("--out", required=True, type=Path, help="Répertoire où écrire les figures PNG.")
+    plots_parser.add_argument(
+        "--scenario-filter",
+        action="append",
+        default=[],
+        help="Filtre clé=val1,val2 (répétable), ex: --scenario-filter algo=ucb --scenario-filter mobility_model=rwp.",
+    )
+    plots_parser.add_argument("--no-bonus", action="store_true", help="Désactive les figures bonus fig11/fig12.")
     plots_parser.set_defaults(func=cmd_plots)
 
     return parser
