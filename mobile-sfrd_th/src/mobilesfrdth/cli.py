@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .scenarios import generate_jobs, parse_grid_spec
+from .simulator.io import aggregate_runs
 
 
 def _existing_file(value: str) -> Path:
@@ -119,18 +120,17 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        payloads = _read_job_payloads(args.results)
-    except (ValueError, json.JSONDecodeError) as exc:
+        files = aggregate_runs(inputs=args.results, output_root=out_dir)
+    except (ValueError, json.JSONDecodeError, FileNotFoundError) as exc:
         raise SystemExit(f"Erreur pendant l'agrégation: {exc}") from exc
 
-    total_jobs = sum(int(payload.get("num_jobs", 0)) for payload in payloads)
-    aggregate = {
-        "num_inputs": len(payloads),
-        "total_jobs": total_jobs,
+    manifest = {
+        "num_inputs": len(args.results),
         "sources": [str(path) for path in args.results],
+        "files": {name: str(path) for name, path in files.items()},
     }
     output_file = out_dir / "aggregate.json"
-    _dump_json(output_file, aggregate)
+    _dump_json(output_file, manifest)
     print(f"Agrégation écrite dans {output_file}")
     return 0
 
@@ -199,16 +199,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.set_defaults(func=cmd_run)
 
     aggregate_parser = subparsers.add_parser(
-        "aggregate", help="Agrège plusieurs résultats de campagnes en un résumé."
+        "aggregate", help="Agrège plusieurs runs et produit les CSV standards dans aggregates/."
     )
     aggregate_parser.add_argument(
         "--results",
         required=True,
         nargs="+",
         type=_existing_path,
-        help="Un ou plusieurs chemins vers jobs.json ou répertoires contenant jobs.json.",
+        help="Un ou plusieurs chemins vers des runs (ou un dossier contenant results/<run_id>/...).",
     )
-    aggregate_parser.add_argument("--out", required=True, type=Path, help="Répertoire où écrire aggregate.json.")
+    aggregate_parser.add_argument("--out", required=True, type=Path, help="Répertoire où écrire aggregates/*.csv et aggregate.json.")
     aggregate_parser.set_defaults(func=cmd_aggregate)
 
     plots_parser = subparsers.add_parser(
