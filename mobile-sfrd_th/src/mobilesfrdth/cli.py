@@ -1,0 +1,1 @@
+"""Interface CLI pour mobilesfrdth."""
