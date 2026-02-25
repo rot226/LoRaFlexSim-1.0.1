@@ -1,1 +1,5 @@
-"""Module mobility pour le moteur de simulation mobilesfrdth."""
+"""Compatibilité: expose les modèles de mobilité sous forme de sous-modules."""
+
+from .mobility import rwp, smooth
+
+__all__ = ["rwp", "smooth"]
