@@ -1,1 +1,237 @@
 """Interface CLI pour mobilesfrdth."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+from typing import Iterable
+
+from .scenarios import generate_jobs, parse_grid_spec
+
+
+def _existing_file(value: str) -> Path:
+    path = Path(value)
+    if not path.is_file():
+        raise argparse.ArgumentTypeError(f"Fichier introuvable: {path}")
+    return path
+
+
+def _existing_path(value: str) -> Path:
+    path = Path(value)
+    if not path.exists():
+        raise argparse.ArgumentTypeError(f"Chemin introuvable: {path}")
+    return path
+
+
+def _sf_range(value: str) -> tuple[int, int]:
+    token = value.strip()
+    sep = "-" if "-" in token else ":" if ":" in token else None
+    if sep is None:
+        raise argparse.ArgumentTypeError("Format attendu pour --sf-range: min-max (ex: 7-12).")
+    left, right = [part.strip() for part in token.split(sep, 1)]
+    if not left or not right:
+        raise argparse.ArgumentTypeError("--sf-range incomplet, utiliser min-max.")
+    try:
+        return int(left), int(right)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--sf-range doit contenir des entiers.") from exc
+
+
+def _positive_int(value: str, *, name: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"{name} doit être un entier.") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError(f"{name} doit être >= 1.")
+    return parsed
+
+
+def _seed_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--seed doit être un entier.") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("--seed doit être >= 0.")
+    return parsed
+
+
+def _dump_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _read_job_payloads(results: Iterable[Path]) -> list[dict]:
+    payloads: list[dict] = []
+    for result in results:
+        if result.is_dir():
+            candidate = result / "jobs.json"
+            if not candidate.is_file():
+                raise ValueError(f"Répertoire résultat sans jobs.json: {result}")
+            target = candidate
+        else:
+            target = result
+        with target.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+            if isinstance(data, dict):
+                payloads.append(data)
+            else:
+                raise ValueError(f"Format JSON inattendu dans {target} (objet requis).")
+    return payloads
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    out_dir: Path = args.out
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        grid = parse_grid_spec(args.grid)
+        jobs = generate_jobs(
+            config_path=args.config,
+            output_root=out_dir,
+            grid=grid,
+            seed=args.seed,
+            reps=args.reps,
+            sf_range=args.sf_range,
+        )
+    except ValueError as exc:
+        raise SystemExit(f"Erreur de validation: {exc}") from exc
+
+    payload = {
+        "config": str(args.config),
+        "grid": grid,
+        "seed": args.seed,
+        "reps": args.reps,
+        "sf_range": list(args.sf_range) if args.sf_range else None,
+        "jobs": jobs,
+        "num_jobs": len(jobs),
+    }
+    output_file = out_dir / "jobs.json"
+    _dump_json(output_file, payload)
+    print(f"{len(jobs)} jobs générés dans {output_file}")
+    return 0
+
+
+def cmd_aggregate(args: argparse.Namespace) -> int:
+    out_dir: Path = args.out
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        payloads = _read_job_payloads(args.results)
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"Erreur pendant l'agrégation: {exc}") from exc
+
+    total_jobs = sum(int(payload.get("num_jobs", 0)) for payload in payloads)
+    aggregate = {
+        "num_inputs": len(payloads),
+        "total_jobs": total_jobs,
+        "sources": [str(path) for path in args.results],
+    }
+    output_file = out_dir / "aggregate.json"
+    _dump_json(output_file, aggregate)
+    print(f"Agrégation écrite dans {output_file}")
+    return 0
+
+
+def cmd_plots(args: argparse.Namespace) -> int:
+    out_dir: Path = args.out
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    aggregate_payloads = []
+    for aggregate_path in args.aggregates:
+        with aggregate_path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+            if not isinstance(data, dict):
+                raise SystemExit(f"Fichier d'agrégats invalide (objet JSON attendu): {aggregate_path}")
+            aggregate_payloads.append(data)
+
+    total_jobs = sum(int(payload.get("total_jobs", 0)) for payload in aggregate_payloads)
+    report = {
+        "num_aggregates": len(aggregate_payloads),
+        "total_jobs": total_jobs,
+        "note": "Sortie placeholder: brancher ici les fonctions de tracé réelles.",
+    }
+    output_file = out_dir / "plots_summary.json"
+    _dump_json(output_file, report)
+    print(f"Résumé de plots écrit dans {output_file}")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="mobilesfrdth",
+        description="CLI de campagnes mobile-sfrd_th: génération, agrégation et préparation des plots.",
+        epilog=(
+            "Exemple grille: N=50,100,160;speed=1,3;seed=1,2\n"
+            "Exemple run: mobilesfrdth run --config experiments/default.yaml --out runs --grid 'N=50,100;speed=1,3'"
+        ),
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    run_parser = subparsers.add_parser("run", help="Génère les jobs d'une campagne.")
+    run_parser.add_argument("--config", required=True, type=_existing_file, help="Fichier de configuration de base.")
+    run_parser.add_argument("--out", required=True, type=Path, help="Répertoire de sortie pour jobs.json.")
+    run_parser.add_argument(
+        "--grid",
+        required=True,
+        help="Grille de sweep au format clé=v1,v2;clé2=v3,v4 (ex: N=50,100;speed=1,3).",
+    )
+    run_parser.add_argument(
+        "--seed",
+        type=_seed_int,
+        default=None,
+        help="Seed globale (entier >= 0) injectée dans chaque job si absente de --grid.",
+    )
+    run_parser.add_argument(
+        "--reps",
+        type=lambda value: _positive_int(value, name="--reps"),
+        default=None,
+        help="Nombre de répétitions par job (entier >= 1).",
+    )
+    run_parser.add_argument(
+        "--sf-range",
+        type=_sf_range,
+        default=None,
+        help="Plage SF globale, format min-max (bornes attendues: 7-12).",
+    )
+    run_parser.set_defaults(func=cmd_run)
+
+    aggregate_parser = subparsers.add_parser(
+        "aggregate", help="Agrège plusieurs résultats de campagnes en un résumé."
+    )
+    aggregate_parser.add_argument(
+        "--results",
+        required=True,
+        nargs="+",
+        type=_existing_path,
+        help="Un ou plusieurs chemins vers jobs.json ou répertoires contenant jobs.json.",
+    )
+    aggregate_parser.add_argument("--out", required=True, type=Path, help="Répertoire où écrire aggregate.json.")
+    aggregate_parser.set_defaults(func=cmd_aggregate)
+
+    plots_parser = subparsers.add_parser(
+        "plots", help="Prépare les artefacts de visualisation à partir des agrégats."
+    )
+    plots_parser.add_argument(
+        "--aggregates",
+        required=True,
+        nargs="+",
+        type=_existing_file,
+        help="Un ou plusieurs fichiers aggregate.json.",
+    )
+    plots_parser.add_argument("--out", required=True, type=Path, help="Répertoire où écrire le résumé de plots.")
+    plots_parser.set_defaults(func=cmd_plots)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
