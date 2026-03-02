@@ -94,3 +94,57 @@ def test_write_run_config_exports_expected_sections(tmp_path) -> None:
     assert payload["snir"]["switches"]["collision_model"]["changed"] is False
     assert "radio" in payload and isinstance(payload["radio"], dict)
     assert "qos" in payload and isinstance(payload["qos"], dict)
+
+
+def test_main_use_snir_without_fading_std_uses_default_and_does_not_crash(monkeypatch, tmp_path):
+    captured: dict[str, object] = {}
+
+    class DummySimulator:
+        def __init__(self) -> None:
+            self.use_snir = True
+            self.multichannel = type("Multi", (), {"channels": []})()
+            self.channel = None
+            self.current_time = 0.0
+            self.snir_fading_std = 3.0
+            self.noise_floor_std = 0.0
+            self.capture_delta_db = 6.0
+            self.marginal_snir_margin_db = 0.0
+            self.marginal_snir_drop_prob = 0.0
+
+        def run(self, *, max_time: float) -> None:
+            self.current_time = max_time
+
+        def get_metrics(self) -> dict[str, object]:
+            return {"collisions_snir": 0, "PDR": 1.0, "DER": 1.0}
+
+    def fake_instantiate(*args, **kwargs):
+        captured["fading_std_db"] = kwargs.get("fading_std_db")
+        return DummySimulator()
+
+    monkeypatch.setattr(run_step1_experiments, "_instantiate_simulator", fake_instantiate)
+    monkeypatch.setattr(run_step1_experiments, "_configure_clusters", lambda *a, **k: None)
+    monkeypatch.setattr(run_step1_experiments, "_apply_algorithm", lambda *a, **k: None)
+    monkeypatch.setattr(run_step1_experiments, "_compute_additional_metrics", lambda *a, **k: a[1])
+    monkeypatch.setattr(run_step1_experiments, "_flatten_metrics", lambda payload: payload)
+    monkeypatch.setattr(run_step1_experiments, "_write_csv", lambda *a, **k: None)
+    monkeypatch.setattr(run_step1_experiments, "_write_run_config", lambda output_dir, **k: output_dir / "run_config.json")
+
+    result = run_step1_experiments.main([
+        "--algorithm",
+        "adr",
+        "--nodes",
+        "10",
+        "--duration",
+        "1",
+        "--packet-interval",
+        "60",
+        "--seed",
+        "1",
+        "--output-dir",
+        str(tmp_path),
+        "--use-snir",
+        "--quiet",
+    ])
+
+    assert captured["fading_std_db"] == run_step1_experiments.DEFAULT_SNIR_FADING_STD_DB
+    assert result["csv_path"].name.endswith("_snir-on.csv")
