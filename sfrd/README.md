@@ -15,6 +15,23 @@ Structure initiale pour les scripts CLI et les parseurs SFRD.
 python -m sfrd.cli.run_campaign --network-sizes 80 160 320 640 1280 --replications 5 --seeds-base 1 --snir OFF,ON --algos UCB ADR MixRA-H MixRA-Opt --warmup-s 0
 ```
 
+
+## Workflow standard (3 commandes)
+
+```bash
+python -m sfrd.cli.run_campaign --network-sizes 80 160 320 640 1280 --replications 5 --seeds-base 1 --snir OFF,ON --algos UCB ADR MixRA-H MixRA-Opt --warmup-s 0
+python -m sfrd.cli.validate_outputs --output-root sfrd/logs/<campaign_id>/output
+python -m sfrd.cli.plot_campaign --campaign-id <campaign_id>
+```
+
+La commande de plotting lit automatiquement:
+
+- `SNIR_OFF/pdr_results.csv`, `throughput_results.csv`, `energy_results.csv`, `sf_distribution.csv`
+- `SNIR_ON/pdr_results.csv`, `throughput_results.csv`, `energy_results.csv`, `sf_distribution.csv`
+- `learning_curve_ucb.csv`
+
+et écrit les figures dans `sfrd/logs/<campaign_id>/figures/`.
+
 ## Validation des sorties
 
 ```bash
