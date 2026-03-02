@@ -23,16 +23,28 @@ try:  # pragma: no cover - dépend de l'environnement de test
 except Exception:  # pragma: no cover - permet de continuer même sans matplotlib
     plt = None  # type: ignore
 
-from plot_theme import (
-    SNIR_COLORS,
-    THEME_LABEL_SIZE,
-    THEME_LINE_WIDTH,
-    THEME_MARKER_EDGE_WIDTH,
-    THEME_MARKER_SIZE,
-    THEME_TICK_LABEL_SIZE,
-    THEME_TITLE_SIZE,
-    apply_plot_theme,
-)
+try:
+    from .plot_theme import (
+        SNIR_COLORS,
+        THEME_LABEL_SIZE,
+        THEME_LINE_WIDTH,
+        THEME_MARKER_EDGE_WIDTH,
+        THEME_MARKER_SIZE,
+        THEME_TICK_LABEL_SIZE,
+        THEME_TITLE_SIZE,
+        apply_plot_theme,
+    )
+except ImportError:
+    from plot_theme import (
+        SNIR_COLORS,
+        THEME_LABEL_SIZE,
+        THEME_LINE_WIDTH,
+        THEME_MARKER_EDGE_WIDTH,
+        THEME_MARKER_SIZE,
+        THEME_TICK_LABEL_SIZE,
+        THEME_TITLE_SIZE,
+        apply_plot_theme,
+    )
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_RESULTS_DIR = ROOT_DIR / "results" / "step1"
