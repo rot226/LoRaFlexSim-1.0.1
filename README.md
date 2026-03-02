@@ -1,4 +1,4 @@
-# LoRaFlexSim 1.0.1 : simulateur réseau LoRa (Python 3.10+)
+# LoRaFlexSim 1.0.1 : simulateur réseau LoRa (Python 3.11 recommandé)
 
 Bienvenue ! **LoRaFlexSim** est un **simulateur complet de réseau LoRa**, inspiré du fonctionnement de FLoRa sous OMNeT++, codé entièrement en Python.
 Pour un aperçu des différences avec FLoRa, consultez docs/lorawan_features.md.
@@ -12,6 +12,8 @@ Par défaut, le module `Channel` charge la table de bruit de FLoRa en analysant
 table est injectée dans la fonction `_flora_noise_dBm` pour les calculs de
 sensibilité. Un chemin personnalisé peut être fourni via `flora_noise_path`.
 ## 🛠️ Installation
+
+> **Version Python recommandée : 3.11.x** (versions supportées: **>=3.11 et <3.13**).
 
 1. **Clonez ou téléchargez** le projet.
 2. **Créez un environnement virtuel et installez le projet :**

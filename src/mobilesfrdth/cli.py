@@ -3,10 +3,25 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from typing import Callable
 
 
 CommandHandler = Callable[[argparse.Namespace], int]
+MIN_PYTHON = (3, 11)
+MAX_PYTHON_EXCLUSIVE = (3, 13)
+
+
+def _check_python_version() -> str | None:
+    """Retourne un message d'erreur si la version Python n'est pas supportée."""
+    current = sys.version_info[:2]
+    if MIN_PYTHON <= current < MAX_PYTHON_EXCLUSIVE:
+        return None
+    return (
+        "Version Python non supportée pour `mobilesfrdth`: "
+        f"{current[0]}.{current[1]}. "
+        "Versions supportées: >=3.11 et <3.13 (Python 3.11 recommandé)."
+    )
 
 
 def _run_command(_: argparse.Namespace) -> int:
@@ -46,6 +61,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """Point d'entrée principal de la CLI."""
+    version_error = _check_python_version()
+    if version_error is not None:
+        print(version_error, file=sys.stderr)
+        return 2
+
     parser = build_parser()
     args = parser.parse_args(argv)
     handler: CommandHandler = args.handler

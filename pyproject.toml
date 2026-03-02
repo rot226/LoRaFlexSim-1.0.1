@@ -8,7 +8,7 @@ version = "1.0.1"
 # Updated name to reflect new project identity
 description = "LoRaFlexSim : simulateur complet et flexible de réseau LoRa"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.13"
 license = {file = "LICENSE"}
 authors = [{name = "Unknown"}]
 
@@ -36,4 +36,3 @@ package-dir = {"" = "src"}
 where = ["src"]
 include = ["mobilesfrdth*"]
 exclude = ["tests*"]
-
