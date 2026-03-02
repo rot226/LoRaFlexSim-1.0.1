@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["loraflexsim*", "traffic*", "sfrd*"]
+where = [".", "src"]
+include = ["loraflexsim*", "traffic*", "sfrd*", "mobilesfrdth*"]
 exclude = ["tests*"]
 
