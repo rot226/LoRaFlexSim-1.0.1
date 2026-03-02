@@ -26,8 +26,14 @@ dependencies = [
   "Pillow>=10.0"
 ]
 
+[project.scripts]
+mobilesfrdth = "mobilesfrdth.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
 [tool.setuptools.packages.find]
-where = [".", "src"]
-include = ["loraflexsim*", "traffic*", "sfrd*", "mobilesfrdth*"]
+where = ["src"]
+include = ["mobilesfrdth*"]
 exclude = ["tests*"]
 
