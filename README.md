@@ -33,6 +33,38 @@ sensibilité. Un chemin personnalisé peut être fourni via `flora_noise_path`.
    > exécuter les scripts ou les exemples de LoRaFlexSim, assurez‑vous que la
    > véritable bibliothèque NumPy est installée dans votre environnement.
 
+## 📦 CLI `mobilesfrdth` (Windows 11 / Linux / macOS)
+
+Après installation editable (`pip install -e .`), la commande `mobilesfrdth`
+est disponible dans l'environnement virtuel actif.
+
+```bash
+pip install -e .
+mobilesfrdth run ...
+mobilesfrdth aggregate ...
+mobilesfrdth plots ...
+```
+
+Sur Windows 11 (PowerShell), pensez à activer d'abord votre venv :
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+## 🧰 Dépannage CLI `mobilesfrdth`
+
+- **Erreur `CommandNotFound`**
+  - Cause fréquente : environnement virtuel non activé.
+  - Cause fréquente : `pip install -e .` non exécuté.
+  - Correctif : activez le venv, puis relancez `pip install -e .` depuis la
+    racine du dépôt.
+
+- **Erreur `No module named mobilesfrdth`**
+  - Cause fréquente : package non découvert (installation incomplète ou
+    exécution avec un autre interpréteur Python).
+  - Correctif : vérifiez `python --version`, activez le bon venv et réinstallez
+    avec `pip install -e .`.
+
 ## ✅ Vérification avant mise à jour
 
 Avant de mettre à jour votre branche ou de soumettre une contribution,
