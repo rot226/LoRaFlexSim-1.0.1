@@ -53,6 +53,13 @@ Sur Windows 11 (PowerShell), pensez à activer d'abord votre venv :
 .\.venv\Scripts\Activate.ps1
 ```
 
+### Commandes vérifiées Windows PowerShell
+
+```powershell
+python -m sfrd.cli.validate_outputs --output-root sfrd/output
+python -m sfrd.parse.aggregate --logs-root sfrd/logs --campaign-id <campaign_id>
+```
+
 ## 🧰 Dépannage CLI `mobilesfrdth`
 
 - **Erreur `CommandNotFound`**
