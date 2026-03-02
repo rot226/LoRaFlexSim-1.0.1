@@ -23,6 +23,14 @@ REQUIRED_FILES = {
     "fairness_airtime_switching": "fairness_airtime_switching.csv",
 }
 
+REQUIRED_COLUMNS = {
+    "metric_by_factor": {"N", "algo", "mode", "pdr_mean", "der_mean", "throughput_bps_mean"},
+    "distribution_sf": {"algo", "sf", "ratio"},
+    "convergence_tc": {"algo", "speed", "Tc_s"},
+    "sinr_cdf": {"algo", "quantile", "sinr_db"},
+    "fairness_airtime_switching": {"N", "algo", "jain_fairness", "airtime_total_s", "switch_count"},
+}
+
 FIGURE_SPECS = [
     ("fig01_pdr_vs_n_snir_off.png", "metric_by_factor", "pdr_mean", {"mode": {"snir_off"}}),
     ("fig02_pdr_vs_n_snir_on.png", "metric_by_factor", "pdr_mean", {"mode": {"snir_on"}}),
@@ -77,6 +85,25 @@ def _read_csv_rows(path: Path) -> list[dict[str, str]]:
         return []
     with path.open("r", encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
+
+
+def validate_aggregates_inputs(aggregates_dir: Path) -> list[str]:
+    """Valide la présence des CSV et des colonnes contractuelles avant plotting."""
+
+    errors: list[str] = []
+    for key, filename in REQUIRED_FILES.items():
+        csv_path = aggregates_dir / filename
+        if not csv_path.is_file():
+            errors.append(f"fichier manquant: {csv_path}")
+            continue
+        with csv_path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            fieldnames = set(reader.fieldnames or [])
+        expected = REQUIRED_COLUMNS.get(key, set())
+        missing = sorted(expected - fieldnames)
+        if missing:
+            errors.append(f"colonnes manquantes dans {csv_path.name}: {', '.join(missing)}")
+    return errors
 
 
 def _to_float(value: str | None) -> float | None:
