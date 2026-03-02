@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .scenarios import generate_jobs, parse_grid_spec
-from .plotting.plots import ScenarioFilters, generate_minimal_figures
+from .plotting.plots import ScenarioFilters, generate_minimal_figures, validate_aggregates_inputs
 from .simulator.engine import GridRunOrchestrator
 from .simulator.io import aggregate_runs
 
@@ -142,7 +142,8 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
     try:
         files = aggregate_runs(inputs=args.results, output_root=out_dir)
     except (ValueError, json.JSONDecodeError, FileNotFoundError) as exc:
-        raise SystemExit(f"Erreur pendant l'agrégation: {exc}") from exc
+        print(f"Erreur pendant l'agrégation: {exc}")
+        return 2
 
     manifest = {
         "num_inputs": len(args.results),
@@ -158,6 +159,13 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
 def cmd_plots(args: argparse.Namespace) -> int:
     out_dir: Path = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    errors = validate_aggregates_inputs(args.aggregates_dir)
+    if errors:
+        print("Prérequis manquants pour plotting:")
+        for err in errors:
+            print(f"- {err}")
+        return 2
 
     generated = generate_minimal_figures(
         aggregates_dir=args.aggregates_dir,
@@ -254,8 +262,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        args = parser.parse_args(argv)
+        return args.func(args)
+    except ValueError as exc:
+        print(f"Erreur: {exc}")
+        return 2
 
 
 if __name__ == "__main__":
