@@ -18,13 +18,13 @@ python -m sfrd.cli.run_campaign --network-sizes 80 160 320 640 1280 --replicatio
 ## Validation des sorties
 
 ```bash
-python -m sfrd.cli.validate_outputs --root sfrd/output
+python -m sfrd.cli.validate_outputs --output-root sfrd/output
 ```
 
 ## Agrégation optionnelle
 
 ```bash
-python -m sfrd.parse.aggregate --logs-root sfrd/logs --out-root sfrd/output
+python -m sfrd.parse.aggregate --logs-root sfrd/logs --campaign-id <campaign_id>
 ```
 
 ## Définition des métriques
