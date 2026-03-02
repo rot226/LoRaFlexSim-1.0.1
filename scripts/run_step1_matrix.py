@@ -8,6 +8,14 @@ SNIR (puis par graine) dans ``results/step1/<state>/``. Ces suffixes et
 le champ ``snir_state`` écrit par ``run_step1_experiments.py`` doivent
 rester présents dans les CSV finaux pour permettre l'agrégation stricte
 des résultats.
+
+Exemples CLI (Windows 11 / PowerShell) :
+  # SNIR on/off avec fading par défaut côté SNIR ON (3.0 dB).
+  # python scripts/run_step1_matrix.py --with-snir true false --algos adr apra
+
+  # Surcharge explicite du fading SNIR.
+  # python scripts/run_step1_matrix.py --with-snir true --fading-std-db 4.0 --algos adr
+
 """
 
 from __future__ import annotations
@@ -33,6 +41,7 @@ DEFAULT_SEEDS: Sequence[int] = tuple(range(1, 6))
 DEFAULT_NODE_COUNTS: Sequence[int] = (1000, 5000, 10000, 13000, 15000)
 DEFAULT_PACKET_INTERVALS: Sequence[float] = (600.0, 300.0, 150.0)
 DEFAULT_DURATION = 6 * 3600.0
+DEFAULT_SNIR_FADING_STD_DB = 3.0
 STATE_LABELS = {True: "snir_on", False: "snir_off"}
 PRECHECK_NODE_COUNTS: Sequence[int] = (80,)
 PRECHECK_SEEDS: Sequence[int] = (1, 2)
@@ -155,7 +164,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Écart-type (dB) du fading aléatoire appliqué au calcul SNIR "
-            "(obligatoire si SNIR activé, recommandé : 2 à 4 dB)"
+            "(par défaut : 3.0 dB si SNIR activé, recommandé : 2 à 4 dB)"
         ),
     )
     parser.add_argument(
@@ -326,9 +335,7 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:  # clarification immédiate pour l'utilisateur
         parser.error(str(exc))
     if any(snir_states) and args.fading_std_db is None:
-        parser.error(
-            "--fading-std-db est obligatoire lorsque SNIR est activé (recommandé : 2 à 4 dB)."
-        )
+        args.fading_std_db = DEFAULT_SNIR_FADING_STD_DB
 
     if args.precheck:
         try:

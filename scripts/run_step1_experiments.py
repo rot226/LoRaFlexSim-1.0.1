@@ -4,6 +4,17 @@ Le script permet de choisir l'algorithme QoS (ADR, APRA, MixRA-H ou
 MixRA-Opt), de contrôler l'utilisation du calcul SNIR et d'exporter les
 métriques clés au format CSV via l'infrastructure de journalisation
 existante.
+
+Exemples CLI (Windows 11 / PowerShell) :
+  # SNIR activé : une valeur par défaut (3.0 dB) est appliquée si
+  # --fading-std-db n'est pas fourni.
+  # python scripts/run_step1_experiments.py --algorithm adr --nodes 1000 --use-snir
+
+  # Surcharge explicite du fading SNIR.
+  # python scripts/run_step1_experiments.py --algorithm adr --nodes 1000 --use-snir --fading-std-db 4.0
+
+  # SNIR désactivé.
+  # python scripts/run_step1_experiments.py --algorithm adr --nodes 1000 --no-snir
 """
 
 from __future__ import annotations
@@ -58,6 +69,7 @@ ALGORITHMS: Mapping[str, Callable[..., None]] = {
     "ucb1": _apply_ucb1,
 }
 STATE_LABELS = {True: "snir_on", False: "snir_off"}
+DEFAULT_SNIR_FADING_STD_DB = 3.0
 
 
 def _parse_snir_window(value: str) -> str | float:
@@ -137,7 +149,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Écart-type (dB) du fading aléatoire appliqué au calcul SNIR "
-            "(recommandé : 2 à 4 dB)"
+            "(par défaut : 3.0 dB quand --use-snir, recommandé : 2 à 4 dB)"
         ),
     )
     parser.add_argument(
@@ -568,10 +580,9 @@ def _start_progress_monitor(
 def main(argv: list[str] | None = None) -> Mapping[str, object]:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    if args.use_snir and args.fading_std_db is None:
-        parser.error(
-            "--fading-std-db est obligatoire en mode SNIR (recommandé : 2 à 4 dB)."
-        )
+    effective_fading_std_db = args.fading_std_db
+    if args.use_snir and effective_fading_std_db is None:
+        effective_fading_std_db = DEFAULT_SNIR_FADING_STD_DB
     _configure_qos_logging(args.qos_verbose)
 
     print(
@@ -579,7 +590,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
         f"algo={args.algorithm} use_snir={args.use_snir} seed={args.seed} "
         f"nodes={args.nodes} interval={args.packet_interval:g}s "
         f"pure_poisson={args.pure_poisson} "
-        f"fading={args.fading_std_db or 'config'}dB "
+        f"fading={effective_fading_std_db if effective_fading_std_db is not None else 'config'}dB "
         f"noise_std={args.noise_floor_std_db or 'config'}dB "
         f"mode={args.fading_model}"
     )
@@ -596,7 +607,7 @@ def main(argv: list[str] | None = None) -> Mapping[str, object]:
         args.use_snir,
         pure_poisson=args.pure_poisson,
         channel_config=args.channel_config,
-        fading_std_db=args.fading_std_db,
+        fading_std_db=effective_fading_std_db,
         noise_floor_std_db=args.noise_floor_std_db,
         capture_threshold_db=args.capture_threshold_db,
         marginal_snir_margin_db=args.marginal_snir_margin_db,
