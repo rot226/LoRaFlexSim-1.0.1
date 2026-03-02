@@ -9,6 +9,7 @@ from typing import Iterable
 
 from .scenarios import generate_jobs, parse_grid_spec
 from .plotting.plots import ScenarioFilters, generate_minimal_figures
+from .simulator.engine import GridRunOrchestrator
 from .simulator.io import aggregate_runs
 
 
@@ -112,8 +113,26 @@ def cmd_run(args: argparse.Namespace) -> int:
     }
     output_file = out_dir / "jobs.json"
     _dump_json(output_file, payload)
+
+    orchestrator = GridRunOrchestrator(output_root=out_dir)
+    report = orchestrator.execute_jobs(jobs)
+    failures = [
+        {"run_id": item.run_id, "error": item.error, "run_dir": str(item.run_dir)}
+        for item in report.failed_reports
+    ]
+    execution_summary = {
+        "num_jobs": len(jobs),
+        "num_success": len(jobs) - len(failures),
+        "num_failures": len(failures),
+        "failures": failures,
+    }
+    summary_file = out_dir / "batch_summary.json"
+    _dump_json(summary_file, execution_summary)
+
     print(f"{len(jobs)} jobs générés dans {output_file}")
-    return 0
+    print(f"Exécution terminée: {execution_summary['num_success']} succès, {execution_summary['num_failures']} échec(s)")
+    print(f"Résumé batch écrit dans {summary_file}")
+    return 1 if failures else 0
 
 
 def cmd_aggregate(args: argparse.Namespace) -> int:
@@ -170,9 +189,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    run_parser = subparsers.add_parser("run", help="Génère les jobs d'une campagne.")
+    run_parser = subparsers.add_parser("run", help="Génère les jobs puis exécute la campagne.")
     run_parser.add_argument("--config", required=True, type=_existing_file, help="Fichier de configuration de base.")
-    run_parser.add_argument("--out", required=True, type=Path, help="Répertoire de sortie pour jobs.json.")
+    run_parser.add_argument("--out", required=True, type=Path, help="Répertoire de sortie (jobs.json, results/<run_id>/...).")
     run_parser.add_argument(
         "--grid",
         required=True,
