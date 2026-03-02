@@ -9,6 +9,27 @@ import re
 from typing import Any
 
 GRID_KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+REQUIRED_GRID_KEYS = {"N", "mode", "algo", "reps", "seed_base"}
+ALLOWED_GRID_KEYS = REQUIRED_GRID_KEYS | {"model"}
+
+MODEL_ALIASES = {
+    "RWP": "RWP",
+    "SMOOTH": "SMOOTH",
+}
+
+MODE_ALIASES = {
+    "SNIR_OFF": "SNIR_OFF",
+    "SNIR_ON": "SNIR_ON",
+    "OFF": "SNIR_OFF",
+    "ON": "SNIR_ON",
+}
+
+ALGO_ALIASES = {
+    "ADR": "ADR",
+    "ADR_MIXRA": "ADR_MIXRA",
+    "UCB": "UCB",
+    "UCB_FORGET": "UCB_FORGET",
+}
 
 
 @dataclass(frozen=True)
@@ -40,6 +61,17 @@ def _parse_scalar(value: str) -> Any:
         return token
 
 
+def _normalize_enum(value: Any, *, key: str, aliases: dict[str, str]) -> str:
+    raw = str(value).strip()
+    if raw == "":
+        raise ValueError(f"La clé '{key}' contient une valeur vide.")
+    canonical = raw.upper().replace("-", "_")
+    if canonical not in aliases:
+        allowed = ", ".join(sorted(set(aliases.values())))
+        raise ValueError(f"Valeur invalide pour '{key}': '{raw}'. Valeurs autorisées: {allowed}.")
+    return aliases[canonical]
+
+
 def parse_grid_spec(grid_spec: str) -> dict[str, list[Any]]:
     """Parse une grille au format ``cle=v1,v2;autre=...``.
 
@@ -62,15 +94,37 @@ def parse_grid_spec(grid_spec: str) -> dict[str, list[Any]]:
             raise ValueError(f"Entrée de grille invalide '{chunk}': '=' manquant.")
         key, raw_values = chunk.split("=", 1)
         key = key.strip()
+        if key == "":
+            raise ValueError(f"Entrée de grille invalide '{chunk}': clé vide.")
         if not GRID_KEY_PATTERN.match(key):
             raise ValueError(
                 f"Nom de clé invalide '{key}'. Utiliser [A-Za-z_][A-Za-z0-9_]*."
             )
 
-        values = [_parse_scalar(v) for v in raw_values.split(",")]
+        if key not in ALLOWED_GRID_KEYS:
+            allowed = ", ".join(sorted(ALLOWED_GRID_KEYS))
+            raise ValueError(f"Clé inconnue '{key}'. Clés autorisées: {allowed}.")
+
+        raw_items = [item.strip() for item in raw_values.split(",")]
+        if any(item == "" for item in raw_items):
+            raise ValueError(f"La clé '{key}' contient une valeur vide.")
+
+        values = [_parse_scalar(v) for v in raw_items]
         if not values:
             raise ValueError(f"La clé '{key}' n'a aucune valeur.")
+
+        if key == "model":
+            values = [_normalize_enum(value, key=key, aliases=MODEL_ALIASES) for value in values]
+        elif key == "mode":
+            values = [_normalize_enum(value, key=key, aliases=MODE_ALIASES) for value in values]
+        elif key == "algo":
+            values = [_normalize_enum(value, key=key, aliases=ALGO_ALIASES) for value in values]
+
         result[key] = values
+
+    missing = sorted(REQUIRED_GRID_KEYS - set(result))
+    if missing:
+        raise ValueError(f"Clés obligatoires manquantes: {', '.join(missing)}.")
 
     return result
 
@@ -102,6 +156,19 @@ def _validate_grid_values(grid: dict[str, list[Any]], checks: JobValidationConfi
         for reps in grid["reps"]:
             if not isinstance(reps, int) or reps < 1:
                 raise ValueError("Toutes les valeurs reps doivent être des entiers >= 1.")
+
+    if "seed_base" in grid:
+        for seed_base in grid["seed_base"]:
+            if not isinstance(seed_base, int) or not (checks.min_seed <= seed_base <= checks.max_seed):
+                raise ValueError(f"Toutes les valeurs seed_base doivent être dans [{checks.min_seed}, {checks.max_seed}].")
+
+
+def _build_run_id(params: dict[str, Any], rep: int, seed: int) -> str:
+    model = str(params.get("model", "RWP")).lower()
+    mode = str(params["mode"]).lower()
+    algo = str(params["algo"]).lower()
+    n_val = params["N"]
+    return f"n{n_val}_model-{model}_mode-{mode}_algo-{algo}_rep-{rep:03d}_seed-{seed}"
 
 
 def validate_run_parameters(
@@ -140,26 +207,33 @@ def generate_jobs(
     validate_run_parameters(seed=seed, reps=reps, sf_range=sf_range, checks=checks)
     _validate_grid_values(grid, checks)
 
-    keys = list(grid.keys())
+    keys = [key for key in grid if key not in {"reps", "seed_base"}]
     combinations = list(product(*(grid[k] for k in keys)))
     jobs: list[dict[str, Any]] = []
 
-    for index, values in enumerate(combinations, start=1):
-        params = dict(zip(keys, values, strict=True))
-        if seed is not None:
-            params.setdefault("seed", seed)
-        if reps is not None:
-            params.setdefault("reps", reps)
-        if sf_range is not None:
-            params.setdefault("sf_min", sf_range[0])
-            params.setdefault("sf_max", sf_range[1])
+    job_index = 1
+    for values in combinations:
+        base_params = dict(zip(keys, values, strict=True))
+        reps_count = reps if reps is not None else int(grid["reps"][0])
+        seed_origin = seed if seed is not None else int(grid["seed_base"][0])
 
-        jobs.append(
-            {
-                "job_id": f"job_{index:04d}",
-                "config": str(config_path),
-                "output": str(output_root / f"job_{index:04d}"),
-                "params": params,
-            }
-        )
+        for rep in range(1, reps_count + 1):
+            rep_seed = seed_origin + rep - 1
+            params = dict(base_params)
+            params["rep"] = rep
+            params["seed"] = rep_seed
+            params["run_id"] = _build_run_id(params, rep, rep_seed)
+            if sf_range is not None:
+                params.setdefault("sf_min", sf_range[0])
+                params.setdefault("sf_max", sf_range[1])
+
+            jobs.append(
+                {
+                    "job_id": f"job_{job_index:04d}",
+                    "config": str(config_path),
+                    "output": str(output_root / params["run_id"]),
+                    "params": params,
+                }
+            )
+            job_index += 1
     return jobs
