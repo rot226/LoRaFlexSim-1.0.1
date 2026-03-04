@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  smoke:
+  smoke-linux:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,7 +19,33 @@ jobs:
       - name: Install package
         run: pip install -e .
 
-      - name: CLI smoke
+      - name: CLI smoke (blocking)
         run: |
           mobilesfrdth --help
           mobilesfrdth run --help
+          python -m sfrd.cli.run_campaign --help
+
+  smoke-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Create virtual environment
+        shell: pwsh
+        run: python -m venv .venv
+
+      - name: Install package in venv
+        shell: pwsh
+        run: .\.venv\Scripts\python -m pip install -e .
+
+      - name: CLI smoke (blocking)
+        shell: pwsh
+        run: |
+          .\.venv\Scripts\mobilesfrdth --help
+          .\.venv\Scripts\python -m sfrd.cli.run_campaign --help
