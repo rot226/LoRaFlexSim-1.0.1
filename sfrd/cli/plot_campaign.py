@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -20,6 +21,18 @@ _REQUIRED_FILES = {
     "SNIR_ON/sf_distribution.csv": "sf_distribution.csv",
     "learning_curve_ucb.csv": "learning_curve_ucb.csv",
 }
+
+_FIXED_FIGURE_SPECS = (
+    ("pdr_vs_n", "SNIR_OFF/pdr_results.csv", "SNIR_ON/pdr_results.csv"),
+    (
+        "throughput_vs_n",
+        "SNIR_OFF/throughput_results.csv",
+        "SNIR_ON/throughput_results.csv",
+    ),
+    ("energy_vs_n", "SNIR_OFF/energy_results.csv", "SNIR_ON/energy_results.csv"),
+    ("sf_distribution", "SNIR_OFF/sf_distribution.csv", "SNIR_ON/sf_distribution.csv"),
+    ("learning_curve_ucb", "learning_curve_ucb.csv"),
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -54,7 +67,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--figures-dir",
         type=Path,
         default=None,
-        help="Dossier de sortie des figures. Défaut: sfrd/logs/<campaign_id>/figures.",
+        help="Dossier de sortie des figures. Défaut: figures/<campaign_id>/.",
     )
     parser.add_argument(
         "--format",
@@ -72,7 +85,7 @@ def _resolve_paths(args: argparse.Namespace) -> tuple[Path, Path]:
         if args.figures_dir is not None:
             figures_dir = args.figures_dir.resolve()
         else:
-            figures_dir = (output_root.parent / "figures").resolve()
+            figures_dir = output_root.parent / "figures"
         return output_root, figures_dir
 
     if not args.campaign_id:
@@ -83,8 +96,41 @@ def _resolve_paths(args: argparse.Namespace) -> tuple[Path, Path]:
     if args.figures_dir is not None:
         figures_dir = args.figures_dir.resolve()
     else:
-        figures_dir = campaign_root / "figures"
+        figures_dir = Path("figures") / args.campaign_id
     return output_root, figures_dir
+
+
+def _write_figures_manifest(
+    *,
+    manifest_path: Path,
+    campaign_id: str | None,
+    output_root: Path,
+    figures_dir: Path,
+    format_name: str,
+) -> None:
+    figures = []
+    for spec in _FIXED_FIGURE_SPECS:
+        figure_name = spec[0]
+        source_csvs = [str((output_root / rel).resolve()) for rel in spec[1:]]
+        figures.append(
+            {
+                "name": figure_name,
+                "file": str((figures_dir / f"{figure_name}.{format_name}").resolve()),
+                "source_csv": source_csvs,
+            }
+        )
+
+    payload = {
+        "campaign_id": campaign_id,
+        "output_root": str(output_root.resolve()),
+        "figures_dir": str(figures_dir.resolve()),
+        "format": format_name,
+        "figures": figures,
+    }
+    manifest_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
 
 
 def _load_required_csvs(output_root: Path) -> dict[str, pd.DataFrame]:
@@ -225,6 +271,14 @@ def main() -> None:
     _plot_learning_curve(
         frames["learning_curve_ucb.csv"],
         output_path=figures_dir / f"learning_curve_ucb.{args.format}",
+    )
+
+    _write_figures_manifest(
+        manifest_path=figures_dir / "figures_manifest.json",
+        campaign_id=args.campaign_id,
+        output_root=output_root,
+        figures_dir=figures_dir,
+        format_name=args.format,
     )
 
     print(f"Figures générées dans: {figures_dir}")
