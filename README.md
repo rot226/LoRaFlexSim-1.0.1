@@ -30,6 +30,12 @@ et exécute `pip install -e .` automatiquement.
 Après installation editable (`pip install -e .`), la commande `mobilesfrdth`
 est disponible dans l'environnement virtuel actif.
 
+### Statut de migration des modes CLI
+
+- **Mode officiel actuel : `sfrd`** (référence stable aujourd'hui).
+- **Mode cible : `mobilesfrdth`** (migration en cours ; les commandes restent
+  alignées sur les mêmes scripts backend).
+
 ```bash
 pip install -e .
 mobilesfrdth run ...
@@ -43,12 +49,18 @@ Sur Windows 11 (PowerShell), pensez à activer d'abord votre venv :
 .\.venv\Scripts\Activate.ps1
 ```
 
-### Commandes vérifiées Windows PowerShell
+### Tableau « commande ➜ exemple validé Windows »
 
-```powershell
-python -m sfrd.cli.validate_outputs --output-root sfrd/output
-python -m sfrd.parse.aggregate --logs-root sfrd/logs --campaign-id <campaign_id>
-```
+| Commande | Exemple validé Windows (PowerShell) |
+|---|---|
+| `validate_outputs` | `python -m sfrd.cli.validate_outputs --output-root sfrd/output` |
+| `aggregate` (via campaign id) | `python -m sfrd.parse.aggregate --logs-root sfrd/logs --campaign-id 20250215_101530` |
+| `aggregate` (via manifest explicite) | `python -m sfrd.parse.aggregate --logs-root sfrd/logs --manifest sfrd/logs/campaign_manifests/20250215_101530.json` |
+
+> ⚠️ Historique de compatibilité : n'utilisez plus `--root` pour
+> `validate_outputs`, ni `--out-root` pour `aggregate`.
+> Les flags à utiliser sont bien `--output-root`, `--logs-root`,
+> `--campaign-id` et `--manifest`.
 
 ## 🧰 Dépannage CLI `mobilesfrdth`
 
@@ -63,6 +75,32 @@ python -m sfrd.parse.aggregate --logs-root sfrd/logs --campaign-id <campaign_id>
     exécution avec un autre interpréteur Python).
   - Correctif : vérifiez `python --version`, activez le bon venv et réinstallez
     avec `pip install -e .`.
+
+### Dépannage PowerShell (Windows 11)
+
+- **Venv introuvable / non activé**
+  ```powershell
+  python -m venv .venv
+  .\.venv\Scripts\Activate.ps1
+  python -m pip install -e .
+  ```
+
+- **Blocage `ExecutionPolicy`** (`running scripts is disabled on this system`)
+  ```powershell
+  Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+  .\.venv\Scripts\Activate.ps1
+  ```
+  (Alternative sans modifier la session courante :
+  `powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1`.)
+
+- **Commande `mobilesfrdth` non trouvée dans PATH**
+  ```powershell
+  .\.venv\Scripts\Activate.ps1
+  python -m pip install -e .
+  Get-Command mobilesfrdth
+  ```
+  Si `Get-Command` ne retourne rien, utilisez temporairement le module Python :
+  `python -m mobilesfrdth --help` (ou les modules `sfrd.*` selon le mode utilisé).
 
 ## ✅ Vérification avant mise à jour
 
