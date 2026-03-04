@@ -13,27 +13,17 @@ table est injectée dans la fonction `_flora_noise_dBm` pour les calculs de
 sensibilité. Un chemin personnalisé peut être fourni via `flora_noise_path`.
 ## 🛠️ Installation
 
-> **Version Python recommandée : 3.11.x** (versions supportées: **>=3.11 et <3.13**).
+> **Version Python recommandée : 3.11.x** (versions supportées: **3.11 et 3.12**).
 
 1. **Clonez ou téléchargez** le projet.
-2. **Créez un environnement virtuel et installez le projet :**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # PowerShell : .\.venv\Scripts\Activate.ps1
-   pip install -e .
+2. **Exécutez la commande d'entrée Windows 11 (PowerShell) depuis la racine du dépôt :**
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
    ```
 
-   Sous Windows 11, l'activation via PowerShell requiert parfois l'option
-   `-ExecutionPolicy Bypass` (`powershell -ExecutionPolicy Bypass -File ...`).
-   Les dépendances Python principales (NumPy, Pandas, SciPy, Matplotlib, Plotly,
-   Panel, FastAPI, Uvicorn) sont installées automatiquement par `pip install -e
-   .` ; aucune étape supplémentaire n'est nécessaire pour les scripts de
-   génération de figures.
-
-   > **Remarque :** les tests automatisés utilisent un stub minimal
-   > ``numpy_stub`` situé dans ``tests/stubs`` uniquement pour les tests. Pour
-   > exécuter les scripts ou les exemples de LoRaFlexSim, assurez‑vous que la
-   > véritable bibliothèque NumPy est installée dans votre environnement.
+Ce script vérifie la version de Python, crée/active `.venv`, met `pip` à jour,
+et exécute `pip install -e .` automatiquement.
 
 ## 📦 CLI `mobilesfrdth` (Windows 11 / Linux / macOS)
 
