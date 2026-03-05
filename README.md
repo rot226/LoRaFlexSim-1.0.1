@@ -15,15 +15,15 @@ sensibilité. Un chemin personnalisé peut être fourni via `flora_noise_path`.
 
 > **Version Python recommandée : 3.11.x** (versions supportées: **3.11 et 3.12**).
 
-1. **Clonez ou téléchargez** le projet.
-2. **Exécutez la commande d'entrée Windows 11 (PowerShell) depuis la racine du dépôt :**
+Procédure d'entrée unique (Windows 11 / PowerShell), à copier-coller depuis la racine du dépôt :
 
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
-   ```
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
+```
 
-Ce script vérifie la version de Python, crée/active `.venv`, met `pip` à jour,
-et exécute `pip install -e .` automatiquement.
+Le script `scripts/bootstrap_windows.ps1` crée `.venv` si nécessaire, active
+l'environnement, met `pip` à jour, installe le projet avec `pip install -e .`,
+et vérifie la présence de `mobilesfrdth` avec fallback vers `python -m sfrd...`.
 
 ## 📦 CLI `mobilesfrdth` (Windows 11 / Linux / macOS)
 
