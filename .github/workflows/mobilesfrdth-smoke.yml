@@ -19,7 +19,7 @@ jobs:
       - name: Install package
         run: pip install -e .
 
-      - name: CLI smoke (blocking)
+      - name: CLI smoke (mobilesfrdth --help == 0)
         run: |
           mobilesfrdth --help
           mobilesfrdth run --help
@@ -44,8 +44,15 @@ jobs:
         shell: pwsh
         run: .\.venv\Scripts\python -m pip install -e .
 
-      - name: CLI smoke (blocking)
+      - name: Check Windows launcher exists
         shell: pwsh
         run: |
-          .\.venv\Scripts\mobilesfrdth --help
+          if (-not (Test-Path .\.venv\Scripts\mobilesfrdth.exe)) {
+            Write-Error "Launcher manquant: .venv\\Scripts\\mobilesfrdth.exe"
+          }
+
+      - name: CLI smoke (mobilesfrdth --help == 0)
+        shell: pwsh
+        run: |
+          .\.venv\Scripts\mobilesfrdth.exe --help
           .\.venv\Scripts\python -m sfrd.cli.run_campaign --help
