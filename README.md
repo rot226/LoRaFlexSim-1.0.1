@@ -62,6 +62,28 @@ Sur Windows 11 (PowerShell), pensez à activer d'abord votre venv :
 > Les flags à utiliser sont bien `--output-root`, `--logs-root`,
 > `--campaign-id` et `--manifest`.
 
+### Bloc Windows 11 « core paper » (copier-coller)
+
+```powershell
+# Depuis la racine du dépôt, dans un venv actif
+python -m sfrd.cli.run_campaign --network-sizes 50 100 160 --snir OFF,ON --algos ADR MixRA-H MixRA-Opt UCB --replications 5 --seeds-base 123 --warmup-s 0
+
+# Récupère automatiquement la dernière campagne créée
+$campaignId = (Get-ChildItem -Directory .\sfrd\logs | Sort-Object LastWriteTime -Descending | Select-Object -First 1).Name
+
+# Validation CSV (complétude des sorties produites)
+python -m sfrd.cli.validate_outputs --output-root "sfrd/logs/$campaignId/output"
+
+# Agrégation explicite via campaign-id
+python -m sfrd.parse.aggregate --logs-root sfrd/logs --campaign-id $campaignId
+
+# Tracé unifié des courbes article
+python -m sfrd.cli.plot_campaign --logs-root sfrd/logs --campaign-id $campaignId --format png
+
+# Vérification présence PNG
+Get-ChildItem "figures/$campaignId" -Filter *.png | Select-Object Name, Length
+```
+
 ## 🧰 Dépannage CLI `mobilesfrdth`
 
 - **Erreur `CommandNotFound`**
