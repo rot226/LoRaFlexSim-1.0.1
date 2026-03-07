@@ -49,6 +49,9 @@ est disponible dans l'environnement virtuel actif.
 - **Mode officiel actuel : `sfrd`** (référence stable aujourd'hui).
 - **Mode cible : `mobilesfrdth`** (migration en cours ; les commandes restent
   alignées sur les mêmes scripts backend).
+- **Mode officiel fallback offline : `scripts/mobilesfrdth.ps1`** sous Windows
+  11 (PowerShell), pour exécuter `python -m mobilesfrdth` avec
+  `PYTHONPATH=src` sans dépendre de l'entrypoint installé.
 
 ### Exécution officielle via module (sans installation)
 
@@ -205,6 +208,8 @@ powershell -ExecutionPolicy Bypass -File scripts/mobilesfrdth.ps1 --help
 
 Ce script fixe `PYTHONPATH=src` puis relance `python -m mobilesfrdth`, ce qui
 permet d'utiliser la CLI sans dépendre de l'installation de l'entrypoint.
+
+> ✅ Cette voie est le **mode officiel fallback offline** sous Windows 11.
 
 ## ✅ Vérification avant mise à jour
 
