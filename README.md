@@ -23,7 +23,10 @@ powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
 ```
 
 Le script `scripts/bootstrap_windows.ps1` crée `.venv` avec `py -3.11`,
-active l'environnement puis tente `python -m pip install -e . --no-build-isolation`.
+active l'environnement, affiche la version Python active, vérifie
+`import setuptools`, puis tente `python -m pip install -e . --no-build-isolation`.
+En cas d'échec, il bascule automatiquement en mode fallback `PYTHONPATH=src`
+et affiche la commande exacte à utiliser.
 
 ### Windows 11 (offline)
 
@@ -196,6 +199,33 @@ Get-ChildItem "figures/$campaignId" -Filter *.png | Select-Object Name, Length
   ```
   Si `Get-Command` ne retourne rien, utilisez temporairement le module Python :
   `python -m mobilesfrdth --help` (ou les modules `sfrd.*` selon le mode utilisé).
+
+### Dépannage bootstrap Windows (`scripts/bootstrap_windows.ps1`)
+
+- **`py` introuvable (`Le lanceur Python 'py' est introuvable`)**
+  - Installez Python depuis python.org en cochant *Add Python to PATH*.
+  - Vérifiez ensuite :
+    ```powershell
+    py --version
+    py -0p
+    ```
+
+- **Blocage `ExecutionPolicy` au lancement du script**
+  - Utilisez explicitement :
+    ```powershell
+    powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
+    ```
+  - Ou déverrouillez la session courante uniquement :
+    ```powershell
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+    ```
+
+- **`pip install -e . --no-build-isolation` échoue**
+  - Le bootstrap bascule automatiquement en fallback `PYTHONPATH=src`.
+  - Commande immédiate recommandée :
+    ```powershell
+    powershell -ExecutionPolicy Bypass -File scripts/mobilesfrdth.ps1 --help
+    ```
 
 ### Si `mobilesfrdth` n'est pas reconnu
 
