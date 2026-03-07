@@ -92,6 +92,11 @@ def _dump_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _dump_partial(path: Path, payload: object) -> None:
+    partial_name = f"{path.stem}_partial{path.suffix}"
+    _dump_json(path.with_name(partial_name), payload)
+
+
 def _read_job_payloads(results: Iterable[Path]) -> list[dict]:
     payloads: list[dict] = []
     for result in results:
@@ -159,25 +164,38 @@ def cmd_run(args: argparse.Namespace) -> int:
             f"[run] {completed}/{total} | succès={success_rate:.1f}% | ETA={eta} | sortie={getattr(run_report, 'run_dir', out_dir)}",
         )
 
-    report = orchestrator.execute_jobs(jobs, progress_callback=_on_run_progress)
-    failures = [
-        {"run_id": item.run_id, "error": item.error, "run_dir": str(item.run_dir)}
-        for item in report.failed_reports
-    ]
-    execution_summary = {
-        "num_jobs": len(jobs),
-        "num_success": len(jobs) - len(failures),
-        "num_failures": len(failures),
-        "failures": failures,
-    }
     summary_file = out_dir / "batch_summary.json"
-    _dump_json(summary_file, execution_summary)
+    try:
+        report = orchestrator.execute_jobs(jobs, progress_callback=_on_run_progress)
+        failures = [
+            {"run_id": item.run_id, "error": item.error, "run_dir": str(item.run_dir)}
+            for item in report.failed_reports
+        ]
+        execution_summary = {
+            "status": "completed",
+            "num_jobs": len(jobs),
+            "num_success": len(jobs) - len(failures),
+            "num_failures": len(failures),
+            "failures": failures,
+        }
+        _dump_json(summary_file, execution_summary)
 
-    _print_info(args, f"{len(jobs)} jobs générés dans {output_file}")
-    _print_info(args, f"Exécution terminée: {execution_summary['num_success']} succès, {execution_summary['num_failures']} échec(s)")
-    _print_info(args, f"Résumé batch écrit dans {summary_file}")
-    return 1 if failures else 0
-
+        _print_info(args, f"{len(jobs)} jobs générés dans {output_file}")
+        _print_info(args, f"Exécution terminée: {execution_summary['num_success']} succès, {execution_summary['num_failures']} échec(s)")
+        _print_info(args, f"Résumé batch écrit dans {summary_file}")
+        return 1 if failures else 0
+    except KeyboardInterrupt:
+        partial_summary = {
+            "status": "interrupted",
+            "num_jobs": len(jobs),
+            "num_completed": completed,
+            "num_success": successes,
+            "num_interrupted": max(len(jobs) - completed, 0),
+            "message": "reprendre via --resume",
+        }
+        _dump_partial(summary_file, partial_summary)
+        print("Interruption utilisateur détectée (run): reprendre via --resume")
+        return 130
 
 def cmd_aggregate(args: argparse.Namespace) -> int:
     out_dir: Path = args.out
@@ -194,22 +212,34 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
             return
         _print_info(args, f"[aggregate] phase={phase} ({phase_index[phase]}/{len(phase_order)}) progression={done}/{total}")
 
+    output_file = out_dir / "aggregate.json"
     try:
         files = aggregate_runs(inputs=args.results, output_root=out_dir, progress_callback=_on_aggregate_progress)
+    except KeyboardInterrupt:
+        _dump_partial(
+            output_file,
+            {
+                "status": "interrupted",
+                "num_inputs": len(args.results),
+                "sources": [str(path) for path in args.results],
+                "message": "reprendre via --resume",
+            },
+        )
+        print("Interruption utilisateur détectée (aggregate): reprendre via --resume")
+        return 130
     except (ValueError, json.JSONDecodeError, FileNotFoundError) as exc:
         print(f"Erreur pendant l'agrégation: {exc}")
         return 2
 
     manifest = {
+        "status": "completed",
         "num_inputs": len(args.results),
         "sources": [str(path) for path in args.results],
         "files": {name: str(path) for name, path in files.items()},
     }
-    output_file = out_dir / "aggregate.json"
     _dump_json(output_file, manifest)
     _print_info(args, f"Agrégation écrite dans {output_file}")
     return 0
-
 
 def cmd_plots(args: argparse.Namespace) -> int:
     out_dir: Path = args.out
@@ -226,25 +256,39 @@ def cmd_plots(args: argparse.Namespace) -> int:
         status = "générée" if generated_ok else "ignorée"
         _print_info(args, f"[plots] {fig_name}: {status} ({out_path})")
 
-    generated = generate_minimal_figures(
-        aggregates_dir=args.aggregates_dir,
-        out_dir=out_dir,
-        filters=ScenarioFilters.from_tokens(args.scenario_filter),
-        include_bonus=not args.no_bonus,
-        progress_callback=_on_plot_progress,
-    )
+    output_file = out_dir / "plots_summary.json"
+    try:
+        generated = generate_minimal_figures(
+            aggregates_dir=args.aggregates_dir,
+            out_dir=out_dir,
+            filters=ScenarioFilters.from_tokens(args.scenario_filter),
+            include_bonus=not args.no_bonus,
+            progress_callback=_on_plot_progress,
+        )
+    except KeyboardInterrupt:
+        _dump_partial(
+            output_file,
+            {
+                "status": "interrupted",
+                "aggregates_dir": str(args.aggregates_dir),
+                "out_dir": str(out_dir),
+                "message": "reprendre via --resume",
+            },
+        )
+        print("Interruption utilisateur détectée (plots): reprendre via --resume")
+        return 130
+
     report = {
+        "status": "completed",
         "aggregates_dir": str(args.aggregates_dir),
         "out_dir": str(out_dir),
         "num_figures": len(generated),
         "figures": [str(path) for path in generated],
     }
-    output_file = out_dir / "plots_summary.json"
     _dump_json(output_file, report)
     _print_info(args, f"{len(generated)} figure(s) écrite(s) dans {out_dir}")
     _print_info(args, f"Résumé de plots écrit dans {output_file}")
     return 0
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(

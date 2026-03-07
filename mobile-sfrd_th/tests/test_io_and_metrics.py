@@ -89,3 +89,38 @@ def test_metrics_formulas_basics():
     assert round(jain_fairness([1, 1, 1]), 5) == 1.0
     assert airtime_lora(12, sf=7) > 0
     assert convergence_tc([0.2, 0.5, 0.95, 0.97, 0.96], dt_s=1.0, target=1.0, tolerance=0.05, stable_bins=2) == 3.0
+
+
+def test_aggregate_ignores_incomplete_run_status(tmp_path: Path):
+    write_run_outputs(
+        output_root=tmp_path,
+        run_id="run_ok",
+        run_config=_sample_config(seed=1, rep=0),
+        events=_sample_events(),
+        duration_s=10.0,
+        time_bin_s=5.0,
+    )
+    write_run_outputs(
+        output_root=tmp_path,
+        run_id="run_partial",
+        run_config=_sample_config(seed=2, rep=1),
+        events=_sample_events(),
+        duration_s=10.0,
+        time_bin_s=5.0,
+    )
+
+    (tmp_path / "results" / "run_ok" / "run_status.json").write_text(
+        "{\"run_id\":\"run_ok\",\"status\":\"completed\"}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "results" / "run_partial" / "run_status.json").write_text(
+        "{\"run_id\":\"run_partial\",\"status\":\"interrupted\"}\n",
+        encoding="utf-8",
+    )
+
+    outputs = aggregate_runs(inputs=[tmp_path], output_root=tmp_path)
+    rows = (outputs["convergence_tc"]).read_text(encoding="utf-8").strip().splitlines()
+
+    assert len(rows) == 2
+    assert "run_ok" in rows[1]
+    assert "run_partial" not in rows[1]

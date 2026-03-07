@@ -1,5 +1,7 @@
+import json
 from pathlib import Path
 
+import mobilesfrdth.cli as cli
 from mobilesfrdth.cli import main
 from mobilesfrdth.plotting.plots import validate_aggregates_inputs
 
@@ -48,3 +50,20 @@ def test_verbose_and_quiet_are_mutually_exclusive(tmp_path: Path):
     code = main(["--verbose", "--quiet", "plots", "--aggregates-dir", str(aggregates), "--out", str(tmp_path / "plots")])
 
     assert code != 0
+
+
+def test_keyboard_interrupt_in_aggregate_writes_partial_and_returns_130(tmp_path: Path, monkeypatch):
+    def _boom(*, inputs, output_root, progress_callback=None):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "aggregate_runs", _boom)
+
+    out = tmp_path / "agg_out"
+    code = main(["aggregate", "--results", str(tmp_path), "--out", str(out)])
+
+    assert code == 130
+    partial = out / "aggregate_partial.json"
+    assert partial.is_file()
+    payload = json.loads(partial.read_text(encoding="utf-8"))
+    assert payload["status"] == "interrupted"
+    assert payload["message"] == "reprendre via --resume"
