@@ -102,6 +102,7 @@ class BatchExecutionReport:
     total_jobs: int = 0
     skipped_runs: int = 0
     scheduled_runs: int = 0
+    interrupted: bool = False
 
     @property
     def failed_reports(self) -> list[RunExecutionReport]:
@@ -206,6 +207,7 @@ class GridRunOrchestrator:
         max_walltime_s: float | None = None,
         progress_path: Path | None = None,
         progress_interval_s: float = 30.0,
+        on_run_complete: Callable[[RunExecutionReport, int, int, int, int, float | None], None] | None = None,
     ) -> BatchExecutionReport:
         if max_runs is not None and max_runs < 1:
             raise ValueError("max_runs doit être >= 1")
@@ -232,6 +234,8 @@ class GridRunOrchestrator:
         total_runs = len(jobs)
         walltime_start_s = monotonic()
         progress_target = progress_path or (self.output_root / "campaign_progress.json")
+        scheduled_runs = len(pending_jobs)
+        interrupted = False
         self._write_campaign_progress(
             progress_path=progress_target,
             total_runs=total_runs,
@@ -291,6 +295,17 @@ class GridRunOrchestrator:
                 )
                 logger.info("Run terminé: uplinks=%s", result.uplink_count)
                 reports.append(RunExecutionReport(run_id=run_id, success=True, run_dir=run_dir))
+            except KeyboardInterrupt:
+                logger.warning("Interruption utilisateur détectée (Ctrl+C). Arrêt propre après ce run.")
+                reports.append(
+                    RunExecutionReport(
+                        run_id=run_id,
+                        success=False,
+                        run_dir=run_dir,
+                        error="Interruption utilisateur (Ctrl+C)",
+                    )
+                )
+                interrupted = True
             except Exception as exc:
                 logger.exception("Run en erreur: %s", exc)
                 reports.append(RunExecutionReport(run_id=run_id, success=False, run_dir=run_dir, error=str(exc)))
@@ -299,14 +314,34 @@ class GridRunOrchestrator:
                     logger.removeHandler(handler)
                     handler.close()
 
+            run_index = len(reports)
+            if on_run_complete is not None:
+                elapsed_s = monotonic() - walltime_start_s
+                remaining_runs = max(scheduled_runs - run_index, 0)
+                eta_s = None
+                if run_index > 0 and remaining_runs > 0:
+                    eta_s = (elapsed_s / run_index) * remaining_runs
+                last_report = reports[-1]
+                on_run_complete(
+                    last_report,
+                    run_index,
+                    scheduled_runs,
+                    len([report for report in reports if report.success]),
+                    len([report for report in reports if not report.success]),
+                    eta_s,
+                )
+
             self._write_campaign_progress(
                 progress_path=progress_target,
                 total_runs=total_runs,
                 completed_runs=len([report for report in reports if report.success]),
                 skipped_runs=skipped_runs,
                 error_reports=[report for report in reports if not report.success],
-                status="running",
+                status="interrupted" if interrupted else "running",
             )
+
+            if interrupted:
+                break
 
         self._write_campaign_progress(
             progress_path=progress_target,
@@ -314,12 +349,13 @@ class GridRunOrchestrator:
             completed_runs=len([report for report in reports if report.success]),
             skipped_runs=skipped_runs,
             error_reports=[report for report in reports if not report.success],
-            status="finished",
+            status="interrupted" if interrupted else "finished",
         )
 
         return BatchExecutionReport(
             reports=reports,
             total_jobs=total_runs,
             skipped_runs=skipped_runs,
-            scheduled_runs=len(pending_jobs),
+            scheduled_runs=scheduled_runs,
+            interrupted=interrupted,
         )
