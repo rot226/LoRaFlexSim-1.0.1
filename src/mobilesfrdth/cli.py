@@ -166,7 +166,13 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        files = aggregate_runs(inputs=args.results, output_root=out_dir)
+        files = aggregate_runs(
+            inputs=args.results,
+            output_root=out_dir,
+            summary_only=args.summary_only,
+            skip_sinr_cdf=args.skip_sinr_cdf,
+            skip_sf_distribution=args.skip_sf_distribution,
+        )
     except (ValueError, json.JSONDecodeError, FileNotFoundError) as exc:
         print(f"Erreur pendant l'agrégation: {exc}")
         return 2
@@ -285,6 +291,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Un ou plusieurs chemins vers des runs (ou un dossier contenant results/<run_id>/...).",
     )
     aggregate_parser.add_argument("--out", required=True, type=Path, help="Répertoire où écrire aggregates/*.csv et aggregate.json.")
+    aggregate_parser.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="Agrège uniquement les summary.csv (rapide, n'ouvre pas events.csv).",
+    )
+    aggregate_parser.add_argument(
+        "--skip-sinr-cdf",
+        action="store_true",
+        help="N'écrit pas sinr_cdf.csv pour accélérer l'agrégation.",
+    )
+    aggregate_parser.add_argument(
+        "--skip-sf-distribution",
+        action="store_true",
+        help="N'écrit pas distribution_sf.csv pour accélérer l'agrégation.",
+    )
     aggregate_parser.set_defaults(func=cmd_aggregate)
 
     plots_parser = subparsers.add_parser(

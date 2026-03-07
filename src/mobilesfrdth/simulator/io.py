@@ -264,6 +264,13 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def _iter_csv(path: Path) -> Iterable[dict[str, str]]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            yield row
+
+
 def _collect_run_dirs(paths: Iterable[Path]) -> list[Path]:
     run_dirs: list[Path] = []
     for path in paths:
@@ -289,22 +296,46 @@ def _collect_run_dirs(paths: Iterable[Path]) -> list[Path]:
     return unique
 
 
-def aggregate_runs(*, inputs: Iterable[Path], output_root: Path) -> dict[str, Path]:
+def aggregate_runs(
+    *,
+    inputs: Iterable[Path],
+    output_root: Path,
+    summary_only: bool = False,
+    skip_sinr_cdf: bool = False,
+    skip_sf_distribution: bool = False,
+) -> dict[str, Path]:
     """Agrège des runs et écrit les CSV dans ``aggregates/``."""
 
     run_dirs = _collect_run_dirs(inputs)
     out_dir = output_root / "aggregates"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    if summary_only:
+        skip_sinr_cdf = True
+        skip_sf_distribution = True
+
     summaries: list[dict[str, str]] = []
-    events: list[dict[str, str]] = []
-    node_timeseries: list[dict[str, str]] = []
-    for run_dir in run_dirs:
-        summaries.extend(_read_csv(run_dir / "summary.csv"))
-        events.extend(_read_csv(run_dir / "events.csv"))
-        node_timeseries.extend(_read_csv(run_dir / "node_timeseries.csv"))
+    sf_counter: dict[tuple[str, ...], Counter[str]] = defaultdict(Counter)
+    sinr_values: dict[tuple[str, ...], list[float]] = defaultdict(list)
 
     factor_columns = ["N", "speed", "mobility_model", "mode", "algo", "gateways", "sigma"]
+
+    total = len(run_dirs)
+    for index, run_dir in enumerate(run_dirs, start=1):
+        print(f"Agrégation des runs: {index}/{total}", end="\r" if index < total else "\n", flush=True)
+        summaries.extend(_read_csv(run_dir / "summary.csv"))
+
+        if summary_only:
+            continue
+
+        for row in _iter_csv(run_dir / "events.csv"):
+            if row.get("event_type") != "uplink":
+                continue
+            key = tuple(row.get(column, "") for column in factor_columns)
+            if not skip_sf_distribution:
+                sf_counter[key][row.get("sf", "")] += 1
+            if not skip_sinr_cdf:
+                sinr_values[key].append(float(row.get("sinr_db", 0.0) or 0.0))
 
     by_factor: dict[tuple[str, ...], list[dict[str, str]]] = defaultdict(list)
     for row in summaries:
@@ -343,27 +374,24 @@ def aggregate_runs(*, inputs: Iterable[Path], output_root: Path) -> dict[str, Pa
         "switch_count_mean",
     ], metric_by_factor_rows)
 
-    sf_counter: dict[tuple[str, ...], Counter[str]] = defaultdict(Counter)
-    for row in events:
-        if row.get("event_type") != "uplink":
-            continue
-        key = tuple(row.get(column, "") for column in factor_columns)
-        sf_counter[key][row.get("sf", "")] += 1
+    files: dict[str, Path] = {"metric_by_factor": metric_by_factor_path}
 
-    distribution_rows = []
-    for key, counts in sorted(sf_counter.items()):
-        total = sum(counts.values())
-        for sf, count in sorted(counts.items(), key=lambda item: int(item[0] or 0)):
-            distribution_rows.append(
-                {
-                    **dict(zip(factor_columns, key, strict=False)),
-                    "sf": sf,
-                    "count": count,
-                    "ratio": count / max(total, 1),
-                }
-            )
-    distribution_path = out_dir / "distribution_sf.csv"
-    _write_csv(distribution_path, factor_columns + ["sf", "count", "ratio"], distribution_rows)
+    if not skip_sf_distribution:
+        distribution_rows = []
+        for key, counts in sorted(sf_counter.items()):
+            total_count = sum(counts.values())
+            for sf, count in sorted(counts.items(), key=lambda item: int(item[0] or 0)):
+                distribution_rows.append(
+                    {
+                        **dict(zip(factor_columns, key, strict=False)),
+                        "sf": sf,
+                        "count": count,
+                        "ratio": count / max(total_count, 1),
+                    }
+                )
+        distribution_path = out_dir / "distribution_sf.csv"
+        _write_csv(distribution_path, factor_columns + ["sf", "count", "ratio"], distribution_rows)
+        files["distribution_sf"] = distribution_path
 
     convergence_rows = [
         {
@@ -376,25 +404,20 @@ def aggregate_runs(*, inputs: Iterable[Path], output_root: Path) -> dict[str, Pa
     convergence_path = out_dir / "convergence_tc.csv"
     _write_csv(convergence_path, SCENARIO_ID_COLUMNS + ["run_id", "Tc_s"], convergence_rows)
 
-    sinr_values: dict[tuple[str, ...], list[float]] = defaultdict(list)
-    for row in events:
-        if row.get("event_type") != "uplink":
-            continue
-        key = tuple(row.get(column, "") for column in factor_columns)
-        sinr_values[key].append(float(row.get("sinr_db", 0.0) or 0.0))
-
-    sinr_rows = []
-    quantiles = [i / 100 for i in range(101)]
-    for key, values in sorted(sinr_values.items()):
-        if not values:
-            continue
-        data = sorted(values)
-        n = len(data)
-        for q in quantiles:
-            index = min(int(round(q * (n - 1))), n - 1)
-            sinr_rows.append({**dict(zip(factor_columns, key, strict=False)), "quantile": q, "sinr_db": data[index]})
-    sinr_path = out_dir / "sinr_cdf.csv"
-    _write_csv(sinr_path, factor_columns + ["quantile", "sinr_db"], sinr_rows)
+    if not skip_sinr_cdf:
+        sinr_rows = []
+        quantiles = [i / 100 for i in range(101)]
+        for key, values in sorted(sinr_values.items()):
+            if not values:
+                continue
+            data = sorted(values)
+            n = len(data)
+            for q in quantiles:
+                index = min(int(round(q * (n - 1))), n - 1)
+                sinr_rows.append({**dict(zip(factor_columns, key, strict=False)), "quantile": q, "sinr_db": data[index]})
+        sinr_path = out_dir / "sinr_cdf.csv"
+        _write_csv(sinr_path, factor_columns + ["quantile", "sinr_db"], sinr_rows)
+        files["sinr_cdf"] = sinr_path
 
     fairness_rows = [
         {
@@ -413,10 +436,7 @@ def aggregate_runs(*, inputs: Iterable[Path], output_root: Path) -> dict[str, Pa
         fairness_rows,
     )
 
-    return {
-        "metric_by_factor": metric_by_factor_path,
-        "distribution_sf": distribution_path,
-        "convergence_tc": convergence_path,
-        "sinr_cdf": sinr_path,
-        "fairness_airtime_switching": fairness_path,
-    }
+    files["convergence_tc"] = convergence_path
+    files["fairness_airtime_switching"] = fairness_path
+
+    return files
