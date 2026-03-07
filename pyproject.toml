@@ -8,7 +8,7 @@ version = "1.0.1"
 # Updated name to reflect new project identity
 description = "LoRaFlexSim : simulateur complet et flexible de réseau LoRa"
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.15"
 license = {file = "LICENSE"}
 authors = [{name = "Unknown"}]
 
