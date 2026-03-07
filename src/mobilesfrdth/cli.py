@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from time import monotonic
 from typing import Iterable
 
 from .scenarios import generate_jobs, parse_grid_spec
@@ -14,6 +15,12 @@ from .scenarios import generate_jobs, parse_grid_spec
 MIN_SUPPORTED_PYTHON = (3, 11)
 MAX_SUPPORTED_PYTHON_EXCLUSIVE = (3, 15)
 EXPERIMENTAL_WARNING_PYTHON = (3, 14)
+
+PROFILE_PRESETS: dict[str, str] = {
+    "smoke": "N=30,50;speed=1;mode=SNIR_OFF,SNIR_ON;algo=ADR,UCB;reps=1;duration_s=300;seed_base=1234",
+    "core": "N=50,100,160;speed=1,3;mode=SNIR_OFF,SNIR_ON;algo=ADR,ADR_MIXRA,UCB,UCB_FORGET;reps=2;duration_s=1800;seed_base=1234",
+    "full": "N=50,100,160,320;speed=0,1,3,6;mode=SNIR_OFF,SNIR_ON;algo=ADR,ADR_MIXRA,UCB,UCB_FORGET;reps=5;duration_s=3600;seed_base=1234",
+}
 
 
 def _existing_file(value: str) -> Path:
@@ -98,12 +105,29 @@ def _read_job_payloads(results: Iterable[Path]) -> list[dict]:
     return payloads
 
 
+def _format_eta(seconds: float | None) -> str:
+    if seconds is None:
+        return "N/A"
+    total = max(int(seconds), 0)
+    hours, rem = divmod(total, 3600)
+    minutes, sec = divmod(rem, 60)
+    return f"{hours:02d}:{minutes:02d}:{sec:02d}"
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     out_dir: Path = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        grid = parse_grid_spec(args.grid)
+        if args.grid:
+            grid_spec = args.grid
+        elif args.profile:
+            grid_spec = PROFILE_PRESETS[args.profile]
+            print(f"Profil sélectionné: {args.profile}")
+        else:
+            raise SystemExit("Erreur: fournir --grid ou --profile.")
+
+        grid = parse_grid_spec(grid_spec)
         jobs = generate_jobs(
             config_path=args.config,
             output_root=out_dir,
@@ -130,11 +154,21 @@ def cmd_run(args: argparse.Namespace) -> int:
     from .simulator.engine import GridRunOrchestrator
 
     orchestrator = GridRunOrchestrator(output_root=out_dir)
+    start_s = monotonic()
+
+    def _on_run_complete(run_report, run_i, total, success_count, failure_count, eta_s):
+        status = "succès" if run_report.success else "échec"
+        print(
+            f"[{run_i}/{total}] {run_report.run_id}: {status} | "
+            f"ETA={_format_eta(eta_s)} | succès={success_count} échec={failure_count}"
+        )
+
     report = orchestrator.execute_jobs(
         jobs,
         resume=args.resume,
         max_runs=args.max_runs,
         max_walltime_s=args.max_walltime,
+        on_run_complete=_on_run_complete,
     )
     failures = [
         {"run_id": item.run_id, "error": item.error, "run_dir": str(item.run_dir)}
@@ -149,6 +183,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         "num_skipped": report.skipped_runs,
         "num_success": successful_runs,
         "num_failures": len(failures),
+        "interrupted": report.interrupted,
+        "elapsed_s": monotonic() - start_s,
         "failures": failures,
     }
     summary_file = out_dir / "batch_summary.json"
@@ -161,8 +197,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         f"{execution_summary['num_failures']} échec(s), "
         f"{execution_summary['num_skipped']} ignoré(s)."
     )
+    if execution_summary["interrupted"]:
+        print("Exécution interrompue (Ctrl+C): bilan partiel écrit.")
     print(f"Résumé batch écrit dans {summary_file}")
-    return 1 if failures else 0
+    return 130 if execution_summary["interrupted"] else (1 if failures else 0)
 
 
 def cmd_aggregate(args: argparse.Namespace) -> int:
@@ -248,8 +286,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--out", required=True, type=Path, help="Répertoire de sortie (jobs.json, results/<run_id>/...).")
     run_parser.add_argument(
         "--grid",
-        required=True,
+        required=False,
         help="Grille de sweep au format clé=v1,v2;clé2=v3,v4 (ex: N=50,100;speed=1,3).",
+    )
+    run_parser.add_argument(
+        "--profile",
+        choices=sorted(PROFILE_PRESETS),
+        help="Profil prédéfini de campagne (smoke, core, full). Utilisable à la place de --grid.",
     )
     run_parser.add_argument(
         "--seed",
