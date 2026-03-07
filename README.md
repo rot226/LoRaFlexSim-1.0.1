@@ -49,6 +49,26 @@ est disponible dans l'environnement virtuel actif.
 - **Mode cible : `mobilesfrdth`** (migration en cours ; les commandes restent
   alignées sur les mêmes scripts backend).
 
+### Exécution officielle via module (sans installation)
+
+Si vous ne souhaitez pas installer immédiatement l'entrypoint `mobilesfrdth`,
+la méthode officiellement supportée est d'exécuter le module Python avec
+`PYTHONPATH=src`.
+
+```bash
+PYTHONPATH=src python -m mobilesfrdth --help
+PYTHONPATH=src python -m mobilesfrdth run ...
+PYTHONPATH=src python -m mobilesfrdth aggregate ...
+PYTHONPATH=src python -m mobilesfrdth plots ...
+```
+
+Sous Windows PowerShell :
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m mobilesfrdth --help
+```
+
 ```bash
 pip install -e .
 mobilesfrdth run ...
@@ -136,6 +156,18 @@ Get-ChildItem "figures/$campaignId" -Filter *.png | Select-Object Name, Length
   ```
   Si `Get-Command` ne retourne rien, utilisez temporairement le module Python :
   `python -m mobilesfrdth --help` (ou les modules `sfrd.*` selon le mode utilisé).
+
+### Si `mobilesfrdth` n'est pas reconnu
+
+Si Windows affiche que la commande n'est pas reconnue, exécutez le wrapper
+PowerShell fourni par le dépôt :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/mobilesfrdth.ps1 --help
+```
+
+Ce script fixe `PYTHONPATH=src` puis relance `python -m mobilesfrdth`, ce qui
+permet d'utiliser la CLI sans dépendre de l'installation de l'entrypoint.
 
 ## ✅ Vérification avant mise à jour
 
