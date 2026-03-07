@@ -9,9 +9,11 @@ from pathlib import Path
 from typing import Iterable
 
 from .scenarios import generate_jobs, parse_grid_spec
-from .plotting.plots import ScenarioFilters, generate_minimal_figures, validate_aggregates_inputs
-from .simulator.engine import GridRunOrchestrator
-from .simulator.io import aggregate_runs
+
+
+MIN_SUPPORTED_PYTHON = (3, 11)
+MAX_SUPPORTED_PYTHON_EXCLUSIVE = (3, 15)
+EXPERIMENTAL_WARNING_PYTHON = (3, 14)
 
 
 def _existing_file(value: str) -> Path:
@@ -125,6 +127,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     output_file = out_dir / "jobs.json"
     _dump_json(output_file, payload)
 
+    from .simulator.engine import GridRunOrchestrator
+
     orchestrator = GridRunOrchestrator(output_root=out_dir)
     report = orchestrator.execute_jobs(
         jobs,
@@ -166,6 +170,8 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     try:
+        from .simulator.io import aggregate_runs
+
         files = aggregate_runs(
             inputs=args.results,
             output_root=out_dir,
@@ -197,6 +203,8 @@ def cmd_plots(args: argparse.Namespace) -> int:
         return 2
     if (aggregates_dir / "aggregates").is_dir():
         aggregates_dir = aggregates_dir / "aggregates"
+
+    from .plotting.plots import ScenarioFilters, generate_minimal_figures, validate_aggregates_inputs
 
     errors = validate_aggregates_inputs(aggregates_dir)
     if errors:
@@ -336,16 +344,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _ensure_supported_python() -> bool:
     major, minor = sys.version_info[:2]
-    return major == 3 and minor in (11, 12)
+    return MIN_SUPPORTED_PYTHON <= (major, minor) < MAX_SUPPORTED_PYTHON_EXCLUSIVE
 
 
 def main(argv: list[str] | None = None) -> int:
     if not _ensure_supported_python():
         print(
-            "Version Python non supportée: utiliser Python 3.11 ou 3.12.",
+            "Version Python non supportée: utiliser une version >=3.11 et <3.15.",
             file=sys.stderr,
         )
         return 2
+
+    if sys.version_info[:2] == EXPERIMENTAL_WARNING_PYTHON:
+        print(
+            "Avertissement: Python 3.14 est autorisé, mais certaines dépendances peuvent être encore expérimentales.",
+            file=sys.stderr,
+        )
 
     parser = build_parser()
     try:
