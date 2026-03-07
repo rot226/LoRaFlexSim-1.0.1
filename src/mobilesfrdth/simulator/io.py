@@ -5,10 +5,10 @@ from __future__ import annotations
 import csv
 import json
 import math
+import warnings
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from statistics import mean
 from typing import Any
 
 from .metrics import der, jain_fairness, outage_ratio, pdr, throughput
@@ -259,10 +259,6 @@ def write_run_outputs(
     }
 
 
-def _read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        return list(csv.DictReader(handle))
-
 
 def _iter_csv(path: Path) -> Iterable[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
@@ -296,6 +292,13 @@ def _collect_run_dirs(paths: Iterable[Path]) -> list[Path]:
     return unique
 
 
+def _missing_required_files(run_dir: Path, *, summary_only: bool) -> list[str]:
+    required_files = ["summary.csv"]
+    if not summary_only:
+        required_files.append("events.csv")
+    return [name for name in required_files if not (run_dir / name).is_file()]
+
+
 def aggregate_runs(
     *,
     inputs: Iterable[Path],
@@ -303,6 +306,7 @@ def aggregate_runs(
     summary_only: bool = False,
     skip_sinr_cdf: bool = False,
     skip_sf_distribution: bool = False,
+    strict: bool = False,
 ) -> dict[str, Path]:
     """Agrège des runs et écrit les CSV dans ``aggregates/``."""
 
@@ -314,16 +318,82 @@ def aggregate_runs(
         skip_sinr_cdf = True
         skip_sf_distribution = True
 
-    summaries: list[dict[str, str]] = []
+    metric_accumulators: dict[tuple[str, ...], dict[str, float]] = defaultdict(lambda: {
+        "num_runs": 0,
+        "pdr_sum": 0.0,
+        "der_sum": 0.0,
+        "throughput_bps_sum": 0.0,
+        "Tc_s_sum": 0.0,
+        "jain_fairness_sum": 0.0,
+        "airtime_total_s_sum": 0.0,
+        "outage_ratio_sum": 0.0,
+        "switch_count_sum": 0.0,
+    })
     sf_counter: dict[tuple[str, ...], Counter[str]] = defaultdict(Counter)
     sinr_values: dict[tuple[str, ...], list[float]] = defaultdict(list)
 
     factor_columns = ["N", "speed", "mobility_model", "mode", "algo", "gateways", "sigma"]
 
+    convergence_path = out_dir / "convergence_tc.csv"
+    fairness_path = out_dir / "fairness_airtime_switching.csv"
+
+    convergence_handle = convergence_path.open("w", newline="", encoding="utf-8")
+    fairness_handle = fairness_path.open("w", newline="", encoding="utf-8")
+    convergence_writer = csv.DictWriter(convergence_handle, fieldnames=SCENARIO_ID_COLUMNS + ["run_id", "Tc_s"])
+    fairness_writer = csv.DictWriter(
+        fairness_handle,
+        fieldnames=SCENARIO_ID_COLUMNS + ["run_id", "jain_fairness", "airtime_total_s", "switch_count"],
+    )
+    convergence_writer.writeheader()
+    fairness_writer.writeheader()
+
     total = len(run_dirs)
+    processed = 0
+    skipped = 0
     for index, run_dir in enumerate(run_dirs, start=1):
-        print(f"Agrégation des runs: {index}/{total}", end="\r" if index < total else "\n", flush=True)
-        summaries.extend(_read_csv(run_dir / "summary.csv"))
+        print(f"{index}/{total} run dirs traités", end="\r" if index < total else "\n", flush=True)
+        missing_files = _missing_required_files(run_dir, summary_only=summary_only)
+        if missing_files:
+            message = (
+                f"Run incomplet ignoré: {run_dir} (fichier(s) manquant(s): {', '.join(sorted(missing_files))})"
+            )
+            if strict:
+                raise FileNotFoundError(message)
+            warnings.warn(message, RuntimeWarning, stacklevel=2)
+            skipped += 1
+            continue
+
+        processed += 1
+
+        for row in _iter_csv(run_dir / "summary.csv"):
+            key = tuple(row.get(column, "") for column in factor_columns)
+            bucket = metric_accumulators[key]
+            bucket["num_runs"] += 1
+            bucket["pdr_sum"] += float(row.get("pdr", 0.0) or 0.0)
+            bucket["der_sum"] += float(row.get("der", 0.0) or 0.0)
+            bucket["throughput_bps_sum"] += float(row.get("throughput_bps", 0.0) or 0.0)
+            bucket["Tc_s_sum"] += float(row.get("Tc_s", 0.0) or 0.0)
+            bucket["jain_fairness_sum"] += float(row.get("jain_fairness", 0.0) or 0.0)
+            bucket["airtime_total_s_sum"] += float(row.get("airtime_total_s", 0.0) or 0.0)
+            bucket["outage_ratio_sum"] += float(row.get("outage_ratio", 0.0) or 0.0)
+            bucket["switch_count_sum"] += float(row.get("switch_count", 0.0) or 0.0)
+
+            convergence_writer.writerow(
+                {
+                    **{column: row.get(column, "") for column in SCENARIO_ID_COLUMNS},
+                    "run_id": row.get("run_id", ""),
+                    "Tc_s": row.get("Tc_s", ""),
+                }
+            )
+            fairness_writer.writerow(
+                {
+                    **{column: row.get(column, "") for column in SCENARIO_ID_COLUMNS},
+                    "run_id": row.get("run_id", ""),
+                    "jain_fairness": row.get("jain_fairness", ""),
+                    "airtime_total_s": row.get("airtime_total_s", ""),
+                    "switch_count": row.get("switch_count", ""),
+                }
+            )
 
         if summary_only:
             continue
@@ -337,28 +407,30 @@ def aggregate_runs(
             if not skip_sinr_cdf:
                 sinr_values[key].append(float(row.get("sinr_db", 0.0) or 0.0))
 
-    by_factor: dict[tuple[str, ...], list[dict[str, str]]] = defaultdict(list)
-    for row in summaries:
-        by_factor[tuple(row.get(column, "") for column in factor_columns)].append(row)
+    convergence_handle.close()
+    fairness_handle.close()
+
+    if processed == 0:
+        raise ValueError("Aucun run complet à agréger.")
+
+    if skipped:
+        print(f"Runs incomplets ignorés: {skipped}")
 
     metric_by_factor_rows = []
-    for key, rows in sorted(by_factor.items()):
-        def avg(name: str) -> float:
-            values = [float(r.get(name, 0.0) or 0.0) for r in rows]
-            return mean(values) if values else 0.0
-
+    for key, bucket in sorted(metric_accumulators.items()):
+        num_runs = int(bucket["num_runs"])
         metric_by_factor_rows.append(
             {
                 **dict(zip(factor_columns, key, strict=False)),
-                "num_runs": len(rows),
-                "pdr_mean": avg("pdr"),
-                "der_mean": avg("der"),
-                "throughput_bps_mean": avg("throughput_bps"),
-                "Tc_s_mean": avg("Tc_s"),
-                "jain_fairness_mean": avg("jain_fairness"),
-                "airtime_total_s_mean": avg("airtime_total_s"),
-                "outage_ratio_mean": avg("outage_ratio"),
-                "switch_count_mean": avg("switch_count"),
+                "num_runs": num_runs,
+                "pdr_mean": bucket["pdr_sum"] / max(num_runs, 1),
+                "der_mean": bucket["der_sum"] / max(num_runs, 1),
+                "throughput_bps_mean": bucket["throughput_bps_sum"] / max(num_runs, 1),
+                "Tc_s_mean": bucket["Tc_s_sum"] / max(num_runs, 1),
+                "jain_fairness_mean": bucket["jain_fairness_sum"] / max(num_runs, 1),
+                "airtime_total_s_mean": bucket["airtime_total_s_sum"] / max(num_runs, 1),
+                "outage_ratio_mean": bucket["outage_ratio_sum"] / max(num_runs, 1),
+                "switch_count_mean": bucket["switch_count_sum"] / max(num_runs, 1),
             }
         )
     metric_by_factor_path = out_dir / "metric_by_factor.csv"
@@ -393,17 +465,6 @@ def aggregate_runs(
         _write_csv(distribution_path, factor_columns + ["sf", "count", "ratio"], distribution_rows)
         files["distribution_sf"] = distribution_path
 
-    convergence_rows = [
-        {
-            **{column: row.get(column, "") for column in SCENARIO_ID_COLUMNS},
-            "run_id": row.get("run_id", ""),
-            "Tc_s": row.get("Tc_s", ""),
-        }
-        for row in summaries
-    ]
-    convergence_path = out_dir / "convergence_tc.csv"
-    _write_csv(convergence_path, SCENARIO_ID_COLUMNS + ["run_id", "Tc_s"], convergence_rows)
-
     if not skip_sinr_cdf:
         sinr_rows = []
         quantiles = [i / 100 for i in range(101)]
@@ -418,23 +479,6 @@ def aggregate_runs(
         sinr_path = out_dir / "sinr_cdf.csv"
         _write_csv(sinr_path, factor_columns + ["quantile", "sinr_db"], sinr_rows)
         files["sinr_cdf"] = sinr_path
-
-    fairness_rows = [
-        {
-            **{column: row.get(column, "") for column in SCENARIO_ID_COLUMNS},
-            "run_id": row.get("run_id", ""),
-            "jain_fairness": row.get("jain_fairness", ""),
-            "airtime_total_s": row.get("airtime_total_s", ""),
-            "switch_count": row.get("switch_count", ""),
-        }
-        for row in summaries
-    ]
-    fairness_path = out_dir / "fairness_airtime_switching.csv"
-    _write_csv(
-        fairness_path,
-        SCENARIO_ID_COLUMNS + ["run_id", "jain_fairness", "airtime_total_s", "switch_count"],
-        fairness_rows,
-    )
 
     files["convergence_tc"] = convergence_path
     files["fairness_airtime_switching"] = fairness_path

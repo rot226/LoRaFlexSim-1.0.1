@@ -216,6 +216,7 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
             summary_only=args.summary_only,
             skip_sinr_cdf=args.skip_sinr_cdf,
             skip_sf_distribution=args.skip_sf_distribution,
+            strict=args.strict,
         )
     except (ValueError, json.JSONDecodeError, FileNotFoundError) as exc:
         print(f"Erreur pendant l'agrégation: {exc}")
@@ -356,6 +357,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--skip-sf-distribution",
         action="store_true",
         help="N'écrit pas distribution_sf.csv pour accélérer l'agrégation.",
+    )
+    aggregate_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Échoue si un run incomplet est détecté au lieu de l'ignorer.",
     )
     aggregate_parser.set_defaults(func=cmd_aggregate)
 
