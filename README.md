@@ -13,7 +13,8 @@ table est injectée dans la fonction `_flora_noise_dBm` pour les calculs de
 sensibilité. Un chemin personnalisé peut être fourni via `flora_noise_path`.
 ## 🛠️ Installation
 
-> **Version Python recommandée : 3.11.x** (versions supportées: **3.11 et 3.12**).
+> **Version Python recommandée : 3.11.x** (versions supportées: **3.11 à 3.14**).
+> **Version testée : 3.14.x (Windows 11)**.
 
 Procédure d'entrée unique (Windows 11 / PowerShell), à copier-coller depuis la racine du dépôt :
 
