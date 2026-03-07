@@ -264,18 +264,32 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def _run_marked_incomplete(run_dir: Path) -> bool:
+    status_file = run_dir / "run_status.json"
+    if not status_file.is_file():
+        return False
+    try:
+        status = json.loads(status_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return True
+    return status.get("status") != "completed"
+
+
 def _collect_run_dirs(paths: Iterable[Path]) -> list[Path]:
     run_dirs: list[Path] = []
     for path in paths:
         if path.is_file() and path.name == "summary.csv":
-            run_dirs.append(path.parent)
+            candidate = path.parent
+            if not _run_marked_incomplete(candidate):
+                run_dirs.append(candidate)
             continue
         if path.is_dir() and (path / "summary.csv").is_file():
-            run_dirs.append(path)
+            if not _run_marked_incomplete(path):
+                run_dirs.append(path)
             continue
         if path.is_dir() and (path / "results").is_dir():
             for candidate in sorted((path / "results").iterdir()):
-                if candidate.is_dir() and (candidate / "summary.csv").is_file():
+                if candidate.is_dir() and (candidate / "summary.csv").is_file() and not _run_marked_incomplete(candidate):
                     run_dirs.append(candidate)
     unique = []
     seen = set()

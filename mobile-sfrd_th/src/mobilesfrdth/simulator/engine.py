@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import heapq
 import logging
+import json
 from pathlib import Path
 import random
 from typing import Any, Callable
@@ -154,6 +155,15 @@ class GridRunOrchestrator:
         logger.addHandler(file_handler)
         return logger, file_handler, run_dir
 
+    def _write_run_status(self, run_dir: Path, run_id: str, status: str, error: str | None = None) -> None:
+        payload: dict[str, Any] = {"run_id": run_id, "status": status}
+        if error:
+            payload["error"] = error
+        (run_dir / "run_status.json").write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+
     def execute_jobs(
         self,
         jobs: list[dict[str, Any]],
@@ -165,6 +175,7 @@ class GridRunOrchestrator:
             params = dict(job.get("params", {}))
             run_id = str(params.get("run_id", job.get("job_id", "run")))
             logger, handler, run_dir = self._logger_for_run(run_id)
+            self._write_run_status(run_dir, run_id, "running")
             try:
                 seed = int(params.get("seed", 0))
                 duration_s = float(params.get("duration_s", 3600.0))
@@ -188,12 +199,14 @@ class GridRunOrchestrator:
                     time_bin_s=float(params.get("time_bin_s", 10.0)),
                 )
                 logger.info("Run terminé: uplinks=%s", result.uplink_count)
+                self._write_run_status(run_dir, run_id, "completed")
                 report = RunExecutionReport(run_id=run_id, success=True, run_dir=run_dir)
                 reports.append(report)
                 if progress_callback is not None:
                     progress_callback(index, total_jobs, report)
             except Exception as exc:
                 logger.exception("Run en erreur: %s", exc)
+                self._write_run_status(run_dir, run_id, "failed", str(exc))
                 report = RunExecutionReport(run_id=run_id, success=False, run_dir=run_dir, error=str(exc))
                 reports.append(report)
                 if progress_callback is not None:
