@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import heapq
+import json
 import logging
 from pathlib import Path
 import random
+from time import monotonic
 from typing import Any, Callable
 
 from .io import write_run_outputs
@@ -64,9 +66,6 @@ class EventDrivenEngine:
         node_by_id = {n.node_id: n for n in nodes}
         queue = self._schedule_initial_events(nodes)
         result = SimulationResult()
-        thresholds = [0.25, 0.5, 0.75, 1.0]
-        threshold_idx = 0
-
         while queue:
             event = heapq.heappop(queue)
             if event.time_s > until_s:
@@ -74,9 +73,7 @@ class EventDrivenEngine:
             result.events.append(event)
 
             if progress_callback is not None:
-                while threshold_idx < len(thresholds) and event.time_s >= (until_s * thresholds[threshold_idx]):
-                    progress_callback(thresholds[threshold_idx])
-                    threshold_idx += 1
+                progress_callback(min(max(event.time_s / until_s, 0.0), 1.0))
 
             if event.kind == "uplink":
                 result.uplink_count += 1
@@ -86,9 +83,7 @@ class EventDrivenEngine:
                 heapq.heappush(queue, Event(time_s=next_time, kind="uplink", node_id=node.node_id))
 
         if progress_callback is not None:
-            while threshold_idx < len(thresholds):
-                progress_callback(thresholds[threshold_idx])
-                threshold_idx += 1
+            progress_callback(1.0)
 
         return result
 
@@ -104,6 +99,9 @@ class RunExecutionReport:
 @dataclass
 class BatchExecutionReport:
     reports: list[RunExecutionReport]
+    total_jobs: int = 0
+    skipped_runs: int = 0
+    scheduled_runs: int = 0
 
     @property
     def failed_reports(self) -> list[RunExecutionReport]:
@@ -139,7 +137,10 @@ class GridRunOrchestrator:
             **params,
         }
 
-    def _logger_for_run(self, run_id: str) -> tuple[logging.Logger, logging.Handler, Path]:
+    def _logger_for_run(
+        self,
+        run_id: str,
+    ) -> tuple[logging.Logger, list[logging.Handler], Path]:
         run_dir = self.output_root / "results" / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         logger = logging.getLogger(f"mobilesfrdth.run.{run_id}")
@@ -151,16 +152,109 @@ class GridRunOrchestrator:
         log_path = run_dir / "run.log"
         file_handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
         file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(logging.Formatter("%(levelname)s | %(message)s"))
         logger.addHandler(file_handler)
-        return logger, file_handler, run_dir
+        logger.addHandler(console_handler)
+        return logger, [file_handler, console_handler], run_dir
 
-    def execute_jobs(self, jobs: list[dict[str, Any]]) -> BatchExecutionReport:
+    def _is_run_completed(self, run_id: str) -> bool:
+        run_dir = self.output_root / "results" / run_id
+        required = [
+            run_dir / "run_config.json",
+            run_dir / "events.csv",
+            run_dir / "node_timeseries.csv",
+            run_dir / "summary.csv",
+        ]
+        return all(path.is_file() for path in required)
+
+    def _write_campaign_progress(
+        self,
+        *,
+        progress_path: Path,
+        total_runs: int,
+        completed_runs: int,
+        skipped_runs: int,
+        error_reports: list[RunExecutionReport],
+        status: str,
+    ) -> None:
+        payload = {
+            "status": status,
+            "total_runs": total_runs,
+            "runs_completed": completed_runs,
+            "runs_skipped": skipped_runs,
+            "runs_remaining": max(total_runs - completed_runs - skipped_runs, 0),
+            "errors_count": len(error_reports),
+            "errors": [
+                {
+                    "run_id": report.run_id,
+                    "run_dir": str(report.run_dir),
+                    "error": report.error,
+                }
+                for report in error_reports
+            ],
+        }
+        progress_path.parent.mkdir(parents=True, exist_ok=True)
+        progress_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    def execute_jobs(
+        self,
+        jobs: list[dict[str, Any]],
+        *,
+        resume: bool = False,
+        max_runs: int | None = None,
+        max_walltime_s: float | None = None,
+        progress_path: Path | None = None,
+        progress_interval_s: float = 30.0,
+    ) -> BatchExecutionReport:
+        if max_runs is not None and max_runs < 1:
+            raise ValueError("max_runs doit être >= 1")
+        if max_walltime_s is not None and max_walltime_s <= 0:
+            raise ValueError("max_walltime_s doit être > 0")
+        if progress_interval_s <= 0:
+            raise ValueError("progress_interval_s doit être > 0")
+
         reports: list[RunExecutionReport] = []
+        pending_jobs: list[dict[str, Any]] = []
+        skipped_runs = 0
+
         for job in jobs:
             params = dict(job.get("params", {}))
             run_id = str(params.get("run_id", job.get("job_id", "run")))
-            logger, handler, run_dir = self._logger_for_run(run_id)
+            if resume and self._is_run_completed(run_id):
+                skipped_runs += 1
+                continue
+            pending_jobs.append(job)
+
+        if max_runs is not None:
+            pending_jobs = pending_jobs[:max_runs]
+
+        total_runs = len(jobs)
+        walltime_start_s = monotonic()
+        progress_target = progress_path or (self.output_root / "campaign_progress.json")
+        self._write_campaign_progress(
+            progress_path=progress_target,
+            total_runs=total_runs,
+            completed_runs=0,
+            skipped_runs=skipped_runs,
+            error_reports=[],
+            status="running",
+        )
+
+        for job in pending_jobs:
+            params = dict(job.get("params", {}))
+            run_id = str(params.get("run_id", job.get("job_id", "run")))
+            logger, handlers, run_dir = self._logger_for_run(run_id)
             try:
+                elapsed_walltime_s = monotonic() - walltime_start_s
+                if max_walltime_s is not None and elapsed_walltime_s >= max_walltime_s:
+                    logger.warning(
+                        "Arrêt campagne: plafond walltime atteint (%.1fs/%.1fs).",
+                        elapsed_walltime_s,
+                        max_walltime_s,
+                    )
+                    break
+
                 seed = int(params.get("seed", 0))
                 duration_s = float(params.get("duration_s", 3600.0))
                 logger.info("Démarrage run_id=%s seed=%s", run_id, seed)
@@ -168,10 +262,23 @@ class GridRunOrchestrator:
 
                 engine = EventDrivenEngine(seed=seed)
                 nodes = self._build_nodes(params)
+                next_progress_log_at = monotonic() + progress_interval_s
+
+                def _progress(progress: float) -> None:
+                    nonlocal next_progress_log_at
+                    now = monotonic()
+                    if now >= next_progress_log_at:
+                        next_progress_log_at = now + progress_interval_s
+                        logger.info(
+                            "Progression périodique run_id=%s: %s%%",
+                            run_id,
+                            int(progress * 100),
+                        )
+
                 result = engine.run(
                     nodes=nodes,
                     until_s=duration_s,
-                    progress_callback=lambda progress: logger.info("Progression: %s%%", int(progress * 100)),
+                    progress_callback=_progress,
                 )
                 run_config = self._build_run_config(params)
                 write_run_outputs(
@@ -188,7 +295,31 @@ class GridRunOrchestrator:
                 logger.exception("Run en erreur: %s", exc)
                 reports.append(RunExecutionReport(run_id=run_id, success=False, run_dir=run_dir, error=str(exc)))
             finally:
-                logger.removeHandler(handler)
-                handler.close()
+                for handler in handlers:
+                    logger.removeHandler(handler)
+                    handler.close()
 
-        return BatchExecutionReport(reports=reports)
+            self._write_campaign_progress(
+                progress_path=progress_target,
+                total_runs=total_runs,
+                completed_runs=len([report for report in reports if report.success]),
+                skipped_runs=skipped_runs,
+                error_reports=[report for report in reports if not report.success],
+                status="running",
+            )
+
+        self._write_campaign_progress(
+            progress_path=progress_target,
+            total_runs=total_runs,
+            completed_runs=len([report for report in reports if report.success]),
+            skipped_runs=skipped_runs,
+            error_reports=[report for report in reports if not report.success],
+            status="finished",
+        )
+
+        return BatchExecutionReport(
+            reports=reports,
+            total_jobs=total_runs,
+            skipped_runs=skipped_runs,
+            scheduled_runs=len(pending_jobs),
+        )

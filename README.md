@@ -76,6 +76,42 @@ mobilesfrdth aggregate ...
 mobilesfrdth plots ...
 ```
 
+### Reprise de campagne `mobilesfrdth run` (sans perte)
+
+La sous-commande `run` expose maintenant des options de reprise et de limitation
+pilotables depuis Windows 11/PowerShell (et Linux/macOS) :
+
+- `--resume` : saute les runs déjà complets présents dans `--out/results/*`.
+- `--max-runs <N>` : exécute au plus `N` runs durant l'appel courant.
+- `--max-walltime <secondes>` : coupe proprement la campagne quand le budget
+  de temps mur est atteint.
+
+Pendant l'exécution, un fichier `campaign_progress.json` est écrit à la racine
+de `--out` avec l'état courant (`runs_completed`, `runs_remaining`, erreurs,
+etc.), afin de reprendre ensuite sans perdre le suivi.
+
+Exemple PowerShell :
+
+```powershell
+python -m mobilesfrdth run --config experiments/default.yaml --out runs\core --grid "N=50,100;speed=1;mode=SNIR_OFF,SNIR_ON;algo=ADR,UCB;reps=2;seed_base=123" --resume --max-runs 8 --max-walltime 7200
+```
+
+### Templates de campagne (Windows 11)
+
+Le script `scripts/run_campaign_profiles.ps1` fournit trois profils prêts à
+lancer :
+
+- `smoke` (rapide),
+- `core_article` (raisonnable),
+- `full_article` (long).
+
+Exemples :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_campaign_profiles.ps1 -Profile smoke
+powershell -ExecutionPolicy Bypass -File scripts/run_campaign_profiles.ps1 -Profile core_article -Out runs\article_core
+```
+
 Sur Windows 11 (PowerShell), pensez à activer d'abord votre venv :
 
 ```powershell

@@ -62,6 +62,16 @@ def _seed_int(value: str) -> int:
     return parsed
 
 
+def _positive_float(value: str, *, name: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"{name} doit être un nombre.") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError(f"{name} doit être > 0.")
+    return parsed
+
+
 def _dump_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -116,14 +126,24 @@ def cmd_run(args: argparse.Namespace) -> int:
     _dump_json(output_file, payload)
 
     orchestrator = GridRunOrchestrator(output_root=out_dir)
-    report = orchestrator.execute_jobs(jobs)
+    report = orchestrator.execute_jobs(
+        jobs,
+        resume=args.resume,
+        max_runs=args.max_runs,
+        max_walltime_s=args.max_walltime,
+    )
     failures = [
         {"run_id": item.run_id, "error": item.error, "run_dir": str(item.run_dir)}
         for item in report.failed_reports
     ]
+    executed_runs = len(report.reports)
+    successful_runs = executed_runs - len(failures)
     execution_summary = {
-        "num_jobs": len(jobs),
-        "num_success": len(jobs) - len(failures),
+        "num_jobs": report.total_jobs,
+        "num_scheduled": report.scheduled_runs,
+        "num_executed": executed_runs,
+        "num_skipped": report.skipped_runs,
+        "num_success": successful_runs,
         "num_failures": len(failures),
         "failures": failures,
     }
@@ -131,7 +151,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     _dump_json(summary_file, execution_summary)
 
     print(f"{len(jobs)} jobs générés dans {output_file}")
-    print(f"Exécution terminée: {execution_summary['num_success']} succès, {execution_summary['num_failures']} échec(s)")
+    print(
+        "Exécution terminée: "
+        f"{execution_summary['num_success']} succès, "
+        f"{execution_summary['num_failures']} échec(s), "
+        f"{execution_summary['num_skipped']} ignoré(s)."
+    )
     print(f"Résumé batch écrit dans {summary_file}")
     return 1 if failures else 0
 
@@ -229,6 +254,23 @@ def build_parser() -> argparse.ArgumentParser:
         type=_sf_range,
         default=None,
         help="Plage SF globale, format min-max (bornes attendues: 7-12).",
+    )
+    run_parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Reprend une campagne existante en sautant les runs déjà complets dans --out/results.",
+    )
+    run_parser.add_argument(
+        "--max-runs",
+        type=lambda value: _positive_int(value, name="--max-runs"),
+        default=None,
+        help="Limite le nombre de runs exécutés pendant cet appel (utile pour reprendre par tranches).",
+    )
+    run_parser.add_argument(
+        "--max-walltime",
+        type=lambda value: _positive_float(value, name="--max-walltime"),
+        default=None,
+        help="Durée murale max en secondes pour la commande run (arrêt propre au-delà).",
     )
     run_parser.set_defaults(func=cmd_run)
 
