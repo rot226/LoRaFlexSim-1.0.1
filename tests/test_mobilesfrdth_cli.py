@@ -27,3 +27,24 @@ def test_main_help_supported_python(monkeypatch):
         cli.main(["--help"])
 
     assert exc_info.value.code == 0
+
+
+def test_build_parser_accepts_aggregate_acceleration_flags(tmp_path):
+    parser = cli.build_parser()
+
+    args = parser.parse_args(
+        [
+            "aggregate",
+            "--results",
+            str(tmp_path),
+            "--out",
+            str(tmp_path / "out"),
+            "--summary-only",
+            "--skip-sinr-cdf",
+            "--skip-sf-distribution",
+        ]
+    )
+
+    assert args.summary_only is True
+    assert args.skip_sinr_cdf is True
+    assert args.skip_sf_distribution is True
