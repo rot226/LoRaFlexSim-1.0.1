@@ -154,9 +154,14 @@ class GridRunOrchestrator:
         logger.addHandler(file_handler)
         return logger, file_handler, run_dir
 
-    def execute_jobs(self, jobs: list[dict[str, Any]]) -> BatchExecutionReport:
+    def execute_jobs(
+        self,
+        jobs: list[dict[str, Any]],
+        progress_callback: Callable[[int, int, RunExecutionReport], None] | None = None,
+    ) -> BatchExecutionReport:
         reports: list[RunExecutionReport] = []
-        for job in jobs:
+        total_jobs = len(jobs)
+        for index, job in enumerate(jobs, start=1):
             params = dict(job.get("params", {}))
             run_id = str(params.get("run_id", job.get("job_id", "run")))
             logger, handler, run_dir = self._logger_for_run(run_id)
@@ -183,10 +188,16 @@ class GridRunOrchestrator:
                     time_bin_s=float(params.get("time_bin_s", 10.0)),
                 )
                 logger.info("Run terminé: uplinks=%s", result.uplink_count)
-                reports.append(RunExecutionReport(run_id=run_id, success=True, run_dir=run_dir))
+                report = RunExecutionReport(run_id=run_id, success=True, run_dir=run_dir)
+                reports.append(report)
+                if progress_callback is not None:
+                    progress_callback(index, total_jobs, report)
             except Exception as exc:
                 logger.exception("Run en erreur: %s", exc)
-                reports.append(RunExecutionReport(run_id=run_id, success=False, run_dir=run_dir, error=str(exc)))
+                report = RunExecutionReport(run_id=run_id, success=False, run_dir=run_dir, error=str(exc))
+                reports.append(report)
+                if progress_callback is not None:
+                    progress_callback(index, total_jobs, report)
             finally:
                 logger.removeHandler(handler)
                 handler.close()

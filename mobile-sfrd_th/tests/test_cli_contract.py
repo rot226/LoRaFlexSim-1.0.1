@@ -39,3 +39,12 @@ def test_aggregate_returns_non_zero_when_no_run_found(tmp_path: Path):
     code = main(["aggregate", "--results", str(empty), "--out", str(tmp_path / "out")])
 
     assert code != 0
+
+
+def test_verbose_and_quiet_are_mutually_exclusive(tmp_path: Path):
+    aggregates = tmp_path / "aggregates"
+    aggregates.mkdir()
+
+    code = main(["--verbose", "--quiet", "plots", "--aggregates-dir", str(aggregates), "--out", str(tmp_path / "plots")])
+
+    assert code != 0
