@@ -1,5 +1,3 @@
-"""Package mobilesfrdth."""
+"""Package principal mobilesfrdth (indépendant de loraflexsim et sfrd)."""
 
-from .cli import main
-
-__all__ = ["main"]
+__all__ = []
