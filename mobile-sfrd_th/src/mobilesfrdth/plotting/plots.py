@@ -8,6 +8,7 @@ import warnings
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 import matplotlib
 
@@ -294,7 +295,14 @@ def _plot_sf_distribution(rows: list[dict[str, str]], out_path: Path) -> bool:
     return True
 
 
-def generate_minimal_figures(*, aggregates_dir: Path, out_dir: Path, filters: ScenarioFilters, include_bonus: bool = True) -> list[Path]:
+def generate_minimal_figures(
+    *,
+    aggregates_dir: Path,
+    out_dir: Path,
+    filters: ScenarioFilters,
+    include_bonus: bool = True,
+    progress_callback: Callable[[str, Path, bool], None] | None = None,
+) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     payloads = {name: _read_csv_rows(aggregates_dir / filename) for name, filename in REQUIRED_FILES.items()}
 
@@ -303,31 +311,49 @@ def generate_minimal_figures(*, aggregates_dir: Path, out_dir: Path, filters: Sc
     for fig_name, source, metric, local_filter in FIGURE_SPECS:
         selected = _apply_filters(payloads[source], filters.merge(local_filter))
         out_path = out_dir / fig_name
-        if _plot_xy_by_algo(selected, fig_name=fig_name, y_col=metric, out_path=out_path):
+        was_generated = _plot_xy_by_algo(selected, fig_name=fig_name, y_col=metric, out_path=out_path)
+        if was_generated:
             generated.append(out_path)
+        if progress_callback is not None:
+            progress_callback(fig_name, out_path, was_generated)
 
     fig07 = out_dir / "fig07_tc_vs_speed.png"
-    if _plot_tc_vs_speed(_apply_filters(payloads["convergence_tc"], filters), fig07):
+    was_generated = _plot_tc_vs_speed(_apply_filters(payloads["convergence_tc"], filters), fig07)
+    if was_generated:
         generated.append(fig07)
+    if progress_callback is not None:
+        progress_callback(fig07.name, fig07, was_generated)
 
     fig08 = out_dir / "fig08_fairness_vs_n.png"
-    if _plot_xy_by_algo(_apply_filters(payloads["fairness_airtime_switching"], filters), fig_name=fig08.name, y_col="jain_fairness", out_path=fig08):
+    was_generated = _plot_xy_by_algo(_apply_filters(payloads["fairness_airtime_switching"], filters), fig_name=fig08.name, y_col="jain_fairness", out_path=fig08)
+    if was_generated:
         generated.append(fig08)
+    if progress_callback is not None:
+        progress_callback(fig08.name, fig08, was_generated)
 
     fig09 = out_dir / "fig09_sf_distribution.png"
-    if _plot_sf_distribution(_apply_filters(payloads["distribution_sf"], filters), fig09):
+    was_generated = _plot_sf_distribution(_apply_filters(payloads["distribution_sf"], filters), fig09)
+    if was_generated:
         generated.append(fig09)
+    if progress_callback is not None:
+        progress_callback(fig09.name, fig09, was_generated)
 
     fig10 = out_dir / "fig10_sinr_cdf.png"
-    if _plot_sinr_cdf(_apply_filters(payloads["sinr_cdf"], filters), fig10):
+    was_generated = _plot_sinr_cdf(_apply_filters(payloads["sinr_cdf"], filters), fig10)
+    if was_generated:
         generated.append(fig10)
+    if progress_callback is not None:
+        progress_callback(fig10.name, fig10, was_generated)
 
     if include_bonus:
         for fig_name, source, metric, local_filter in BONUS_SPECS:
             selected = _apply_filters(payloads[source], filters.merge(local_filter))
             out_path = out_dir / fig_name
-            if _plot_xy_by_algo(selected, fig_name=fig_name, y_col=metric, out_path=out_path):
+            was_generated = _plot_xy_by_algo(selected, fig_name=fig_name, y_col=metric, out_path=out_path)
+            if was_generated:
                 generated.append(out_path)
+            if progress_callback is not None:
+                progress_callback(fig_name, out_path, was_generated)
 
     return generated
 

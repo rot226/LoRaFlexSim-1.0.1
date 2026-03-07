@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import time
 from typing import Iterable
 
 from .scenarios import generate_jobs, parse_grid_spec
@@ -61,6 +62,31 @@ def _seed_int(value: str) -> int:
     return parsed
 
 
+
+
+def _verbosity_level(args: argparse.Namespace) -> int:
+    if getattr(args, "quiet", False):
+        return 0
+    return 2 if getattr(args, "verbose", False) else 1
+
+
+def _print_info(args: argparse.Namespace, message: str) -> None:
+    if _verbosity_level(args) >= 1:
+        print(message)
+
+
+def _print_verbose(args: argparse.Namespace, message: str) -> None:
+    if _verbosity_level(args) >= 2:
+        print(message)
+
+
+def _format_eta(seconds: float) -> str:
+    remaining = max(0, int(round(seconds)))
+    h, rem = divmod(remaining, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
 def _dump_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -115,7 +141,25 @@ def cmd_run(args: argparse.Namespace) -> int:
     _dump_json(output_file, payload)
 
     orchestrator = GridRunOrchestrator(output_root=out_dir)
-    report = orchestrator.execute_jobs(jobs)
+    start_time = time.perf_counter()
+    completed = 0
+    successes = 0
+
+    def _on_run_progress(current: int, total: int, run_report: object) -> None:
+        nonlocal completed, successes
+        completed = current
+        if getattr(run_report, "success", False):
+            successes += 1
+        elapsed = time.perf_counter() - start_time
+        avg = elapsed / max(completed, 1)
+        eta = _format_eta(avg * max(total - completed, 0))
+        success_rate = (successes / max(completed, 1)) * 100.0
+        _print_info(
+            args,
+            f"[run] {completed}/{total} | succès={success_rate:.1f}% | ETA={eta} | sortie={getattr(run_report, 'run_dir', out_dir)}",
+        )
+
+    report = orchestrator.execute_jobs(jobs, progress_callback=_on_run_progress)
     failures = [
         {"run_id": item.run_id, "error": item.error, "run_dir": str(item.run_dir)}
         for item in report.failed_reports
@@ -129,9 +173,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     summary_file = out_dir / "batch_summary.json"
     _dump_json(summary_file, execution_summary)
 
-    print(f"{len(jobs)} jobs générés dans {output_file}")
-    print(f"Exécution terminée: {execution_summary['num_success']} succès, {execution_summary['num_failures']} échec(s)")
-    print(f"Résumé batch écrit dans {summary_file}")
+    _print_info(args, f"{len(jobs)} jobs générés dans {output_file}")
+    _print_info(args, f"Exécution terminée: {execution_summary['num_success']} succès, {execution_summary['num_failures']} échec(s)")
+    _print_info(args, f"Résumé batch écrit dans {summary_file}")
     return 1 if failures else 0
 
 
@@ -139,8 +183,19 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
     out_dir: Path = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    phase_order = ["metric_by_factor", "sf_distribution", "sinr_cdf"]
+    phase_index: dict[str, int] = {name: idx + 1 for idx, name in enumerate(phase_order)}
+
+    def _on_aggregate_progress(phase: str, done: int, total: int) -> None:
+        if phase == "discover":
+            _print_info(args, f"[aggregate] runs détectés: {done}")
+            return
+        if phase not in phase_index:
+            return
+        _print_info(args, f"[aggregate] phase={phase} ({phase_index[phase]}/{len(phase_order)}) progression={done}/{total}")
+
     try:
-        files = aggregate_runs(inputs=args.results, output_root=out_dir)
+        files = aggregate_runs(inputs=args.results, output_root=out_dir, progress_callback=_on_aggregate_progress)
     except (ValueError, json.JSONDecodeError, FileNotFoundError) as exc:
         print(f"Erreur pendant l'agrégation: {exc}")
         return 2
@@ -152,7 +207,7 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
     }
     output_file = out_dir / "aggregate.json"
     _dump_json(output_file, manifest)
-    print(f"Agrégation écrite dans {output_file}")
+    _print_info(args, f"Agrégation écrite dans {output_file}")
     return 0
 
 
@@ -167,11 +222,16 @@ def cmd_plots(args: argparse.Namespace) -> int:
             print(f"- {err}")
         return 2
 
+    def _on_plot_progress(fig_name: str, out_path: Path, generated_ok: bool) -> None:
+        status = "générée" if generated_ok else "ignorée"
+        _print_info(args, f"[plots] {fig_name}: {status} ({out_path})")
+
     generated = generate_minimal_figures(
         aggregates_dir=args.aggregates_dir,
         out_dir=out_dir,
         filters=ScenarioFilters.from_tokens(args.scenario_filter),
         include_bonus=not args.no_bonus,
+        progress_callback=_on_plot_progress,
     )
     report = {
         "aggregates_dir": str(args.aggregates_dir),
@@ -181,8 +241,8 @@ def cmd_plots(args: argparse.Namespace) -> int:
     }
     output_file = out_dir / "plots_summary.json"
     _dump_json(output_file, report)
-    print(f"{len(generated)} figure(s) écrite(s) dans {out_dir}")
-    print(f"Résumé de plots écrit dans {output_file}")
+    _print_info(args, f"{len(generated)} figure(s) écrite(s) dans {out_dir}")
+    _print_info(args, f"Résumé de plots écrit dans {output_file}")
     return 0
 
 
@@ -195,6 +255,8 @@ def build_parser() -> argparse.ArgumentParser:
             "Exemple run: mobilesfrdth run --config experiments/default.yaml --out runs --grid 'N=50,100;speed=1,3'"
         ),
     )
+    parser.add_argument("--verbose", action="store_true", help="Affiche plus de détails de progression.")
+    parser.add_argument("--quiet", action="store_true", help="Réduit la sortie au minimum.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     run_parser = subparsers.add_parser("run", help="Génère les jobs puis exécute la campagne.")
@@ -264,6 +326,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     try:
         args = parser.parse_args(argv)
+        if getattr(args, "verbose", False) and getattr(args, "quiet", False):
+            raise ValueError("--verbose et --quiet ne peuvent pas être utilisés ensemble.")
         return args.func(args)
     except ValueError as exc:
         print(f"Erreur: {exc}")

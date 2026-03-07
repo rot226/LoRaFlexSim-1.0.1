@@ -9,7 +9,7 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from statistics import mean
-from typing import Any
+from typing import Any, Callable
 
 from .metrics import der, jain_fairness, outage_ratio, pdr, throughput
 
@@ -289,10 +289,17 @@ def _collect_run_dirs(paths: Iterable[Path]) -> list[Path]:
     return unique
 
 
-def aggregate_runs(*, inputs: Iterable[Path], output_root: Path) -> dict[str, Path]:
+def aggregate_runs(
+    *,
+    inputs: Iterable[Path],
+    output_root: Path,
+    progress_callback: Callable[[str, int, int], None] | None = None,
+) -> dict[str, Path]:
     """Agrège des runs et écrit les CSV dans ``aggregates/``."""
 
     run_dirs = _collect_run_dirs(inputs)
+    if progress_callback is not None:
+        progress_callback("discover", len(run_dirs), len(run_dirs))
     out_dir = output_root / "aggregates"
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -309,6 +316,9 @@ def aggregate_runs(*, inputs: Iterable[Path], output_root: Path) -> dict[str, Pa
     by_factor: dict[tuple[str, ...], list[dict[str, str]]] = defaultdict(list)
     for row in summaries:
         by_factor[tuple(row.get(column, "") for column in factor_columns)].append(row)
+
+    if progress_callback is not None:
+        progress_callback("metric_by_factor", 0, 3)
 
     metric_by_factor_rows = []
     for key, rows in sorted(by_factor.items()):
@@ -342,6 +352,11 @@ def aggregate_runs(*, inputs: Iterable[Path], output_root: Path) -> dict[str, Pa
         "outage_ratio_mean",
         "switch_count_mean",
     ], metric_by_factor_rows)
+    if progress_callback is not None:
+        progress_callback("metric_by_factor", 1, 3)
+
+    if progress_callback is not None:
+        progress_callback("sf_distribution", 1, 3)
 
     sf_counter: dict[tuple[str, ...], Counter[str]] = defaultdict(Counter)
     for row in events:
@@ -364,6 +379,8 @@ def aggregate_runs(*, inputs: Iterable[Path], output_root: Path) -> dict[str, Pa
             )
     distribution_path = out_dir / "distribution_sf.csv"
     _write_csv(distribution_path, factor_columns + ["sf", "count", "ratio"], distribution_rows)
+    if progress_callback is not None:
+        progress_callback("sf_distribution", 2, 3)
 
     convergence_rows = [
         {
@@ -375,6 +392,9 @@ def aggregate_runs(*, inputs: Iterable[Path], output_root: Path) -> dict[str, Pa
     ]
     convergence_path = out_dir / "convergence_tc.csv"
     _write_csv(convergence_path, SCENARIO_ID_COLUMNS + ["run_id", "Tc_s"], convergence_rows)
+
+    if progress_callback is not None:
+        progress_callback("sinr_cdf", 2, 3)
 
     sinr_values: dict[tuple[str, ...], list[float]] = defaultdict(list)
     for row in events:
@@ -395,6 +415,8 @@ def aggregate_runs(*, inputs: Iterable[Path], output_root: Path) -> dict[str, Pa
             sinr_rows.append({**dict(zip(factor_columns, key, strict=False)), "quantile": q, "sinr_db": data[index]})
     sinr_path = out_dir / "sinr_cdf.csv"
     _write_csv(sinr_path, factor_columns + ["quantile", "sinr_db"], sinr_rows)
+    if progress_callback is not None:
+        progress_callback("sinr_cdf", 3, 3)
 
     fairness_rows = [
         {
