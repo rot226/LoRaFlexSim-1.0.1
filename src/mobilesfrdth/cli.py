@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Iterable
 
@@ -270,7 +271,19 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _ensure_supported_python() -> bool:
+    major, minor = sys.version_info[:2]
+    return major == 3 and minor in (11, 12)
+
+
 def main(argv: list[str] | None = None) -> int:
+    if not _ensure_supported_python():
+        print(
+            "Version Python non supportée: utiliser Python 3.11 ou 3.12.",
+            file=sys.stderr,
+        )
+        return 2
+
     parser = build_parser()
     try:
         args = parser.parse_args(argv)

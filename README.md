@@ -21,9 +21,22 @@ Procédure d'entrée unique (Windows 11 / PowerShell), à copier-coller depuis l
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
 ```
 
-Le script `scripts/bootstrap_windows.ps1` crée `.venv` si nécessaire, active
-l'environnement, met `pip` à jour, installe le projet avec `pip install -e .`,
-et vérifie la présence de `mobilesfrdth` avec fallback vers `python -m sfrd...`.
+Le script `scripts/bootstrap_windows.ps1` crée `.venv` avec `py -3.11`,
+active l'environnement puis tente `python -m pip install -e . --no-build-isolation`.
+
+### Windows 11 (offline)
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e . --no-build-isolation
+```
+
+Si vous préférez un bootstrap automatisé, utilisez aussi :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap_windows.ps1
+```
 
 ## 📦 CLI `mobilesfrdth` (Windows 11 / Linux / macOS)
 

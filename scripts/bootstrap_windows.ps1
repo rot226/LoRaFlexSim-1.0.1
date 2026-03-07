@@ -11,9 +11,14 @@ $venvDir = Join-Path $rootDir ".venv"
 $venvPython = Join-Path $venvDir "Scripts/python.exe"
 $activateScript = Join-Path $venvDir "Scripts/Activate.ps1"
 
+if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
+    Write-Error "Le lanceur Python 'py' est introuvable. Installez Python 3.11 puis relancez ce script."
+    exit 1
+}
+
 if (-not (Test-Path $venvPython)) {
-    Write-Host "Création de l'environnement virtuel .venv..."
-    python -m venv .venv
+    Write-Host "Création de l'environnement virtuel .venv avec py -3.11..."
+    py -3.11 -m venv .venv
 }
 
 if (-not (Test-Path $activateScript)) {
@@ -29,19 +34,7 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-Write-Host "Mise à jour de pip..."
-python -m pip install --upgrade pip
-
-Write-Host "Installation du projet en mode editable..."
-python -m pip install -e .
-
-$mobilesfrdth = Get-Command mobilesfrdth -ErrorAction SilentlyContinue
-if ($null -ne $mobilesfrdth) {
-    Write-Host "CLI détectée : mobilesfrdth ($($mobilesfrdth.Source))"
-} else {
-    Write-Warning "La commande 'mobilesfrdth' est introuvable dans le PATH du venv. Fallback vers le mode module Python 'sfrd'."
-    Write-Host "Exemple fallback : python -m sfrd.cli.run_campaign --help"
-    python -m sfrd.cli.run_campaign --help
-}
+Write-Host "Installation du projet en mode editable (sans build isolation)..."
+python -m pip install -e . --no-build-isolation
 
 Write-Host "Bootstrap Windows terminé."
